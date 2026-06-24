@@ -25,7 +25,158 @@ const workflowSkillsByFamily: Record<RoleFamily, string[]> = {
   "IT Support": ["Ticket Triage", "User Support", "Troubleshooting", "Technical Documentation"]
 };
 
+type DomainProfile = {
+  name: string;
+  keywords: string[];
+  environment: string;
+  strengths: string[];
+  processLanguage: string;
+};
+
+const domainProfiles: DomainProfile[] = [
+  {
+    name: "sportsbook",
+    keywords: ["sportsbook", "gaming", "casino", "wager", "ticket writer", "draftkings", "fanduel"],
+    environment: "high-volume gaming and customer transaction environment",
+    strengths: ["customer transactions", "compliance-aware service", "operational accuracy", "issue escalation"],
+    processLanguage: "transaction records, customer requests, and compliance-aware service steps"
+  },
+  {
+    name: "security",
+    keywords: ["security", "guard", "access control", "surveillance", "site officer"],
+    environment: "safety-focused, public-facing environment",
+    strengths: ["access control", "incident reporting", "visitor management", "safety procedures"],
+    processLanguage: "access control procedures, incident notes, and visitor support workflows"
+  },
+  {
+    name: "retail",
+    keywords: ["retail", "cashier", "sales associate", "store", "target", "best buy", "walgreens", "cvs", "walmart", "costco"],
+    environment: "fast-paced retail service environment",
+    strengths: ["POS systems", "customer service", "inventory support", "transaction accuracy"],
+    processLanguage: "POS transactions, customer requests, inventory tasks, and store records"
+  },
+  {
+    name: "food service",
+    keywords: ["server", "barista", "restaurant", "food", "cafe", "starbucks", "shift"],
+    environment: "fast-paced food service environment",
+    strengths: ["order accuracy", "customer experience", "shift operations", "service speed"],
+    processLanguage: "order flow, customer service steps, sanitation standards, and shift tasks"
+  },
+  {
+    name: "admin",
+    keywords: ["admin", "administrative", "office", "front desk", "reception", "records"],
+    environment: "office and administrative support environment",
+    strengths: ["scheduling", "records management", "correspondence", "office workflows"],
+    processLanguage: "calendar coordination, records, correspondence, and office workflows"
+  },
+  {
+    name: "it",
+    keywords: ["it", "help desk", "desktop support", "service desk", "technical support", "technician"],
+    environment: "technical support and user service environment",
+    strengths: ["troubleshooting", "ticketing", "user support", "documentation"],
+    processLanguage: "support tickets, troubleshooting notes, user requests, and escalation workflows"
+  }
+];
+
+type RoleStrategy = {
+  focus: string[];
+  safeDefaults: string[];
+  verbs: string[];
+  environment: string;
+  supportContext: string;
+  seniorContext: string;
+  valueArea: string;
+};
+
+const roleStrategies: Record<RoleFamily, RoleStrategy> = {
+  "Customer Success": {
+    focus: ["customer communication", "account support", "issue resolution", "CRM documentation", "onboarding support"],
+    safeDefaults: ["Customer Communication", "Issue Resolution", "Service Follow-Through", "Documentation"],
+    verbs: ["Supported", "Documented", "Resolved", "Communicated", "Maintained"],
+    environment: "customer-facing service environment",
+    supportContext: "service requests and client follow-through",
+    seniorContext: "customer success workflows and team communication",
+    valueArea: "Client Experience"
+  },
+  Operations: {
+    focus: ["workflow coordination", "reporting", "scheduling", "process improvement", "operational accuracy"],
+    safeDefaults: ["Workflow Coordination", "Operational Reporting", "Task Tracking", "Process Support"],
+    verbs: ["Coordinated", "Tracked", "Maintained", "Improved", "Documented"],
+    environment: "operations and service workflow environment",
+    supportContext: "daily operations and task flow",
+    seniorContext: "operational workflows and service standards",
+    valueArea: "Operational Efficiency"
+  },
+  Admin: {
+    focus: ["scheduling", "records", "correspondence", "office support", "documentation"],
+    safeDefaults: ["Scheduling", "Records Management", "Office Support", "Professional Communication"],
+    verbs: ["Coordinated", "Maintained", "Organized", "Documented", "Communicated"],
+    environment: "office and administrative support environment",
+    supportContext: "administrative requests and office workflows",
+    seniorContext: "administrative workflows and cross-team support",
+    valueArea: "Administrative Reliability"
+  },
+  Sales: {
+    focus: ["outreach", "lead generation", "CRM updates", "pipeline support", "follow-up communication"],
+    safeDefaults: ["Follow-Up Communication", "Lead Support", "CRM Updates", "Pipeline Coordination"],
+    verbs: ["Supported", "Tracked", "Maintained", "Communicated", "Researched"],
+    environment: "sales support and customer outreach environment",
+    supportContext: "sales outreach and account follow-up",
+    seniorContext: "pipeline support and customer handoff workflows",
+    valueArea: "Revenue Support"
+  },
+  "IT Support": {
+    focus: ["troubleshooting", "ticket resolution", "documentation", "escalation", "user support"],
+    safeDefaults: ["Troubleshooting", "Ticket Management", "User Support", "Technical Documentation"],
+    verbs: ["Troubleshot", "Resolved", "Documented", "Escalated", "Supported"],
+    environment: "technical support and user service environment",
+    supportContext: "user requests and support tickets",
+    seniorContext: "help desk workflows and technical escalation paths",
+    valueArea: "Technical Support"
+  },
+  "Project Coordination": {
+    focus: ["timelines", "milestones", "stakeholder updates", "meeting support", "documentation"],
+    safeDefaults: ["Timeline Tracking", "Status Reporting", "Meeting Coordination", "Project Documentation"],
+    verbs: ["Coordinated", "Tracked", "Documented", "Communicated", "Maintained"],
+    environment: "project coordination and cross-functional support environment",
+    supportContext: "project updates and delivery tasks",
+    seniorContext: "project timelines, milestones, and stakeholder communication",
+    valueArea: "Cross-Functional Support"
+  },
+  Business: {
+    focus: ["reporting", "analysis", "process documentation", "stakeholder communication", "operational insight"],
+    safeDefaults: ["Reporting", "Analysis", "Process Documentation", "Stakeholder Support"],
+    verbs: ["Analyzed", "Documented", "Reported", "Communicated", "Tracked"],
+    environment: "business operations and stakeholder support environment",
+    supportContext: "business reporting and stakeholder requests",
+    seniorContext: "business workflows and operational insights",
+    valueArea: "Business Support"
+  },
+  Tech: {
+    focus: ["testing", "documentation", "tooling", "implementation support", "technical workflows"],
+    safeDefaults: ["Testing Support", "Technical Documentation", "Implementation Support", "Support Workflows"],
+    verbs: ["Tested", "Documented", "Supported", "Tracked", "Troubleshot"],
+    environment: "technical workflow and implementation support environment",
+    supportContext: "technical tasks and support workflows",
+    seniorContext: "technical workflows and implementation support",
+    valueArea: "Technical Operations"
+  },
+  Security: {
+    focus: ["access control", "incident reporting", "visitor management", "safety procedures", "emergency response"],
+    safeDefaults: ["Access Control", "Incident Reporting", "Visitor Management", "Safety Procedures"],
+    verbs: ["Monitored", "Documented", "Supported", "Escalated", "Maintained"],
+    environment: "safety-focused, public-facing environment",
+    supportContext: "site safety and visitor support",
+    seniorContext: "security workflows and safety procedures",
+    valueArea: "Safety & Compliance"
+  }
+};
+
 const weakTargetValues = new Set(["ee", "test", "testing", "asdf", "qwerty", "none", "na", "n/a", "unknown"]);
+const awkwardPhrases = [/customers customers/gi, /tickets tickets/gi, /managed onboarding using python/gi, /candidate targeting/gi];
+const leadershipTerms = /\b(supervisor|lead|manager|senior|coordinator|specialist)\b/i;
+const supportTerms = /\b(associate|assistant|representative|clerk|cashier|writer|technician|intern)\b/i;
+
 const acronyms = new Map([
   ["api", "API"],
   ["crm", "CRM"],
@@ -34,8 +185,10 @@ const acronyms = new Map([
   ["hubspot", "HubSpot"],
   ["it", "IT"],
   ["kpi", "KPI"],
+  ["macos", "macOS"],
   ["pos", "POS"],
   ["qa", "QA"],
+  ["servicenow", "ServiceNow"],
   ["sop", "SOP"],
   ["sql", "SQL"],
   ["ui", "UI"],
@@ -60,13 +213,6 @@ const splitList = (value: string) =>
 
 const cleanWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
 
-const sentenceList = (items: string[], joiner = "and") => {
-  if (items.length <= 1) return items[0] ?? "";
-  if (items.length === 2) return `${items[0]} ${joiner} ${items[1]}`;
-  if (joiner === "&") return `${items.slice(0, -1).join(", ")} & ${items.at(-1)}`;
-  return `${items.slice(0, -1).join(", ")}, ${joiner} ${items.at(-1)}`;
-};
-
 const compact = (items: string[]) => {
   const seen = new Set<string>();
 
@@ -79,6 +225,14 @@ const compact = (items: string[]) => {
       seen.add(key);
       return true;
     });
+};
+
+const sentenceList = (items: string[], joiner = "and") => {
+  const cleanItems = compact(items);
+  if (cleanItems.length <= 1) return cleanItems[0] ?? "";
+  if (cleanItems.length === 2) return `${cleanItems[0]} ${joiner} ${cleanItems[1]}`;
+  if (joiner === "&") return `${cleanItems.slice(0, -1).join(", ")} & ${cleanItems.at(-1)}`;
+  return `${cleanItems.slice(0, -1).join(", ")}, ${joiner} ${cleanItems.at(-1)}`;
 };
 
 function titleCase(value: string) {
@@ -125,11 +279,7 @@ function normalizeResponsibility(value: string) {
 function readablePhrase(value: string) {
   return value
     .split(" ")
-    .map((word, index) => {
-      const normalized = acronyms.get(word.toLowerCase());
-      if (normalized) return normalized;
-      return index === 0 ? word.toLowerCase() : word.toLowerCase();
-    })
+    .map((word) => acronyms.get(word.toLowerCase()) ?? word.toLowerCase())
     .join(" ");
 }
 
@@ -146,8 +296,7 @@ const scopeFields: Array<[keyof IntakeData, string, string, string[]]> = [
 function formatScopePhrase(value: string, shortLabel: string, aliases: string[]) {
   const cleaned = cleanWhitespace(value);
   const lower = cleaned.toLowerCase();
-  const labelTerms = aliases.map((term) => term.toLowerCase());
-  const alreadyLabeled = labelTerms.some((term) => lower.includes(term));
+  const alreadyLabeled = aliases.some((term) => lower.includes(term.toLowerCase()));
 
   return alreadyLabeled ? cleaned : `${cleaned} ${shortLabel}`;
 }
@@ -156,17 +305,28 @@ function buildScopeItems(data: IntakeData) {
   return scopeFields
     .map(([key, shortLabel, longLabel, aliases]) => {
       const value = cleanWhitespace(String(data[key]));
-      return value ? { value, shortLabel, longLabel, phrase: formatScopePhrase(value, shortLabel, aliases) } : null;
+      if (!value) return null;
+      const basePhrase = formatScopePhrase(value, shortLabel, aliases);
+      const phrase =
+        key === "customersServed" && ["IT Support", "Tech"].includes(data.roleFamily)
+          ? basePhrase.replace(/\bcustomers\b/gi, "users")
+          : basePhrase;
+      return { key, value, shortLabel, longLabel, phrase };
     })
-    .filter(Boolean) as Array<{ value: string; shortLabel: string; longLabel: string; phrase: string }>;
+    .filter(Boolean) as Array<{ key: keyof IntakeData; value: string; shortLabel: string; longLabel: string; phrase: string }>;
+}
+
+function buildUserResponsibilityList(data: IntakeData) {
+  return compact([
+    ...data.selectedResponsibilities.map(normalizeResponsibility),
+    ...splitList(data.responsibilities).map(normalizeResponsibility)
+  ]).slice(0, 8);
 }
 
 function buildResponsibilityList(data: IntakeData) {
-  return compact([
-    ...data.selectedResponsibilities.map(normalizeResponsibility),
-    ...splitList(data.responsibilities).map(normalizeResponsibility),
-    ...roleIntelligence[data.roleFamily].responsibilities.map(normalizeResponsibility)
-  ]).slice(0, 8);
+  const userResponsibilities = buildUserResponsibilityList(data);
+  if (userResponsibilities.length) return userResponsibilities;
+  return roleStrategies[data.roleFamily].safeDefaults;
 }
 
 function buildToolList(data: IntakeData) {
@@ -178,54 +338,156 @@ function buildSkillList(data: IntakeData) {
   const responsibilities = buildResponsibilityList(data);
 
   return compact([
+    ...responsibilities.slice(0, 6),
     ...roleIntelligence[data.roleFamily].skills.map(normalizeResponsibility),
-    ...responsibilities.slice(0, 5),
-    ...tools,
+    ...tools.slice(0, 4),
     ...workflowSkillsByFamily[data.roleFamily]
   ]).slice(0, 14);
 }
 
-function buildOutcomePhrase(data: IntakeData) {
-  const selected = data.selectedOutcomes.map((outcome) => outcome.toLowerCase());
-  const custom = cleanWhitespace(data.outcomes).toLowerCase();
+function detectDomain(role: ExperienceRole | { title: string; company: string }) {
+  const roleHaystack = [role.title, role.company].join(" ").toLowerCase();
 
-  if (selected.length) return `improve ${sentenceList(selected.slice(0, 3))}`;
-  if (custom) return custom.replace(/^improved\s+/i, "improve ");
-  return "maintain reliable service quality";
+  return domainProfiles.find((profile) => profile.keywords.some((keyword) => roleHaystack.includes(keyword))) ?? null;
+}
+
+function activityPhrase(responsibility: string) {
+  const readable = readablePhrase(responsibility);
+  const lower = readable.toLowerCase();
+  if (lower.includes("support tickets") || lower.includes("ticket management")) return "handling support tickets";
+  if (lower.includes("troubleshooting")) return "troubleshooting user issues";
+  if (lower.includes("reporting")) return "preparing reports and updates";
+  if (lower.includes("task coordination")) return "coordinating daily tasks";
+  if (lower.includes("timeline tracking")) return "tracking timelines";
+  if (lower.includes("status reporting")) return "preparing status updates";
+  if (lower.includes("scheduling")) return "coordinating schedules";
+  if (lower.includes("client communication")) return "supporting client communication";
+  if (lower.includes("customer communication")) return "supporting customer communication";
+  if (lower.includes("records management")) return "maintaining records";
+  if (lower.includes("documentation")) return "maintaining documentation";
+  if (lower.includes("crm")) return "updating CRM records";
+  return `handling ${readable}`;
+}
+
+function responsibilityObject(responsibility: string) {
+  const readable = readablePhrase(responsibility);
+  if (/support|documentation|communication|coordination|management|tracking|reporting|handling/i.test(readable)) return readable;
+  return `${readable} support`;
+}
+
+function buildOutcomeSupport(data: IntakeData) {
+  const selected = compact(data.selectedOutcomes.map((outcome) => outcome.toLowerCase()));
+  const custom = cleanWhitespace(data.outcomes).replace(/^improved\s+/i, "");
+  if (selected.length) return sentenceList(selected.slice(0, 2));
+  if (custom) return custom;
+  return "";
+}
+
+function chooseToolPhrase(tools: string[], roleFamily: RoleFamily, responsibility: string) {
+  if (!tools.length) return "";
+  const lowerResponsibility = responsibility.toLowerCase();
+  const compatibleTools = tools.filter((tool) => {
+    const lowerTool = tool.toLowerCase();
+    if (["Customer Success", "Sales"].includes(roleFamily)) return /salesforce|hubspot|zendesk|intercom|crm|google workspace|slack|excel/.test(lowerTool);
+    if (roleFamily === "IT Support") return /active directory|jira|servicenow|windows|macos|azure|office 365|zendesk/.test(lowerTool);
+    if (roleFamily === "Project Coordination") return /asana|trello|monday|jira|sheets|slack|teams|notion/.test(lowerTool);
+    if (roleFamily === "Admin") return /google workspace|office|excel|outlook|calendly|slack|notion|docusign/.test(lowerTool);
+    if (roleFamily === "Operations" || roleFamily === "Business") return /excel|sheets|sap|oracle|notion|airtable|tableau|power bi|sql/.test(lowerTool);
+    if (roleFamily === "Tech") return /jira|github|sql|sheets|figma|postman|notion|excel/.test(lowerTool);
+    return /excel|workspace|teams|slack|system|report|camera|radio|access/.test(lowerTool);
+  });
+
+  if (!compatibleTools.length) return "";
+  if (/communication|follow|stakeholder|client|customer|support/.test(lowerResponsibility)) {
+    return ` using ${sentenceList(compatibleTools.slice(0, 2))}`;
+  }
+  if (/document|record|report|CRM|ticket|tracking|analysis|timeline|status/i.test(responsibility)) {
+    return ` in ${sentenceList(compatibleTools.slice(0, 2))}`;
+  }
+  return compatibleTools.length >= 2 ? ` with ${sentenceList(compatibleTools.slice(0, 2))}` : "";
+}
+
+function roleLevel(role: ExperienceRole, index: number) {
+  if (leadershipTerms.test(role.title)) return "senior";
+  if (supportTerms.test(role.title)) return index === 0 ? "current-support" : "prior-support";
+  return index === 0 ? "current" : "prior";
+}
+
+function roleContext(role: ExperienceRole, data: IntakeData, index: number) {
+  const strategy = roleStrategies[data.roleFamily];
+  const domain = detectDomain(role);
+  const level = roleLevel(role, index);
+  const context =
+    level === "senior" ? strategy.seniorContext : index === 0 ? strategy.supportContext : `${strategy.supportContext} in an earlier support role`;
+
+  return { strategy, domain, level, context };
+}
+
+function scopeForBullet(scopes: ReturnType<typeof buildScopeItems>, preferredKeys: Array<keyof IntakeData>) {
+  return preferredKeys.map((key) => scopes.find((scope) => scope.key === key)).find(Boolean) ?? scopes[0];
+}
+
+function cleanSentence(sentence: string) {
+  let cleaned = cleanWhitespace(sentence)
+    .replace(/\s+([,.])/g, "$1")
+    .replace(/\s+\./g, ".")
+    .replace(/ ,/g, ",")
+    .replace(/\b(\w+)\s+\1\b/gi, "$1")
+    .replace(/\ba ([aeiou])/gi, "an $1")
+    .replace(/\bwhile ([a-z]+ing)\b/gi, "while $1")
+    .replace(/\bwhile ([a-z]+ tickets|[a-z]+ communication|[a-z]+ coordination|[a-z]+ tracking|[a-z]+ reporting)\b/gi, "while handling $1")
+    .replace(/\bdocumented documentation\b/gi, "Created documentation")
+    .replace(/\bDocumented documentation\b/g, "Created documentation");
+
+  awkwardPhrases.forEach((pattern) => {
+    cleaned = cleaned.replace(pattern, (match) => match.replace(/\s+\w+$/i, ""));
+  });
+
+  if (!/[.!?]$/.test(cleaned)) cleaned += ".";
+  return cleaned;
 }
 
 function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleIndex: number) {
   const responsibilities = buildResponsibilityList(data);
   const tools = buildToolList(data);
   const scopes = buildScopeItems(data);
-  const outcome = buildOutcomePhrase(data);
-  const primary = responsibilities[0] ?? "Service Requests";
-  const secondary = responsibilities[1] ?? "Documentation";
-  const tertiary = responsibilities[2] ?? "Follow-Up Communication";
-  const primaryPhrase = readablePhrase(primary);
-  const secondaryPhrase = readablePhrase(secondary);
-  const tertiaryPhrase = readablePhrase(tertiary);
-  const toolPhrase = tools.length ? ` using ${sentenceList(tools.slice(0, 3))}` : "";
-  const scopeOne = scopes[0]?.phrase;
-  const scopeTwo = scopes[1]?.phrase;
-  const scopeThree = scopes[2]?.phrase;
-  const actionSets = [
-    ["Managed", "Documented", "Resolved"],
-    ["Supported", "Tracked", "Maintained"],
-    ["Coordinated", "Resolved", "Assisted"]
-  ];
-  const [firstAction, secondAction, thirdAction] = actionSets[roleIndex] ?? actionSets[0];
+  const outcome = buildOutcomeSupport(data);
+  const { strategy, domain, level, context } = roleContext(role, data, roleIndex);
+  const verbs = roleIndex === 0 ? strategy.verbs : ["Assisted", "Maintained", "Communicated", "Supported", "Documented"];
+  const primary = responsibilities[0] ?? strategy.safeDefaults[0];
+  const secondary = responsibilities[1] ?? strategy.safeDefaults[1];
+  const tertiary = responsibilities[2] ?? strategy.safeDefaults[2];
+  const scopeOne = scopeForBullet(scopes, ["customersServed", "ticketsHandled", "callsHandled"]);
+  const scopeTwo = scopeForBullet(scopes, ["reportsCreated", "projectsSupported", "teamSizeSupported"]);
+  const processLanguage = domain?.processLanguage ?? context;
+  const outcomeClause = outcome ? ` to support ${outcome}` : " to maintain dependable service standards";
+  const currentTone = level === "senior" ? "coordinating" : "supporting";
+  const environment = domain?.environment ?? strategy.environment;
+  const scopeIntro = scopeOne ? ` for ${scopeOne.phrase} while ` : " while ";
+  const selectedFocus = strategy.focus
+    .map(readablePhrase)
+    .filter((focus) => ![primary, secondary, tertiary].map(readablePhrase).includes(focus))
+    .slice(0, 3);
+  const roleFocus = selectedFocus.length ? selectedFocus.join(", ") : strategy.focus.slice(0, 3).map(readablePhrase).join(", ");
 
-  const firstScope = scopeOne ? ` for ${scopeOne}` : "";
-  const secondScope = scopeTwo ? ` across ${scopeTwo}` : "";
-  const thirdScope = scopeThree ? ` supporting ${scopeThree}` : "";
-  const outcomeClause = outcome.startsWith("improve") ? `to ${outcome}` : `to support ${outcome}`;
+  if (roleIndex > 0) {
+    const priorScope = scopeTwo ? ` while supporting ${scopeTwo.phrase}` : "";
+    return qualityCheckBullets(
+      [
+        `${verbs[0]} with ${readablePhrase(primary)} in a ${environment}, building practical experience with ${processLanguage}.`,
+        `${verbs[1]} accurate records, handoffs, and routine updates${priorScope}.`,
+        `${verbs[2]} with customers, team members, and internal partners to keep ${readablePhrase(tertiary)} moving with dependable follow-through.`
+      ],
+      verbs
+    );
+  }
 
-  return compact([
-    `${firstAction} ${primaryPhrase}${toolPhrase}${firstScope} ${outcomeClause}.`,
-    `${secondAction} ${secondaryPhrase}, documentation, and status updates${secondScope}, keeping records accurate and next steps visible.`,
-    `${thirdAction === "Assisted" ? "Assisted with" : thirdAction} ${tertiaryPhrase}${thirdScope}, resolving routine issues and escalating complex needs for consistent follow-through.`
-  ]).slice(0, 3);
+  const openingVerb = level === "senior" ? "Coordinated" : verbs[0];
+  const bulletOne = `${openingVerb} ${context}${scopeIntro}${activityPhrase(primary)} in a ${environment}${outcomeClause}.`;
+  const bulletTwo = `${verbs[1]} ${readablePhrase(secondary)} through ${processLanguage}${chooseToolPhrase(tools, data.roleFamily, secondary)}, keeping records, handoffs, and next steps clear.`;
+  const bulletThree = `${verbs[2]} ${responsibilityObject(tertiary)} by ${currentTone} ${roleFocus}${scopeTwo ? ` across ${scopeTwo.phrase}` : ""}.`;
+
+  return qualityCheckBullets([bulletOne, bulletTwo, bulletThree], verbs);
 }
 
 function buildExperience(data: IntakeData): ExperienceRole[] {
@@ -264,31 +526,101 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
   }));
 }
 
-export function generateResumePackage(data: IntakeData): ResumePackage {
-  const target = normalizeTargetRole(data);
-  const tools = buildToolList(data);
-  const responsibilities = buildResponsibilityList(data);
-  const skills = buildSkillList(data);
-  const scopes = buildScopeItems(data);
-  const outcomes = data.selectedOutcomes.map((outcome) => outcome.toLowerCase());
+function qualityCheckBullets(bullets: string[], fallbackVerbs: string[]) {
+  const usedOpeners = new Set<string>();
+
+  return compact(bullets)
+    .map(cleanSentence)
+    .map((bullet) => {
+      const opener = bullet.split(" ")[0];
+      if (!usedOpeners.has(opener.toLowerCase())) {
+        usedOpeners.add(opener.toLowerCase());
+        return bullet;
+      }
+      const replacement = fallbackVerbs.find((verb) => !usedOpeners.has(verb.toLowerCase())) ?? "Supported";
+      usedOpeners.add(replacement.toLowerCase());
+      return bullet.replace(/^\w+/, replacement);
+    })
+    .filter((bullet) => bullet.length > 30)
+    .slice(0, 3);
+}
+
+function limitSentences(value: string, maxSentences: number) {
+  const sentences = value.match(/[^.!?]+[.!?]+/g)?.map(cleanWhitespace) ?? [cleanSentence(value)];
+  return sentences.slice(0, maxSentences).join(" ");
+}
+
+function buildSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const roleFamily = data.roleFamily;
-  const primaryResponsibilities = responsibilities.slice(0, 4);
-  const timeSentence = cleanWhitespace(data.currentTime) ? ` Recent experience includes ${cleanWhitespace(data.currentTime)} as a ${titleCase(data.currentTitle || target)}.` : "";
-  const toolSentence = tools.length ? ` Tools include ${sentenceList(tools.slice(0, 4))}.` : "";
-  const scopeSentence = scopes.length ? ` Scope includes ${sentenceList(scopes.slice(0, 3).map((scope) => scope.phrase))}.` : "";
-  const outcomeSentence = outcomes.length ? ` Work is centered on improving ${sentenceList(outcomes.slice(0, 3))}.` : "";
+  const currentRole = experience[0];
+  const domain = currentRole ? detectDomain(currentRole) : null;
+  const strategy = roleStrategies[roleFamily];
+  const responsibilities = buildResponsibilityList(data);
+  const background = currentRole
+    ? `${currentRole.title} with experience in ${domain?.environment ?? strategy.environment}`
+    : `Early-career professional with ${roleFamily.toLowerCase()} experience`;
+  const strengths = compact([...(domain?.strengths ?? []), ...responsibilities.map(readablePhrase), ...strategy.focus.map(readablePhrase)]).slice(0, 3);
+  const direction = `${target} roles`;
+
+  return limitSentences(
+    `${background}. Brings ${sentenceList(strengths)} with a transition focus toward ${direction}.`,
+    3
+  );
+}
+
+function buildLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
+  const currentRole = experience[0];
+  const domain = currentRole ? detectDomain(currentRole) : null;
+  const strategy = roleStrategies[data.roleFamily];
+  const responsibilities = buildResponsibilityList(data).slice(0, 2).map(readablePhrase);
+  const strengths = compact([...(domain?.strengths ?? []), ...responsibilities, ...strategy.focus.map(readablePhrase)]).slice(0, 3);
+
+  return limitSentences(
+    `I am building toward ${target} roles with experience in ${domain?.environment ?? strategy.environment}. My strengths include ${sentenceList(strengths)} and steady follow-through in practical work environments. I am focused on turning service, documentation, and workflow experience into stronger ${data.roleFamily.toLowerCase()} support.`,
+    3
+  );
+}
+
+function buildHeadline(data: IntakeData, target: string, skills: string[]) {
   const headlineSkills = compact([
-    ...tools.slice(0, 2),
-    ...responsibilities.slice(0, 3),
-    ...skills.slice(0, 3)
+    ...buildResponsibilityList(data).slice(0, 2),
+    ...skills.filter((skill) => !/\b(reliable|follow-through|professional communication)\b/i.test(skill)).slice(0, 3)
   ]).slice(0, 3);
 
+  const middle = sentenceList(headlineSkills, "&");
+  const headline = `${target} | ${middle} | ${roleStrategies[data.roleFamily].valueArea}`;
+  return headline.length > 115 ? `${target} | ${headlineSkills.slice(0, 2).join(" & ")} | ${roleStrategies[data.roleFamily].valueArea}` : headline;
+}
+
+function qualityCheckResume(resume: ResumePackage): ResumePackage {
+  const experience = resume.experience.map((role) => ({
+    ...role,
+    bullets: qualityCheckBullets(role.bullets, ["Supported", "Documented", "Maintained"]).filter(
+      (bullet, index, bullets) => bullets.findIndex((item) => item.toLowerCase() === bullet.toLowerCase()) === index
+    )
+  }));
+
   return {
-    summary: `Early-career ${target} with hands-on experience in ${sentenceList(primaryResponsibilities.map(readablePhrase).slice(0, 4))}. Brings organized follow-through, clear communication, and practical ${roleFamily.toLowerCase()} experience in fast-moving work environments.${timeSentence}${toolSentence}${scopeSentence}${outcomeSentence}`,
-    coreSkills: skills,
-    experience: buildExperience(data),
-    education: "Education or Certification | School or Provider | Year",
-    linkedinHeadline: `${target} | ${sentenceList(headlineSkills, "&")} | ${roleIntelligence[data.roleFamily].valueArea}`,
-    linkedinSummary: `Early-career ${target} focused on ${roleIntelligence[data.roleFamily].valueArea.toLowerCase()}. Experience includes ${sentenceList(primaryResponsibilities.slice(0, 3).map(readablePhrase))}${tools.length ? ` with hands-on use of ${sentenceList(tools.slice(0, 3))}` : ""}. Known for steady communication, organized follow-through, and practical problem solving.`
+    ...resume,
+    summary: limitSentences(cleanSentence(resume.summary), 3),
+    coreSkills: compact(resume.coreSkills).slice(0, 14),
+    experience,
+    linkedinHeadline: resume.linkedinHeadline.length > 120 ? resume.linkedinHeadline.slice(0, 117).replace(/\s+\S*$/, "") + "..." : resume.linkedinHeadline,
+    linkedinSummary: limitSentences(resume.linkedinSummary, 3)
   };
+}
+
+export function generateResumePackage(data: IntakeData): ResumePackage {
+  const target = normalizeTargetRole(data);
+  const skills = buildSkillList(data);
+  const experience = buildExperience(data);
+
+  return qualityCheckResume({
+    summary: buildSummary(data, target, experience),
+    coreSkills: skills,
+    experience,
+    education: "Education or Certification | School or Provider | Year",
+    linkedinHeadline: buildHeadline(data, target, skills),
+    linkedinSummary: buildLinkedInSummary(data, target, experience)
+  });
 }
