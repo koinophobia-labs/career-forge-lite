@@ -14,10 +14,10 @@ export function ATSValidationPanel({ data, resume }: ATSValidationPanelProps) {
   return (
     <section className="mx-auto max-w-6xl px-5 pb-12 sm:px-8" id="ats-checks">
       <div className="mb-5 max-w-3xl">
-        <p className="trust-kicker text-sm font-bold uppercase">ATS validation</p>
-        <h2 className="mt-3 text-3xl font-bold text-paper">Pass or warning checks only.</h2>
+        <p className="trust-kicker text-sm font-bold uppercase">ats://receipts</p>
+        <h2 className="mt-3 text-3xl font-bold text-paper">Structure checks, no fake score.</h2>
         <p className="mt-3 text-paper/70">
-          This panel checks resume structure and keyword usefulness without inventing an ATS score.
+          A practical audit for headings, structure, skills, action verbs, contact info, and measurable context.
         </p>
       </div>
 

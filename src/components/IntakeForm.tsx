@@ -33,32 +33,32 @@ const templateDescriptions: Record<TemplateStyle, string> = {
 
 const steps = [
   {
-    title: "How should employers reach you?",
-    microcopy: "Start with the basics. This becomes the clean contact line at the top of your resume.",
+    title: "Set the contact line.",
+    microcopy: "Start with the basics. This becomes the clean header employers see first.",
     validate: ["fullName", "email"] as Array<keyof IntakeData>
   },
   {
-    title: "What role are you aiming for?",
+    title: "Name the target.",
     microcopy: "A rough target is enough. If it is too vague, Career Forge will normalize it into a stronger role title.",
     validate: ["targetJobTitle"] as Array<keyof IntakeData>
   },
   {
-    title: "Where have you built experience?",
+    title: "Log the experience.",
     microcopy: "Add your current role first. Short titles, companies, and date ranges are enough.",
     validate: ["currentTitle"] as Array<keyof IntakeData>
   },
   {
-    title: "What kind of work did you actually do?",
+    title: "Translate the real work.",
     microcopy: "Choose what fits, then add your own words. We will turn this into resume language.",
     validate: [] as Array<keyof IntakeData>
   },
   {
-    title: "What was the size or impact of your work?",
+    title: "Add the receipts.",
     microcopy: "Estimate if you are not sure. Numbers and outcomes make bullets more credible.",
     validate: [] as Array<keyof IntakeData>
   },
   {
-    title: "Pick the resume style",
+    title: "Pick the resume shell.",
     microcopy: "All options stay single-column and ATS-safe. Choose the tone that fits the opportunity.",
     validate: [] as Array<keyof IntakeData>
   }
@@ -157,12 +157,12 @@ export function IntakeForm({
     <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8" id="intake">
       <div className="mb-6">
         <p className="trust-kicker text-sm font-bold uppercase">
-          Step {stepIndex + 1} of {steps.length}
+          intake://step-{stepIndex + 1} / {steps.length}
         </p>
         <h2 className="mt-3 text-3xl font-bold text-paper">{step.title}</h2>
         <p className="mt-3 max-w-3xl text-paper/70">{step.microcopy}</p>
         <p className="mt-3 inline-flex rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm font-semibold text-cyan">
-          No perfect wording needed. Short answers are welcome.
+          No perfect wording needed. Bring rough notes. Career Forge cleans the language.
         </p>
         <div className="mt-5 h-2 rounded-full bg-white/10">
           <div className="h-2 rounded-full bg-gold transition-all" style={{ width: `${progress}%` }} />
@@ -199,9 +199,9 @@ export function IntakeForm({
               )}
             </div>
             <div className="rounded-md border border-ink/10 bg-paper p-4 sm:p-5">
-              <span className="mb-2 block text-sm font-bold text-ink">Which lane feels closest?</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Which lane fits the work?</span>
               <p className="mb-4 text-sm leading-6 text-ink/65">
-                This helps load the right responsibility suggestions and ATS keywords.
+                This loads the right responsibility set and keeps the draft role-aligned.
               </p>
               <div className="flex flex-wrap gap-2">
                 {roleFamilies.map((roleFamily) => (
@@ -255,9 +255,9 @@ export function IntakeForm({
         {stepIndex === 3 && (
           <div className="space-y-5">
             <div>
-              <span className="mb-2 block text-sm font-bold text-ink">What sounds like your work?</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Which receipts belong in the draft?</span>
               <p className="mb-4 text-sm leading-6 text-ink/70">
-                Pick anything that fits. We will translate these into cleaner resume bullets.
+                Pick anything that fits. These become the raw material for cleaner resume bullets.
               </p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((item) => (
@@ -303,7 +303,7 @@ export function IntakeForm({
         {stepIndex === 4 && (
           <div className="space-y-6">
             <div>
-              <span className="mb-2 block text-sm font-bold text-ink">Add any numbers you remember</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Add any numbers you can defend</span>
               <p className="mb-4 text-sm leading-6 text-ink/70">
                 Estimate if you are not sure. These details help the resume sound specific without inventing anything.
               </p>

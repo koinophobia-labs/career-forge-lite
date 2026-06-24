@@ -67,10 +67,10 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
     <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8" id="resume">
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="trust-kicker text-sm font-bold uppercase">Generated resume</p>
-          <h2 className="mt-3 text-3xl font-bold text-paper">Edit before copying or exporting.</h2>
+          <p className="trust-kicker text-sm font-bold uppercase">resume://draft</p>
+          <h2 className="mt-3 text-3xl font-bold text-paper">Review the package before it ships.</h2>
           <p className="mt-3 max-w-2xl text-paper/70">
-            Your working draft stays editable here. The resume content itself remains neutral, single-column, and ATS-safe.
+            Edit the draft like a final pass. The resume content itself remains neutral, single-column, and ATS-safe.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

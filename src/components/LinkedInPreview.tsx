@@ -13,8 +13,8 @@ export function LinkedInPreview({ resume, onChange }: LinkedInPreviewProps) {
     <section className="mx-auto max-w-6xl px-5 pb-16 sm:px-8">
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <p className="trust-kicker text-sm font-bold uppercase">LinkedIn preview</p>
-          <h2 className="mt-3 text-3xl font-bold text-paper">A concise profile starter.</h2>
+          <p className="trust-kicker text-sm font-bold uppercase">linkedin://starter</p>
+          <h2 className="mt-3 text-3xl font-bold text-paper">A searchable headline, not a full rewrite.</h2>
           <p className="mt-3 text-paper/70">
             Keep this focused for now: headline plus a short professional summary.
           </p>

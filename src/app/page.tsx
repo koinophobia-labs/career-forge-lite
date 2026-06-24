@@ -76,7 +76,7 @@ export default function Home() {
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
         <div className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 md:grid-cols-3">
-          {["Landing", "Guided Intake", "Resume + LinkedIn"].map((label, index) => (
+          {["Dossier", "Interview", "Resume Package"].map((label, index) => (
             <button
               key={label}
               type="button"
