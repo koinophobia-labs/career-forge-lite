@@ -1,5 +1,10 @@
 import type { IntakeData, RoleFamily, TemplateStyle } from "@/types/career";
 
+export type CareerTarget = {
+  title: string;
+  roleFamily: RoleFamily;
+};
+
 export const roleFamilies: RoleFamily[] = [
   "Tech",
   "Business",
@@ -13,6 +18,76 @@ export const roleFamilies: RoleFamily[] = [
 ];
 
 export const templates: TemplateStyle[] = ["Corporate", "Modern ATS", "Tech ATS"];
+
+export const careerTargets: CareerTarget[] = [
+  { title: "Customer Success Associate", roleFamily: "Customer Success" },
+  { title: "Customer Support Specialist", roleFamily: "Customer Success" },
+  { title: "Customer Experience Associate", roleFamily: "Customer Success" },
+  { title: "Client Services Coordinator", roleFamily: "Customer Success" },
+  { title: "Onboarding Specialist", roleFamily: "Customer Success" },
+  { title: "Account Coordinator", roleFamily: "Customer Success" },
+  { title: "Member Services Representative", roleFamily: "Customer Success" },
+  { title: "Client Support Representative", roleFamily: "Customer Success" },
+  { title: "Customer Care Coordinator", roleFamily: "Customer Success" },
+  { title: "Operations Associate", roleFamily: "Operations" },
+  { title: "Operations Coordinator", roleFamily: "Operations" },
+  { title: "Logistics Coordinator", roleFamily: "Operations" },
+  { title: "Fulfillment Coordinator", roleFamily: "Operations" },
+  { title: "Scheduling Coordinator", roleFamily: "Operations" },
+  { title: "Process Coordinator", roleFamily: "Operations" },
+  { title: "Business Operations Associate", roleFamily: "Operations" },
+  { title: "Facilities Coordinator", roleFamily: "Operations" },
+  { title: "Inventory Coordinator", roleFamily: "Operations" },
+  { title: "Administrative Assistant", roleFamily: "Admin" },
+  { title: "Office Coordinator", roleFamily: "Admin" },
+  { title: "Front Desk Coordinator", roleFamily: "Admin" },
+  { title: "Receptionist", roleFamily: "Admin" },
+  { title: "Administrative Coordinator", roleFamily: "Admin" },
+  { title: "Records Coordinator", roleFamily: "Admin" },
+  { title: "Executive Assistant", roleFamily: "Admin" },
+  { title: "Office Assistant", roleFamily: "Admin" },
+  { title: "Data Entry Clerk", roleFamily: "Admin" },
+  { title: "Sales Development Representative", roleFamily: "Sales" },
+  { title: "Business Development Representative", roleFamily: "Sales" },
+  { title: "Sales Coordinator", roleFamily: "Sales" },
+  { title: "Account Representative", roleFamily: "Sales" },
+  { title: "Inside Sales Representative", roleFamily: "Sales" },
+  { title: "Lead Generation Specialist", roleFamily: "Sales" },
+  { title: "Sales Support Specialist", roleFamily: "Sales" },
+  { title: "Account Development Representative", roleFamily: "Sales" },
+  { title: "Business Analyst", roleFamily: "Business" },
+  { title: "Business Operations Associate", roleFamily: "Business" },
+  { title: "Operations Analyst", roleFamily: "Business" },
+  { title: "Program Associate", roleFamily: "Business" },
+  { title: "Strategy Associate", roleFamily: "Business" },
+  { title: "Process Analyst", roleFamily: "Business" },
+  { title: "Reporting Analyst", roleFamily: "Business" },
+  { title: "Business Support Specialist", roleFamily: "Business" },
+  { title: "Project Coordinator", roleFamily: "Project Coordination" },
+  { title: "Project Administrator", roleFamily: "Project Coordination" },
+  { title: "Program Coordinator", roleFamily: "Project Coordination" },
+  { title: "Implementation Coordinator", roleFamily: "Project Coordination" },
+  { title: "PMO Coordinator", roleFamily: "Project Coordination" },
+  { title: "Project Support Specialist", roleFamily: "Project Coordination" },
+  { title: "Project Assistant", roleFamily: "Project Coordination" },
+  { title: "Implementation Associate", roleFamily: "Project Coordination" },
+  { title: "Help Desk Technician", roleFamily: "IT Support" },
+  { title: "IT Support Specialist", roleFamily: "IT Support" },
+  { title: "Technical Support Representative", roleFamily: "IT Support" },
+  { title: "Desktop Support Technician", roleFamily: "IT Support" },
+  { title: "Service Desk Analyst", roleFamily: "IT Support" },
+  { title: "Support Technician", roleFamily: "IT Support" },
+  { title: "IT Support Technician", roleFamily: "IT Support" },
+  { title: "Help Desk Analyst", roleFamily: "IT Support" },
+  { title: "QA Tester", roleFamily: "Tech" },
+  { title: "Junior Product Analyst", roleFamily: "Tech" },
+  { title: "Technical Operations Associate", roleFamily: "Tech" },
+  { title: "Data Associate", roleFamily: "Tech" },
+  { title: "Product Operations Associate", roleFamily: "Tech" },
+  { title: "Implementation Specialist", roleFamily: "Tech" },
+  { title: "Junior QA Analyst", roleFamily: "Tech" },
+  { title: "Technical Support Associate", roleFamily: "Tech" }
+];
 
 export const roleIntelligence: Record<RoleFamily, { responsibilities: string[]; skills: string[]; valueArea: string }> = {
   Security: {

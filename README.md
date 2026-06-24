@@ -42,6 +42,7 @@ Early-career candidates often have useful experience but struggle to describe it
   - Responsibilities
   - Scope + Outcomes
   - Template
+- Searchable career target database with 67 mapped early-career role titles
 - Guided responsibility suggestions based on role family
 - Role intelligence system for Security, Customer Success, Project Coordination, Operations, Business, Sales, Admin, Tech, and IT Support
 - Up to three experience roles:

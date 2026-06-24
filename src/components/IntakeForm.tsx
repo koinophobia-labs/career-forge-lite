@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import {
+  careerTargets,
+  type CareerTarget,
   outcomeOptions,
   outcomeSuggestionsByFamily,
   responsibilitySuggestions,
@@ -47,12 +49,12 @@ const questions: Question[] = [
   },
   {
     title: "What role are you aiming for?",
-    helper: "A rough target is fine. Career Forge will clean weak or placeholder role titles.",
+    helper: "Search a specific title or type your own. Known titles map to the right role family automatically.",
     validate: ["targetJobTitle"]
   },
   {
-    title: "Which lane fits this target best?",
-    helper: "This loads the right responsibility set and keeps the resume language role-aligned.",
+    title: "Does this career lane look right?",
+    helper: "This controls the responsibility chips, scope prompts, outcome suggestions, and ATS keyword logic.",
     validate: []
   },
   {
@@ -144,6 +146,15 @@ export function IntakeForm({
   const roleScopePrompts = scopePromptSets[data.roleFamily];
   const roleOutcomes = outcomeSuggestionsByFamily[data.roleFamily];
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
+  const normalizedTargetQuery = data.targetJobTitle.trim().toLowerCase();
+  const targetMatches = careerTargets
+    .filter((target) => {
+      if (!normalizedTargetQuery) return true;
+      const title = target.title.toLowerCase();
+      const family = target.roleFamily.toLowerCase();
+      return title.includes(normalizedTargetQuery) || family.includes(normalizedTargetQuery);
+    })
+    .slice(0, 12);
   const progress = Math.round(((questionIndex + 1) / questions.length) * 100);
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
 
@@ -182,6 +193,27 @@ export function IntakeForm({
 
   function setRoleFamily(roleFamily: RoleFamily) {
     onChange({ ...data, roleFamily, selectedResponsibilities: [] });
+  }
+
+  function updateTargetRole(value: string) {
+    const exactMatch =
+      careerTargets.find((target) => target.title.toLowerCase() === value.trim().toLowerCase() && target.roleFamily === data.roleFamily) ??
+      careerTargets.find((target) => target.title.toLowerCase() === value.trim().toLowerCase());
+
+    onChange({
+      ...data,
+      targetJobTitle: value,
+      ...(exactMatch ? { roleFamily: exactMatch.roleFamily, selectedResponsibilities: [] } : {})
+    });
+  }
+
+  function selectCareerTarget(target: CareerTarget) {
+    onChange({
+      ...data,
+      targetJobTitle: target.title,
+      roleFamily: target.roleFamily,
+      selectedResponsibilities: []
+    });
   }
 
   function toggleResponsibility(item: string) {
@@ -281,16 +313,76 @@ export function IntakeForm({
           </div>
         );
       case 3:
-        return renderField(
-          "targetJobTitle",
-          "Target role",
-          "Customer Success Associate",
-          "text",
-          "If you type something rough, Career Forge will normalize it before generating."
+        return (
+          <div className="space-y-5">
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold text-ink">
+                Search or enter a target role <span className="text-coral">*</span>
+              </span>
+              <span className="mb-2 block text-sm leading-5 text-ink/60">
+                Pick a known role for automatic mapping, or keep typing if your exact title is not listed.
+              </span>
+              <input
+                type="text"
+                value={data.targetJobTitle}
+                onChange={(event) => updateTargetRole(event.target.value)}
+                placeholder="Example: Help Desk Technician, Project Coordinator, Sales Coordinator"
+                aria-invalid={Boolean(errors.targetJobTitle)}
+                className={inputClass("targetJobTitle")}
+              />
+              {errors.targetJobTitle && (
+                <span className="mt-2 block text-sm font-semibold text-coral">{errors.targetJobTitle}</span>
+              )}
+            </label>
+            <div className="rounded-md border border-ink/10 bg-white p-4">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Career target database</p>
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-ink/50">
+                  {careerTargets.length} mapped titles
+                </span>
+              </div>
+              <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {targetMatches.map((target) => (
+                  <button
+                    key={`${target.title}-${target.roleFamily}`}
+                    type="button"
+                    onClick={() => selectCareerTarget(target)}
+                    className={`rounded-md border p-3 text-left transition ${
+                      data.targetJobTitle === target.title && data.roleFamily === target.roleFamily
+                        ? "border-gold bg-gold/20"
+                        : "border-ink/12 bg-paper/70 hover:border-spruce"
+                    }`}
+                  >
+                    <span className="block text-sm font-bold text-ink">{target.title}</span>
+                    <span className="mt-1 block text-xs font-black uppercase tracking-[0.12em] text-spruce">
+                      Maps to {target.roleFamily}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {!targetMatches.length && (
+                <p className="text-sm leading-6 text-ink/65">
+                  No exact catalog match. You can continue with this custom title and confirm the closest career lane next.
+                </p>
+              )}
+            </div>
+            <div className="rounded-md border border-cyan/20 bg-cyan/10 px-4 py-3 text-sm font-semibold text-ink">
+              Current mapping: <span className="text-spruce">{data.roleFamily}</span>
+            </div>
+          </div>
         );
       case 4:
         return (
-          <div>
+          <div className="space-y-4">
+            <div className="rounded-md border border-ink/10 bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Mapped role family</p>
+              <p className="mt-2 text-sm leading-6 text-ink/65">
+                Target role: <span className="font-bold text-ink">{data.targetJobTitle || "Not added yet"}</span>
+              </p>
+              <p className="mt-1 text-sm leading-6 text-ink/65">
+                Current lane: <span className="font-bold text-ink">{data.roleFamily}</span>. Change it only if another lane fits your target better.
+              </p>
+            </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {roleFamilies.map((roleFamily) => (
                 <button
@@ -487,7 +579,8 @@ export function IntakeForm({
         return (
           <div className="grid gap-3 md:grid-cols-2">
             <ReviewItem label="Contact" value={[data.fullName, data.email, data.phone, data.website].filter(Boolean).join(" / ")} onEdit={() => goToQuestion(0)} />
-            <ReviewItem label="Target" value={`${data.targetJobTitle || "Not added yet"} / ${data.roleFamily}`} onEdit={() => goToQuestion(3)} />
+            <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestion(3)} />
+            <ReviewItem label="Mapped role family" value={data.roleFamily} onEdit={() => goToQuestion(4)} />
             <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestion(5)} />
             <ReviewItem label="Tools" value={data.tools || "Not added yet"} onEdit={() => goToQuestion(9)} />
             <ReviewItem
