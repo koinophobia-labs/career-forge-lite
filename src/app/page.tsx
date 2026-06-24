@@ -6,6 +6,8 @@ import { IntakeForm } from "@/components/IntakeForm";
 import { LandingPage } from "@/components/LandingPage";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
 import { ResumePreview } from "@/components/ResumePreview";
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader";
 import { initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
@@ -72,6 +74,7 @@ export default function Home() {
 
   return (
     <main>
+      <SiteHeader onStart={() => jump("intake")} />
       <LandingPage onStart={() => jump("intake")} />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
@@ -89,6 +92,19 @@ export default function Home() {
             >
               {index + 1}. {label}
             </button>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 text-xs font-bold uppercase tracking-[0.12em] text-paper/64 md:grid-cols-4">
+          {[
+            ["No Login", "No saved account"],
+            ["ATS-Safe", "Single-column output"],
+            ["Editable", "Copy, revise, export"],
+            ["No Fluff", "Real language only"]
+          ].map(([label, detail]) => (
+            <div key={label} className="rounded-md border border-white/10 bg-obsidian/35 p-3">
+              <span className="block text-gold">{label}</span>
+              <span className="mt-1 block text-[0.68rem] text-paper/50">{detail}</span>
+            </div>
           ))}
         </div>
       </section>
@@ -112,9 +128,7 @@ export default function Home() {
         </>
       )}
 
-      <footer className="border-t border-white/10 px-5 py-6 text-center text-sm text-paper/60">
-        Career Forge Lite builds local, editable draft content. Exported resume text is unbranded.
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

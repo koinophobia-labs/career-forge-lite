@@ -2,12 +2,21 @@
 
 ## Summary
 
-Career Forge Lite was adjusted from a Koinophobia-inspired trust redesign into a closer Product Lab ecosystem fit. The changes are selective: the app now uses more of the main site's dossier, receipts, proof, and shipped-utility language while preserving professional resume-tool clarity.
+Career Forge Lite was adjusted from a Koinophobia-inspired trust redesign into a closer Product Lab ecosystem fit. The changes are selective: the app now uses more of the main site's shell, dossier, receipts, proof, and shipped-utility language while preserving professional resume-tool clarity.
 
 ## Design Cues Applied
 
+- Added a compact Koinophobia-style global header with:
+  - Lab mark
+  - Product Lab navigation
+  - Gold `Start the Interview` CTA
+- Added a footer ecosystem strip with:
+  - Koinophobia Labs / Product Lab utility positioning
+  - Product Lab module list
+  - Utility/trust signals
 - Added a subtle top identity row: `Koinophobia Labs` and `Product Lab utility - Live MVP`.
 - Changed the hero kicker to `Built by Koinophobia Labs - Career Forge Lite`.
+- Added cyan emphasis to `recruiter-ready` in the hero headline to match the main site's color-as-signal pattern.
 - Reframed the hero copy around a practical Product Lab tool, clear resume proof, and avoiding inflated AI filler.
 - Changed primary CTA from generic package-building language to `Start the Interview`.
 - Changed secondary CTA to `View the Receipts`.
@@ -16,6 +25,10 @@ Career Forge Lite was adjusted from a Koinophobia-inspired trust redesign into a
   - `ATS`
   - `EDITABLE`
 - Changed the transformation panel from `forge://translation` to `career://dossier`.
+- Added status/stack/mode metadata inside the dossier panel:
+  - `Shipping`
+  - `Web`
+  - `Build in public`
 - Added subtle ecosystem copy referencing You Know Ball, Creator Command Center, and KOI Cave.
 - Changed landing proof cards to a three-part flow:
   - `01 / Interview`
@@ -36,6 +49,11 @@ Career Forge Lite was adjusted from a Koinophobia-inspired trust redesign into a
   - `resume://draft`
   - `ats://receipts`
   - `linkedin://starter`
+- Added a compact trust signal band:
+  - `No Login`
+  - `ATS-Safe`
+  - `Editable`
+  - `No Fluff`
 
 ## Before / After Rationale
 
@@ -49,6 +67,8 @@ After:
 
 - Career Forge now feels like a Koinophobia Labs Product Lab utility.
 - The language uses the same proof, receipts, dossier, and shipping mindset as the main site.
+- The global shell makes the company relationship obvious before the user reads the body copy.
+- The footer reinforces ecosystem connection without adding fake metrics or a giant company section.
 - The resume editor remains practical, white, single-column, readable, and ATS-safe.
 - The ecosystem connection is visible but not oversized.
 
@@ -59,6 +79,9 @@ After:
 - `src/components/ResumePreview.tsx`
 - `src/components/ATSValidationPanel.tsx`
 - `src/components/LinkedInPreview.tsx`
+- `src/components/SiteHeader.tsx`
+- `src/components/SiteFooter.tsx`
+- `src/app/globals.css`
 - `src/app/page.tsx`
 - `public/screenshots/landing.png`
 - `public/screenshots/intake.png`
@@ -83,6 +106,8 @@ Updated:
 Review notes:
 
 - Landing no longer reads as generic SaaS; it now introduces Career Forge as a Product Lab utility.
+- Header and footer make the Koinophobia relationship visible across the app.
+- Mobile remains stacked and usable, with the CTA and trust signals still reachable without horizontal overflow.
 - Intake still feels usable and professional, not like a command center.
 - Resume review still keeps the resume surface neutral and ATS-safe.
 - ATS panel now feels like a proof/receipts audit without inventing a score.
@@ -95,8 +120,8 @@ Review notes:
 
 ## Commit And Push
 
-- Implementation commit hash: `4583f00`
-- Push result: pushed to `origin/main` (`https://github.com/koinophobia-labs/career-forge-lite.git`)
+- Implementation commit hash: pending
+- Push result: pending
 
 ## Deployment Expectation
 

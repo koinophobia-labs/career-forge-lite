@@ -24,10 +24,10 @@ export function LandingPage({ onStart }: LandingPageProps) {
         />
       </div>
       <div className="absolute inset-0 bg-gradient-to-r from-obsidian via-obsidian/92 to-obsidian/40" />
-      <div className="relative mx-auto flex min-h-[88vh] max-w-6xl flex-col justify-center px-5 py-14 sm:px-8">
+      <div className="relative mx-auto flex min-h-[82vh] max-w-6xl flex-col justify-center px-5 py-14 sm:px-8">
         <div className="mb-12 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4 text-xs font-bold uppercase tracking-[0.16em] text-paper/60">
-          <span>Koinophobia Labs</span>
-          <span className="text-gold">Product Lab utility - Live MVP</span>
+          <span>koinophobia://product-lab</span>
+          <span className="text-gold">Career utility - Live MVP</span>
         </div>
         <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="max-w-2xl">
@@ -35,7 +35,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
               Built by Koinophobia Labs - Career Forge Lite
             </p>
             <h1 className="text-4xl font-bold leading-[1.02] text-paper sm:text-6xl">
-              Turn real work into recruiter-ready resume language.
+              Turn real work into <span className="text-cyan">recruiter-ready</span> resume language.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-paper/75">
               A practical Product Lab tool for early-career candidates who need clear
@@ -71,6 +71,20 @@ export function LandingPage({ onStart }: LandingPageProps) {
             <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
               <strong className="text-sm uppercase tracking-[0.16em] text-paper">career://dossier</strong>
               <span className="rounded-md bg-cyan/10 px-2 py-1 text-xs font-bold text-cyan">LIVE MVP</span>
+            </div>
+            <div className="mb-4 grid grid-cols-3 gap-2 border-b border-white/10 pb-4 text-[0.64rem] font-black uppercase tracking-[0.12em] text-paper/48">
+              <span>
+                Status
+                <strong className="mt-1 block text-cyan">Shipping</strong>
+              </span>
+              <span>
+                Stack
+                <strong className="mt-1 block text-paper">Web</strong>
+              </span>
+              <span>
+                Mode
+                <strong className="mt-1 block text-gold">Build in public</strong>
+              </span>
             </div>
             <div className="space-y-4">
               <div className="trust-card rounded-md p-4">

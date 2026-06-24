@@ -73,6 +73,46 @@ textarea {
   color: #111318;
 }
 
+.logo-mark {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(212, 175, 55, 0.58);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 65% 28%, rgba(0, 229, 255, 0.2), transparent 42%),
+    rgba(212, 175, 55, 0.08);
+  color: #d4af37;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 22px rgba(212, 175, 55, 0.12);
+}
+
+.ecosystem-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  box-shadow: 0 0 16px currentColor;
+}
+
+.ecosystem-dot-gold {
+  background: #d4af37;
+  color: #d4af37;
+}
+
+.ecosystem-dot-cyan {
+  background: #00e5ff;
+  color: #00e5ff;
+}
+
+.ecosystem-dot-ember {
+  background: #ff6a2b;
+  color: #ff6a2b;
+}
+
 @media print {
   body * {
     visibility: hidden;

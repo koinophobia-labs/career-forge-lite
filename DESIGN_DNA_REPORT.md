@@ -35,12 +35,14 @@
 ## Recurring Visual Patterns
 
 - Dark background with subtle depth and high-contrast white text.
+- Compact top navigation with lab identity on the left, product links in the middle, and a gold CTA on the right.
 - Narrow uppercase kickers with wide letter spacing.
 - Rectangular panels with thin borders and modest radius.
 - Status pills such as live, online, build, local, or open.
 - Product/module labels that feel system-like without becoming decorative.
 - Gold primary buttons and restrained secondary outline buttons.
 - Dense but readable cards with clear hierarchy.
+- Footer blocks that reinforce the lab ecosystem, not just legal/navigation housekeeping.
 
 ## Recurring Copy Patterns
 
@@ -58,6 +60,7 @@
 - Secondary panels look like command/dossier receipts.
 - Product Lab sections use compact cards and selected-module detail.
 - Sections are separated by clear horizontal rhythm and borders.
+- Global shell elements make each product feel connected: nav, footer, product list, utility labels.
 
 ## Recurring Trust Patterns
 
@@ -71,6 +74,7 @@
 
 Career Forge should borrow:
 
+- Shared shell cues: compact nav, lab mark, Product Lab footer, and status badges.
 - The proof-led information hierarchy.
 - Dossier/receipt language.
 - Gold/cyan status and action treatment.
@@ -87,3 +91,15 @@ Career Forge should not borrow:
 ## Final Design Direction
 
 Career Forge should read as a practical Product Lab utility: built by Koinophobia Labs, focused on real career outcomes, and grounded in editable ATS-safe documents.
+
+## Deep Alignment Pass Notes
+
+The deeper pass should make Career Forge feel visibly connected before the user reads a paragraph. The shared company signal should come from:
+
+- A Koinophobia-style nav and logo mark.
+- A Product Lab utility status line.
+- A dossier panel with status/stack/mode metadata.
+- A trust signal band that mirrors main-site proof chips.
+- A footer ecosystem strip naming adjacent Product Lab modules.
+
+The app should still avoid becoming a dashboard. The resume editor, ATS checks, and LinkedIn preview remain utility-first and readable.
