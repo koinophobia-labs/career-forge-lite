@@ -118,20 +118,40 @@ textarea {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 0.42in;
   }
 
-  #resume,
-  #resume * {
-    visibility: visible;
+  html,
+  body {
+    width: auto;
+    min-height: auto;
+    overflow: visible;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main > :not(#resume) {
+    display: none !important;
+  }
+
+  body * {
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   #resume {
-    position: absolute;
-    inset: 0;
+    display: block !important;
+    max-width: none !important;
     width: 100%;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   #resume > div {
@@ -142,12 +162,22 @@ textarea {
     display: none !important;
   }
 
+  #print-resume {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
   .resume-paper {
-    border: 0;
-    box-shadow: none;
-    padding: 0.45in;
-    font-size: 10.5pt;
-    line-height: 1.35;
+    border: 0 !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    font-size: 9.5pt;
+    line-height: 1.22;
+    color: #000000 !important;
+    page-break-after: avoid;
   }
 
   .resume-paper .screen-edit {
@@ -165,14 +195,68 @@ textarea {
   .resume-paper section {
     break-inside: avoid;
     page-break-inside: avoid;
+    margin: 0 !important;
+  }
+
+  .resume-paper .resume-role-print-empty {
+    display: none !important;
   }
 
   .resume-paper h2 {
     margin-top: 0;
-    font-size: 10pt;
+    font-size: 9pt;
+    line-height: 1.1;
+  }
+
+  .resume-paper header {
+    padding-bottom: 0.12in !important;
+    border-color: #444444 !important;
+  }
+
+  .resume-paper header input,
+  .resume-paper header p,
+  .resume-paper h2,
+  .resume-paper p,
+  .resume-paper li {
+    color: #000000 !important;
   }
 
   .resume-paper header input {
-    font-size: 18pt;
+    font-size: 16pt;
+    line-height: 1.05;
+  }
+
+  .resume-paper header p {
+    margin-top: 0.04in !important;
+    font-size: 8.5pt;
+    line-height: 1.2;
+  }
+
+  .resume-paper > div {
+    margin-top: 0.16in !important;
+    gap: 0 !important;
+  }
+
+  .resume-paper > div > section + section {
+    margin-top: 0.16in !important;
+  }
+
+  .resume-paper section > div:first-child {
+    margin-bottom: 0.07in !important;
+    padding-bottom: 0.035in !important;
+    border-color: #555555 !important;
+  }
+
+  .resume-paper p {
+    margin: 0;
+  }
+
+  .resume-paper ul {
+    margin-top: 0.045in !important;
+    padding-left: 0.18in !important;
+  }
+
+  .resume-paper li {
+    margin: 0 0 0.025in !important;
   }
 }
