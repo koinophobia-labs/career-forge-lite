@@ -30,6 +30,7 @@ export type IntakeData = {
   tools: string;
   responsibilities: string;
   selectedResponsibilities: string[];
+  selectedActions: string[];
   customersServed: string;
   ticketsHandled: string;
   projectsSupported: string;

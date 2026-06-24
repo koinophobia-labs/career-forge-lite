@@ -310,6 +310,18 @@ export const outcomeOptions = [
   "Compliance"
 ];
 
+export const actionSuggestionsByFamily: Record<RoleFamily, string[]> = {
+  Security: ["monitored access", "documented incidents", "escalated issues", "assisted visitors", "followed safety procedures"],
+  "Customer Success": ["resolved issues", "routed escalations", "documented updates", "followed up with customers", "supported onboarding"],
+  "Project Coordination": ["tracked milestones", "updated stakeholders", "prepared status notes", "coordinated meetings", "maintained timelines"],
+  Operations: ["tracked work", "prepared reports", "coordinated schedules", "improved process flow", "maintained records"],
+  Business: ["prepared reports", "analyzed information", "documented processes", "updated stakeholders", "tracked metrics"],
+  Sales: ["followed up with leads", "updated CRM records", "supported outreach", "tracked pipeline activity", "researched prospects"],
+  Admin: ["coordinated schedules", "maintained records", "handled correspondence", "supported office workflows", "entered data accurately"],
+  Tech: ["tested workflows", "documented issues", "supported implementation", "tracked technical tasks", "handled data updates"],
+  "IT Support": ["troubleshot issues", "resolved tickets", "escalated complex cases", "documented fixes", "supported users"]
+};
+
 export const initialIntake: IntakeData = {
   fullName: "",
   email: "",
@@ -329,6 +341,7 @@ export const initialIntake: IntakeData = {
   tools: "",
   responsibilities: "",
   selectedResponsibilities: [],
+  selectedActions: [],
   customersServed: "",
   ticketsHandled: "",
   projectsSupported: "",

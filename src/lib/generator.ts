@@ -1,4 +1,5 @@
 import { roleIntelligence } from "@/lib/career-data";
+import { educationPlaceholder } from "@/lib/resume-export";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
 const defaultTargetByFamily: Record<RoleFamily, string> = {
@@ -173,6 +174,7 @@ const roleStrategies: Record<RoleFamily, RoleStrategy> = {
 };
 
 const weakTargetValues = new Set(["ee", "test", "testing", "asdf", "qwerty", "none", "na", "n/a", "unknown"]);
+const weakFreeTextValues = new Set(["ee", "test", "testing", "asdf", "qwerty", "none", "na", "n/a", "unknown", "null"]);
 const awkwardPhrases = [/customers customers/gi, /tickets tickets/gi, /managed onboarding using python/gi, /candidate targeting/gi];
 const leadershipTerms = /\b(supervisor|lead|manager|senior|coordinator|specialist)\b/i;
 const supportTerms = /\b(associate|assistant|representative|clerk|cashier|writer|technician|intern)\b/i;
@@ -205,10 +207,120 @@ const responsibilityAliases = new Map([
   ["did reports", "Reporting"]
 ]);
 
+type BulletContext = {
+  action: string;
+  bridgeAction: string;
+  company: string;
+  context: string;
+  domainAction: string;
+  environment: string;
+  outcomeClause: string;
+  processLanguage: string;
+  responsibility: string;
+  scope: string;
+  scopeTwo: string;
+  toolPhrase: string;
+  targetFocus: string;
+};
+
+const bulletPatternLibrary: Record<RoleFamily, string[]> = {
+  "Customer Success": [
+    "{action} {scope}customer requests in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping client records and next steps clear.",
+    "{bridgeAction} account support by following up with customers, documenting updates, and escalating complex needs.",
+    "{action} onboarding and service follow-through with clear communication across customer touchpoints.",
+    "{action} customer issues with organized notes, timely handoffs, and reliable follow-through.",
+    "{bridgeAction} client communication by translating routine requests into documented next steps.",
+    "{action} CRM and support records to keep customer history accurate and searchable.",
+    "{bridgeAction} retention-focused service by maintaining consistent updates and positive customer experiences."
+  ],
+  Operations: [
+    "{action} {scope}daily workflows in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping records, handoffs, and next steps clear.",
+    "{bridgeAction} operational consistency by tracking work, documenting updates, and supporting issue resolution.",
+    "{action} schedules, reports, and task flow to keep work moving across teams.",
+    "{action} process details and routine updates to support accuracy and reliability.",
+    "{bridgeAction} team communication by clarifying priorities, deadlines, and follow-up needs.",
+    "{action} records and workflow notes to make recurring work easier to review.",
+    "{bridgeAction} service standards by supporting process flow, compliance awareness, and consistent execution."
+  ],
+  Admin: [
+    "{action} {scope}administrative requests in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping records and correspondence organized.",
+    "{bridgeAction} office workflows by coordinating schedules, maintaining records, and communicating next steps.",
+    "{action} calendars, documents, and routine requests with accuracy and professional follow-through.",
+    "{action} records and data updates to keep information complete, current, and easy to find.",
+    "{bridgeAction} team support by handling correspondence, tracking details, and organizing office needs.",
+    "{action} recurring administrative tasks while protecting accuracy and response consistency.",
+    "{bridgeAction} reliable office operations through documentation, scheduling support, and organized handoffs."
+  ],
+  Sales: [
+    "{action} {scope}prospect or customer follow-ups in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping account notes and handoffs current.",
+    "{bridgeAction} pipeline support by tracking outreach, documenting updates, and following up on next steps.",
+    "{action} lead research and outreach tasks with consistent communication and recordkeeping.",
+    "{action} customer conversations and CRM notes to support cleaner sales follow-through.",
+    "{bridgeAction} revenue support by maintaining accurate pipeline activity and account context.",
+    "{action} follow-up communication to help prospects and customers receive timely next steps.",
+    "{bridgeAction} account coordination through organized notes, outreach support, and clear handoffs."
+  ],
+  Business: [
+    "{action} {scope}business requests in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping reporting context and updates clear.",
+    "{bridgeAction} operational insight by organizing information, documenting processes, and communicating findings.",
+    "{action} reports and process notes to support better stakeholder visibility.",
+    "{action} data and workflow details to help teams understand status, gaps, and next steps.",
+    "{bridgeAction} stakeholder support through clear documentation, reporting, and follow-up.",
+    "{action} recurring business updates with attention to accuracy and usable context.",
+    "{bridgeAction} decision support by preparing organized notes, reports, and process documentation."
+  ],
+  "Project Coordination": [
+    "{action} {scope}project activity in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping milestones and handoffs visible.",
+    "{bridgeAction} project delivery by tracking timelines, preparing updates, and coordinating follow-up.",
+    "{action} meeting notes, status updates, and documentation to keep stakeholders aligned.",
+    "{action} timelines and task owners so project details stayed organized and actionable.",
+    "{bridgeAction} cross-functional communication by clarifying next steps, risks, and status changes.",
+    "{action} project records and recurring updates to support reliable execution.",
+    "{bridgeAction} milestone tracking through organized documentation, follow-up, and schedule awareness."
+  ],
+  "IT Support": [
+    "{action} {scope}user support requests in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping tickets and troubleshooting notes clear.",
+    "{bridgeAction} technical support by documenting fixes, escalating complex cases, and communicating next steps.",
+    "{action} user issues with structured troubleshooting and clear service communication.",
+    "{action} support tickets and knowledge notes to improve repeatable resolution steps.",
+    "{bridgeAction} help desk reliability through accurate documentation, triage, and escalation awareness.",
+    "{action} routine technical requests while protecting service quality and response consistency.",
+    "{bridgeAction} user support workflows by tracking issues, updating records, and following through on fixes."
+  ],
+  Tech: [
+    "{action} {scope}technical tasks in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping technical notes and handoffs clear.",
+    "{bridgeAction} implementation support by documenting issues, testing workflows, and tracking follow-up.",
+    "{action} testing and documentation tasks to make technical work easier to review.",
+    "{action} tool and workflow updates with attention to accuracy and repeatable steps.",
+    "{bridgeAction} technical operations by organizing notes, validating details, and communicating status.",
+    "{action} data or product operations tasks while maintaining clear documentation.",
+    "{bridgeAction} technical workflow support through testing, documentation, and issue tracking."
+  ],
+  Security: [
+    "{action} {scope}site activity in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping incident notes and handoffs clear.",
+    "{bridgeAction} safety procedures by monitoring access, documenting incidents, and escalating concerns.",
+    "{action} visitor and access-control needs while maintaining calm, policy-aware service.",
+    "{action} incident details and shift notes to support reliable safety communication.",
+    "{bridgeAction} compliance-aware operations through documentation, escalation, and procedure follow-through.",
+    "{action} emergency or routine requests with attention to safety and response consistency.",
+    "{bridgeAction} site reliability by supporting access control, visitor management, and incident reporting."
+  ]
+};
+
 const splitList = (value: string) =>
   value
     .split(/,|\n/)
     .map((item) => cleanWhitespace(item))
+    .filter((item) => !isWeakFreeText(item))
     .filter(Boolean);
 
 const cleanWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -251,7 +363,7 @@ function normalizeTool(value: string) {
 
 function normalizeCompany(value: string) {
   const cleaned = cleanWhitespace(value);
-  if (!cleaned) return "";
+  if (!cleaned || isWeakFreeText(cleaned)) return "";
   const hasIntentionalCaps = /[a-z][A-Z]/.test(cleaned);
   return hasIntentionalCaps ? cleaned : titleCase(cleaned);
 }
@@ -265,11 +377,22 @@ function isWeakTarget(value: string) {
   return false;
 }
 
+function isWeakFreeText(value: string) {
+  const cleaned = cleanWhitespace(value).toLowerCase();
+  if (!cleaned) return true;
+  if (weakFreeTextValues.has(cleaned)) return true;
+  if (cleaned.length === 1) return true;
+  if (/^[^\w]+$/.test(cleaned)) return true;
+  if (/^(.)\1{2,}$/.test(cleaned)) return true;
+  return false;
+}
+
 function normalizeTargetRole(data: IntakeData) {
   return isWeakTarget(data.targetJobTitle) ? defaultTargetByFamily[data.roleFamily] : titleCase(data.targetJobTitle);
 }
 
 function normalizeResponsibility(value: string) {
+  if (isWeakFreeText(value)) return "";
   const alias = responsibilityAliases.get(cleanWhitespace(value).toLowerCase());
   if (alias) return alias;
   const titled = titleCase(value);
@@ -330,7 +453,7 @@ function buildResponsibilityList(data: IntakeData) {
 }
 
 function buildToolList(data: IntakeData) {
-  return compact(splitList(data.tools).map(normalizeTool)).slice(0, 6);
+  return compact(splitList(data.tools).filter((tool) => !isWeakFreeText(tool)).map(normalizeTool)).slice(0, 6);
 }
 
 function buildSkillList(data: IntakeData) {
@@ -379,7 +502,7 @@ function buildOutcomeSupport(data: IntakeData) {
   const selected = compact(data.selectedOutcomes.map((outcome) => outcome.toLowerCase()));
   const custom = cleanWhitespace(data.outcomes).replace(/^improved\s+/i, "");
   if (selected.length) return sentenceList(selected.slice(0, 2));
-  if (custom) return custom;
+  if (custom && !isWeakFreeText(custom)) return custom;
   return "";
 }
 
@@ -423,6 +546,14 @@ function roleContext(role: ExperienceRole, data: IntakeData, index: number) {
   return { strategy, domain, level, context };
 }
 
+function renderPattern(pattern: string, context: BulletContext) {
+  return cleanSentence(
+    pattern.replace(/\{(\w+)\}/g, (_, key: keyof BulletContext) => {
+      return context[key] ?? "";
+    })
+  );
+}
+
 function scopeForBullet(scopes: ReturnType<typeof buildScopeItems>, preferredKeys: Array<keyof IntakeData>) {
   return preferredKeys.map((key) => scopes.find((scope) => scope.key === key)).find(Boolean) ?? scopes[0];
 }
@@ -457,37 +588,50 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   const primary = responsibilities[0] ?? strategy.safeDefaults[0];
   const secondary = responsibilities[1] ?? strategy.safeDefaults[1];
   const tertiary = responsibilities[2] ?? strategy.safeDefaults[2];
+  const selectedActions = compact(data.selectedActions.map(normalizeResponsibility)).slice(0, 3);
   const scopeOne = scopeForBullet(scopes, ["customersServed", "ticketsHandled", "callsHandled"]);
   const scopeTwo = scopeForBullet(scopes, ["reportsCreated", "projectsSupported", "teamSizeSupported"]);
   const processLanguage = domain?.processLanguage ?? context;
   const outcomeClause = outcome ? ` to support ${outcome}` : " to maintain dependable service standards";
-  const currentTone = level === "senior" ? "coordinating" : "supporting";
   const environment = domain?.environment ?? strategy.environment;
-  const scopeIntro = scopeOne ? ` for ${scopeOne.phrase} while ` : " while ";
   const selectedFocus = strategy.focus
     .map(readablePhrase)
     .filter((focus) => ![primary, secondary, tertiary].map(readablePhrase).includes(focus))
     .slice(0, 3);
   const roleFocus = selectedFocus.length ? selectedFocus.join(", ") : strategy.focus.slice(0, 3).map(readablePhrase).join(", ");
+  const patterns = bulletPatternLibrary[data.roleFamily];
+  const patternContext: BulletContext = {
+    action: level === "senior" ? "Coordinated" : verbs[0],
+    bridgeAction: verbs[2] ?? "Supported",
+    company: role.company,
+    context,
+    domainAction: activityPhrase(primary),
+    environment,
+    outcomeClause,
+    processLanguage,
+    responsibility: readablePhrase(secondary),
+    scope: scopeOne ? `for ${scopeOne.phrase} while supporting ` : "",
+    scopeTwo: scopeTwo?.phrase ?? "",
+    targetFocus: selectedActions.length ? sentenceList(selectedActions.map(readablePhrase)) : responsibilityObject(tertiary) || roleFocus,
+    toolPhrase: roleIndex === 0 ? chooseToolPhrase(tools, data.roleFamily, secondary) : ""
+  };
 
   if (roleIndex > 0) {
-    const priorScope = scopeTwo ? ` while supporting ${scopeTwo.phrase}` : "";
+    const priorContext = { ...patternContext, action: verbs[0], bridgeAction: verbs[2] ?? "Communicated", toolPhrase: "", scope: "" };
     return qualityCheckBullets(
       [
-        `${verbs[0]} with ${readablePhrase(primary)} in a ${environment}, building practical experience with ${processLanguage}.`,
-        `${verbs[1]} accurate records, handoffs, and routine updates${priorScope}.`,
-        `${verbs[2]} with customers, team members, and internal partners to keep ${readablePhrase(tertiary)} moving with dependable follow-through.`
+        renderPattern(patterns[3], priorContext),
+        renderPattern(patterns[4], priorContext),
+        renderPattern(patterns[5], priorContext)
       ],
       verbs
     );
   }
 
-  const openingVerb = level === "senior" ? "Coordinated" : verbs[0];
-  const bulletOne = `${openingVerb} ${context}${scopeIntro}${activityPhrase(primary)} in a ${environment}${outcomeClause}.`;
-  const bulletTwo = `${verbs[1]} ${readablePhrase(secondary)} through ${processLanguage}${chooseToolPhrase(tools, data.roleFamily, secondary)}, keeping records, handoffs, and next steps clear.`;
-  const bulletThree = `${verbs[2]} ${responsibilityObject(tertiary)} by ${currentTone} ${roleFocus}${scopeTwo ? ` across ${scopeTwo.phrase}` : ""}.`;
-
-  return qualityCheckBullets([bulletOne, bulletTwo, bulletThree], verbs);
+  return qualityCheckBullets(
+    [renderPattern(patterns[0], patternContext), renderPattern(patterns[1], patternContext), renderPattern(patterns[2], patternContext)],
+    verbs
+  );
 }
 
 function buildExperience(data: IntakeData): ExperienceRole[] {
@@ -516,7 +660,7 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
     .map((role) => ({
       title: titleCase(role.title),
       company: normalizeCompany(role.company) || role.fallbackCompany,
-      time: cleanWhitespace(role.time) || "Dates",
+      time: isWeakFreeText(role.time) ? "Dates" : cleanWhitespace(role.time) || "Dates",
       bullets: []
     }));
 
@@ -574,11 +718,21 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
   const strategy = roleStrategies[data.roleFamily];
   const responsibilities = buildResponsibilityList(data).slice(0, 2).map(readablePhrase);
   const strengths = compact([...(domain?.strengths ?? []), ...responsibilities, ...strategy.focus.map(readablePhrase)]).slice(0, 3);
+  const environment = domain?.environment ?? strategy.environment;
+  const strengthText = sentenceList(strengths);
+  const variants: Record<RoleFamily, string> = {
+    "Customer Success": `${target} candidate with hands-on experience in ${environment}. Strongest areas include ${strengthText}, with a service style built around clear updates, organized notes, and dependable follow-through.`,
+    Operations: `${target} candidate with practical experience keeping work organized in ${environment}. Brings ${strengthText} and a steady approach to documentation, handoffs, and process consistency.`,
+    Admin: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized communication, and reliable follow-through across records, schedules, and daily office needs.`,
+    Sales: `${target} candidate with experience supporting customer-facing workflows in ${environment}. Brings ${strengthText} and a practical approach to follow-up, account notes, and pipeline support.`,
+    Business: `${target} candidate with experience supporting reporting and workflow clarity in ${environment}. Brings ${strengthText}, organized documentation, and a practical eye for operational details.`,
+    "Project Coordination": `${target} candidate with experience keeping project details moving in ${environment}. Brings ${strengthText}, clear status communication, and organized follow-through across timelines and handoffs.`,
+    "IT Support": `${target} candidate with experience in ${environment}. Brings ${strengthText}, clear troubleshooting notes, and a user-focused approach to ticket resolution and escalation.`,
+    Tech: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized documentation, and practical follow-through across technical workflows.`,
+    Security: `${target} candidate with experience in ${environment}. Brings ${strengthText}, calm communication, and procedure-focused follow-through in public-facing settings.`
+  };
 
-  return limitSentences(
-    `I am building toward ${target} roles with experience in ${domain?.environment ?? strategy.environment}. My strengths include ${sentenceList(strengths)} and steady follow-through in practical work environments. I am focused on turning service, documentation, and workflow experience into stronger ${data.roleFamily.toLowerCase()} support.`,
-    3
-  );
+  return limitSentences(variants[data.roleFamily], 3);
 }
 
 function buildHeadline(data: IntakeData, target: string, skills: string[]) {
@@ -619,7 +773,7 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
     summary: buildSummary(data, target, experience),
     coreSkills: skills,
     experience,
-    education: "Education or Certification | School or Provider | Year",
+    education: educationPlaceholder,
     linkedinHeadline: buildHeadline(data, target, skills),
     linkedinSummary: buildLinkedInSummary(data, target, experience)
   });

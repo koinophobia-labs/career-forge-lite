@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  actionSuggestionsByFamily,
   careerTargets,
   companySuggestions,
   type CareerTarget,
@@ -180,6 +181,7 @@ export function IntakeForm({
   const [customResponsibility, setCustomResponsibility] = useState("");
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
+  const actionSuggestions = actionSuggestionsByFamily[data.roleFamily];
   const roleScopePrompts = scopePromptSets[data.roleFamily];
   const roleOutcomes = outcomeSuggestionsByFamily[data.roleFamily];
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
@@ -296,6 +298,13 @@ export function IntakeForm({
       ? data.selectedOutcomes.filter((value) => value !== item)
       : [...data.selectedOutcomes, item];
     update("selectedOutcomes", selected);
+  }
+
+  function toggleAction(item: string) {
+    const selected = data.selectedActions.includes(item)
+      ? data.selectedActions.filter((value) => value !== item)
+      : [...data.selectedActions, item];
+    update("selectedActions", selected);
   }
 
   function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
@@ -673,6 +682,28 @@ export function IntakeForm({
                 </div>
               </div>
             </div>
+            <div className="rounded-md border border-ink/10 bg-white p-3">
+              <span className="mb-2 block text-sm font-bold text-ink">Which of these did you do most?</span>
+              <span className="mb-3 block text-sm leading-5 text-ink/60">
+                Pick a few action signals. This helps Career Forge write bullets with less generic language.
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {actionSuggestions.map((item) => (
+                  <label
+                    key={item}
+                    className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-ink/15 bg-paper/70 px-3 text-sm font-semibold text-ink transition has-[:checked]:border-gold has-[:checked]:bg-gold/20"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={data.selectedActions.includes(item)}
+                      onChange={() => toggleAction(item)}
+                      className="h-4 w-4 accent-spruce"
+                    />
+                    {item}
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="block">
               <span className="mb-2 block text-sm font-bold text-ink">Anything else Career Forge should know?</span>
               <span className="mb-2 block text-sm leading-5 text-ink/60">
@@ -802,7 +833,7 @@ export function IntakeForm({
             <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestion(9)} />
             <ReviewItem
               label="Responsibilities"
-              value={formatReviewItems([...data.selectedResponsibilities, data.responsibilities])}
+              value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}
               onEdit={() => goToQuestion(10)}
             />
             <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestion(11)} />

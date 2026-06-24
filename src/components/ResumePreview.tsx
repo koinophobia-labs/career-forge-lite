@@ -1,6 +1,7 @@
 "use client";
 
 import { CopyButton } from "@/components/CopyButton";
+import { experienceToText, isPlaceholderEducation, normalizeHeaderName, resumeToText, roleHasContent } from "@/lib/resume-export";
 import type { ExperienceRole, IntakeData, ResumePackage, TemplateStyle } from "@/types/career";
 
 type ResumePreviewProps = {
@@ -18,51 +19,6 @@ const templateClasses: Record<TemplateStyle, string> = {
 
 function updateRole(role: ExperienceRole, patch: Partial<ExperienceRole>) {
   return { ...role, ...patch };
-}
-
-function normalizeHeaderName(value: string) {
-  return (
-    value
-      .trim()
-      .replace(/\s+/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase()) || "Candidate Name"
-  );
-}
-
-function roleHasContent(role: ExperienceRole) {
-  return role.title.trim() || role.company.trim() || role.time.trim() || role.bullets.some((bullet) => bullet.trim());
-}
-
-function resumeToText(data: IntakeData, resume: ResumePackage) {
-  const contact = [data.email, data.phone, data.website].filter(Boolean).join(" | ");
-  const experience = resume.experience
-    .filter(roleHasContent)
-    .map(
-      (role) =>
-        `${role.title} | ${role.company} | ${role.time}\n${role.bullets
-          .filter((bullet) => bullet.trim())
-          .map((bullet) => `- ${bullet}`)
-          .join("\n")}`
-    )
-    .join("\n\n");
-
-  return `${normalizeHeaderName(data.fullName)}\n${contact}\n\nSUMMARY\n${resume.summary.trim()}\n\nCORE SKILLS\n${resume.coreSkills
-    .filter((skill) => skill.trim())
-    .join(", ")}\n\nEXPERIENCE\n${experience}\n\nEDUCATION\n${resume.education.trim()}`;
-}
-
-function experienceToText(resume: ResumePackage) {
-  return resume.experience
-    .filter(roleHasContent)
-    .map(
-      (role) =>
-        `${role.title} | ${role.company} | ${role.time}\n${role.bullets
-          .filter((bullet) => bullet.trim())
-          .map((bullet) => `- ${bullet}`)
-          .join("\n")}`
-    )
-    .join("\n\n");
 }
 
 export function ResumePreview({ data, resume, template, onChange }: ResumePreviewProps) {
@@ -224,7 +180,9 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                 <CopyButton getText={() => resume.education} label="Copy Education" />
               </span>
             </div>
-            {resume.education.trim() && <p className="print-only text-ink">{resume.education.trim()}</p>}
+            {resume.education.trim() && !isPlaceholderEducation(resume.education) && (
+              <p className="print-only text-ink">{resume.education.trim()}</p>
+            )}
             <input
               value={resume.education}
               onChange={(event) => onChange({ ...resume, education: event.target.value })}

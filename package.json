@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:generator": "node scripts/smoke-generator.mjs"
   },
   "dependencies": {
     "next": "^16.2.9",

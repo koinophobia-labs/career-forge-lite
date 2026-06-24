@@ -1,4 +1,5 @@
 import type { AtsCheck, IntakeData, ResumePackage } from "@/types/career";
+import { isPlaceholderEducation } from "@/lib/resume-export";
 
 const actionVerbs = [
   "coordinated",
@@ -23,6 +24,14 @@ const fillerTerms = [
   "detail-oriented",
   "results-driven",
   "self-starter"
+];
+
+const suspiciousPhrases = [
+  "customers customers",
+  "tickets tickets",
+  "documented documentation",
+  "managed onboarding using python",
+  "candidate targeting"
 ];
 
 function resumeText(data: IntakeData, resume: ResumePackage) {
@@ -64,9 +73,22 @@ function hasQuantifiedContent(data: IntakeData, resume: ResumePackage) {
 export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[] {
   const text = resumeText(data, resume);
   const fillerMatches = fillerTerms.filter((term) => text.includes(term));
+  const suspiciousMatches = suspiciousPhrases.filter((term) => text.includes(term));
   const hasActionVerb = actionVerbs.some((verb) => text.includes(verb));
   const hasContact = Boolean(data.fullName.trim() && data.email.trim());
   const hasSkills = resume.coreSkills.length >= 4;
+  const allBullets = resume.experience.flatMap((role) => role.bullets.map((bullet) => bullet.trim()).filter(Boolean));
+  const duplicateBulletCount = allBullets.length - new Set(allBullets.map((bullet) => bullet.toLowerCase())).size;
+  const repeatedOpeners = resume.experience.some((role) => {
+    const openers = role.bullets.map((bullet) => bullet.trim().split(" ")[0]?.toLowerCase()).filter(Boolean);
+    return openers.length !== new Set(openers).size;
+  });
+  const bulletCountsHealthy = resume.experience.every((role) => {
+    const count = role.bullets.filter((bullet) => bullet.trim()).length;
+    return count >= 2 && count <= 4;
+  });
+  const missingRoleContext = resume.experience.some((role) => !role.company.trim() || role.company.includes("Company") || !role.time.trim() || role.time === "Dates");
+  const hasEmptySections = !resume.summary.trim() || resume.coreSkills.filter((skill) => skill.trim()).length === 0 || resume.experience.length === 0;
 
   return [
     {
@@ -114,6 +136,41 @@ export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[
         fillerMatches.length <= 1
           ? "Resume avoids heavy generic filler language."
           : `Consider replacing generic phrases: ${fillerMatches.join(", ")}.`
+    },
+    {
+      label: "Duplicate bullets",
+      status: duplicateBulletCount === 0 ? "PASS" : "WARNING",
+      detail: duplicateBulletCount === 0 ? "Experience bullets are not duplicated." : "Duplicate bullets make the resume feel generated. Revise repeated experience bullets."
+    },
+    {
+      label: "Bullet count",
+      status: bulletCountsHealthy ? "PASS" : "WARNING",
+      detail: bulletCountsHealthy ? "Each role has a reasonable number of bullets." : "Aim for 2-4 bullets per role so experience is substantial but not padded."
+    },
+    {
+      label: "Repeated opening verbs",
+      status: repeatedOpeners ? "WARNING" : "PASS",
+      detail: repeatedOpeners ? "Some bullets in the same role start with the same verb. Vary action verbs where possible." : "Opening verbs are varied within roles."
+    },
+    {
+      label: "Role context",
+      status: missingRoleContext ? "WARNING" : "PASS",
+      detail: missingRoleContext ? "One or more roles are missing company or date context. Add company names and time ranges for recruiter credibility." : "Roles include company and time context."
+    },
+    {
+      label: "Education placeholder",
+      status: isPlaceholderEducation(resume.education) ? "WARNING" : "PASS",
+      detail: isPlaceholderEducation(resume.education) ? "Education is still using placeholder text. Edit it or leave it out of export." : "Education no longer uses placeholder text."
+    },
+    {
+      label: "Empty resume sections",
+      status: hasEmptySections ? "WARNING" : "PASS",
+      detail: hasEmptySections ? "One or more core sections are empty. Add summary, skills, and at least one role before exporting." : "Core resume sections contain content."
+    },
+    {
+      label: "Suspicious phrasing",
+      status: suspiciousMatches.length ? "WARNING" : "PASS",
+      detail: suspiciousMatches.length ? `Review awkward repeated wording: ${suspiciousMatches.join(", ")}.` : "No obvious repeated-noun or awkward template phrases detected."
     }
   ];
 }
