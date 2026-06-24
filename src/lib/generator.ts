@@ -124,24 +124,20 @@ function readablePhrase(value: string) {
     .join(" ");
 }
 
-const scopeFields: Array<[keyof IntakeData, string, string]> = [
-  ["customersServed", "customers", "customers served"],
-  ["ticketsHandled", "tickets", "tickets handled"],
-  ["projectsSupported", "projects", "projects supported"],
-  ["teamSizeSupported", "team members", "team members supported"],
-  ["callsHandled", "calls", "calls handled"],
-  ["revenueInfluenced", "revenue", "revenue influenced"],
-  ["reportsCreated", "reports", "reports created"]
+const scopeFields: Array<[keyof IntakeData, string, string, string[]]> = [
+  ["customersServed", "customers", "customers served", ["customer", "client", "user", "visitor", "account", "prospect"]],
+  ["ticketsHandled", "tickets", "tickets handled", ["ticket", "request", "case", "issue"]],
+  ["projectsSupported", "projects", "projects supported", ["project", "initiative", "workflow", "rollout"]],
+  ["teamSizeSupported", "team members", "team members supported", ["team", "person", "people", "staff", "stakeholder"]],
+  ["callsHandled", "calls", "calls handled", ["call", "chat", "email", "follow-up", "meeting", "escalation"]],
+  ["revenueInfluenced", "revenue", "revenue influenced", ["revenue", "budget", "pipeline", "money", "cash", "sales"]],
+  ["reportsCreated", "reports", "reports created", ["report", "record", "document", "doc", "tracker", "article", "update"]]
 ];
 
-function formatScopePhrase(value: string, shortLabel: string) {
+function formatScopePhrase(value: string, shortLabel: string, aliases: string[]) {
   const cleaned = cleanWhitespace(value);
   const lower = cleaned.toLowerCase();
-  const labelTerms = shortLabel
-    .toLowerCase()
-    .split(" ")
-    .map((term) => term.replace(/s$/, ""))
-    .filter((term) => term.length > 3);
+  const labelTerms = aliases.map((term) => term.toLowerCase());
   const alreadyLabeled = labelTerms.some((term) => lower.includes(term));
 
   return alreadyLabeled ? cleaned : `${cleaned} ${shortLabel}`;
@@ -149,9 +145,9 @@ function formatScopePhrase(value: string, shortLabel: string) {
 
 function buildScopeItems(data: IntakeData) {
   return scopeFields
-    .map(([key, shortLabel, longLabel]) => {
+    .map(([key, shortLabel, longLabel, aliases]) => {
       const value = cleanWhitespace(String(data[key]));
-      return value ? { value, shortLabel, longLabel, phrase: formatScopePhrase(value, shortLabel) } : null;
+      return value ? { value, shortLabel, longLabel, phrase: formatScopePhrase(value, shortLabel, aliases) } : null;
     })
     .filter(Boolean) as Array<{ value: string; shortLabel: string; longLabel: string; phrase: string }>;
 }
