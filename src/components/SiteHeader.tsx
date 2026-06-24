@@ -21,7 +21,9 @@ export function SiteHeader({ onStart }: SiteHeaderProps) {
           </span>
           <span className="leading-none">
             <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Koinophobia</span>
-            <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">Labs</span>
+            <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
+              Labs / Module 05
+            </span>
           </span>
         </a>
 

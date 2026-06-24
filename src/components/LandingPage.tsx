@@ -5,6 +5,7 @@ type LandingPageProps = {
 };
 
 export function LandingPage({ onStart }: LandingPageProps) {
+  const productLabModules = ["You Know Ball", "Creator Command Center", "KOI Cave", "Career Forge Lite"];
   const proofItems = [
     ["LOCAL", "No login or saved account"],
     ["ATS", "Single-column resume output"],
@@ -26,13 +27,13 @@ export function LandingPage({ onStart }: LandingPageProps) {
       <div className="absolute inset-0 bg-gradient-to-r from-obsidian via-obsidian/92 to-obsidian/40" />
       <div className="relative mx-auto flex min-h-[82vh] max-w-6xl flex-col justify-center px-5 py-14 sm:px-8">
         <div className="mb-12 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4 text-xs font-bold uppercase tracking-[0.16em] text-paper/60">
-          <span>koinophobia://product-lab</span>
-          <span className="text-gold">Career utility - Live MVP</span>
+          <span>koinophobia://product-lab/module-05</span>
+          <span className="text-gold">Product Lab Utility - Module Status: Live</span>
         </div>
         <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="max-w-2xl">
             <p className="trust-kicker mb-4 text-sm font-bold uppercase">
-              Built by Koinophobia Labs - Career Forge Lite
+              Product Lab Module 05 - Career Forge Lite
             </p>
             <h1 className="text-4xl font-bold leading-[1.02] text-paper sm:text-6xl">
               Turn real work into <span className="text-cyan">recruiter-ready</span> resume language.
@@ -41,6 +42,9 @@ export function LandingPage({ onStart }: LandingPageProps) {
               A practical Product Lab tool for early-career candidates who need clear
               resume proof, not inflated AI filler. Answer the interview, review the
               draft, and ship a cleaner resume package.
+            </p>
+            <p className="mt-4 max-w-xl text-base font-semibold leading-7 text-cyan">
+              Created to translate real work into recruiter-ready language.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
@@ -69,13 +73,13 @@ export function LandingPage({ onStart }: LandingPageProps) {
 
           <div className="trust-panel rounded-md p-5">
             <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
-              <strong className="text-sm uppercase tracking-[0.16em] text-paper">career://dossier</strong>
+              <strong className="text-sm uppercase tracking-[0.16em] text-paper">module-05://dossier</strong>
               <span className="rounded-md bg-cyan/10 px-2 py-1 text-xs font-bold text-cyan">LIVE MVP</span>
             </div>
             <div className="mb-4 grid grid-cols-3 gap-2 border-b border-white/10 pb-4 text-[0.64rem] font-black uppercase tracking-[0.12em] text-paper/48">
               <span>
                 Status
-                <strong className="mt-1 block text-cyan">Shipping</strong>
+                <strong className="mt-1 block text-cyan">Live</strong>
               </span>
               <span>
                 Stack
@@ -83,7 +87,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
               </span>
               <span>
                 Mode
-                <strong className="mt-1 block text-gold">Build in public</strong>
+                <strong className="mt-1 block text-gold">Module 05</strong>
               </span>
             </div>
             <div className="space-y-4">
@@ -100,24 +104,44 @@ export function LandingPage({ onStart }: LandingPageProps) {
               </div>
             </div>
             <p className="mt-4 border-t border-white/10 pt-4 text-sm leading-6 text-paper/60">
-              Created alongside the Koinophobia Labs Product Lab: You Know Ball,
-              Creator Command Center, and KOI Cave. Link only, no account wall.
+              Product Lab Utility. Created alongside You Know Ball, Creator Command
+              Center, and KOI Cave. Link only, no account wall.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="relative mx-auto grid max-w-6xl gap-4 px-5 pb-14 sm:px-8 md:grid-cols-3" id="proof">
-        {[
-          ["01 / Interview", "Guided prompts pull out role, tools, scope, responsibilities, and outcomes without making you write perfect resume copy first."],
-          ["02 / Translation", "The generator turns plain work into editable bullets, skills, a summary, and a concise LinkedIn headline."],
-          ["03 / Receipts", "ATS checks stay practical: standard headings, single column, skills, action verbs, and quantified context. No fake score."]
-        ].map(([title, body]) => (
-          <article key={title} className="trust-card rounded-md p-5">
-            <h2 className="text-lg font-bold text-paper">{title}</h2>
-            <p className="mt-3 text-sm leading-6 text-paper/70">{body}</p>
-          </article>
-        ))}
+      <div className="relative mx-auto max-w-6xl px-5 pb-14 sm:px-8" id="proof">
+        <div className="mb-4 rounded-md border border-white/10 bg-white/5 p-3">
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-paper/54">Product Lab</p>
+          <div className="grid gap-2 text-sm font-bold md:grid-cols-4">
+            {productLabModules.map((module) => (
+              <span
+                key={module}
+                className={`rounded-md border px-3 py-3 ${
+                  module === "Career Forge Lite"
+                    ? "border-cyan/40 bg-cyan/10 text-cyan"
+                    : "border-white/10 bg-obsidian/35 text-paper/66"
+                }`}
+              >
+                {module}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            ["01 / Interview", "Guided prompts pull out role, tools, scope, responsibilities, and outcomes without making you write perfect resume copy first."],
+            ["02 / Translation", "The generator turns plain work into editable bullets, skills, a summary, and a concise LinkedIn headline."],
+            ["03 / Receipts", "ATS checks stay practical: standard headings, single column, skills, action verbs, and quantified context. No fake score."]
+          ].map(([title, body]) => (
+            <article key={title} className="trust-card rounded-md p-5">
+              <h2 className="text-lg font-bold text-paper">{title}</h2>
+              <p className="mt-3 text-sm leading-6 text-paper/70">{body}</p>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
