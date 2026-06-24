@@ -75,7 +75,7 @@ export default function Home() {
       <LandingPage onStart={() => jump("intake")} />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 md:grid-cols-3">
           {["Landing", "Guided Intake", "Resume + LinkedIn"].map((label, index) => (
             <button
               key={label}
@@ -83,8 +83,8 @@ export default function Home() {
               onClick={() => jump((["landing", "intake", "preview"] as Step[])[index])}
               className={`min-h-14 rounded-md border px-4 text-left text-sm font-bold transition ${
                 workflowStep === index + 1
-                  ? "border-spruce bg-mint text-ink"
-                  : "border-ink/12 bg-white text-ink/72 hover:border-spruce"
+                  ? "border-gold bg-gold text-ink"
+                  : "border-white/12 bg-obsidian/40 text-paper/70 hover:border-cyan hover:text-cyan"
               }`}
             >
               {index + 1}. {label}
@@ -112,7 +112,7 @@ export default function Home() {
         </>
       )}
 
-      <footer className="border-t border-ink/10 px-5 py-6 text-center text-sm text-ink/60">
+      <footer className="border-t border-white/10 px-5 py-6 text-center text-sm text-paper/60">
         Career Forge Lite builds local, editable draft content. Exported resume text is unbranded.
       </footer>
     </main>

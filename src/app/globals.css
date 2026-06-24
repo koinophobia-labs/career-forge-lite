@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
-  background: #fbfaf7;
-  color: #17202a;
+  color-scheme: dark;
+  background: #07090d;
+  color: #f2f5fa;
 }
 
 * {
@@ -20,8 +20,9 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(251, 250, 247, 0.94), rgba(251, 250, 247, 1) 46rem),
-    #fbfaf7;
+    radial-gradient(circle at 18% 0%, rgba(212, 175, 55, 0.16), transparent 34rem),
+    radial-gradient(circle at 88% 10%, rgba(0, 229, 255, 0.13), transparent 32rem),
+    linear-gradient(180deg, #07090d 0%, #0c1118 36rem, #101318 100%);
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -38,10 +39,38 @@ textarea {
 
 .resume-paper {
   font-family: Arial, Helvetica, sans-serif;
+  color: #111318;
 }
 
 .resume-paper h2 {
   letter-spacing: 0;
+}
+
+.trust-panel {
+  border: 1px solid rgba(242, 245, 250, 0.12);
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.92), rgba(12, 17, 24, 0.94));
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
+}
+
+.trust-card {
+  border: 1px solid rgba(242, 245, 250, 0.12);
+  background: rgba(242, 245, 250, 0.055);
+}
+
+.trust-kicker {
+  color: #d4af37;
+  letter-spacing: 0.16em;
+}
+
+.trust-input {
+  border-color: rgba(17, 19, 24, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.dark-form-card {
+  border: 1px solid rgba(242, 245, 250, 0.14);
+  background: rgba(242, 245, 250, 0.96);
+  color: #111318;
 }
 
 @media print {

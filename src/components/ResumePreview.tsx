@@ -12,8 +12,8 @@ type ResumePreviewProps = {
 
 const templateClasses: Record<TemplateStyle, string> = {
   Corporate: "border-t-[10px] border-t-ink",
-  "Modern ATS": "border-t-[10px] border-t-spruce",
-  "Tech ATS": "border-t-[10px] border-t-coral"
+  "Modern ATS": "border-t-[10px] border-t-gold",
+  "Tech ATS": "border-t-[10px] border-t-cyan"
 };
 
 function updateRole(role: ExperienceRole, patch: Partial<ExperienceRole>) {
@@ -67,22 +67,25 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
     <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8" id="resume">
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-coral">Generated resume</p>
-          <h2 className="mt-3 text-3xl font-bold text-ink">Edit before copying or exporting.</h2>
+          <p className="trust-kicker text-sm font-bold uppercase">Generated resume</p>
+          <h2 className="mt-3 text-3xl font-bold text-paper">Edit before copying or exporting.</h2>
+          <p className="mt-3 max-w-2xl text-paper/70">
+            Your working draft stays editable here. The resume content itself remains neutral, single-column, and ATS-safe.
+          </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <CopyButton getText={() => resumeToText(data, resume)} label="Copy Resume" />
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex min-h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-semibold text-white transition hover:bg-spruce"
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-cyan/30 bg-cyan/10 px-4 text-sm font-semibold text-cyan transition hover:border-cyan hover:bg-cyan hover:text-ink"
           >
             Print / Save PDF
           </button>
         </div>
       </div>
 
-      <article className={`resume-paper rounded-md border border-ink/12 bg-white p-5 shadow-soft sm:p-8 ${templateClasses[template]}`}>
+      <article className={`resume-paper rounded-md border border-white/18 bg-white p-5 shadow-glow sm:p-8 ${templateClasses[template]}`}>
         <header className="border-b border-ink/18 pb-5">
           <input
             value={normalizeHeaderName(data.fullName)}
@@ -104,7 +107,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               value={resume.summary}
               onChange={(event) => onChange({ ...resume, summary: event.target.value })}
               rows={4}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
 
@@ -122,7 +125,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                 })
               }
               rows={3}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
 
@@ -133,7 +136,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
             </div>
             <div className="space-y-6">
               {resume.experience.length === 0 && (
-                <p className="rounded-md border border-ink/12 bg-paper/60 p-4 text-sm font-semibold text-ink/68">
+                <p className="rounded-md border border-ink/12 bg-paper/60 p-4 text-sm font-semibold text-ink/70">
                   Add at least a current role in the intake form to generate experience bullets.
                 </p>
               )}
@@ -143,17 +146,17 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                     <input
                       value={role.title}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { title: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 font-bold text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 font-bold text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                     <input
                       value={role.company}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { company: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                     <input
                       value={role.time}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { time: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                   </div>
                   <div className="mt-3 space-y-2">
@@ -164,7 +167,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                           value={bullet}
                           onChange={(event) => setBullet(roleIndex, bulletIndex, event.target.value)}
                           rows={2}
-                          className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-6 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+                          className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-6 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                         />
                       </div>
                     ))}
@@ -182,7 +185,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
             <input
               value={resume.education}
               onChange={(event) => onChange({ ...resume, education: event.target.value })}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-spruce focus:ring-4 focus:ring-mint"
+              className="w-full rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
         </div>

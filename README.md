@@ -1,8 +1,10 @@
 # Career Forge Lite
 
-Career Forge Lite is a lightweight AI career tool that turns a short questionnaire into an editable, ATS-friendly resume package for early-career candidates.
+Career Forge Lite is a lightweight AI career tool that turns a guided career interview into an editable, ATS-friendly resume package for early-career candidates.
 
-**Positioning:** Turn everyday experience into a polished resume and LinkedIn headline in minutes.
+**Positioning:** Turn real work into recruiter-ready resume language.
+
+The interface uses a Koinophobia Labs-inspired trust design: dark, premium framing for the product experience with clean white work surfaces for resume editing and review.
 
 ## Screenshots
 
@@ -31,6 +33,8 @@ Early-career candidates often have useful experience but struggle to describe it
 ## Features
 
 - Landing page with clear product positioning
+- Koinophobia Labs-inspired trust design with proof-led landing content
+- Sample transformation showing weak input rewritten into resume-ready language
 - Hybrid guided onboarding flow with grouped steps:
   - Contact
   - Target
@@ -148,6 +152,7 @@ ATS_REPORT.md
 OUTPUT_QUALITY_REPORT.md
 UX_REDESIGN_REPORT.md
 FINAL_QA_REPORT.md
+TRUST_DESIGN_REFINEMENT_REPORT.md
 ```
 
 ## Current Limitations
@@ -156,7 +161,7 @@ FINAL_QA_REPORT.md
 - Form data is stored in React state and resets on refresh.
 - Print / Save PDF uses the browser print dialog instead of a dedicated PDF renderer.
 - No saved drafts, accounts, payments, database, or job matching.
-- Screenshots are static examples and may lag behind future UI refinements.
+- Screenshots are static examples from the current trust-design pass and may lag behind future UI refinements.
 
 ## Roadmap
 

@@ -134,11 +134,24 @@ const scopeFields: Array<[keyof IntakeData, string, string]> = [
   ["reportsCreated", "reports", "reports created"]
 ];
 
+function formatScopePhrase(value: string, shortLabel: string) {
+  const cleaned = cleanWhitespace(value);
+  const lower = cleaned.toLowerCase();
+  const labelTerms = shortLabel
+    .toLowerCase()
+    .split(" ")
+    .map((term) => term.replace(/s$/, ""))
+    .filter((term) => term.length > 3);
+  const alreadyLabeled = labelTerms.some((term) => lower.includes(term));
+
+  return alreadyLabeled ? cleaned : `${cleaned} ${shortLabel}`;
+}
+
 function buildScopeItems(data: IntakeData) {
   return scopeFields
     .map(([key, shortLabel, longLabel]) => {
       const value = cleanWhitespace(String(data[key]));
-      return value ? { value, shortLabel, longLabel, phrase: `${value} ${shortLabel}` } : null;
+      return value ? { value, shortLabel, longLabel, phrase: formatScopePhrase(value, shortLabel) } : null;
     })
     .filter(Boolean) as Array<{ value: string; shortLabel: string; longLabel: string; phrase: string }>;
 }

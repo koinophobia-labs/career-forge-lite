@@ -35,7 +35,7 @@ export function CopyButton({ getText, label = "Copy" }: CopyButtonProps) {
     <button
       type="button"
       onClick={handleCopy}
-      className="inline-flex min-h-10 items-center justify-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold text-ink transition hover:border-spruce hover:text-spruce"
+      className="inline-flex min-h-10 items-center justify-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold text-ink transition hover:border-gold hover:bg-gold hover:text-ink"
     >
       {copied ? "Copied" : label}
     </button>
