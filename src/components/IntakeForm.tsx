@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { outcomeOptions, responsibilitySuggestions, roleFamilies, templates } from "@/lib/career-data";
+import {
+  outcomeOptions,
+  outcomeSuggestionsByFamily,
+  responsibilitySuggestions,
+  roleFamilies,
+  scopePromptSets,
+  templates
+} from "@/lib/career-data";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
 type IntakeFormProps = {
@@ -80,7 +87,7 @@ const questions: Question[] = [
   },
   {
     title: "What kind of volume did you handle?",
-    helper: "Estimate if you're not sure. Numbers help create stronger resume bullets.",
+    helper: "Estimate if you are not sure. Numbers help create stronger resume bullets.",
     validate: []
   },
   {
@@ -100,14 +107,14 @@ const questions: Question[] = [
   }
 ];
 
-const scopeFields: Array<{ key: keyof IntakeData; label: string; placeholder: string }> = [
-  { key: "customersServed", label: "Customers served", placeholder: "Example: 40+ per week" },
-  { key: "ticketsHandled", label: "Tickets or requests", placeholder: "Example: 75 per month" },
-  { key: "projectsSupported", label: "Projects supported", placeholder: "Example: 3 active projects" },
-  { key: "teamSizeSupported", label: "Team size supported", placeholder: "Example: 8-person team" },
-  { key: "callsHandled", label: "Calls handled", placeholder: "Example: 25 daily calls" },
-  { key: "reportsCreated", label: "Reports created", placeholder: "Example: 5 weekly reports" },
-  { key: "revenueInfluenced", label: "Revenue influenced", placeholder: "Example: $10K pipeline supported" }
+const allScopeFields: Array<{ key: keyof IntakeData; label: string }> = [
+  { key: "customersServed", label: "Customers/users" },
+  { key: "ticketsHandled", label: "Tickets/requests" },
+  { key: "projectsSupported", label: "Projects" },
+  { key: "teamSizeSupported", label: "Team size" },
+  { key: "callsHandled", label: "Calls/follow-ups" },
+  { key: "reportsCreated", label: "Reports/docs" },
+  { key: "revenueInfluenced", label: "Revenue/budget" }
 ];
 
 const templateDescriptions: Record<TemplateStyle, string> = {
@@ -130,8 +137,13 @@ export function IntakeForm({
   onGenerate
 }: IntakeFormProps) {
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [showAllScope, setShowAllScope] = useState(false);
+  const [showAllOutcomes, setShowAllOutcomes] = useState(false);
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
+  const roleScopePrompts = scopePromptSets[data.roleFamily];
+  const roleOutcomes = outcomeSuggestionsByFamily[data.roleFamily];
+  const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
   const progress = Math.round(((questionIndex + 1) / questions.length) * 100);
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
 
@@ -157,8 +169,11 @@ export function IntakeForm({
     data.previousTitle
   ]);
 
-  const scopeSummary = scopeFields
-    .map((field) => String(data[field.key]).trim())
+  const scopeSummary = allScopeFields
+    .map((field) => {
+      const value = String(data[field.key]).trim();
+      return value ? `${field.label}: ${value}` : "";
+    })
     .filter(Boolean);
 
   function update<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
@@ -181,6 +196,22 @@ export function IntakeForm({
       ? data.selectedOutcomes.filter((value) => value !== item)
       : [...data.selectedOutcomes, item];
     update("selectedOutcomes", selected);
+  }
+
+  function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
+    return (
+      <label key={field.key} className="block">
+        <span className="mb-2 block text-sm font-semibold text-ink">{field.label}</span>
+        {field.hint && <span className="mb-2 block text-sm leading-5 text-ink/60">{field.hint}</span>}
+        <input
+          type="text"
+          value={String(data[field.key])}
+          onChange={(event) => update(field.key, event.target.value as never)}
+          placeholder={field.placeholder}
+          className="trust-input min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+        />
+      </label>
+    );
   }
 
   function continueQuestion() {
@@ -349,27 +380,53 @@ export function IntakeForm({
           </div>
         );
       case 11:
+        const additionalScopeFields = allScopeFields.filter(
+          (field) => !roleScopePrompts.some((prompt) => prompt.key === field.key)
+        );
+
         return (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {scopeFields.map((field) => (
-              <label key={field.key} className="block">
-                <span className="mb-2 block text-sm font-semibold text-ink">{field.label}</span>
-                <input
-                  type="text"
-                  value={String(data[field.key])}
-                  onChange={(event) => update(field.key, event.target.value as never)}
-                  placeholder={field.placeholder}
-                  className="trust-input min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
-                />
-              </label>
-            ))}
+          <div className="space-y-5">
+            <div className="rounded-md border border-ink/10 bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">
+                Adaptive prompts for {data.roleFamily}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-ink/65">
+                These are the scope signals most likely to strengthen this role family. Estimate if you are not sure.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {roleScopePrompts.map(renderScopeInput)}
+            </div>
+            <details
+              open={showAllScope}
+              onToggle={(event) => setShowAllScope(event.currentTarget.open)}
+              className="rounded-md border border-ink/10 bg-white p-4"
+            >
+              <summary className="cursor-pointer text-sm font-black uppercase tracking-[0.12em] text-ink">
+                Add more scope details
+              </summary>
+              <p className="mt-2 text-sm leading-6 text-ink/65">
+                Use this only if another number helps tell the truth of your work.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {additionalScopeFields.map((field) => renderScopeInput({ ...field, placeholder: "Optional estimate" }))}
+              </div>
+            </details>
           </div>
         );
       case 12:
         return (
           <div className="space-y-5">
+            <div className="rounded-md border border-ink/10 bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">
+                Suggested outcomes for {data.roleFamily}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-ink/65">
+                Pick what your work actually improved. You can expand the full outcome set if needed.
+              </p>
+            </div>
             <div className="flex flex-wrap gap-2">
-              {outcomeOptions.map((item) => (
+              {visibleOutcomes.map((item) => (
                 <label
                   key={item}
                   className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink transition has-[:checked]:border-gold has-[:checked]:bg-gold/20"
@@ -384,6 +441,13 @@ export function IntakeForm({
                 </label>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowAllOutcomes((value) => !value)}
+              className="rounded-md border border-ink/15 bg-white px-4 py-2 text-sm font-black uppercase tracking-[0.12em] text-ink transition hover:border-gold"
+            >
+              {showAllOutcomes ? "Show suggested outcomes" : "Show all outcomes"}
+            </button>
             <label className="block">
               <span className="mb-2 block text-sm font-bold text-ink">Any result you want reflected?</span>
               <span className="mb-2 block text-sm leading-5 text-ink/60">
@@ -436,6 +500,11 @@ export function IntakeForm({
               label="Outcomes"
               value={formatList([...data.selectedOutcomes, data.outcomes])}
               onEdit={() => goToQuestion(12)}
+            />
+            <ReviewItem
+              label="Adaptive signals"
+              value={`${data.roleFamily} scope prompts / ${roleOutcomes.join(", ")}`}
+              onEdit={() => goToQuestion(4)}
             />
             <ReviewItem label="Template" value={selectedTemplate} onEdit={() => goToQuestion(13)} />
           </div>
