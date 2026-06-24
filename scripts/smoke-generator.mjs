@@ -38,7 +38,13 @@ function loadTsModule(filePath) {
 }
 
 const { generateResumePackage } = loadTsModule(path.join(root, "src/lib/generator.ts"));
-const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
+const {
+  allToolOptions,
+  careerTargets,
+  companySuggestions,
+  initialIntake,
+  toolSuggestionsByFamily
+} = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 const { educationPlaceholder, resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
 
 const personas = [
@@ -162,6 +168,78 @@ function assert(condition, message) {
 function sentenceCount(value) {
   return (value.match(/[^.!?]+[.!?]+/g) || []).length;
 }
+
+function findCareerTarget(title) {
+  return careerTargets.find((target) => target.title.toLowerCase() === title.toLowerCase());
+}
+
+function searchableCareerTargets(query) {
+  const normalizedQuery = query.toLowerCase();
+  return careerTargets
+    .filter((target) => {
+      const title = target.title.toLowerCase();
+      const family = target.roleFamily.toLowerCase();
+      const aliases = target.aliases?.join(" ").toLowerCase() ?? "";
+      return title.includes(normalizedQuery) || family.includes(normalizedQuery) || aliases.includes(normalizedQuery);
+    })
+    .slice(0, 12);
+}
+
+function searchableOptions(options, query) {
+  const normalizedQuery = query.toLowerCase();
+  return options.filter((option) => option.toLowerCase().includes(normalizedQuery)).slice(0, 10);
+}
+
+const roleMappingChecks = [
+  ["Warehouse Operations Coordinator", "Operations"],
+  ["Manual QA Tester", "Tech"],
+  ["Field Support Technician", "IT Support"],
+  ["Client Implementation Coordinator", "Project Coordination"],
+  ["Customer Care Specialist", "Customer Success"],
+  ["Executive Assistant", "Admin"],
+  ["Sales Enablement Coordinator", "Sales"],
+  ["Reporting Analyst", "Business"]
+];
+
+assert(careerTargets.length >= 150 && careerTargets.length <= 250, `career target count ${careerTargets.length}`);
+assert(allToolOptions.length >= 150 && allToolOptions.length <= 300, `tool option count ${allToolOptions.length}`);
+assert(companySuggestions.length >= 300 && companySuggestions.length <= 500, `company suggestion count ${companySuggestions.length}`);
+
+for (const [title, roleFamily] of roleMappingChecks) {
+  const target = findCareerTarget(title);
+  assert(target, `career target exists: ${title}`);
+  assert(target.roleFamily === roleFamily, `${title} maps to ${roleFamily}`);
+}
+
+assert(searchableCareerTargets("client success representative").some((target) => target.title === "Customer Success Associate"), "role aliases are searchable");
+assert(searchableCareerTargets("warehouse ops").length <= 12, "role search caps visible results");
+assert(searchableOptions(toolSuggestionsByFamily["IT Support"], "service").includes("ServiceNow"), "tool search finds ServiceNow");
+assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
+assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
+
+const customRoleData = {
+  ...initialIntake,
+  fullName: "Custom Role Candidate",
+  email: "custom.role@example.com",
+  targetJobTitle: "Neighborhood Experience Wrangler",
+  roleFamily: "Customer Success",
+  currentTitle: "Community Support Associate",
+  currentCompany: "Koi Local Studio",
+  currentTime: "2024 - Present",
+  tools: "Koi Desk, servicenow, macos, google sheets",
+  selectedResponsibilities: ["Client communication", "Support tickets"],
+  selectedActions: ["resolved issues", "documented updates"],
+  customersServed: "40+ weekly customers",
+  selectedOutcomes: ["Customer satisfaction"]
+};
+const customRoleResume = generateResumePackage(customRoleData);
+const customRoleExport = resumeToText(customRoleData, customRoleResume);
+assert(customRoleExport.includes("Neighborhood Experience Wrangler"), "custom role appears in output");
+assert(customRoleExport.includes("Koi Local Studio"), "custom company appears in output");
+assert(customRoleResume.coreSkills.includes("Koi Desk"), "custom tool normalizes into skills");
+assert(customRoleResume.coreSkills.includes("ServiceNow"), "known tool normalizes ServiceNow");
+assert(customRoleResume.coreSkills.includes("macOS"), "known tool normalizes macOS");
+assert(customRoleResume.coreSkills.includes("Google Sheets"), "known tool normalizes Google Sheets");
 
 for (const persona of personas) {
   const data = {
