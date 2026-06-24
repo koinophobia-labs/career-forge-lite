@@ -31,8 +31,10 @@ const acronyms = new Map([
   ["crm", "CRM"],
   ["css", "CSS"],
   ["html", "HTML"],
+  ["hubspot", "HubSpot"],
   ["it", "IT"],
   ["kpi", "KPI"],
+  ["pos", "POS"],
   ["qa", "QA"],
   ["sop", "SOP"],
   ["sql", "SQL"],
@@ -93,6 +95,13 @@ function normalizeTool(value: string) {
   return acronyms.get(lower) ?? titleCase(cleaned);
 }
 
+function normalizeCompany(value: string) {
+  const cleaned = cleanWhitespace(value);
+  if (!cleaned) return "";
+  const hasIntentionalCaps = /[a-z][A-Z]/.test(cleaned);
+  return hasIntentionalCaps ? cleaned : titleCase(cleaned);
+}
+
 function isWeakTarget(value: string) {
   const cleaned = cleanWhitespace(value).toLowerCase();
   if (!cleaned || cleaned.length <= 2) return true;
@@ -127,7 +136,7 @@ function readablePhrase(value: string) {
 const scopeFields: Array<[keyof IntakeData, string, string, string[]]> = [
   ["customersServed", "customers", "customers served", ["customer", "client", "user", "visitor", "account", "prospect"]],
   ["ticketsHandled", "tickets", "tickets handled", ["ticket", "request", "case", "issue"]],
-  ["projectsSupported", "projects", "projects supported", ["project", "initiative", "workflow", "rollout"]],
+  ["projectsSupported", "projects", "projects supported", ["project", "initiative", "workflow", "rollout", "schedule", "calendar"]],
   ["teamSizeSupported", "team members", "team members supported", ["team", "person", "people", "staff", "stakeholder"]],
   ["callsHandled", "calls", "calls handled", ["call", "chat", "email", "follow-up", "meeting", "escalation"]],
   ["revenueInfluenced", "revenue", "revenue influenced", ["revenue", "budget", "pipeline", "money", "cash", "sales"]],
@@ -181,7 +190,7 @@ function buildOutcomePhrase(data: IntakeData) {
   const custom = cleanWhitespace(data.outcomes).toLowerCase();
 
   if (selected.length) return `improve ${sentenceList(selected.slice(0, 3))}`;
-  if (custom) return `support ${custom}`;
+  if (custom) return custom.replace(/^improved\s+/i, "improve ");
   return "maintain reliable service quality";
 }
 
@@ -197,7 +206,6 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   const secondaryPhrase = readablePhrase(secondary);
   const tertiaryPhrase = readablePhrase(tertiary);
   const toolPhrase = tools.length ? ` using ${sentenceList(tools.slice(0, 3))}` : "";
-  const timePhrase = role.time && role.time !== "Dates" ? ` during ${role.time}` : "";
   const scopeOne = scopes[0]?.phrase;
   const scopeTwo = scopes[1]?.phrase;
   const scopeThree = scopes[2]?.phrase;
@@ -208,15 +216,16 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   ];
   const [firstAction, secondAction, thirdAction] = actionSets[roleIndex] ?? actionSets[0];
 
-  const firstScope = scopeOne ? `${scopeOne} while ` : "";
+  const firstScope = scopeOne ? ` for ${scopeOne}` : "";
   const secondScope = scopeTwo ? ` across ${scopeTwo}` : "";
-  const thirdScope = scopeThree ? ` for ${scopeThree}` : "";
+  const thirdScope = scopeThree ? ` supporting ${scopeThree}` : "";
+  const outcomeClause = outcome.startsWith("improve") ? `to ${outcome}` : `to support ${outcome}`;
 
-  return [
-    `${firstAction} ${firstScope}handling ${primaryPhrase}${toolPhrase}${timePhrase}, helping ${outcome}.`,
-    `${secondAction} ${secondaryPhrase} and status updates${secondScope}, keeping records accurate and next steps visible for team follow-through.`,
-    `${thirdAction === "Assisted" ? "Assisted with" : thirdAction} ${tertiaryPhrase}${thirdScope}, addressing routine issues and escalating complex needs to improve response consistency.`
-  ];
+  return compact([
+    `${firstAction} ${primaryPhrase}${toolPhrase}${firstScope} ${outcomeClause}.`,
+    `${secondAction} ${secondaryPhrase}, documentation, and status updates${secondScope}, keeping records accurate and next steps visible.`,
+    `${thirdAction === "Assisted" ? "Assisted with" : thirdAction} ${tertiaryPhrase}${thirdScope}, resolving routine issues and escalating complex needs for consistent follow-through.`
+  ]).slice(0, 3);
 }
 
 function buildExperience(data: IntakeData): ExperienceRole[] {
@@ -244,7 +253,7 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
     .slice(0, 3)
     .map((role) => ({
       title: titleCase(role.title),
-      company: cleanWhitespace(role.company) ? titleCase(role.company) : role.fallbackCompany,
+      company: normalizeCompany(role.company) || role.fallbackCompany,
       time: cleanWhitespace(role.time) || "Dates",
       bullets: []
     }));
@@ -264,12 +273,10 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   const outcomes = data.selectedOutcomes.map((outcome) => outcome.toLowerCase());
   const roleFamily = data.roleFamily;
   const primaryResponsibilities = responsibilities.slice(0, 4);
-  const timeSentence = cleanWhitespace(data.currentTime)
-    ? ` Recent experience includes ${cleanWhitespace(data.currentTime)} in ${titleCase(data.currentTitle || target)} work.`
-    : "";
+  const timeSentence = cleanWhitespace(data.currentTime) ? ` Recent experience includes ${cleanWhitespace(data.currentTime)} as a ${titleCase(data.currentTitle || target)}.` : "";
   const toolSentence = tools.length ? ` Tools include ${sentenceList(tools.slice(0, 4))}.` : "";
   const scopeSentence = scopes.length ? ` Scope includes ${sentenceList(scopes.slice(0, 3).map((scope) => scope.phrase))}.` : "";
-  const outcomeSentence = outcomes.length ? ` Known for work that supports ${sentenceList(outcomes.slice(0, 3))}.` : "";
+  const outcomeSentence = outcomes.length ? ` Work is centered on improving ${sentenceList(outcomes.slice(0, 3))}.` : "";
   const headlineSkills = compact([
     ...tools.slice(0, 2),
     ...responsibilities.slice(0, 3),
@@ -277,11 +284,11 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   ]).slice(0, 3);
 
   return {
-    summary: `Early-career ${target} with experience supporting ${sentenceList(primaryResponsibilities.map(readablePhrase).slice(0, 4))}. Brings organized follow-through, service-focused communication, and practical ${roleFamily.toLowerCase()} experience maintaining accurate records across fast-moving work environments.${timeSentence}${toolSentence}${scopeSentence}${outcomeSentence}`,
+    summary: `Early-career ${target} with hands-on experience in ${sentenceList(primaryResponsibilities.map(readablePhrase).slice(0, 4))}. Brings organized follow-through, clear communication, and practical ${roleFamily.toLowerCase()} experience in fast-moving work environments.${timeSentence}${toolSentence}${scopeSentence}${outcomeSentence}`,
     coreSkills: skills,
     experience: buildExperience(data),
     education: "Education or Certification | School or Provider | Year",
     linkedinHeadline: `${target} | ${sentenceList(headlineSkills, "&")} | ${roleIntelligence[data.roleFamily].valueArea}`,
-    linkedinSummary: `Early-career ${target} building a career in ${roleFamily.toLowerCase()} roles. Strengths include ${sentenceList(primaryResponsibilities.slice(0, 3).map(readablePhrase))}${tools.length ? ` with hands-on use of ${sentenceList(tools.slice(0, 3))}` : ""}. Brings steady communication, organized follow-through, and a practical focus on ${roleIntelligence[data.roleFamily].valueArea.toLowerCase()}.`
+    linkedinSummary: `Early-career ${target} focused on ${roleIntelligence[data.roleFamily].valueArea.toLowerCase()}. Experience includes ${sentenceList(primaryResponsibilities.slice(0, 3).map(readablePhrase))}${tools.length ? ` with hands-on use of ${sentenceList(tools.slice(0, 3))}` : ""}. Known for steady communication, organized follow-through, and practical problem solving.`
   };
 }

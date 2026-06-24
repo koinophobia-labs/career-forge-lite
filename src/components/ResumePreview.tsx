@@ -35,7 +35,10 @@ function resumeToText(data: IntakeData, resume: ResumePackage) {
   const experience = resume.experience
     .map(
       (role) =>
-        `${role.title} | ${role.company} | ${role.time}\n${role.bullets.map((bullet) => `- ${bullet}`).join("\n")}`
+        `${role.title} | ${role.company} | ${role.time}\n${role.bullets
+          .filter((bullet) => bullet.trim())
+          .map((bullet) => `- ${bullet}`)
+          .join("\n")}`
     )
     .join("\n\n");
 
@@ -46,7 +49,10 @@ function experienceToText(resume: ResumePackage) {
   return resume.experience
     .map(
       (role) =>
-        `${role.title} | ${role.company} | ${role.time}\n${role.bullets.map((bullet) => `- ${bullet}`).join("\n")}`
+        `${role.title} | ${role.company} | ${role.time}\n${role.bullets
+          .filter((bullet) => bullet.trim())
+          .map((bullet) => `- ${bullet}`)
+          .join("\n")}`
     )
     .join("\n\n");
 }
@@ -101,21 +107,27 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
           <section>
             <div className="mb-3 flex flex-col gap-3 border-b border-ink/16 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-bold uppercase text-ink">Summary</h2>
-              <CopyButton getText={() => resume.summary} label="Copy Summary" />
+              <span className="screen-edit">
+                <CopyButton getText={() => resume.summary} label="Copy Summary" />
+              </span>
             </div>
+            <p className="print-only leading-6 text-ink">{resume.summary}</p>
             <textarea
               value={resume.summary}
               onChange={(event) => onChange({ ...resume, summary: event.target.value })}
               rows={4}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+              className="screen-edit w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
 
           <section>
             <div className="mb-3 flex flex-col gap-3 border-b border-ink/16 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-bold uppercase text-ink">Core Skills</h2>
-              <CopyButton getText={() => resume.coreSkills.join(", ")} label="Copy Skills" />
+              <span className="screen-edit">
+                <CopyButton getText={() => resume.coreSkills.join(", ")} label="Copy Skills" />
+              </span>
             </div>
+            <p className="print-only leading-6 text-ink">{resume.coreSkills.join(", ")}</p>
             <textarea
               value={resume.coreSkills.join(", ")}
               onChange={(event) =>
@@ -125,14 +137,16 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                 })
               }
               rows={3}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+              className="screen-edit w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
 
           <section>
             <div className="mb-3 flex flex-col gap-3 border-b border-ink/16 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-bold uppercase text-ink">Experience</h2>
-              <CopyButton getText={() => experienceToText(resume)} label="Copy Experience" />
+              <span className="screen-edit">
+                <CopyButton getText={() => experienceToText(resume)} label="Copy Experience" />
+              </span>
             </div>
             <div className="space-y-6">
               {resume.experience.length === 0 && (
@@ -143,23 +157,31 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               {resume.experience.map((role, roleIndex) => (
                 <div key={`${role.title}-${role.company}-${roleIndex}`}>
                   <div className="grid gap-3 md:grid-cols-[1fr_1fr_12rem]">
+                    <p className="print-only font-bold text-ink">
+                      {role.title} | {role.company} | {role.time}
+                    </p>
                     <input
                       value={role.title}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { title: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 font-bold text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+                      className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 font-bold text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                     <input
                       value={role.company}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { company: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+                      className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                     <input
                       value={role.time}
                       onChange={(event) => setExperience(roleIndex, updateRole(role, { time: event.target.value }))}
-                      className="rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+                      className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                     />
                   </div>
-                  <div className="mt-3 space-y-2">
+                  <ul className="print-only mt-2 list-disc space-y-1 pl-5 text-ink">
+                    {role.bullets.filter((bullet) => bullet.trim()).map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                  <div className="screen-edit mt-3 space-y-2">
                     {role.bullets.map((bullet, bulletIndex) => (
                       <div key={bulletIndex} className="grid grid-cols-[1rem_1fr] gap-2">
                         <span className="pt-3 text-ink">-</span>
@@ -180,12 +202,15 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
           <section>
             <div className="mb-3 flex flex-col gap-3 border-b border-ink/16 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-bold uppercase text-ink">Education</h2>
-              <CopyButton getText={() => resume.education} label="Copy Education" />
+              <span className="screen-edit">
+                <CopyButton getText={() => resume.education} label="Copy Education" />
+              </span>
             </div>
+            <p className="print-only text-ink">{resume.education}</p>
             <input
               value={resume.education}
               onChange={(event) => onChange({ ...resume, education: event.target.value })}
-              className="w-full rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
+              className="screen-edit w-full rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
             />
           </section>
         </div>
