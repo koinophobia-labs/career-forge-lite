@@ -6,12 +6,17 @@ Career Forge Lite is a lightweight AI career tool that turns a short questionnai
 
 ## Screenshots
 
-Screenshots are not committed yet. Suggested placeholders for the first public repo update:
+![Landing page](public/screenshots/landing.png)
 
-- `docs/screenshots/landing.png` - landing page
-- `docs/screenshots/guided-intake.png` - guided onboarding flow
-- `docs/screenshots/template-step.png` - ATS-safe template selection
-- `docs/screenshots/review.png` - resume, ATS checks, and LinkedIn preview
+![Guided intake](public/screenshots/intake.png)
+
+![Responsibility chips](public/screenshots/responsibilities.png)
+
+![Resume preview](public/screenshots/resume-preview.png)
+
+![ATS review](public/screenshots/ats-review.png)
+
+![Mobile view](public/screenshots/mobile.png)
 
 ## Problem Solved
 
@@ -151,7 +156,7 @@ FINAL_QA_REPORT.md
 - Form data is stored in React state and resets on refresh.
 - Print / Save PDF uses the browser print dialog instead of a dedicated PDF renderer.
 - No saved drafts, accounts, payments, database, or job matching.
-- Screenshots are not committed yet.
+- Screenshots are static examples and may lag behind future UI refinements.
 
 ## Roadmap
 
@@ -160,7 +165,7 @@ FINAL_QA_REPORT.md
 - Add richer bullet rewriting controls by role family
 - Add downloadable PDF generation
 - Add import/export JSON for local drafts
-- Add screenshot examples to this README
+- Refresh screenshots as the UI evolves
 
 ## Deployment
 

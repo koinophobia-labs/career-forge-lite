@@ -17,12 +17,12 @@ type IntakeFormProps = {
 const requiredKeys: Array<keyof IntakeData> = ["fullName", "email", "targetJobTitle", "currentTitle"];
 
 const scopeFields: Array<{ key: keyof IntakeData; label: string; placeholder: string }> = [
-  { key: "customersServed", label: "Customers served", placeholder: "Example: 40+ per week" },
-  { key: "ticketsHandled", label: "Tickets handled", placeholder: "Example: 75 per month" },
-  { key: "projectsSupported", label: "Projects supported", placeholder: "Example: 3 active projects" },
-  { key: "teamSizeSupported", label: "Team size supported", placeholder: "Example: 8-person team" },
-  { key: "callsHandled", label: "Calls handled", placeholder: "Example: 25 daily calls" },
-  { key: "reportsCreated", label: "Reports created", placeholder: "Example: 5 weekly reports" }
+  { key: "customersServed", label: "About how many customers did you support?", placeholder: "Example: 40+ per week" },
+  { key: "ticketsHandled", label: "How many tickets or requests did you handle?", placeholder: "Example: 75 per month" },
+  { key: "projectsSupported", label: "How many projects did you support?", placeholder: "Example: 3 active projects" },
+  { key: "teamSizeSupported", label: "What team size did you support?", placeholder: "Example: 8-person team" },
+  { key: "callsHandled", label: "How many calls did you handle?", placeholder: "Example: 25 daily calls" },
+  { key: "reportsCreated", label: "How many reports did you create?", placeholder: "Example: 5 weekly reports" }
 ];
 
 const templateDescriptions: Record<TemplateStyle, string> = {
@@ -33,33 +33,33 @@ const templateDescriptions: Record<TemplateStyle, string> = {
 
 const steps = [
   {
-    title: "Contact",
-    microcopy: "Recruiters need clear contact details before they read anything else.",
+    title: "How should employers reach you?",
+    microcopy: "Start with the basics. This becomes the clean contact line at the top of your resume.",
     validate: ["fullName", "email"] as Array<keyof IntakeData>
   },
   {
-    title: "Target",
-    microcopy: "The target role shapes keywords, summary language, and LinkedIn positioning.",
+    title: "What role are you aiming for?",
+    microcopy: "A rough target is enough. If it is too vague, Career Forge will normalize it into a stronger role title.",
     validate: ["targetJobTitle"] as Array<keyof IntakeData>
   },
   {
-    title: "Experience",
-    microcopy: "Add up to three roles. Short titles and date ranges are enough for a strong first draft.",
+    title: "Where have you built experience?",
+    microcopy: "Add your current role first. Short titles, companies, and date ranges are enough.",
     validate: ["currentTitle"] as Array<keyof IntakeData>
   },
   {
-    title: "Responsibilities",
-    microcopy: "Choose guided chips and add anything specific. These become ATS-searchable skills and bullets.",
+    title: "What kind of work did you actually do?",
+    microcopy: "Choose what fits, then add your own words. We will turn this into resume language.",
     validate: [] as Array<keyof IntakeData>
   },
   {
-    title: "Scope + Outcomes",
-    microcopy: "Numbers and outcomes turn duties into evidence. Estimates are fine.",
+    title: "What was the size or impact of your work?",
+    microcopy: "Estimate if you are not sure. Numbers and outcomes make bullets more credible.",
     validate: [] as Array<keyof IntakeData>
   },
   {
-    title: "Template",
-    microcopy: "All templates remain single-column and ATS-safe. Pick the style that fits the role.",
+    title: "Pick the resume style",
+    microcopy: "All options stay single-column and ATS-safe. Choose the tone that fits the opportunity.",
     validate: [] as Array<keyof IntakeData>
   }
 ];
@@ -130,7 +130,8 @@ export function IntakeForm({
     fieldKey: keyof IntakeData,
     label: string,
     placeholder?: string,
-    type = "text"
+    type = "text",
+    helper?: string
   ) {
     return (
       <label className="block">
@@ -138,6 +139,7 @@ export function IntakeForm({
           {label}
           {requiredKeys.includes(fieldKey) && <span className="text-coral"> *</span>}
         </span>
+        {helper && <span className="mb-2 block text-sm leading-5 text-ink/62">{helper}</span>}
         <input
           type={type}
           value={String(data[fieldKey])}
@@ -159,61 +161,93 @@ export function IntakeForm({
         </p>
         <h2 className="mt-3 text-3xl font-bold text-ink">{step.title}</h2>
         <p className="mt-3 max-w-3xl text-ink/70">{step.microcopy}</p>
+        <p className="mt-3 inline-flex rounded-md bg-mint px-3 py-2 text-sm font-semibold text-spruce">
+          No perfect wording needed. Short answers are welcome.
+        </p>
         <div className="mt-5 h-2 rounded-full bg-ink/10">
           <div className="h-2 rounded-full bg-spruce transition-all" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
       <form
-        className="rounded-md border border-ink/12 bg-white p-5 shadow-soft sm:p-6"
+        className="rounded-md border border-ink/12 bg-white p-5 shadow-soft sm:p-7"
         onSubmit={(event) => {
           event.preventDefault();
           continueStep();
         }}
       >
         {stepIndex === 0 && (
-          <div className="grid gap-5 md:grid-cols-2">
-            {renderField("fullName", "Full name", "Jordan Lee")}
-            {renderField("email", "Email", "jordan@email.com", "email")}
-            {renderField("phone", "Phone", "(555) 123-4567")}
-            {renderField("website", "Website or portfolio URL", "jordanlee.com")}
+          <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              {renderField("fullName", "What name should appear on your resume?", "Jordan Lee")}
+              {renderField("email", "What email should employers use?", "jordan@email.com", "email")}
+              {renderField("phone", "Phone number", "(555) 123-4567", "text", "Optional, but useful for a resume header.")}
+              {renderField("website", "Portfolio, LinkedIn, or website", "jordanlee.com", "text", "Optional. Add one clean link if it helps your candidacy.")}
+            </div>
           </div>
         )}
 
         {stepIndex === 1 && (
-          <div className="grid gap-5 md:grid-cols-2">
-            {renderField("targetJobTitle", "Target job title", "Customer Success Associate")}
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold text-ink">Target role family</span>
-              <select
-                value={data.roleFamily}
-                onChange={(event) => setRoleFamily(event.target.value as RoleFamily)}
-                className="min-h-12 w-full rounded-md border border-ink/15 bg-white px-4 text-ink outline-none transition focus:border-spruce focus:ring-4 focus:ring-mint"
-              >
+          <div className="space-y-5">
+            <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+              {renderField(
+                "targetJobTitle",
+                "What job title are you aiming for?",
+                "Customer Success Associate",
+                "text",
+                "If you type something rough, like a shorthand or placeholder, we will clean it up."
+              )}
+            </div>
+            <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+              <span className="mb-2 block text-sm font-bold text-ink">Which lane feels closest?</span>
+              <p className="mb-4 text-sm leading-6 text-ink/64">
+                This helps load the right responsibility suggestions and ATS keywords.
+              </p>
+              <div className="flex flex-wrap gap-2">
                 {roleFamilies.map((roleFamily) => (
-                  <option key={roleFamily}>{roleFamily}</option>
+                  <button
+                    key={roleFamily}
+                    type="button"
+                    onClick={() => setRoleFamily(roleFamily)}
+                    className={`min-h-10 rounded-md border px-3 text-sm font-semibold transition ${
+                      data.roleFamily === roleFamily
+                        ? "border-spruce bg-mint text-spruce"
+                        : "border-ink/15 bg-white text-ink hover:border-spruce"
+                    }`}
+                  >
+                    {roleFamily}
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
           </div>
         )}
 
         {stepIndex === 2 && (
-          <div className="space-y-6">
-            <div className="grid gap-5 md:grid-cols-3">
-              {renderField("currentTitle", "Current or most recent role", "Support Specialist")}
-              {renderField("currentCompany", "Current/most recent company", "Northstar Co.")}
-              {renderField("currentTime", "Time in role", "Jan 2024 - Present")}
+          <div className="space-y-5">
+            <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+              <p className="mb-4 text-sm font-bold uppercase tracking-[0.12em] text-spruce">Most recent role</p>
+              <div className="grid gap-5 md:grid-cols-3">
+                {renderField("currentTitle", "What was your role?", "Support Specialist")}
+                {renderField("currentCompany", "Where was it?", "Northstar Co.")}
+                {renderField("currentTime", "When were you there?", "Jan 2024 - Present")}
+              </div>
             </div>
-            <div className="grid gap-5 md:grid-cols-3">
-              {renderField("previousTitle", "Previous role title", "Administrative Assistant")}
-              {renderField("previousCompany", "Previous company", "Bright Office Group")}
-              {renderField("previousTime", "Time in previous role", "Jun 2022 - Dec 2023")}
+            <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+              <p className="mb-4 text-sm font-bold uppercase tracking-[0.12em] text-spruce">Previous role</p>
+              <div className="grid gap-5 md:grid-cols-3">
+                {renderField("previousTitle", "What was the role before that?", "Administrative Assistant")}
+                {renderField("previousCompany", "Where was it?", "Bright Office Group")}
+                {renderField("previousTime", "When were you there?", "Jun 2022 - Dec 2023")}
+              </div>
             </div>
-            <div className="grid gap-5 md:grid-cols-3">
-              {renderField("additionalTitle", "Optional third role", "Campus Assistant")}
-              {renderField("additionalCompany", "Optional third company", "City College")}
-              {renderField("additionalTime", "Time in third role", "Sep 2021 - May 2022")}
+            <div className="rounded-md border border-ink/10 bg-paper/60 p-4 sm:p-5">
+              <p className="mb-4 text-sm font-bold uppercase tracking-[0.12em] text-spruce">Optional third role</p>
+              <div className="grid gap-5 md:grid-cols-3">
+                {renderField("additionalTitle", "Any other role worth including?", "Campus Assistant")}
+                {renderField("additionalCompany", "Where was it?", "City College")}
+                {renderField("additionalTime", "When were you there?", "Sep 2021 - May 2022")}
+              </div>
             </div>
           </div>
         )}
@@ -221,9 +255,9 @@ export function IntakeForm({
         {stepIndex === 3 && (
           <div className="space-y-5">
             <div>
-              <span className="mb-2 block text-sm font-bold text-ink">Guided responsibilities</span>
+              <span className="mb-2 block text-sm font-bold text-ink">What sounds like your work?</span>
               <p className="mb-4 text-sm leading-6 text-ink/68">
-                These update from your role family and help the generator choose stronger ATS language.
+                Pick anything that fits. We will translate these into cleaner resume bullets.
               </p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((item) => (
@@ -243,7 +277,7 @@ export function IntakeForm({
               </div>
             </div>
             <label className="block">
-              <span className="mb-2 block text-sm font-bold text-ink">Tools/software used</span>
+              <span className="mb-2 block text-sm font-bold text-ink">What tools or systems did you use?</span>
               <input
                 type="text"
                 value={data.tools}
@@ -253,7 +287,8 @@ export function IntakeForm({
               />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-bold text-ink">Custom responsibilities</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Anything else you handled?</span>
+              <span className="mb-2 block text-sm leading-5 text-ink/62">Plain language is fine. We will turn this into resume language.</span>
               <textarea
                 value={data.responsibilities}
                 onChange={(event) => update("responsibilities", event.target.value)}
@@ -268,9 +303,9 @@ export function IntakeForm({
         {stepIndex === 4 && (
           <div className="space-y-6">
             <div>
-              <span className="mb-2 block text-sm font-bold text-ink">Scope handled</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Add any numbers you remember</span>
               <p className="mb-4 text-sm leading-6 text-ink/68">
-                Use numbers or estimates. Even rough scope helps bullets sound more credible.
+                Estimate if you are not sure. These details help the resume sound specific without inventing anything.
               </p>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {scopeFields.map((field) => (
@@ -288,7 +323,7 @@ export function IntakeForm({
               </div>
             </div>
             <div>
-              <span className="mb-3 block text-sm font-bold text-ink">Outcomes improved</span>
+              <span className="mb-3 block text-sm font-bold text-ink">What did your work make better?</span>
               <div className="flex flex-wrap gap-2">
                 {outcomeOptions.map((item) => (
                   <label
@@ -307,7 +342,8 @@ export function IntakeForm({
               </div>
             </div>
             <label className="block">
-              <span className="mb-2 block text-sm font-bold text-ink">Additional measurable outcomes</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Any result you want reflected?</span>
+              <span className="mb-2 block text-sm leading-5 text-ink/62">This can be informal: faster replies, fewer mistakes, happier customers, cleaner records.</span>
               <textarea
                 value={data.outcomes}
                 onChange={(event) => update("outcomes", event.target.value)}
@@ -322,7 +358,7 @@ export function IntakeForm({
         {stepIndex === 5 && (
           <div>
             <div className="mb-4 rounded-md border border-ink/12 bg-paper/60 p-4 text-sm font-semibold text-ink/70">
-              {selectedSummary}. Generated resume content stays neutral and unbranded.
+              {selectedSummary}. Generated resume content stays neutral, unbranded, and ATS-safe.
             </div>
             <div className="grid gap-4 md:grid-cols-3">
               {templates.map((template) => (
