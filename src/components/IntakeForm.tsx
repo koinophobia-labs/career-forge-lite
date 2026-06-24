@@ -3,13 +3,15 @@
 import { useMemo, useState } from "react";
 import {
   careerTargets,
+  companySuggestions,
   type CareerTarget,
   outcomeOptions,
   outcomeSuggestionsByFamily,
   responsibilitySuggestions,
   roleFamilies,
   scopePromptSets,
-  templates
+  templates,
+  toolSuggestionsByFamily
 } from "@/lib/career-data";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
@@ -129,6 +131,36 @@ function formatList(items: string[]) {
   return items.filter(Boolean).join(", ") || "Not added yet";
 }
 
+function formatReviewItems(items: string[]) {
+  const cleanItems = items.map(normalizeSelection).filter(Boolean);
+  return cleanItems.length ? cleanItems.map((item) => `- ${item}`).join("\n") : "Not added yet";
+}
+
+function normalizeSelection(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function splitSelections(value: string) {
+  return value
+    .split(",")
+    .map(normalizeSelection)
+    .filter(Boolean);
+}
+
+function mergeSelection(current: string, item: string) {
+  const normalized = normalizeSelection(item);
+  const next = splitSelections(current);
+  const exists = next.some((value) => value.toLowerCase() === normalized.toLowerCase());
+  return exists ? next.filter((value) => value.toLowerCase() !== normalized.toLowerCase()).join(", ") : [...next, normalized].join(", ");
+}
+
+function filterOptions(options: string[], query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  return options
+    .filter((option) => !normalizedQuery || option.toLowerCase().includes(normalizedQuery))
+    .slice(0, 10);
+}
+
 export function IntakeForm({
   data,
   errors,
@@ -141,18 +173,27 @@ export function IntakeForm({
   const [questionIndex, setQuestionIndex] = useState(0);
   const [showAllScope, setShowAllScope] = useState(false);
   const [showAllOutcomes, setShowAllOutcomes] = useState(false);
+  const [customCompany, setCustomCompany] = useState("");
+  const [toolSearch, setToolSearch] = useState("");
+  const [customTool, setCustomTool] = useState("");
+  const [responsibilitySearch, setResponsibilitySearch] = useState("");
+  const [customResponsibility, setCustomResponsibility] = useState("");
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
   const roleScopePrompts = scopePromptSets[data.roleFamily];
   const roleOutcomes = outcomeSuggestionsByFamily[data.roleFamily];
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
+  const selectedTools = splitSelections(data.tools);
+  const toolMatches = filterOptions(toolSuggestionsByFamily[data.roleFamily], toolSearch);
+  const responsibilityMatches = filterOptions(suggestions, responsibilitySearch);
   const normalizedTargetQuery = data.targetJobTitle.trim().toLowerCase();
   const targetMatches = careerTargets
     .filter((target) => {
       if (!normalizedTargetQuery) return true;
       const title = target.title.toLowerCase();
       const family = target.roleFamily.toLowerCase();
-      return title.includes(normalizedTargetQuery) || family.includes(normalizedTargetQuery);
+      const aliases = target.aliases?.join(" ").toLowerCase() ?? "";
+      return title.includes(normalizedTargetQuery) || family.includes(normalizedTargetQuery) || aliases.includes(normalizedTargetQuery);
     })
     .slice(0, 12);
   const progress = Math.round(((questionIndex + 1) / questions.length) * 100);
@@ -216,6 +257,33 @@ export function IntakeForm({
     });
   }
 
+  function setCompany(key: "currentCompany" | "previousCompany" | "additionalCompany", value: string) {
+    update(key, normalizeSelection(value));
+  }
+
+  function toggleTool(item: string) {
+    update("tools", mergeSelection(data.tools, item));
+  }
+
+  function addCustomTool() {
+    const normalized = normalizeSelection(customTool);
+    if (!normalized) return;
+    update("tools", mergeSelection(data.tools, normalized));
+    setCustomTool("");
+    setToolSearch("");
+  }
+
+  function addCustomResponsibility() {
+    const normalized = normalizeSelection(customResponsibility || responsibilitySearch);
+    if (!normalized) return;
+    const selected = data.selectedResponsibilities.some((item) => item.toLowerCase() === normalized.toLowerCase())
+      ? data.selectedResponsibilities
+      : [...data.selectedResponsibilities, normalized];
+    update("selectedResponsibilities", selected);
+    setCustomResponsibility("");
+    setResponsibilitySearch("");
+  }
+
   function toggleResponsibility(item: string) {
     const selected = data.selectedResponsibilities.includes(item)
       ? data.selectedResponsibilities.filter((value) => value !== item)
@@ -231,18 +299,102 @@ export function IntakeForm({
   }
 
   function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
+    const quickChoices = scopeQuickChoices(field.key);
     return (
-      <label key={field.key} className="block">
+      <div key={field.key} className="block">
         <span className="mb-2 block text-sm font-semibold text-ink">{field.label}</span>
         {field.hint && <span className="mb-2 block text-sm leading-5 text-ink/60">{field.hint}</span>}
+        <div className="mb-3 flex flex-wrap gap-2">
+          {quickChoices.map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => update(field.key, choice as never)}
+              className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                String(data[field.key]) === choice ? "border-gold bg-gold/20 text-ink" : "border-ink/12 bg-paper/70 text-ink hover:border-spruce"
+              }`}
+            >
+              {choice}
+            </button>
+          ))}
+        </div>
         <input
           type="text"
           value={String(data[field.key])}
           onChange={(event) => update(field.key, event.target.value as never)}
-          placeholder={field.placeholder}
+          placeholder={field.placeholder ?? "Custom estimate"}
           className="trust-input min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
         />
-      </label>
+      </div>
+    );
+  }
+
+  function scopeQuickChoices(key: keyof IntakeData) {
+    const choices: Partial<Record<keyof IntakeData, string[]>> = {
+      customersServed: ["10+ weekly customers", "25+ weekly customers", "50+ weekly customers", "100+ weekly customers"],
+      ticketsHandled: ["10+ tickets", "25+ tickets", "50+ tickets", "100+ tickets"],
+      projectsSupported: ["1-2 active projects", "3-5 active projects", "5+ active projects"],
+      teamSizeSupported: ["3-5 people", "6-10 people", "10+ people"],
+      callsHandled: ["10+ weekly calls", "25+ weekly calls", "50+ weekly calls"],
+      revenueInfluenced: ["$10K+ handled", "$50K+ supported", "$100K+ supported"],
+      reportsCreated: ["2+ weekly reports", "5+ weekly reports", "10+ weekly reports"]
+    };
+    return choices[key] ?? [];
+  }
+
+  function renderCompanyPicker(key: "currentCompany" | "previousCompany" | "additionalCompany", label: string) {
+    const value = String(data[key]);
+    const matches = filterOptions(companySuggestions, value || customCompany);
+
+    return (
+      <div className="rounded-md border border-ink/10 bg-white p-4">
+        <label className="block">
+          <span className="mb-2 block text-sm font-bold text-ink">{label}</span>
+          <input
+            type="text"
+            value={value}
+            onChange={(event) => setCompany(key, event.target.value)}
+            placeholder="Search company..."
+            className="trust-input min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+          />
+        </label>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {matches.map((company) => (
+            <button
+              key={company}
+              type="button"
+              onClick={() => setCompany(key, company)}
+              className={`rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
+                value === company ? "border-gold bg-gold/20 text-ink" : "border-ink/12 bg-paper/70 text-ink hover:border-spruce"
+              }`}
+            >
+              {company}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 border-t border-ink/10 pt-3">
+          <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={customCompany}
+              onChange={(event) => setCustomCompany(event.target.value)}
+              placeholder="Add custom company"
+              className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setCompany(key, customCompany);
+                setCustomCompany("");
+              }}
+              className="rounded-md border border-ink/15 bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+            >
+              Add custom
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -405,42 +557,92 @@ export function IntakeForm({
         return renderField("currentTitle", "Current or most recent role", "Support Specialist");
       case 6:
         return (
-          <div className="grid gap-5 md:grid-cols-2">
-            {renderField("currentCompany", "Company", "Northstar Co.")}
+          <div className="grid gap-5">
+            {renderCompanyPicker("currentCompany", "Where did you do that work?")}
             {renderField("currentTime", "Dates or time in role", "Jan 2024 - Present")}
           </div>
         );
       case 7:
         return (
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5">
             {renderField("previousTitle", "Previous role", "Administrative Assistant", "text", "Skip if this does not apply.")}
-            {renderField("previousCompany", "Company", "Bright Office Group")}
+            {renderCompanyPicker("previousCompany", "Previous company")}
             {renderField("previousTime", "Dates or time in role", "Jun 2022 - Dec 2023")}
           </div>
         );
       case 8:
         return (
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5">
             {renderField("additionalTitle", "Optional third role", "Campus Assistant", "text", "Skip if this does not apply.")}
-            {renderField("additionalCompany", "Company", "City College")}
+            {renderCompanyPicker("additionalCompany", "Additional company")}
             {renderField("additionalTime", "Dates or time in role", "Sep 2021 - May 2022")}
           </div>
         );
       case 9:
-        return renderField(
-          "tools",
-          "Tools, software, or platforms",
-          "Zendesk, Salesforce, Excel, Notion",
-          "text",
-          "Use commas for multiple tools. Acronyms like CRM, ATS, SQL, IT, API, and KPI are normalized."
+        return (
+          <div className="space-y-5">
+            <div className="rounded-md border border-ink/10 bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Suggested for {data.roleFamily}</p>
+              <p className="mt-2 text-sm leading-6 text-ink/65">Select everything you used. Search or add a custom tool if it is missing.</p>
+              <input
+                type="text"
+                value={toolSearch}
+                onChange={(event) => setToolSearch(event.target.value)}
+                placeholder="Search tools..."
+                className="trust-input mt-4 min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {toolMatches.map((tool) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    onClick={() => toggleTool(tool)}
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                      selectedTools.some((item) => item.toLowerCase() === tool.toLowerCase())
+                        ? "border-gold bg-gold/20 text-ink"
+                        : "border-ink/12 bg-paper/70 text-ink hover:border-spruce"
+                    }`}
+                  >
+                    {tool}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-ink/10 pt-3">
+                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={customTool}
+                    onChange={(event) => setCustomTool(event.target.value)}
+                    placeholder="Add custom tool"
+                    className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+                  />
+                  <button type="button" onClick={addCustomTool} className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink">
+                    Add custom
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-md border border-ink/10 bg-paper p-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Selected tools</h3>
+              <p className="mt-3 text-sm leading-6 text-ink/72">{formatList(selectedTools)}</p>
+            </div>
+          </div>
         );
       case 10:
         return (
           <div className="space-y-5">
             <div>
-              <span className="mb-3 block text-sm font-bold text-ink">Select responsibilities that fit.</span>
+              <span className="mb-3 block text-sm font-bold text-ink">Did your work include any of these?</span>
+              <input
+                type="text"
+                value={responsibilitySearch}
+                onChange={(event) => setResponsibilitySearch(event.target.value)}
+                placeholder="Search responsibilities..."
+                className="trust-input mb-4 min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
               <div className="flex flex-wrap gap-2">
-                {suggestions.map((item) => (
+                {responsibilityMatches.map((item) => (
                   <label
                     key={item}
                     className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink transition has-[:checked]:border-gold has-[:checked]:bg-gold/20"
@@ -455,11 +657,26 @@ export function IntakeForm({
                   </label>
                 ))}
               </div>
+              <div className="mt-4 rounded-md border border-ink/10 bg-white p-3">
+                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={customResponsibility}
+                    onChange={(event) => setCustomResponsibility(event.target.value)}
+                    placeholder="Add my own responsibility"
+                    className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+                  />
+                  <button type="button" onClick={addCustomResponsibility} className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink">
+                    Add custom
+                  </button>
+                </div>
+              </div>
             </div>
             <label className="block">
-              <span className="mb-2 block text-sm font-bold text-ink">Add your own words</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Anything else Career Forge should know?</span>
               <span className="mb-2 block text-sm leading-5 text-ink/60">
-                Plain language is fine. Career Forge will translate it.
+                Optional. Plain language is fine if the chips missed something important.
               </span>
               <textarea
                 value={data.responsibilities}
@@ -582,16 +799,16 @@ export function IntakeForm({
             <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestion(3)} />
             <ReviewItem label="Mapped role family" value={data.roleFamily} onEdit={() => goToQuestion(4)} />
             <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestion(5)} />
-            <ReviewItem label="Tools" value={data.tools || "Not added yet"} onEdit={() => goToQuestion(9)} />
+            <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestion(9)} />
             <ReviewItem
               label="Responsibilities"
-              value={formatList([...data.selectedResponsibilities, data.responsibilities])}
+              value={formatReviewItems([...data.selectedResponsibilities, data.responsibilities])}
               onEdit={() => goToQuestion(10)}
             />
-            <ReviewItem label="Scope" value={formatList(scopeSummary)} onEdit={() => goToQuestion(11)} />
+            <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestion(11)} />
             <ReviewItem
               label="Outcomes"
-              value={formatList([...data.selectedOutcomes, data.outcomes])}
+              value={formatReviewItems([...data.selectedOutcomes, data.outcomes])}
               onEdit={() => goToQuestion(12)}
             />
             <ReviewItem
@@ -674,7 +891,7 @@ function ReviewItem({ label, value, onEdit }: { label: string; value: string; on
           Edit
         </button>
       </div>
-      <p className="mt-3 text-sm leading-6 text-ink/72">{value || "Not added yet"}</p>
+      <p className="mt-3 whitespace-pre-line text-sm leading-6 text-ink/72">{value || "Not added yet"}</p>
     </div>
   );
 }

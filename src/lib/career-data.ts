@@ -3,6 +3,7 @@ import type { IntakeData, RoleFamily, TemplateStyle } from "@/types/career";
 export type CareerTarget = {
   title: string;
   roleFamily: RoleFamily;
+  aliases?: string[];
 };
 
 export const roleFamilies: RoleFamily[] = [
@@ -20,7 +21,7 @@ export const roleFamilies: RoleFamily[] = [
 export const templates: TemplateStyle[] = ["Corporate", "Modern ATS", "Tech ATS"];
 
 export const careerTargets: CareerTarget[] = [
-  { title: "Customer Success Associate", roleFamily: "Customer Success" },
+  { title: "Customer Success Associate", roleFamily: "Customer Success", aliases: ["customer success specialist", "client success representative"] },
   { title: "Customer Support Specialist", roleFamily: "Customer Success" },
   { title: "Customer Experience Associate", roleFamily: "Customer Success" },
   { title: "Client Services Coordinator", roleFamily: "Customer Success" },
@@ -88,6 +89,45 @@ export const careerTargets: CareerTarget[] = [
   { title: "Junior QA Analyst", roleFamily: "Tech" },
   { title: "Technical Support Associate", roleFamily: "Tech" }
 ];
+
+export const companySuggestions = [
+  "DraftKings",
+  "Amazon",
+  "Target",
+  "United Airlines",
+  "Best Buy",
+  "Walgreens",
+  "CVS",
+  "Starbucks",
+  "Apple",
+  "Google",
+  "Walmart",
+  "Costco",
+  "FedEx",
+  "UPS",
+  "T-Mobile",
+  "Verizon",
+  "Home Depot",
+  "Lowe's",
+  "Chase",
+  "Bank of America",
+  "Northstar Services",
+  "BrightBuild Studio",
+  "Riverline Sportsbook",
+  "CloudDesk"
+];
+
+export const toolSuggestionsByFamily: Record<RoleFamily, string[]> = {
+  Security: ["Incident Reports", "Access Control System", "Radio Systems", "Surveillance Cameras", "Excel", "Google Workspace", "Slack", "Microsoft Teams"],
+  "Customer Success": ["Salesforce", "HubSpot", "Zendesk", "Intercom", "Notion", "Google Workspace", "Slack", "Excel"],
+  "Project Coordination": ["Asana", "Trello", "Monday.com", "Jira", "Google Sheets", "Slack", "Microsoft Teams", "Notion"],
+  Operations: ["Excel", "Google Sheets", "SAP", "Oracle", "Notion", "Airtable", "Slack", "Microsoft Teams"],
+  Business: ["Excel", "Google Sheets", "Tableau", "Power BI", "Salesforce", "Notion", "SQL", "Google Workspace"],
+  Sales: ["Salesforce", "HubSpot", "Outreach", "LinkedIn Sales Navigator", "Excel", "Google Workspace", "Slack", "ZoomInfo"],
+  Admin: ["Google Workspace", "Microsoft Office", "Excel", "Outlook", "Calendly", "Slack", "Notion", "DocuSign"],
+  Tech: ["Jira", "GitHub", "SQL", "Excel", "Google Sheets", "Figma", "Postman", "Notion"],
+  "IT Support": ["Active Directory", "Jira", "ServiceNow", "Windows", "macOS", "Azure", "Office 365", "Zendesk"]
+};
 
 export const roleIntelligence: Record<RoleFamily, { responsibilities: string[]; skills: string[]; valueArea: string }> = {
   Security: {
