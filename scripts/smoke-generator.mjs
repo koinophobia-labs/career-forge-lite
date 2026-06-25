@@ -500,6 +500,12 @@ assert(landingSource.includes("Choose your path"), "landing page explains two pa
 assert(landingSource.includes("Guided Builder") && landingSource.includes("Interview Mode"), "landing page compares builder and interview paths");
 assert(landingSource.includes("Doesn't invent achievements"), "landing page trust copy exists");
 assert(pageSource.includes("Choose Path") && pageSource.includes("Build Resume") && pageSource.includes("Review Resume"), "app workflow labels are launch-ready");
+assert(pageSource.includes("Choose your build mode."), "landing CTA opens build mode choice screen");
+assert(pageSource.includes("Guided Interview") && pageSource.includes("Tell My Story"), "build mode choices are visible");
+assert(pageSource.includes("Answer focused questions.") && pageSource.includes("Best if you want structure."), "guided interview choice has required copy");
+assert(pageSource.includes("Describe your work naturally.") && pageSource.includes("Career Forge organizes the details."), "tell-my-story choice has required copy");
+assert(pageSource.includes('onClick={() => jump("intake")}'), "guided interview path still opens the existing builder flow");
+assert(pageSource.includes('href="/interview"'), "tell-my-story path opens conversational intake mode");
 assert(resumePreviewSource.includes("Before you apply"), "resume review includes before-apply checklist");
 assert(resumePreviewSource.includes("Tailor for each job"), "resume review includes practical next steps");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");

@@ -12,7 +12,13 @@ import { initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 
-type Step = "landing" | "intake" | "preview";
+type Step = "landing" | "mode" | "intake" | "preview";
+
+const workflowSteps: Array<{ label: string; step: Step }> = [
+  { label: "Choose Path", step: "mode" },
+  { label: "Build Resume", step: "intake" },
+  { label: "Review Resume", step: "preview" }
+];
 
 export default function Home() {
   const [step, setStep] = useState<Step>("landing");
@@ -22,7 +28,7 @@ export default function Home() {
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
 
   const workflowStep = useMemo(() => {
-    const order: Step[] = ["landing", "intake", "preview"];
+    const order: Step[] = ["mode", "intake", "preview"];
     return order.indexOf(step) + 1;
   }, [step]);
 
@@ -74,16 +80,16 @@ export default function Home() {
 
   return (
     <main>
-      <SiteHeader onStart={() => jump("intake")} />
-      <LandingPage onStart={() => jump("intake")} />
+      <SiteHeader onStart={() => jump("mode")} />
+      <LandingPage onStart={() => jump("mode")} />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
         <div className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 md:grid-cols-3">
-          {["Choose Path", "Build Resume", "Review Resume"].map((label, index) => (
+          {workflowSteps.map(({ label, step: targetStep }, index) => (
             <button
               key={label}
               type="button"
-              onClick={() => jump((["landing", "intake", "preview"] as Step[])[index])}
+              onClick={() => jump(targetStep)}
               className={`min-h-14 rounded-md border px-4 text-left text-sm font-bold transition ${
                 workflowStep === index + 1
                   ? "border-gold bg-gold text-ink"
@@ -109,6 +115,57 @@ export default function Home() {
         </div>
       </section>
 
+      {step === "mode" && (
+        <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8" id="mode">
+          <div className="trust-panel overflow-hidden rounded-md">
+            <div className="border-b border-white/10 p-5 sm:p-7">
+              <p className="trust-kicker text-sm font-bold uppercase">Product Lab Module 05</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
+                <div>
+                  <h2 className="text-3xl font-bold text-paper sm:text-4xl">Choose your build mode.</h2>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-paper/68">
+                    Pick the path that matches how you think. Both modes feed the same resume engine, LinkedIn preview,
+                    and ATS-safe review.
+                  </p>
+                </div>
+                <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4 text-sm leading-6 text-paper/72">
+                  <strong className="block text-cyan">Resume package mission</strong>
+                  Career Forge turns real work into recruiter-ready language without inventing achievements or metrics.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 p-5 sm:p-7 lg:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => jump("intake")}
+                className="group rounded-md border border-gold/35 bg-gold/10 p-5 text-left transition hover:-translate-y-0.5 hover:border-gold hover:bg-gold/15 focus:outline-none focus:ring-2 focus:ring-gold/70"
+              >
+                <span className="rounded-sm border border-gold/40 bg-gold px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-ink">
+                  Guided Interview
+                </span>
+                <h3 className="mt-5 text-2xl font-bold text-paper">Answer focused questions.</h3>
+                <p className="mt-3 text-sm leading-6 text-paper/70">Best if you want structure.</p>
+                <p className="mt-5 text-sm font-bold text-gold transition group-hover:text-cyan">Start guided build</p>
+              </button>
+
+              <a
+                href="/interview"
+                className="group rounded-md border border-cyan/35 bg-cyan/10 p-5 transition hover:-translate-y-0.5 hover:border-cyan hover:bg-cyan/15 focus:outline-none focus:ring-2 focus:ring-cyan/70"
+              >
+                <span className="rounded-sm border border-cyan/40 bg-cyan/10 px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-cyan">
+                  Tell My Story
+                </span>
+                <h3 className="mt-5 text-2xl font-bold text-paper">Describe your work naturally.</h3>
+                <p className="mt-3 text-sm leading-6 text-paper/70">
+                  Career Forge organizes the details.
+                </p>
+                <p className="mt-5 text-sm font-bold text-cyan transition group-hover:text-gold">Open conversational mode</p>
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
       {step === "intake" && (
         <IntakeForm
           data={intake}
