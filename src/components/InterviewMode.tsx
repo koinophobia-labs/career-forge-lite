@@ -34,6 +34,20 @@ function statusTone(status: string) {
   return "border-white/10 bg-white/5 text-paper/55";
 }
 
+function readinessLabel(status: string) {
+  if (status === "strong") return "Strong";
+  if (status === "usable") return "Ready";
+  if (status === "weak") return "Needs detail";
+  return "Need answer";
+}
+
+function readinessNote(label: string, status: string) {
+  if (status === "strong") return `${label} has strong resume evidence.`;
+  if (status === "usable") return `${label} is usable for a first draft.`;
+  if (status === "weak") return `${label} needs one more concrete detail.`;
+  return `${label} still needs an answer.`;
+}
+
 function focusCopy(stage: InterviewSession["currentStage"]) {
   const focus: Record<InterviewSession["currentStage"], { label: string; body: string }> = {
     role_targeting: {
@@ -99,6 +113,9 @@ export function InterviewMode() {
   const smartSummary = useMemo(() => getSmartInterviewSummary(session), [session]);
   const interviewFocus = useMemo(() => focusCopy(session.currentStage), [session.currentStage]);
   const coachTip = coachingMessages[0] ?? "Short answers work, but examples make the resume stronger.";
+  const generateHelpText = canGenerate
+    ? "Ready when you are. You can generate now or add one more proof point."
+    : "Generate unlocks after Career Forge has a target role, experience proof, responsibilities, tools or skills, and one result or project.";
   const draftPreview = useMemo(
     () => [
       ["Target role", session.resumeDraft.targetRole],
@@ -458,7 +475,7 @@ export function InterviewMode() {
                 </>
               )}
               <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-cyan">
-                Conversation quality: {smartSummary.conversationScore}
+                {smartSummary.conversationScore > 12 ? "Strong interview signal" : "Keep adding proof"}
               </p>
             </div>
 
@@ -503,9 +520,9 @@ export function InterviewMode() {
                   <div key={String(field.fieldKey)} className={`rounded-md border px-3 py-2 ${statusTone(field.status)}`}>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm font-bold text-paper">{field.label}</span>
-                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{field.status}</span>
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{readinessLabel(field.status)}</span>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-paper/58">{field.notes}</p>
+                    <p className="mt-1 text-xs leading-5 text-paper/58">{readinessNote(field.label, field.status)}</p>
                   </div>
                 ))}
               </div>
@@ -515,10 +532,14 @@ export function InterviewMode() {
               type="button"
               disabled={!canGenerate || mode === "generating"}
               onClick={handleGenerate}
+              aria-describedby="generate-resume-help"
               className="mt-5 min-h-12 w-full rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-paper/35"
             >
               {mode === "generating" ? "Generating..." : "Generate Resume"}
             </button>
+            <p id="generate-resume-help" className="mt-2 text-xs leading-5 text-paper/50">
+              {mode === "generating" ? "Career Forge is shaping your draft now." : generateHelpText}
+            </p>
           </aside>
         </section>
       </div>

@@ -67,7 +67,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
           href="/#demo"
           className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
         >
-          Use Static Builder
+          Use Free Builder
         </Link>
         <Link
           href="/"
@@ -77,7 +77,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
         </Link>
       </div>
       <p className="mt-4 text-xs leading-5 text-paper/45">
-        TODO: connect this state to auth, billing, and entitlement checks when payments are added.
+        This preview does not include checkout or billing. The free guided builder remains available anytime.
       </p>
     </div>
   );
