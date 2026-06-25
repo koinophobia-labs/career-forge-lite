@@ -420,6 +420,7 @@ assert(limitState.label.includes("Premium Preview"), "preview state has premium 
 const interviewModeSource = fs.readFileSync(path.join(root, "src/components/InterviewMode.tsx"), "utf8");
 const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
 const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
+const intakeSource = fs.readFileSync(path.join(root, "src/components/IntakeForm.tsx"), "utf8");
 assert(interviewModeSource.includes("Let Career Forge interview you."), "first-screen value proposition exists");
 assert(interviewModeSource.includes("Build your resume") || landingSource.includes("Build your resume"), "premium entry helper copy exists");
 assert(interviewModeSource.includes("Resume Readiness"), "sidebar coach dashboard copy exists");
@@ -433,6 +434,17 @@ assert(premiumSource.includes("Interview Mode is planned as a premium feature"),
 assert(landingSource.includes("Premium Preview"), "landing page premium badge copy exists");
 assert(landingSource.includes("Start the Interview"), "static builder entry remains available");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
+assert(intakeSource.includes("I'm building my first resume"), "free builder quick start path exists");
+assert(intakeSource.includes("Help Me Think"), "free builder help-me-think support exists");
+assert(intakeSource.includes("You do not need resume language"), "free builder accepts messy answers");
+assert(intakeSource.includes("Skip for now"), "free builder skip path exists");
+assert(intakeSource.includes("Not sure"), "free builder not-sure path exists");
+assert(intakeSource.includes("Use projects instead"), "free builder project fallback path exists");
+assert(intakeSource.includes("Resume Readiness"), "free builder uses readiness progress model");
+assert(intakeSource.includes("Ready to Generate"), "free builder readiness language exists");
+assert(intakeSource.includes("Approximate numbers are okay"), "free builder metric coaching exists");
+assert(intakeSource.includes("Needs More Detail") && intakeSource.includes("Missing"), "free builder confidence labels exist");
+assert(!intakeSource.includes("Question {String(questionIndex"), "free builder does not show question count progress");
 
 const customRoleData = {
   ...initialIntake,

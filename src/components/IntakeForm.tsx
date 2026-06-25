@@ -30,84 +30,137 @@ type IntakeFormProps = {
 };
 
 type Question = {
+  id:
+    | "quick_start"
+    | "name"
+    | "email"
+    | "contact"
+    | "target"
+    | "current_role"
+    | "current_company"
+    | "previous_role"
+    | "additional_role"
+    | "tools"
+    | "responsibilities"
+    | "scope"
+    | "outcomes"
+    | "template"
+    | "review";
   title: string;
   helper: string;
   validate: Array<keyof IntakeData>;
 };
 
+type QuickStartPath =
+  | "first_resume"
+  | "career_change"
+  | "old_resume"
+  | "knows_experience"
+  | "project_based"
+  | "internal_application";
+
 const requiredKeys: Array<keyof IntakeData> = ["fullName", "email", "targetJobTitle", "currentTitle"];
 
 const questions: Question[] = [
   {
+    id: "quick_start",
+    title: "What kind of resume are we building today?",
+    helper: "Pick the closest path. This only changes examples and coaching, not the final resume rules.",
+    validate: []
+  },
+  {
+    id: "name",
     title: "What's your full name?",
-    helper: "This becomes the name line at the top of the resume dossier.",
+    helper: "This becomes the name line at the top of the resume.",
     validate: ["fullName"]
   },
   {
+    id: "email",
     title: "What email should recruiters use?",
     helper: "Use the address you want on the final resume header.",
     validate: ["email"]
   },
   {
+    id: "contact",
     title: "Want to add phone or portfolio?",
     helper: "Skip anything that does not apply. One clean link is enough.",
     validate: []
   },
   {
+    id: "target",
     title: "What role are you aiming for?",
     helper: "Search a specific title or type your own. Known titles map to the right role family automatically.",
     validate: ["targetJobTitle"]
   },
   {
+    id: "current_role",
     title: "What's your current or most recent role?",
     helper: "Start with the role that should carry the most weight.",
     validate: ["currentTitle"]
   },
   {
+    id: "current_company",
     title: "Where did you do that work?",
     helper: "Company and dates help the resume read like a real work history.",
     validate: []
   },
   {
+    id: "previous_role",
     title: "Add a previous role?",
     helper: "Skip if this does not apply. A short title, company, and date range is enough.",
     validate: []
   },
   {
+    id: "additional_role",
     title: "Add one more role?",
     helper: "Optional. Use this for one extra job, campus role, internship, or relevant work experience.",
     validate: []
   },
   {
+    id: "tools",
     title: "What tools or platforms did you use?",
-    helper: "Plain language is fine. These become ATS-searchable skills when useful.",
+    helper: "Think software, systems, equipment, spreadsheets, CRMs, ticketing tools, or internal platforms.",
     validate: []
   },
   {
+    id: "responsibilities",
     title: "What responsibilities did you actually handle?",
-    helper: "Pick what fits, then add your own words. Career Forge will translate it.",
+    helper: "You do not need resume language. Pick examples or write it the way you would say it.",
     validate: []
   },
   {
+    id: "scope",
     title: "What kind of volume did you handle?",
-    helper: "Estimate if you are not sure. Numbers help create stronger resume bullets.",
+    helper: "Approximate numbers are okay. Skip anything you do not remember.",
     validate: []
   },
   {
+    id: "outcomes",
     title: "What did your work improve?",
     helper: "Select outcomes you can honestly stand behind.",
     validate: []
   },
   {
+    id: "template",
     title: "Pick your resume module style.",
     helper: "All three are single-column, ATS-safe, and neutral in exported resume content.",
     validate: []
   },
   {
+    id: "review",
     title: "Review the dossier.",
     helper: "Check the captured signals before generating the resume package.",
     validate: []
   }
+];
+
+const quickStartPaths: Array<{ id: QuickStartPath; label: string; helper: string }> = [
+  { id: "first_resume", label: "I'm building my first resume", helper: "We will use simple examples and remind you that school, part-time work, and projects count." },
+  { id: "career_change", label: "I'm changing careers", helper: "We will emphasize transferable skills and proof from past roles." },
+  { id: "old_resume", label: "I'm updating an old resume", helper: "We will focus on recent work, cleaner bullets, and stronger numbers." },
+  { id: "knows_experience", label: "I already know my experience", helper: "We will keep the flow quick and let you confirm key signals." },
+  { id: "project_based", label: "I have projects instead of work experience", helper: "We will treat projects, coursework, shipped work, or volunteer work as usable proof." },
+  { id: "internal_application", label: "I'm applying internally", helper: "We will look for reliability, process knowledge, and cross-team support." }
 ];
 
 const allScopeFields: Array<{ key: keyof IntakeData; label: string }> = [
@@ -259,6 +312,8 @@ export function IntakeForm({
   const [customIndustry, setCustomIndustry] = useState("");
   const [customWorkStyle, setCustomWorkStyle] = useState("");
   const [customTransferableSkill, setCustomTransferableSkill] = useState("");
+  const [quickStartPath, setQuickStartPath] = useState<QuickStartPath>("first_resume");
+  const [showHelpMeThink, setShowHelpMeThink] = useState(false);
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
   const actionSuggestions = actionSuggestionsByFamily[data.roleFamily];
@@ -298,8 +353,8 @@ export function IntakeForm({
     })
     .slice(0, normalizedTargetQuery ? 8 : 6);
   const showTargetMatches = targetSearchOpen && (!exactTargetMatch || Boolean(normalizedTargetQuery));
-  const progress = Math.round(((questionIndex + 1) / questions.length) * 100);
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
+  const pathGuidance = quickStartPaths.find((path) => path.id === quickStartPath)?.helper ?? quickStartPaths[0].helper;
 
   const roleSummary = useMemo(() => {
     const roles = [
@@ -329,9 +384,33 @@ export function IntakeForm({
       return value ? `${field.label}: ${value}` : "";
     })
     .filter(Boolean);
+  const readiness = getReadiness();
 
   function update<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
     onChange({ ...data, [key]: value });
+  }
+
+  function getSectionState(label: string, strong: boolean, good: boolean, needsMoreDetail = false) {
+    if (strong) return { label, status: "Strong", tone: "border-cyan/35 bg-cyan/10 text-cyan" };
+    if (good) return { label, status: "Good", tone: "border-gold/35 bg-gold/10 text-gold" };
+    if (needsMoreDetail) return { label, status: "Needs More Detail", tone: "border-ember/35 bg-ember/10 text-ember" };
+    return { label, status: "Missing", tone: "border-white/10 bg-white/5 text-paper/55" };
+  }
+
+  function getReadiness() {
+    const hasScope = scopeSummary.length > 0;
+    const hasOutcome = data.selectedOutcomes.length > 0 || data.outcomes.trim().length > 0;
+    const sections = [
+      getSectionState("Target Role", Boolean(data.targetJobTitle.trim()), Boolean(data.roleFamily)),
+      getSectionState("Experience", Boolean(data.currentTitle.trim() && data.currentCompany.trim()), Boolean(data.currentTitle.trim() || data.previousTitle.trim() || data.additionalTitle.trim()), Boolean(data.currentTitle.trim())),
+      getSectionState("Skills", selectedTools.length >= 3 || data.selectedResponsibilities.length >= 4, Boolean(selectedTools.length || data.selectedResponsibilities.length), Boolean(data.responsibilities.trim())),
+      getSectionState("Achievements", hasOutcome && data.selectedActions.length > 0, hasOutcome || data.selectedActions.length > 0, Boolean(data.selectedActions.length)),
+      getSectionState("Metrics", hasScope && scopeSummary.length >= 2, hasScope)
+    ];
+    const score = Math.round(
+      (sections.reduce((sum, section) => sum + (section.status === "Strong" ? 1 : section.status === "Good" ? 0.68 : 0), 0) / sections.length) * 100
+    );
+    return { sections, score };
   }
 
   function setRoleFamily(roleFamily: RoleFamily) {
@@ -444,6 +523,202 @@ export function IntakeForm({
       update(key, [...data[key], normalized]);
     }
     clear();
+  }
+
+  function exampleChipsForCurrentQuestion() {
+    const examples: Partial<Record<Question["id"], string[]>> = {
+      name: ["Jordan Lee", "Alex Rivera"],
+      email: ["name@email.com", "first.last@gmail.com"],
+      contact: ["(555) 123-4567", "linkedin.com/in/yourname", "yourportfolio.com"],
+      target: ["Customer Success Associate", "Project Coordinator", "Help Desk Technician", "Administrative Assistant"],
+      current_role: ["Retail Associate", "Security Officer", "Sportsbook Ticket Writer", "IT Support Intern", "Project Assistant"],
+      current_company: ["DraftKings", "Target", "Local Business", "Contract Work", "Self-Employed"],
+      previous_role: ["Cashier", "Front Desk Associate", "Customer Service Associate", "Campus Assistant"],
+      additional_role: ["Volunteer Coordinator", "Class Project", "Freelance Support", "Internship"],
+      tools: ["Salesforce", "Excel", "Slack", "Microsoft Office", "POS Systems", "Zendesk", "Git", "Internal Software"],
+      responsibilities: ["Assisted customers", "Managed schedules", "Processed payments", "Created reports", "Solved technical issues", "Updated records"],
+      scope: ["50+ customers per week", "25+ tickets", "3 active projects", "$10K+ handled", "5 weekly reports", "6-person team"],
+      outcomes: ["Speed", "Accuracy", "Customer satisfaction", "Efficiency", "Reliability", "Compliance"],
+      template: templates,
+      review: ["Looks good", "Need to edit responsibilities", "Add one metric"]
+    };
+    return examples[question.id] ?? [];
+  }
+
+  function helpExamplesForCurrentQuestion() {
+    const examples: Partial<Record<Question["id"], string[]>> = {
+      quick_start: [
+        "First resume: part-time work, class projects, clubs, and volunteer work count.",
+        "Career change: focus on transferable skills and proof.",
+        "Projects: shipped apps, coursework, portfolios, and independent work can carry the resume."
+      ],
+      target: [
+        "Search the job title you would type into a job board.",
+        "If you are unsure, pick a broad but real target like Operations Associate or Customer Support Specialist.",
+        "Career Forge can clean weak wording, but a clear target makes the resume sharper."
+      ],
+      responsibilities: [
+        "What did you usually do during a normal day?",
+        "What problems did people come to you for?",
+        "Did you update records, answer questions, coordinate schedules, process payments, or troubleshoot issues?",
+        "Plain answers are fine: I helped people at the front desk."
+      ],
+      scope: [
+        "Do you remember customers per day, tickets, projects, money handled, team size, reports, calls, or inventory?",
+        "Approximate numbers are okay.",
+        "If you do not know, skip it. Career Forge will not invent metrics."
+      ],
+      outcomes: [
+        "Did your work make anything faster, cleaner, more accurate, more reliable, or easier for customers?",
+        "Small improvements count if they are true.",
+        "You can write this casually: fewer mistakes, faster replies, happier customers."
+      ],
+      tools: [
+        "Think software, equipment, spreadsheets, internal systems, phones, registers, scanners, CRMs, or ticketing tools.",
+        "Internal Software is acceptable if you do not know the system name."
+      ]
+    };
+    return examples[question.id] ?? [
+      "Short answers are enough.",
+      "You do not need resume language yet.",
+      "Skip what does not apply and keep moving."
+    ];
+  }
+
+  function applyExampleChip(example: string) {
+    if (question.id === "quick_start") return;
+    if (question.id === "name") update("fullName", example);
+    if (question.id === "email") update("email", example);
+    if (question.id === "contact") {
+      if (example.includes("@") || example.includes(".com") || example.includes("linkedin")) update("website", example);
+      else update("phone", example);
+    }
+    if (question.id === "target") updateTargetRole(example);
+    if (question.id === "current_role") update("currentTitle", example);
+    if (question.id === "current_company") setCompany("currentCompany", example);
+    if (question.id === "previous_role") update("previousTitle", example);
+    if (question.id === "additional_role") update("additionalTitle", example);
+    if (question.id === "tools") addConfirmedTool(example);
+    if (question.id === "responsibilities") {
+      if (!data.selectedResponsibilities.some((item) => item.toLowerCase() === example.toLowerCase())) {
+        update("selectedResponsibilities", [...data.selectedResponsibilities, example]);
+      }
+    }
+    if (question.id === "scope") {
+      const metricKey = example.includes("ticket")
+        ? "ticketsHandled"
+        : example.includes("project")
+          ? "projectsSupported"
+          : example.includes("$")
+            ? "revenueInfluenced"
+            : example.includes("report")
+              ? "reportsCreated"
+              : example.includes("team")
+                ? "teamSizeSupported"
+                : "customersServed";
+      update(metricKey, example as never);
+    }
+    if (question.id === "outcomes") toggleOutcome(example);
+    if (question.id === "template" && templates.includes(example as TemplateStyle)) onTemplateSelect(example as TemplateStyle);
+  }
+
+  function skipCurrentQuestion(mode: "skip" | "not_sure" | "no_experience" | "projects") {
+    if (mode === "no_experience") {
+      onChange({
+        ...data,
+        currentTitle: data.currentTitle || "Entry-Level Experience",
+        currentCompany: data.currentCompany || "Projects / Coursework / Volunteer Work"
+      });
+      advanceQuestion();
+      return;
+    }
+    if (mode === "projects") {
+      onChange({
+        ...data,
+        currentTitle: data.currentTitle || "Project Experience",
+        currentCompany: data.currentCompany || "Independent Projects"
+      });
+      advanceQuestion();
+      return;
+    }
+    continueQuestion();
+  }
+
+  function advanceQuestion() {
+    if (questionIndex < questions.length - 1) {
+      setQuestionIndex(questionIndex + 1);
+      setShowHelpMeThink(false);
+      window.setTimeout(() => document.getElementById("intake")?.scrollIntoView(), 0);
+      return;
+    }
+    onGenerate();
+  }
+
+  function renderEaseHelpers() {
+    const examples = exampleChipsForCurrentQuestion();
+    if (question.id === "review") return null;
+    return (
+      <div className="mb-5 rounded-md border border-ink/10 bg-paper p-4">
+        <p className="text-sm font-semibold leading-6 text-ink/70">
+          You do not need resume language. Messy answers like &quot;I helped customers&quot; or &quot;I stocked inventory&quot; are useful.
+        </p>
+        {examples.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {examples.slice(0, 8).map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => applyExampleChip(example)}
+                className="min-h-10 rounded-full border border-ink/10 bg-white px-3 text-sm font-semibold text-ink transition hover:border-gold hover:bg-gold/15"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowHelpMeThink((value) => !value)}
+          className="mt-3 rounded-md border border-ink/15 bg-white px-3 py-2 text-sm font-black text-ink transition hover:border-gold"
+        >
+          Help Me Think
+        </button>
+        {showHelpMeThink && (
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+            {helpExamplesForCurrentQuestion().map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  function renderSkipOptions() {
+    if (requiredKeys.some((key) => question.validate.includes(key))) {
+      if (question.id !== "current_role") return null;
+    }
+    if (question.id === "quick_start" || question.id === "review") return null;
+    return (
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button type="button" onClick={() => skipCurrentQuestion("skip")} className="rounded-md border border-ink/15 bg-white px-3 py-2 text-sm font-bold text-ink/75 transition hover:border-gold">
+          Skip for now
+        </button>
+        <button type="button" onClick={() => skipCurrentQuestion("not_sure")} className="rounded-md border border-ink/15 bg-white px-3 py-2 text-sm font-bold text-ink/75 transition hover:border-gold">
+          Not sure
+        </button>
+        {question.id === "current_role" && (
+          <>
+            <button type="button" onClick={() => skipCurrentQuestion("no_experience")} className="rounded-md border border-ink/15 bg-white px-3 py-2 text-sm font-bold text-ink/75 transition hover:border-gold">
+              No formal experience
+            </button>
+            <button type="button" onClick={() => skipCurrentQuestion("projects")} className="rounded-md border border-cyan/25 bg-cyan/10 px-3 py-2 text-sm font-bold text-spruce transition hover:border-gold">
+              Use projects instead
+            </button>
+          </>
+        )}
+      </div>
+    );
   }
 
   function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
@@ -755,6 +1030,7 @@ export function IntakeForm({
     if (!onValidate(question.validate)) return;
     if (questionIndex < questions.length - 1) {
       setQuestionIndex(questionIndex + 1);
+      setShowHelpMeThink(false);
       window.setTimeout(() => document.getElementById("intake")?.scrollIntoView(), 0);
       return;
     }
@@ -763,12 +1039,18 @@ export function IntakeForm({
 
   function backQuestion() {
     setQuestionIndex(Math.max(0, questionIndex - 1));
+    setShowHelpMeThink(false);
     window.setTimeout(() => document.getElementById("intake")?.scrollIntoView(), 0);
   }
 
   function goToQuestion(index: number) {
     setQuestionIndex(index);
+    setShowHelpMeThink(false);
     window.setTimeout(() => document.getElementById("intake")?.scrollIntoView(), 0);
+  }
+
+  function goToQuestionId(id: Question["id"]) {
+    goToQuestion(Math.max(0, questions.findIndex((item) => item.id === id)));
   }
 
   function inputClass(key: keyof IntakeData) {
@@ -805,19 +1087,37 @@ export function IntakeForm({
   }
 
   function renderQuestion() {
-    switch (questionIndex) {
-      case 0:
-        return renderField("fullName", "Full name", "Jordan Lee");
-      case 1:
-        return renderField("email", "Email", "jordan@email.com", "email");
-      case 2:
+    switch (question.id) {
+      case "quick_start":
+        return (
+          <div className="space-y-4">
+            {quickStartPaths.map((path) => (
+              <button
+                key={path.id}
+                type="button"
+                onClick={() => setQuickStartPath(path.id)}
+                className={`w-full rounded-md border p-4 text-left transition ${
+                  quickStartPath === path.id ? "border-gold bg-gold/20" : "border-ink/10 bg-white hover:border-spruce"
+                }`}
+              >
+                <span className="block text-base font-bold text-ink">{path.label}</span>
+                <span className="mt-2 block text-sm leading-6 text-ink/65">{path.helper}</span>
+              </button>
+            ))}
+          </div>
+        );
+      case "name":
+        return renderField("fullName", "What name should appear on the resume?", "Jordan Lee");
+      case "email":
+        return renderField("email", "What email should recruiters use?", "jordan@email.com", "email");
+      case "contact":
         return (
           <div className="grid gap-5 md:grid-cols-2">
             {renderField("phone", "Phone number", "(555) 123-4567", "text", "Optional. Skip if you do not want it on the resume.")}
             {renderField("website", "Portfolio, LinkedIn, or website", "jordanlee.com", "text", "Optional. Add one clean link if it helps your candidacy.")}
           </div>
         );
-      case 3:
+      case "target":
         return (
           <div className="space-y-5">
             <label className="block">
@@ -913,16 +1213,16 @@ export function IntakeForm({
             )}
           </div>
         );
-      case 4:
-        return renderField("currentTitle", "Current or most recent role", "Support Specialist");
-      case 5:
+      case "current_role":
+        return renderField("currentTitle", "What should we call your most recent experience?", "Support Specialist", "text", "This can be a job, internship, project, campus role, volunteer role, or freelance work.");
+      case "current_company":
         return (
           <div className="grid gap-5">
             {renderCompanyPicker("currentCompany", "Where did you do that work?")}
             {renderField("currentTime", "Dates or time in role", "Jan 2024 - Present")}
           </div>
         );
-      case 6:
+      case "previous_role":
         return (
           <div className="grid gap-5">
             {renderField("previousTitle", "Previous role", "Administrative Assistant", "text", "Skip if this does not apply.")}
@@ -930,7 +1230,7 @@ export function IntakeForm({
             {renderField("previousTime", "Dates or time in role", "Jun 2022 - Dec 2023")}
           </div>
         );
-      case 7:
+      case "additional_role":
         return (
           <div className="grid gap-5">
             {renderField("additionalTitle", "Optional third role", "Campus Assistant", "text", "Skip if this does not apply.")}
@@ -938,7 +1238,7 @@ export function IntakeForm({
             {renderField("additionalTime", "Dates or time in role", "Sep 2021 - May 2022")}
           </div>
         );
-      case 8:
+      case "tools":
         return (
           <div className="space-y-5">
             <div className="rounded-md bg-white p-4">
@@ -1029,7 +1329,7 @@ export function IntakeForm({
             </div>
           </div>
         );
-      case 9:
+      case "responsibilities":
         return (
           <div className="space-y-5">
             {renderUnknownRoleFallback()}
@@ -1169,7 +1469,7 @@ export function IntakeForm({
             </label>
           </div>
         );
-      case 10:
+      case "scope":
         const visibleScopePrompts = roleScopePrompts.slice(0, 3);
         const additionalScopeFields = [
           ...roleScopePrompts.slice(3),
@@ -1209,7 +1509,7 @@ export function IntakeForm({
             </details>
           </div>
         );
-      case 11:
+      case "outcomes":
         return (
           <div className="space-y-5">
             <div className="rounded-md border border-ink/10 bg-white p-4">
@@ -1258,7 +1558,7 @@ export function IntakeForm({
             </label>
           </div>
         );
-      case 12:
+      case "template":
         return (
           <div className="grid gap-4 md:grid-cols-3">
             {templates.map((template) => (
@@ -1281,15 +1581,16 @@ export function IntakeForm({
       default:
         return (
           <div className="grid gap-3 md:grid-cols-2">
-            <ReviewItem label="Contact" value={[data.fullName, data.email, data.phone, data.website].filter(Boolean).join(" / ")} onEdit={() => goToQuestion(0)} />
-            <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestion(3)} />
-            <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestion(3)} />
-            <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestion(4)} />
-            <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestion(8)} />
+            <ReviewItem label="Quick start path" value={quickStartPaths.find((path) => path.id === quickStartPath)?.label ?? "First resume"} onEdit={() => goToQuestionId("quick_start")} />
+            <ReviewItem label="Contact" value={[data.fullName, data.email, data.phone, data.website].filter(Boolean).join(" / ")} onEdit={() => goToQuestionId("name")} />
+            <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestionId("target")} />
+            <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestionId("target")} />
+            <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestionId("current_role")} />
+            <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestionId("tools")} />
             <ReviewItem
               label="Responsibilities"
               value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}
-              onEdit={() => goToQuestion(9)}
+              onEdit={() => goToQuestionId("responsibilities")}
             />
             {needsUnknownRoleContext && (
               <ReviewItem
@@ -1300,21 +1601,21 @@ export function IntakeForm({
                   data.customRoleTransferableSkills.length ? `Transferable skills: ${data.customRoleTransferableSkills.join(", ")}` : "",
                   data.customRoleNotes ? `Notes: ${data.customRoleNotes}` : ""
                 ])}
-                onEdit={() => goToQuestion(9)}
+                onEdit={() => goToQuestionId("responsibilities")}
               />
             )}
-            <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestion(10)} />
+            <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestionId("scope")} />
             <ReviewItem
               label="Outcomes"
               value={formatReviewItems([...data.selectedOutcomes, data.outcomes])}
-              onEdit={() => goToQuestion(11)}
+              onEdit={() => goToQuestionId("outcomes")}
             />
             <ReviewItem
               label="Adaptive signals"
               value={`${data.roleFamily} scope prompts / ${roleOutcomes.join(", ")}`}
-              onEdit={() => goToQuestion(3)}
+              onEdit={() => goToQuestionId("target")}
             />
-            <ReviewItem label="Template" value={selectedTemplate} onEdit={() => goToQuestion(12)} />
+            <ReviewItem label="Template" value={selectedTemplate} onEdit={() => goToQuestionId("template")} />
           </div>
         );
     }
@@ -1332,14 +1633,25 @@ export function IntakeForm({
         <div className="mb-6 border-b border-white/10 pb-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="trust-kicker text-sm font-bold uppercase">
-              Question {String(questionIndex + 1).padStart(2, "0")} / {questions.length}
+              Resume Readiness
             </p>
             <span className="rounded-md border border-cyan/25 bg-cyan/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-cyan">
               career://interview
             </span>
           </div>
-          <div className="mt-5 h-1.5 rounded-full bg-white/10">
-            <div className="h-1.5 rounded-full bg-cyan transition-all" style={{ width: `${progress}%` }} />
+          <div className="mt-5 grid gap-2 md:grid-cols-[8rem_1fr] md:items-center">
+            <div>
+              <p className="text-3xl font-black text-cyan">{readiness.score}%</p>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-paper/50">Ready to Generate</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-5">
+              {readiness.sections.map((section) => (
+                <span key={section.label} className={`rounded-md border px-3 py-2 text-xs font-bold ${section.tone}`}>
+                  <span className="block text-paper/80">{section.label}</span>
+                  <span className="mt-1 block uppercase tracking-[0.12em]">{section.status}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1348,6 +1660,7 @@ export function IntakeForm({
             <p className="text-xs font-black uppercase tracking-[0.16em] text-gold">Module 05 intake</p>
             <h2 className="mt-3 text-3xl font-bold leading-tight text-paper">{question.title}</h2>
             <p className="mt-4 text-sm leading-6 text-paper/68">{question.helper}</p>
+            <p className="mt-3 text-sm leading-6 text-paper/58">{pathGuidance}</p>
             <p className="mt-5 rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm font-semibold text-cyan">
               {questionIndex === questions.length - 1
                 ? `${selectedSignals} guided signals captured. Review before generating.`
@@ -1356,7 +1669,9 @@ export function IntakeForm({
           </aside>
 
           <div className="dark-form-card rounded-md p-4 sm:p-5">
+            {renderEaseHelpers()}
             {renderQuestion()}
+            {renderSkipOptions()}
             <div className="mt-8 flex flex-col-reverse gap-3 border-t border-ink/10 pt-5 sm:flex-row sm:justify-between">
               <button
                 type="button"
