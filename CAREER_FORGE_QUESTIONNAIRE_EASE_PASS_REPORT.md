@@ -106,3 +106,6 @@ Updated `scripts/smoke-generator.mjs` to verify:
 ## Final Status
 
 Questionnaire Ease Pass is complete. The free builder keeps the same generator behavior, but now feels more like answering small guided prompts than writing a resume from scratch.
+
+Commit: `2ac1a99` (`Ease free builder questionnaire flow`)
+Push: Pushed to `origin/main` at `https://github.com/koinophobia-labs/career-forge-lite.git`.
