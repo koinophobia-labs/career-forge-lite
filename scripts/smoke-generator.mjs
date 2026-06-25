@@ -606,6 +606,9 @@ assert(partialStoryDossier.capturedFields.includes("Company"), "partial story ca
 assert(partialStoryDossier.stillHelpfulFields.includes("Responsibilities"), "partial story asks for missing responsibilities");
 assert(partialStoryDossier.stillHelpfulFields.includes("Scope"), "partial story asks for missing scope");
 assert(partialStoryDossier.focusedFollowUp.length > 10, "partial story gets one focused follow-up");
+const storyContactDossier = parseStoryToDossier("I worked at DraftKings as a sportsbook writer from 2023 to now. My name is Jordan Carter and my email is jordan.carter@example.com.");
+assert(storyContactDossier.intake.fullName === "Jordan Carter", "story mode extracts clean name from contact follow-up");
+assert(storyContactDossier.intake.email === "jordan.carter@example.com", "story mode extracts email from contact follow-up");
 
 const customRoleData = {
   ...initialIntake,

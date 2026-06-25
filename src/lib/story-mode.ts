@@ -184,7 +184,7 @@ function extractEmail(story: string) {
 }
 
 function extractName(story: string) {
-  return titleCase(story.match(/\bmy name is\s+([A-Za-z][A-Za-z' -]{1,48})(?:\.|,| and|$)/i)?.[1] ?? "");
+  return titleCase(story.match(/\bmy name is\s+([A-Za-z][A-Za-z' -]{1,48}?)(?:\.|,|\s+and\b|$)/i)?.[1] ?? "");
 }
 
 function extractRole(story: string) {
@@ -328,11 +328,11 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   };
   const checklist = buildInfoChecklist(story, intake, role, extracted);
   const missingCriticalDetails = [
-    checklist.stillHelpfulFields.includes("Contact") ? "contact" : "",
     targetRole ? "" : "target role",
+    checklist.stillHelpfulFields.includes("Contact") ? "contact" : "",
     role.title && role.company ? "" : "recent role",
-    responsibilities.length ? "" : "responsibilities",
     tools.length ? "" : "tools",
+    responsibilities.length ? "" : "responsibilities",
     scope.length ? "" : "scope",
     transferableSignals.length || intake.selectedOutcomes.length ? "" : "outcomes",
     checklist.stillHelpfulFields.includes("Education") ? "education" : ""
