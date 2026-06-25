@@ -43,6 +43,7 @@ const {
   careerTargets,
   companySuggestions,
   initialIntake,
+  responsibilitySuggestions,
   toolSuggestionsByFamily
 } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 const { educationPlaceholder, resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
@@ -212,10 +213,15 @@ for (const [title, roleFamily] of roleMappingChecks) {
 }
 
 assert(searchableCareerTargets("client success representative").some((target) => target.title === "Customer Success Associate"), "role aliases are searchable");
+assert(searchableCareerTargets("support specialist").some((target) => target.title === "Support Specialist"), "role search filters mapped titles");
 assert(searchableCareerTargets("warehouse ops").length <= 12, "role search caps visible results");
 assert(searchableOptions(toolSuggestionsByFamily["IT Support"], "service").includes("ServiceNow"), "tool search finds ServiceNow");
 assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
+assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
+
+const supportSpecialistTarget = findCareerTarget("Support Specialist");
+assert(supportSpecialistTarget?.roleFamily === "Customer Success", "known role auto-maps to role family");
 
 const customRoleData = {
   ...initialIntake,
@@ -240,6 +246,23 @@ assert(customRoleResume.coreSkills.includes("Koi Desk"), "custom tool normalizes
 assert(customRoleResume.coreSkills.includes("ServiceNow"), "known tool normalizes ServiceNow");
 assert(customRoleResume.coreSkills.includes("macOS"), "known tool normalizes macOS");
 assert(customRoleResume.coreSkills.includes("Google Sheets"), "known tool normalizes Google Sheets");
+
+const overrideRoleResume = generateResumePackage({
+  ...initialIntake,
+  fullName: "Lane Override Candidate",
+  email: "lane.override@example.com",
+  targetJobTitle: "Support Specialist",
+  roleFamily: "Admin",
+  currentTitle: "Office Assistant",
+  currentCompany: "Local Business",
+  currentTime: "2024 - Present",
+  tools: "Google Workspace, Excel",
+  selectedResponsibilities: ["Scheduling", "Records management"],
+  selectedActions: ["maintained records"],
+  selectedOutcomes: ["Accuracy"]
+});
+assert(overrideRoleResume.coreSkills.includes("Calendar Management"), "role family override powers skills");
+assert(overrideRoleResume.linkedinHeadline.includes("Administrative Reliability"), "role family override powers LinkedIn value area");
 
 for (const persona of personas) {
   const data = {
