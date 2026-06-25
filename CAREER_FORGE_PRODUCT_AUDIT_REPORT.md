@@ -66,6 +66,11 @@ Career Forge Lite is coherent enough for public beta. The product now has a clea
 - `npm run typecheck` passed. `tsc --noEmit` completed with no errors.
 - `npm run build` passed. Next.js built `/` and `/interview` successfully.
 
+## Commit And Push
+
+- Commit: `fb3b436` (`Clarify launch positioning and readiness`)
+- Push: Pushed to `origin/main` at `https://github.com/koinophobia-labs/career-forge-lite.git`
+
 ## Launch Recommendation
 
 Ready with notes.
