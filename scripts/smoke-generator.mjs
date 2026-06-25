@@ -11,6 +11,12 @@ const root = path.resolve(__dirname, "..");
 const moduleCache = new Map();
 const resumePreviewSource = fs.readFileSync(path.join(root, "src/components/ResumePreview.tsx"), "utf8");
 const globalCssSource = fs.readFileSync(path.join(root, "src/app/globals.css"), "utf8");
+const tellMyStorySource = fs.existsSync(path.join(root, "src/components/TellMyStoryMode.tsx"))
+  ? fs.readFileSync(path.join(root, "src/components/TellMyStoryMode.tsx"), "utf8")
+  : "";
+const storyModeSource = fs.existsSync(path.join(root, "src/lib/story-mode.ts"))
+  ? fs.readFileSync(path.join(root, "src/lib/story-mode.ts"), "utf8")
+  : "";
 
 function loadTsModule(filePath) {
   const absolute = path.resolve(filePath);
@@ -61,6 +67,7 @@ const {
   formatParsedRoleConfirmation,
   parseRoleAnswer
 } = loadTsModule(path.join(root, "src/lib/natural-role-parser.ts"));
+const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode.ts"));
 const {
   canUseInterviewMode,
   getFeatureAccess,
@@ -505,7 +512,11 @@ assert(pageSource.includes("Guided Interview") && pageSource.includes("Tell My S
 assert(pageSource.includes("Answer focused questions.") && pageSource.includes("Best if you want structure."), "guided interview choice has required copy");
 assert(pageSource.includes("Describe your work naturally.") && pageSource.includes("Career Forge organizes the details."), "tell-my-story choice has required copy");
 assert(pageSource.includes('onClick={() => jump("intake")}'), "guided interview path still opens the existing builder flow");
-assert(pageSource.includes('href="/interview"'), "tell-my-story path opens conversational intake mode");
+assert(pageSource.includes('href="/story"'), "tell-my-story path opens story intake mode");
+assert(tellMyStorySource.includes("Tell Career Forge about your work history."), "story mode has required story input screen");
+assert(tellMyStorySource.includes("I read this as..."), "story mode shows extracted dossier");
+assert(tellMyStorySource.includes("Looks right") && tellMyStorySource.includes("Edit details") && tellMyStorySource.includes("Add more context"), "story mode supports dossier actions");
+assert(storyModeSource.includes("parseRoleAnswer") && storyModeSource.includes("parseStoryToDossier"), "story mode uses deterministic natural role parser");
 assert(resumePreviewSource.includes("Before you apply"), "resume review includes before-apply checklist");
 assert(resumePreviewSource.includes("Tailor for each job"), "resume review includes practical next steps");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
@@ -572,6 +583,18 @@ const parsedRoleResume = generateResumePackage({
 });
 const parsedRoleExport = resumeToText({ ...initialIntake, fullName: "Parsed Role Candidate", email: "parsed.role@example.com" }, parsedRoleResume);
 assert(parsedRoleExport.includes("Founder | Koinophobia Labs | 2025-Present"), "generated resume uses parsed role fields");
+
+const storyDossier = parseStoryToDossier(
+  "I worked at DraftKings as a sportsbook writer from 2023 to now. I handled customers, cash, wagers, and escalations."
+);
+assert(storyDossier.extracted.role === "Sportsbook Ticket Writer", "story mode normalizes sportsbook writer role");
+assert(storyDossier.extracted.company === "DraftKings", "story mode extracts company");
+assert(storyDossier.extracted.dates === "2023-Present", "story mode extracts dates");
+assert(storyDossier.extracted.responsibilities.some((item) => /customer|cash|wager|escalation/i.test(item)), "story mode extracts responsibilities");
+assert(storyDossier.intake.currentTitle === "Sportsbook Ticket Writer", "story mode feeds parsed role into intake");
+assert(storyDossier.intake.currentCompany === "DraftKings", "story mode feeds parsed company into intake");
+assert(storyDossier.intake.targetJobTitle, "story mode creates a usable target role fallback");
+assert(generateResumePackage(storyDossier.intake).summary.trim(), "story mode intake feeds existing resume generator");
 
 const customRoleData = {
   ...initialIntake,

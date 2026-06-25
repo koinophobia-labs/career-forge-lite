@@ -1,0 +1,291 @@
+import {
+  allToolOptions,
+  careerTargets,
+  findJobArsenal,
+  initialIntake,
+  roleIntelligence
+} from "@/lib/career-data";
+import { parseRoleAnswer } from "@/lib/natural-role-parser";
+import type { IntakeData, RoleFamily } from "@/types/career";
+
+export type StoryDossier = {
+  intake: IntakeData;
+  confidence: "needs_follow_up" | "usable" | "strong";
+  extracted: {
+    role: string;
+    company: string;
+    dates: string;
+    targetRole: string;
+    roleFamily: RoleFamily;
+    responsibilities: string[];
+    tools: string[];
+    scope: string[];
+    transferableSignals: string[];
+  };
+  missingCriticalDetails: string[];
+  focusedFollowUp: string;
+};
+
+const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
+  ["IT Support", /help desk|it support|desktop|service desk|technical support|troubleshoot|password|active directory/i],
+  ["Project Coordination", /project|program|timeline|milestone|implementation|pmo|status update/i],
+  ["Admin", /admin|assistant|office|front desk|reception|calendar|scheduling|records/i],
+  ["Sales", /sales|business development|lead|prospect|pipeline|outreach|account representative/i],
+  ["Operations", /operations|logistics|warehouse|inventory|fulfillment|process|workflow|scheduling|supervisor/i],
+  ["Business", /business analyst|reporting|analysis|data|stakeholder|research|process analyst/i],
+  ["Security", /security|safety|access control|incident|surveillance|patrol/i],
+  ["Tech", /qa|tester|product|technical operations|implementation|data associate|software|web|developer|founder/i],
+  ["Customer Success", /customer|client|support|success|onboarding|retention|member service|experience|sportsbook|ticket writer/i]
+];
+
+const responsibilityKeywords = [
+  "access control",
+  "calendar management",
+  "cash handling",
+  "client communication",
+  "crm updates",
+  "customer communication",
+  "data entry",
+  "documentation",
+  "escalation handling",
+  "inventory tracking",
+  "issue escalation",
+  "meeting coordination",
+  "onboarding",
+  "payment processing",
+  "process improvement",
+  "record keeping",
+  "reporting",
+  "scheduling",
+  "support tickets",
+  "task coordination",
+  "troubleshooting",
+  "user support",
+  "wagering transactions"
+];
+
+const transferableKeywords = [
+  "accuracy",
+  "compliance",
+  "conflict resolution",
+  "customer satisfaction",
+  "efficiency",
+  "follow-up",
+  "high-volume service",
+  "operational accuracy",
+  "policy enforcement",
+  "reliability",
+  "response consistency",
+  "speed",
+  "team coordination"
+];
+
+const scopePattern =
+  /\b(?:\$?\d[\d,.]*\+?(?:%|k|m| hours?| minutes?| days?| weeks?| months?| years?)?\s*(?:customers|clients|users|tickets|calls|reports|projects|transactions|wagers|orders|accounts|team members|people|cases|requests|dollars|revenue|budget|weekly|monthly|daily|per week|per month|per day)?|\$\d[\d,.]*\+?|\d+%\+?)\b(?:[^,.]*)/gi;
+
+function clean(value = "") {
+  return value
+    .replace(/[.!,]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleCase(value: string) {
+  const acronyms = new Set(["api", "ats", "crm", "it", "kpi", "pos", "qa", "sql", "ui", "ux"]);
+  return clean(value)
+    .toLowerCase()
+    .split(" ")
+    .map((part) => (acronyms.has(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(" ")
+    .replace(/\bDraftkings\b/g, "DraftKings")
+    .replace(/\bMacos\b/g, "macOS");
+}
+
+function unique(items: string[]) {
+  const seen = new Set<string>();
+  return items
+    .map(clean)
+    .filter((item) => item.length > 1 && !/^(test|asdf|none|n\/a|no)$/i.test(item))
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function splitSentences(story: string) {
+  return story
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(clean)
+    .filter((sentence) => sentence.length > 2);
+}
+
+function splitSignals(value: string) {
+  return unique(value.split(/,|;|\band\b|\bwith\b/i).map(clean));
+}
+
+function normalizeKnownRole(title: string) {
+  const lower = title.toLowerCase();
+  const arsenal = findJobArsenal(title);
+  if (arsenal) return { title: arsenal.title, family: arsenal.family };
+
+  const target = careerTargets.find((item) => {
+    const aliases = item.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+    return item.title.toLowerCase() === lower || aliases.includes(lower);
+  });
+  if (target) return { title: target.title, family: target.roleFamily };
+
+  const aliasArsenal = [
+    findJobArsenal("Sportsbook Ticket Writer"),
+    findJobArsenal("Security Officer"),
+    findJobArsenal("Retail Associate")
+  ].find((item) => item?.aliases?.some((alias) => lower.includes(alias)));
+
+  return aliasArsenal ? { title: aliasArsenal.title, family: aliasArsenal.family } : { title: titleCase(title), family: undefined };
+}
+
+function inferRoleFamily(text: string, fallbackTitle: string): RoleFamily {
+  const known = normalizeKnownRole(fallbackTitle);
+  if (known.family) return known.family;
+  return roleFamilyKeywords.find(([, pattern]) => pattern.test(text))?.[0] ?? "Customer Success";
+}
+
+function inferTargetRole(story: string, roleTitle: string, roleFamily: RoleFamily) {
+  const targetMatch = story.match(/\b(?:targeting|applying for|aiming for|want to be|looking for)\s+(?:a|an)?\s*([^,.]+)/i)?.[1];
+  if (targetMatch) return titleCase(targetMatch);
+
+  const knownRole = normalizeKnownRole(roleTitle);
+  if (knownRole.family && knownRole.family !== "Security") return knownRole.title;
+
+  const fallbackByFamily: Record<RoleFamily, string> = {
+    Admin: "Administrative Assistant",
+    Business: "Business Operations Associate",
+    "Customer Success": "Customer Success Associate",
+    "IT Support": "IT Support Specialist",
+    Operations: "Operations Associate",
+    "Project Coordination": "Project Coordinator",
+    Sales: "Sales Development Representative",
+    Security: "Operations Associate",
+    Tech: "Technical Support Associate"
+  };
+  return fallbackByFamily[roleFamily];
+}
+
+function extractRole(story: string) {
+  const sentences = splitSentences(story);
+  const parsed = sentences
+    .map((sentence) => parseRoleAnswer(sentence))
+    .find((role) => role.title || role.company || role.dates) ?? parseRoleAnswer(story);
+  const normalized = parsed.title ? normalizeKnownRole(parsed.title) : { title: "", family: undefined };
+
+  return {
+    title: normalized.title || parsed.title,
+    company: parsed.company,
+    dates: parsed.dates,
+    family: normalized.family
+  };
+}
+
+function extractTools(story: string) {
+  const knownTools = allToolOptions.filter((tool) => new RegExp(`\\b${tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(story));
+  const toolClause = story.match(/\b(?:used|tools? like|worked with|systems? like|platforms? like)\s+([^.;]+)/i)?.[1] ?? "";
+  return unique([...knownTools, ...splitSignals(toolClause).filter((item) => item.length <= 32).map(titleCase)]).slice(0, 12);
+}
+
+function extractResponsibilities(story: string, roleFamily: RoleFamily) {
+  const lower = story.toLowerCase();
+  const keywordMatches = responsibilityKeywords.filter((item) => lower.includes(item)).map(titleCase);
+  const handledClause = story.match(/\b(?:handled|managed|supported|coordinated|processed|maintained|tracked|documented|resolved)\s+([^.;]+)/i)?.[1] ?? "";
+  const clauseMatches = splitSignals(handledClause).map(titleCase);
+  const familyMatches = roleIntelligence[roleFamily].responsibilities.filter((item) => lower.includes(item.toLowerCase()));
+  return unique([...familyMatches, ...keywordMatches, ...clauseMatches]).slice(0, 10);
+}
+
+function extractScope(story: string) {
+  return unique(story.match(scopePattern) ?? [])
+    .filter((item) => !/^(?:19|20)\d{2}(?:\s*-\s*present)?$/i.test(item))
+    .slice(0, 8);
+}
+
+function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
+  const lower = story.toLowerCase();
+  const keywordMatches = transferableKeywords.filter((item) => lower.includes(item)).map(titleCase);
+  const familySkills = roleIntelligence[roleFamily].skills.filter((skill) => lower.includes(skill.toLowerCase()));
+  return unique([...familySkills, ...keywordMatches]).slice(0, 10);
+}
+
+function metricForPattern(metrics: string[], pattern: RegExp) {
+  return metrics.find((metric) => pattern.test(metric)) ?? "";
+}
+
+function focusedFollowUp(missing: string[]) {
+  if (missing.includes("target role")) return "What role should this resume target?";
+  if (missing.includes("recent role")) return "What was your title, company, and approximate date range?";
+  if (missing.includes("responsibilities")) return "What work were you trusted with most often?";
+  if (missing.includes("tools or skills")) return "What tools, software, systems, or skills did you use?";
+  return "What result, improvement, volume, or scope can you add?";
+}
+
+export function parseStoryToDossier(story: string, previousIntake: IntakeData = initialIntake): StoryDossier {
+  const role = extractRole(story);
+  const roleFamily = role.family ?? inferRoleFamily(story, role.title);
+  const targetRole = inferTargetRole(story, role.title, roleFamily);
+  const responsibilities = extractResponsibilities(story, roleFamily);
+  const tools = extractTools(story);
+  const scope = extractScope(story);
+  const transferableSignals = extractTransferableSignals(story, roleFamily);
+  const selectedOutcomes = transferableSignals.filter((item) =>
+    /accuracy|satisfaction|efficiency|reliability|compliance|speed|retention|revenue/i.test(item)
+  );
+  const roleSummary = [role.title, role.company, role.dates].filter(Boolean).join(" | ");
+  const missingCriticalDetails = [
+    targetRole ? "" : "target role",
+    role.title && role.company ? "" : "recent role",
+    responsibilities.length ? "" : "responsibilities",
+    tools.length || transferableSignals.length ? "" : "tools or skills"
+  ].filter(Boolean);
+  const confidence: StoryDossier["confidence"] =
+    missingCriticalDetails.length > 1 ? "needs_follow_up" : scope.length || transferableSignals.length >= 3 ? "strong" : "usable";
+
+  const intake: IntakeData = {
+    ...previousIntake,
+    targetJobTitle: previousIntake.targetJobTitle || targetRole,
+    roleFamily,
+    currentTitle: previousIntake.currentTitle || role.title,
+    currentCompany: previousIntake.currentCompany || role.company,
+    currentTime: previousIntake.currentTime || role.dates,
+    tools: unique([previousIntake.tools, ...tools]).join(", "),
+    responsibilities: unique([previousIntake.responsibilities, ...responsibilities]).join(", "),
+    selectedResponsibilities: unique([...previousIntake.selectedResponsibilities, ...responsibilities]).slice(0, 10),
+    selectedActions: unique([...previousIntake.selectedActions, ...responsibilities.slice(0, 4).map((item) => item.toLowerCase())]).slice(0, 6),
+    customersServed: previousIntake.customersServed || metricForPattern(scope, /customer|client|user|people/i),
+    ticketsHandled: previousIntake.ticketsHandled || metricForPattern(scope, /ticket|case|issue|request/i),
+    projectsSupported: previousIntake.projectsSupported || metricForPattern(scope, /project|launch|implementation/i),
+    teamSizeSupported: previousIntake.teamSizeSupported || metricForPattern(scope, /team|people|members|staff/i),
+    callsHandled: previousIntake.callsHandled || metricForPattern(scope, /call/i),
+    revenueInfluenced: previousIntake.revenueInfluenced || metricForPattern(scope, /\$|revenue|budget|money|dollars|cash|wager/i),
+    reportsCreated: previousIntake.reportsCreated || metricForPattern(scope, /report|document|dashboard/i),
+    selectedOutcomes: unique([...previousIntake.selectedOutcomes, ...selectedOutcomes]).slice(0, 4),
+    outcomes: unique([previousIntake.outcomes, ...transferableSignals]).join(", "),
+    customRoleNotes: unique([previousIntake.customRoleNotes, roleSummary, ...scope, ...transferableSignals]).join(", ")
+  };
+
+  return {
+    intake,
+    confidence,
+    extracted: {
+      role: role.title,
+      company: role.company,
+      dates: role.dates,
+      targetRole,
+      roleFamily,
+      responsibilities,
+      tools,
+      scope,
+      transferableSignals
+    },
+    missingCriticalDetails,
+    focusedFollowUp: focusedFollowUp(missingCriticalDetails)
+  };
+}

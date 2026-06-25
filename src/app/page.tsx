@@ -150,7 +150,7 @@ export default function Home() {
               </button>
 
               <a
-                href="/interview"
+                href="/story"
                 className="group rounded-md border border-cyan/35 bg-cyan/10 p-5 transition hover:-translate-y-0.5 hover:border-cyan hover:bg-cyan/15 focus:outline-none focus:ring-2 focus:ring-cyan/70"
               >
                 <span className="rounded-sm border border-cyan/40 bg-cyan/10 px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-cyan">

@@ -1,0 +1,306 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { ATSValidationPanel } from "@/components/ATSValidationPanel";
+import { LinkedInPreview } from "@/components/LinkedInPreview";
+import { ResumePreview } from "@/components/ResumePreview";
+import { initialIntake } from "@/lib/career-data";
+import { generateResumePackage } from "@/lib/generator";
+import { parseStoryToDossier, type StoryDossier } from "@/lib/story-mode";
+import type { IntakeData, ResumePackage } from "@/types/career";
+
+type StoryModeState = "story" | "dossier" | "edit" | "review";
+
+const sampleStory =
+  "I worked at DraftKings as a sportsbook writer from 2023 to now. I handled customers, cash, wagers, and escalations.";
+
+function DossierRow({ label, value }: { label: string; value: string | string[] }) {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return (
+    <div className="rounded-md border border-white/10 bg-white/5 p-3">
+      <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/45">{label}</p>
+      {values.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {values.map((item) => (
+            <span key={item} className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1.5 text-sm font-semibold text-cyan">
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-paper/48">Not found yet.</p>
+      )}
+    </div>
+  );
+}
+
+export function TellMyStoryMode() {
+  const [story, setStory] = useState("");
+  const [context, setContext] = useState("");
+  const [mode, setMode] = useState<StoryModeState>("story");
+  const [intake, setIntake] = useState<IntakeData>(initialIntake);
+  const [dossier, setDossier] = useState<StoryDossier | null>(null);
+  const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
+
+  const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
+  const canGenerate = dossier ? dossier.missingCriticalDetails.length <= 1 : false;
+
+  function parseStory(nextStory = combinedStory) {
+    const nextDossier = parseStoryToDossier(nextStory, intake);
+    setDossier(nextDossier);
+    setIntake(nextDossier.intake);
+    setMode("dossier");
+  }
+
+  function handleStorySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!story.trim()) return;
+    parseStory(story);
+  }
+
+  function handleAddContext(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context.trim()) return;
+    parseStory(combinedStory);
+    setContext("");
+  }
+
+  function handleGenerate() {
+    const nextResume = generateResumePackage(intake);
+    setResume(nextResume);
+    setMode("review");
+    window.setTimeout(() => document.getElementById("resume")?.scrollIntoView(), 0);
+  }
+
+  function updateField<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
+    setIntake((current) => ({ ...current, [key]: value }));
+  }
+
+  if (mode === "review") {
+    return (
+      <main className="min-h-screen px-5 py-8 sm:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+              <span className="logo-mark" aria-hidden="true">
+                CF
+              </span>
+              <span>
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
+                <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">Tell My Story</span>
+              </span>
+            </Link>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("dossier")}
+                className="rounded-md border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
+              >
+                Back to dossier
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("story")}
+                className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
+              >
+                Start over
+              </button>
+            </div>
+          </div>
+
+          <section className="trust-panel rounded-md p-5 sm:p-7">
+            <p className="trust-kicker text-xs font-black uppercase">Story converted</p>
+            <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Your story-built resume package</h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
+              Career Forge used the extracted dossier below to generate the same ATS-safe resume, LinkedIn headline,
+              and review package as the guided builder.
+            </p>
+          </section>
+
+          <ResumePreview data={intake} resume={resume} template="Modern ATS" onChange={setResume} />
+          <ATSValidationPanel data={intake} resume={resume} />
+          <LinkedInPreview resume={resume} onChange={setResume} />
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen px-5 py-8 sm:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+            <span className="logo-mark" aria-hidden="true">
+              CF
+            </span>
+            <span>
+              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Koinophobia Labs</span>
+              <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
+                Product Lab Module 05
+              </span>
+            </span>
+          </Link>
+          <Link
+            href="/"
+            className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
+          >
+            Use Guided Interview
+          </Link>
+        </header>
+
+        <section className="trust-panel rounded-md p-5 sm:p-7">
+          <p className="trust-kicker text-xs font-black uppercase">Tell My Story</p>
+          <div className="mt-4 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-paper sm:text-5xl">Tell Career Forge about your work history.</h1>
+              <p className="mt-4 text-base leading-7 text-paper/70">
+                Write naturally. Career Forge will look for roles, companies, dates, responsibilities, tools, scope,
+                and transferable signals, then show you what it understood.
+              </p>
+            </div>
+
+            <form onSubmit={handleStorySubmit} className="rounded-md border border-white/10 bg-white/5 p-4">
+              <label htmlFor="story" className="text-sm font-bold text-paper">
+                Describe the work in plain language
+              </label>
+              <textarea
+                id="story"
+                value={story}
+                onChange={(event) => setStory(event.target.value)}
+                placeholder={sampleStory}
+                className="mt-3 min-h-48 w-full rounded-md border border-white/10 bg-obsidian/70 p-4 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/32 focus:border-cyan/70"
+              />
+              <p className="mt-3 text-xs leading-5 text-paper/55">
+                Example: {sampleStory}
+              </p>
+              <button
+                type="submit"
+                className="mt-4 min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={!story.trim()}
+              >
+                Extract dossier
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {dossier && mode !== "story" && (
+          <section className="mt-6 trust-panel rounded-md p-5 sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="trust-kicker text-xs font-black uppercase">I read this as...</p>
+                <h2 className="mt-3 text-2xl font-bold text-paper">
+                  {dossier.extracted.role || "Role not found yet"}
+                  {dossier.extracted.company ? ` at ${dossier.extracted.company}` : ""}
+                  {dossier.extracted.dates ? `, ${dossier.extracted.dates}` : ""}
+                </h2>
+              </div>
+              <span
+                className={`rounded-md border px-3 py-2 text-xs font-black uppercase tracking-[0.12em] ${
+                  dossier.confidence === "strong"
+                    ? "border-cyan/30 bg-cyan/10 text-cyan"
+                    : dossier.confidence === "usable"
+                      ? "border-gold/30 bg-gold/10 text-gold"
+                      : "border-ember/30 bg-ember/10 text-ember"
+                }`}
+              >
+                {dossier.confidence === "needs_follow_up" ? "Needs one signal" : dossier.confidence}
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <DossierRow label="Target role" value={dossier.extracted.targetRole} />
+              <DossierRow label="Role family" value={dossier.extracted.roleFamily} />
+              <DossierRow label="Responsibilities" value={dossier.extracted.responsibilities} />
+              <DossierRow label="Tools" value={dossier.extracted.tools} />
+              <DossierRow label="Scope" value={dossier.extracted.scope} />
+              <DossierRow label="Transferable signals" value={dossier.extracted.transferableSignals} />
+            </div>
+
+            {dossier.missingCriticalDetails.length > 0 && (
+              <div className="mt-5 rounded-md border border-ember/25 bg-ember/10 p-4">
+                <p className="text-sm font-bold text-ember">Focused follow-up</p>
+                <p className="mt-2 text-sm leading-6 text-paper/70">{dossier.focusedFollowUp}</p>
+              </div>
+            )}
+
+            {mode === "edit" && (
+              <div className="mt-5 grid gap-3 rounded-md border border-white/10 bg-white/5 p-4 md:grid-cols-3">
+                {[
+                  ["fullName", "Name"],
+                  ["email", "Email"],
+                  ["targetJobTitle", "Target role"],
+                  ["currentTitle", "Role title"],
+                  ["currentCompany", "Company"],
+                  ["currentTime", "Dates"],
+                  ["tools", "Tools"],
+                  ["responsibilities", "Responsibilities"]
+                ].map(([key, label]) => (
+                  <label key={key} className="text-xs font-bold uppercase tracking-[0.12em] text-paper/50">
+                    {label}
+                    <input
+                      value={String(intake[key as keyof IntakeData] ?? "")}
+                      onChange={(event) => updateField(key as keyof IntakeData, event.target.value as IntakeData[keyof IntakeData])}
+                      className="mt-2 min-h-11 w-full rounded-md border border-white/10 bg-obsidian/70 px-3 text-sm normal-case tracking-normal text-paper outline-none focus:border-cyan/70"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleAddContext} className="mt-5 rounded-md border border-white/10 bg-white/5 p-4">
+              <label htmlFor="context" className="text-sm font-bold text-paper">
+                Add more context
+              </label>
+              <textarea
+                id="context"
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+                placeholder="Example: I supported 50+ customers per shift and used Excel, Slack, and internal payment systems."
+                className="mt-3 min-h-24 w-full rounded-md border border-white/10 bg-obsidian/70 p-3 text-sm leading-6 text-paper outline-none placeholder:text-paper/32 focus:border-cyan/70"
+              />
+              <button
+                type="submit"
+                className="mt-3 rounded-md border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={!context.trim()}
+              >
+                Add more context
+              </button>
+            </form>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Looks right
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("edit")}
+                className="min-h-11 rounded-md border border-white/15 bg-white/5 px-5 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
+              >
+                Edit details
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("story")}
+                className="min-h-11 rounded-md border border-ember/25 bg-ember/10 px-5 text-sm font-bold text-ember transition hover:border-ember"
+              >
+                Start over
+              </button>
+            </div>
+            {!canGenerate && (
+              <p className="mt-3 text-sm leading-6 text-paper/55">
+                Add the focused detail above before generating so the resume does not come out generic.
+              </p>
+            )}
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
