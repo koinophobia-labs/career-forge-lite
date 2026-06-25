@@ -258,7 +258,28 @@ assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "c
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
 assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
 assert(resumePreviewSource.includes("ATS Resume") && resumePreviewSource.includes("Visual Portfolio Resume"), "resume view toggle includes ATS and visual modes");
-assert(resumePreviewSource.includes("Executive Dark") && resumePreviewSource.includes("Clean Modern") && resumePreviewSource.includes("Product Lab"), "visual resume styles are available");
+assert(
+  ["Professional Sans", "Editorial Serif", "Modern Mono", "Clean System"].every((option) => resumePreviewSource.includes(option)),
+  "visual font options are available"
+);
+assert(
+  ["Gold", "Cyan", "Ember", "Slate", "Emerald"].every((option) => resumePreviewSource.includes(option)),
+  "visual accent options are available"
+);
+assert(
+  ["Classic Card", "Sidebar Profile", "Portfolio Sheet", "Product Lab"].every((option) => resumePreviewSource.includes(option)),
+  "visual layout options are available"
+);
+assert(["Compact", "Balanced", "Spacious"].every((option) => resumePreviewSource.includes(option)), "visual density options are available");
+assert(
+  ["Summary", "Strengths", "Experience Highlights", "Skills/Tools", "LinkedIn Headline", "Contact"].every((section) => resumePreviewSource.includes(section)),
+  "visual section organization controls are available"
+);
+assert(resumePreviewSource.includes("moveSection") && resumePreviewSource.includes("toggleSection"), "visual sections can be toggled and reordered");
+assert(
+  ["data-accent", "data-density", "data-font", "data-layout"].every((hook) => resumePreviewSource.includes(hook)),
+  "visual resume exposes print customization hooks"
+);
 assert(resumePreviewSource.includes("Use ATS Resume for job applications"), "ATS safety copy is visible");
 assert(globalCssSource.includes("#print-visual-resume") && globalCssSource.includes(".visual-resume-paper"), "visual resume print target is styled");
 
@@ -605,7 +626,7 @@ for (const persona of personas) {
   assert(!unnaturalToolPattern.test(exportText), `${persona.name}: unnatural tool phrase`);
   assert(!exportText.includes(educationPlaceholder), `${persona.name}: placeholder education omitted from export`);
   assert(exportText.includes(persona.targetJobTitle), `${persona.name}: export includes selected target`);
-  assert(!/Visual Portfolio Resume|Executive Dark|Clean Modern|Product Lab|Use ATS Resume/i.test(exportText), `${persona.name}: ATS export excludes visual resume chrome`);
+  assert(!/Visual Portfolio Resume|Executive Dark|Clean Modern|Product Lab|Professional Sans|Editorial Serif|Modern Mono|Clean System|Use ATS Resume/i.test(exportText), `${persona.name}: ATS export excludes visual resume chrome`);
   assert(["Good", "Strong", "Excellent"].includes(quality.rating), `${persona.name}: resume quality rating is usable`);
   assert(quality.strongestSections.length > 0, `${persona.name}: resume quality strongest sections exist`);
   assert(quality.suggestedImprovements.length > 0, `${persona.name}: resume quality coaching exists`);

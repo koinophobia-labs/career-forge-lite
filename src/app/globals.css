@@ -271,15 +271,42 @@ textarea {
     border: 0 !important;
     border-radius: 0 !important;
     padding: 0 !important;
-    color: #000000 !important;
     font-size: 10pt;
     line-height: 1.28;
     page-break-after: avoid;
+    print-color-adjust: exact;
   }
 
-  .visual-resume-paper,
-  .visual-resume-paper * {
-    color: #000000 !important;
+  .visual-resume-paper[data-layout="Classic Card"],
+  .visual-resume-paper[data-layout="Portfolio Sheet"] {
+    background: #ffffff !important;
+    color: #111318 !important;
+  }
+
+  .visual-resume-paper[data-layout="Sidebar Profile"] {
+    background: #101318 !important;
+    color: #f2f5fa !important;
+  }
+
+  .visual-resume-paper[data-layout="Product Lab"] {
+    background: #071014 !important;
+    color: #f2f5fa !important;
+  }
+
+  .visual-resume-paper[data-font="Professional Sans"] {
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+
+  .visual-resume-paper[data-font="Editorial Serif"] {
+    font-family: Georgia, "Times New Roman", serif !important;
+  }
+
+  .visual-resume-paper[data-font="Modern Mono"] {
+    font-family: "Courier New", Courier, monospace !important;
+  }
+
+  .visual-resume-paper[data-font="Clean System"] {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
   }
 
   .visual-resume-paper > div {
@@ -290,7 +317,17 @@ textarea {
 
   .visual-resume-paper aside,
   .visual-resume-paper > div > div {
-    padding: 0 !important;
+    padding: 0.18in !important;
+  }
+
+  .visual-resume-paper[data-density="Compact"] aside,
+  .visual-resume-paper[data-density="Compact"] > div > div {
+    padding: 0.12in !important;
+  }
+
+  .visual-resume-paper[data-density="Spacious"] aside,
+  .visual-resume-paper[data-density="Spacious"] > div > div {
+    padding: 0.24in !important;
   }
 
   .visual-resume-paper h2 {
@@ -309,5 +346,50 @@ textarea {
   .visual-resume-paper section article {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .visual-resume-paper[data-accent="Gold"] .visual-print-accent {
+    color: #d4af37 !important;
+    border-color: #d4af37 !important;
+  }
+
+  .visual-resume-paper[data-accent="Cyan"] .visual-print-accent {
+    color: #00e5ff !important;
+    border-color: #00e5ff !important;
+  }
+
+  .visual-resume-paper[data-accent="Ember"] .visual-print-accent {
+    color: #ff6a2b !important;
+    border-color: #ff6a2b !important;
+  }
+
+  .visual-resume-paper[data-accent="Slate"] .visual-print-accent {
+    color: #94a3b8 !important;
+    border-color: #94a3b8 !important;
+  }
+
+  .visual-resume-paper[data-accent="Emerald"] .visual-print-accent {
+    color: #34d399 !important;
+    border-color: #34d399 !important;
+  }
+
+  .visual-resume-paper[data-accent="Gold"] .visual-print-fill {
+    background: #d4af37 !important;
+  }
+
+  .visual-resume-paper[data-accent="Cyan"] .visual-print-fill {
+    background: #00e5ff !important;
+  }
+
+  .visual-resume-paper[data-accent="Ember"] .visual-print-fill {
+    background: #ff6a2b !important;
+  }
+
+  .visual-resume-paper[data-accent="Slate"] .visual-print-fill {
+    background: #94a3b8 !important;
+  }
+
+  .visual-resume-paper[data-accent="Emerald"] .visual-print-fill {
+    background: #34d399 !important;
   }
 }
