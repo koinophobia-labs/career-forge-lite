@@ -31,6 +31,10 @@ export type IntakeData = {
   responsibilities: string;
   selectedResponsibilities: string[];
   selectedActions: string[];
+  customRoleIndustry: string;
+  customRoleWorkStyles: string[];
+  customRoleTransferableSkills: string[];
+  customRoleNotes: string;
   customersServed: string;
   ticketsHandled: string;
   projectsSupported: string;

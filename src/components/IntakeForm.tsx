@@ -5,6 +5,7 @@ import {
   actionSuggestionsByFamily,
   careerTargets,
   companySuggestions,
+  findJobArsenal,
   getExperienceArsenal,
   type CareerTarget,
   outcomeOptions,
@@ -125,6 +126,68 @@ const templateDescriptions: Record<TemplateStyle, string> = {
   "Tech ATS": "Compact and keyword-forward for tools, support workflows, and technical roles."
 };
 
+const industryOptions = [
+  "Retail",
+  "Customer Service",
+  "Hospitality",
+  "Gaming / Sportsbook",
+  "Healthcare",
+  "Finance",
+  "Banking",
+  "Insurance",
+  "Logistics",
+  "Warehouse",
+  "Manufacturing",
+  "Technology",
+  "Education",
+  "Government",
+  "Security",
+  "Food Service",
+  "Entertainment",
+  "Nonprofit",
+  "Other"
+];
+
+const workStyleOptions = [
+  "Customer-facing",
+  "Administrative",
+  "Operations",
+  "Sales",
+  "Technical support",
+  "Data / reporting",
+  "Coordination",
+  "Management / supervision",
+  "Physical / field work",
+  "Compliance / safety",
+  "Cash handling",
+  "Inventory / fulfillment",
+  "Creative / content",
+  "Other"
+];
+
+const transferableSkillOptions = [
+  "Customer communication",
+  "Cash handling",
+  "Payment processing",
+  "Documentation",
+  "Scheduling",
+  "Record keeping",
+  "Issue escalation",
+  "Conflict resolution",
+  "Compliance",
+  "Policy enforcement",
+  "Inventory tracking",
+  "Reporting",
+  "Team coordination",
+  "Training others",
+  "Data entry",
+  "Quality control",
+  "Safety procedures",
+  "Technical troubleshooting",
+  "Process improvement",
+  "High-volume service"
+];
+
 function formatList(items: string[]) {
   return items.filter(Boolean).join(", ") || "Not added yet";
 }
@@ -164,6 +227,12 @@ function hasExactOption(options: string[], query: string) {
   return Boolean(normalizedQuery) && options.some((option) => option.toLowerCase() === normalizedQuery);
 }
 
+function hasKnownRole(title: string) {
+  const normalized = title.trim().toLowerCase();
+  if (!normalized) return true;
+  return careerTargets.some((target) => target.title.toLowerCase() === normalized) || Boolean(findJobArsenal(title));
+}
+
 export function IntakeForm({
   data,
   errors,
@@ -187,6 +256,9 @@ export function IntakeForm({
   const [responsibilitySearch, setResponsibilitySearch] = useState("");
   const [responsibilitySearchOpen, setResponsibilitySearchOpen] = useState(false);
   const [customResponsibility, setCustomResponsibility] = useState("");
+  const [customIndustry, setCustomIndustry] = useState("");
+  const [customWorkStyle, setCustomWorkStyle] = useState("");
+  const [customTransferableSkill, setCustomTransferableSkill] = useState("");
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
   const actionSuggestions = actionSuggestionsByFamily[data.roleFamily];
@@ -198,6 +270,13 @@ export function IntakeForm({
     data.additionalTitle,
     data.targetJobTitle
   ]);
+  const unknownRoleTitles = [
+    data.targetJobTitle,
+    data.currentTitle,
+    data.previousTitle,
+    data.additionalTitle
+  ].filter((title) => title.trim() && !hasKnownRole(title));
+  const needsUnknownRoleContext = Boolean(unknownRoleTitles.length);
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
   const selectedTools = splitSelections(data.tools);
   const roleAwareToolOptions = toolSuggestionsByFamily[data.roleFamily];
@@ -349,6 +428,22 @@ export function IntakeForm({
       ? data.selectedActions.filter((value) => value !== item)
       : [...data.selectedActions, item];
     update("selectedActions", selected);
+  }
+
+  function toggleFallbackList(key: "customRoleWorkStyles" | "customRoleTransferableSkills", item: string) {
+    const selected = data[key].some((value) => value.toLowerCase() === item.toLowerCase())
+      ? data[key].filter((value) => value.toLowerCase() !== item.toLowerCase())
+      : [...data[key], item];
+    update(key, selected);
+  }
+
+  function addCustomFallbackItem(key: "customRoleWorkStyles" | "customRoleTransferableSkills", value: string, clear: () => void) {
+    const normalized = normalizeSelection(value);
+    if (!normalized) return;
+    if (!data[key].some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+      update(key, [...data[key], normalized]);
+    }
+    clear();
   }
 
   function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
@@ -518,6 +613,139 @@ export function IntakeForm({
               </button>
             );
           })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderUnknownRoleFallback() {
+    if (!needsUnknownRoleContext) return null;
+
+    return (
+      <div className="rounded-md bg-white p-4">
+        <p className="text-sm font-bold text-ink">Tell Career Forge how to understand this role.</p>
+        <p className="mt-1 text-sm leading-6 text-ink/60">
+          One more signal helps translate {formatList(unknownRoleTitles.slice(0, 2))} without guessing.
+        </p>
+
+        <div className="mt-4 space-y-5">
+          <div>
+            <p className="mb-2 text-sm font-bold text-ink">What industry was this role in?</p>
+            <div className="flex flex-wrap gap-2">
+              {industryOptions.map((industry) => (
+                <button
+                  key={industry}
+                  type="button"
+                  onClick={() => update("customRoleIndustry", industry)}
+                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                    data.customRoleIndustry === industry ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                  }`}
+                >
+                  {industry}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={customIndustry}
+                onChange={(event) => setCustomIndustry(event.target.value)}
+                placeholder="Custom industry"
+                className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const normalized = normalizeSelection(customIndustry);
+                  if (!normalized) return;
+                  update("customRoleIndustry", normalized);
+                  setCustomIndustry("");
+                }}
+                className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+              >
+                Add custom
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-bold text-ink">What kind of work did it mostly involve?</p>
+            <div className="flex flex-wrap gap-2">
+              {workStyleOptions.map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  onClick={() => toggleFallbackList("customRoleWorkStyles", style)}
+                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                    data.customRoleWorkStyles.includes(style) ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                  }`}
+                >
+                  {style}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={customWorkStyle}
+                onChange={(event) => setCustomWorkStyle(event.target.value)}
+                placeholder="Custom work style"
+                className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomFallbackItem("customRoleWorkStyles", customWorkStyle, () => setCustomWorkStyle(""))}
+                className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+              >
+                Add custom
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-bold text-ink">Which of these were part of the job?</p>
+            <div className="flex flex-wrap gap-2">
+              {transferableSkillOptions.map((skill) => (
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() => toggleFallbackList("customRoleTransferableSkills", skill)}
+                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                    data.customRoleTransferableSkills.includes(skill) ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                  }`}
+                >
+                  {skill}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={customTransferableSkill}
+                onChange={(event) => setCustomTransferableSkill(event.target.value)}
+                placeholder="Custom transferable skill"
+                className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomFallbackItem("customRoleTransferableSkills", customTransferableSkill, () => setCustomTransferableSkill(""))}
+                className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+              >
+                Add custom
+              </button>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-bold text-ink">Anything important about this role?</span>
+            <textarea
+              value={data.customRoleNotes}
+              onChange={(event) => update("customRoleNotes", event.target.value)}
+              placeholder="Optional: equipment, environment, customers, compliance, pace, or special responsibilities"
+              rows={3}
+              className="trust-input w-full rounded-md border px-4 py-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+            />
+          </label>
         </div>
       </div>
     );
@@ -804,6 +1032,7 @@ export function IntakeForm({
       case 9:
         return (
           <div className="space-y-5">
+            {renderUnknownRoleFallback()}
             {experienceArsenal && (
               <div className="rounded-md bg-white p-4">
                 <p className="text-sm font-bold text-ink">
@@ -1062,6 +1291,18 @@ export function IntakeForm({
               value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}
               onEdit={() => goToQuestion(9)}
             />
+            {needsUnknownRoleContext && (
+              <ReviewItem
+                label="Custom role context"
+                value={formatReviewItems([
+                  data.customRoleIndustry ? `Industry: ${data.customRoleIndustry}` : "",
+                  data.customRoleWorkStyles.length ? `Work style: ${data.customRoleWorkStyles.join(", ")}` : "",
+                  data.customRoleTransferableSkills.length ? `Transferable skills: ${data.customRoleTransferableSkills.join(", ")}` : "",
+                  data.customRoleNotes ? `Notes: ${data.customRoleNotes}` : ""
+                ])}
+                onEdit={() => goToQuestion(9)}
+              />
+            )}
             <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestion(10)} />
             <ReviewItem
               label="Outcomes"

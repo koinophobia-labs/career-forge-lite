@@ -266,7 +266,6 @@ export function findJobArsenal(title: string) {
   return (
     jobArsenals.find((arsenal) => arsenal.title.toLowerCase() === normalized) ??
     jobArsenals.find((arsenal) => arsenal.aliases?.some((alias) => alias.toLowerCase() === normalized)) ??
-    jobArsenals.find((arsenal) => normalized.includes(arsenal.title.toLowerCase()) || arsenal.title.toLowerCase().includes(normalized)) ??
     null
   );
 }

@@ -441,7 +441,10 @@ function buildScopeItems(data: IntakeData) {
 
 function buildUserResponsibilityList(data: IntakeData) {
   return compact([
+    ...data.customRoleTransferableSkills.map(normalizeResponsibility),
+    ...data.customRoleWorkStyles.map(normalizeResponsibility),
     ...data.selectedResponsibilities.map(normalizeResponsibility),
+    normalizeResponsibility(data.customRoleIndustry),
     ...splitList(data.responsibilities).map(normalizeResponsibility)
   ]).slice(0, 8);
 }
@@ -462,6 +465,8 @@ function buildSkillList(data: IntakeData) {
 
   return compact([
     ...responsibilities.slice(0, 6),
+    ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
+    ...data.customRoleWorkStyles.map(normalizeResponsibility).slice(0, 3),
     ...roleIntelligence[data.roleFamily].skills.map(normalizeResponsibility),
     ...tools.slice(0, 4),
     ...workflowSkillsByFamily[data.roleFamily]
@@ -472,6 +477,38 @@ function detectDomain(role: ExperienceRole | { title: string; company: string })
   const roleHaystack = [role.title, role.company].join(" ").toLowerCase();
 
   return domainProfiles.find((profile) => profile.keywords.some((keyword) => roleHaystack.includes(keyword))) ?? null;
+}
+
+function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
+  const industry = cleanWhitespace(data.customRoleIndustry);
+  const workStyles = compact(data.customRoleWorkStyles.map(readablePhrase));
+  const transferableSkills = compact(data.customRoleTransferableSkills.map(readablePhrase));
+  const notes = splitList(data.customRoleNotes).map(readablePhrase);
+  const signals = compact([industry.toLowerCase(), ...workStyles, ...transferableSkills, ...notes]);
+  if (!signals.length) return null;
+
+  const environmentByIndustry: Array<[RegExp, string, string]> = [
+    [/gaming|sportsbook|casino/i, "gaming and customer transaction environment", "customer transactions, payment handling, records, and compliance-aware service steps"],
+    [/retail/i, "retail service environment", "POS transactions, customer requests, inventory tasks, and store records"],
+    [/warehouse|logistics/i, "logistics and fulfillment environment", "inventory movement, fulfillment tasks, handoffs, and tracking records"],
+    [/food|hospitality/i, "fast-paced service environment", "service requests, order flow, customer communication, and shift tasks"],
+    [/healthcare/i, "service and records-focused healthcare environment", "patient or customer requests, records, scheduling, and compliance-aware handoffs"],
+    [/finance|banking|insurance/i, "transaction and records-focused service environment", "customer requests, payment or account details, records, and policy-aware handoffs"],
+    [/security|government/i, "procedure-focused public service environment", "visitor support, documentation, policy steps, and escalation workflows"],
+    [/technology|technical/i, "technical support and workflow environment", "technical requests, troubleshooting notes, documentation, and escalation workflows"]
+  ];
+  const match = environmentByIndustry.find(([pattern]) => pattern.test(industry));
+  const environment = match?.[1] ?? `${industry ? industry.toLowerCase() : "cross-functional"} work environment`;
+  const processLanguage = match?.[2] ?? (sentenceList(compact([...workStyles, ...transferableSkills]).slice(0, 4)) || "daily work requests, records, and handoffs");
+  const strengths = compact([...transferableSkills, ...workStyles, industry]).slice(0, 5);
+
+  return {
+    name: "custom",
+    keywords: signals,
+    environment,
+    strengths,
+    processLanguage
+  };
 }
 
 function activityPhrase(responsibility: string) {
@@ -538,7 +575,7 @@ function roleLevel(role: ExperienceRole, index: number) {
 
 function roleContext(role: ExperienceRole, data: IntakeData, index: number) {
   const strategy = roleStrategies[data.roleFamily];
-  const domain = detectDomain(role);
+  const domain = detectDomain(role) ?? fallbackDomainProfile(data);
   const level = roleLevel(role, index);
   const context =
     level === "senior" ? strategy.seniorContext : index === 0 ? strategy.supportContext : `${strategy.supportContext} in an earlier support role`;
@@ -697,7 +734,7 @@ function limitSentences(value: string, maxSentences: number) {
 function buildSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const roleFamily = data.roleFamily;
   const currentRole = experience[0];
-  const domain = currentRole ? detectDomain(currentRole) : null;
+  const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
   const strategy = roleStrategies[roleFamily];
   const responsibilities = buildResponsibilityList(data);
   const background = currentRole
@@ -714,7 +751,7 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
 
 function buildLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const currentRole = experience[0];
-  const domain = currentRole ? detectDomain(currentRole) : null;
+  const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
   const strategy = roleStrategies[data.roleFamily];
   const responsibilities = buildResponsibilityList(data).slice(0, 2).map(readablePhrase);
   const strengths = compact([...(domain?.strengths ?? []), ...responsibilities, ...strategy.focus.map(readablePhrase)]).slice(0, 3);

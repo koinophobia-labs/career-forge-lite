@@ -193,6 +193,11 @@ function searchableOptions(options, query) {
   return options.filter((option) => option.toLowerCase().includes(normalizedQuery)).slice(0, 10);
 }
 
+function hasKnownRole(title) {
+  const normalized = title.toLowerCase();
+  return careerTargets.some((target) => target.title.toLowerCase() === normalized) || Boolean(findJobArsenal(title));
+}
+
 const roleMappingChecks = [
   ["Warehouse Operations Coordinator", "Operations"],
   ["Manual QA Tester", "Tech"],
@@ -225,6 +230,8 @@ assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket"
 
 const supportSpecialistTarget = findCareerTarget("Support Specialist");
 assert(supportSpecialistTarget?.roleFamily === "Customer Success", "known role auto-maps to role family");
+assert(hasKnownRole("Support Specialist"), "known role does not need fallback");
+assert(!hasKnownRole("Casino Cage Cashier"), "unknown role triggers fallback context path");
 const sportsbookArsenal = findJobArsenal("Sportsbook Ticket Writer");
 assert(sportsbookArsenal?.responsibilities.includes("Cash handling"), "sportsbook arsenal includes cash handling");
 assert(sportsbookArsenal?.workflows.includes("Shift balancing"), "sportsbook arsenal includes workflow prompts");
@@ -289,6 +296,29 @@ const arsenalResume = generateResumePackage({
 const arsenalText = resumeToText({ ...initialIntake, fullName: "Arsenal Candidate", email: "arsenal@example.com" }, arsenalResume);
 assert(arsenalResume.coreSkills.includes("Cash Handling"), "confirmed arsenal responsibility reaches skills");
 assert(/transaction accuracy|cash handling|responsible gaming/i.test(arsenalText), "confirmed arsenal language reaches resume text");
+
+const unknownRoleData = {
+  ...initialIntake,
+  fullName: "Unknown Role Candidate",
+  email: "unknown.role@example.com",
+  targetJobTitle: "Customer Success Associate",
+  roleFamily: "Customer Success",
+  currentTitle: "Casino Cage Cashier",
+  currentCompany: "Local Casino",
+  currentTime: "2023 - Present",
+  customRoleIndustry: "Gaming / Sportsbook",
+  customRoleWorkStyles: ["Customer-facing", "Cash handling", "Compliance / safety"],
+  customRoleTransferableSkills: ["Payment processing", "Record keeping", "Issue escalation", "Policy enforcement"],
+  customersServed: "80+ weekly customers",
+  selectedOutcomes: ["Accuracy", "Compliance"]
+};
+const unknownRoleResume = generateResumePackage(unknownRoleData);
+const unknownRoleExport = resumeToText(unknownRoleData, unknownRoleResume);
+assert(unknownRoleResume.coreSkills.includes("Payment Processing"), "fallback skills reach core skills");
+assert(/gaming and customer transaction environment|payment handling|policy enforcement|record keeping/i.test(unknownRoleExport), "fallback context reaches output");
+assert(unknownRoleResume.experience.flatMap((role) => role.bullets).every((bullet) => bullet.trim()), "unknown role has no blank bullets");
+assert(!unknownRoleExport.includes(educationPlaceholder), "unknown role export omits placeholder education");
+assert(!weakTerms.some((term) => unknownRoleExport.toLowerCase().includes(term.toLowerCase())), "unknown role has no weak leakage");
 
 for (const persona of personas) {
   const data = {
