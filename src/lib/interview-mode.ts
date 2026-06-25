@@ -440,6 +440,18 @@ function extractTarget(answer: string) {
 }
 
 function extractRole(answer: string) {
+  const explicitRoleMatch = answer.match(
+    /\b(?:worked as|work as|served as|currently work as|current role is|most recent role is|role is|title is|i am|i'm|was)\s+(?:an?\s+)?(.+?)\s+at\s+(.+?)(?:\s+(?:from|since|for)\s+(.+?))?(?:,|\.|$)/i
+  );
+  if (explicitRoleMatch) {
+    return {
+      title: explicitRoleMatch[1]?.trim() ?? "",
+      company: explicitRoleMatch[2]?.trim() ?? "",
+      timeInRole: explicitRoleMatch[3]?.trim() ?? "",
+      notes: [answer]
+    };
+  }
+
   const atMatch = answer.match(
     /(?:as|role is|title is|worked as|i'm|i am|was|currently|most recent role is)\s+(?:an?\s+)?([^,.]+?)(?:\s+at\s+([^,.]+?))?(?:\s+(?:from|since|for)\s+([^,.]+))?(?:,|\.|$)/i
   );
@@ -466,7 +478,7 @@ function mergeRole(existing: InterviewResumeDraft["roles"], answer: string) {
 
 function extractToolSignals(answer: string) {
   const matchedTools = allToolOptions.filter((tool) => new RegExp(`\\b${tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(answer));
-  const toolClause = answer.match(/\b(?:tools? like|used|worked with|platforms? like|systems? like)\s+([^.;]+)/i)?.[1] ?? "";
+  const toolClause = answer.match(/\b(?:tools? like|used|worked with|platforms? like|systems? like)\s+([^;\n]+)/i)?.[1] ?? "";
   const clauseTools = splitSignals(toolClause).filter((item) => item.length <= 32);
   return unique([...matchedTools, ...clauseTools]).slice(0, 12);
 }
@@ -476,6 +488,8 @@ function extractMetricSignals(answer: string) {
     .filter((metric) => {
       const trimmed = metric.trim();
       if (/^(?:19|20)\d{2}(?:\s*-\s*(?:present|(?:19|20)\d{2}))?$/i.test(trimmed)) return false;
+      if (/\bfrom\s+(?:19|20)\d{2}\b/i.test(trimmed)) return false;
+      if (/\b(?:19|20)\d{2}\s*-\s*(?:present|(?:19|20)\d{2})\b/i.test(trimmed)) return false;
       return /\$|%|\+|customers?|clients?|users?|tickets?|calls?|reports?|projects?|transactions?|orders?|accounts?|team members?|people|cases?|requests?|revenue|budget|weekly|monthly|daily|per week|per month|per day|hours?|minutes?|days?|saved|reduced|increased/i.test(trimmed);
     })
     .slice(0, 10);
@@ -506,7 +520,13 @@ function extractSkillSignals(answer: string) {
 }
 
 function extractProjectSignals(answer: string) {
-  if (!/\b(project|portfolio|built|created|launched|implemented|case study|website|dashboard|workflow|automation)\b/i.test(answer)) return [];
+  if (
+    !/\b(portfolio|built|created|launched|implemented|case study|website|dashboard|workflow|automation|class project|project for|worked on .*project|managed .*project|supported .*project)\b/i.test(
+      answer
+    )
+  ) {
+    return [];
+  }
   return unique(splitSentences(answer).length ? splitSentences(answer) : splitSignals(answer)).slice(0, 8);
 }
 
@@ -675,8 +695,9 @@ function isStageSatisfied(session: InterviewSession, stageId: InterviewStageId) 
   const answeredCurrentStage = session.completedStages.includes(stageId);
 
   if (stageId === "role_targeting") return isUsable("targetRole");
-  if (stageId === "background_overview") return isUsable("experienceLevel") || isUsable("roles");
-  if (stageId === "current_or_recent_role") return isUsable("roles");
+  const hasProjectExperienceProof = isUsable("projects") && (isUsable("achievements") || isUsable("responsibilities") || isUsable("education"));
+  if (stageId === "background_overview") return isUsable("experienceLevel") || isUsable("roles") || hasProjectExperienceProof;
+  if (stageId === "current_or_recent_role") return isUsable("roles") || hasProjectExperienceProof;
   if (stageId === "responsibilities") return isUsable("responsibilities");
   if (stageId === "achievements") return isUsable("achievements") || isUsable("projects");
   if (stageId === "metrics") return isUsable("metrics") || answeredCurrentStage;
@@ -715,9 +736,7 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
     nextDraft.achievements = unique([...nextDraft.achievements, answer]).slice(0, 10);
   }
 
-  if (session.currentStage === "metrics" && !nextDraft.metrics.length && /\d/.test(answer)) {
-    nextDraft.metrics = unique([...nextDraft.metrics, answer]).slice(0, 10);
-  }
+  if (session.currentStage === "metrics" && !nextDraft.metrics.length) nextDraft.metrics = unique([...nextDraft.metrics, ...extractMetricSignals(answer)]).slice(0, 10);
 
   if (session.currentStage === "tools_and_skills") {
     const extraSkills = splitSignals(answer).filter((item) => !nextDraft.tools.some((tool) => tool.toLowerCase() === item.toLowerCase()));
@@ -731,11 +750,12 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
   if (session.currentStage === "education_and_certifications") {
     const education = extractEducationSignals(answer);
     nextDraft.certifications = unique([...nextDraft.certifications, ...education.certifications]).slice(0, 6);
-    if (education.education || (!skipPattern.test(answer) && answer.length > 4)) nextDraft.education = education.education || answer;
+    if (education.education) nextDraft.education = education.education;
   }
 
   if (session.currentStage === "gaps_and_positioning" && !skipPattern.test(answer)) {
-    nextDraft.gapsOrWeakAreas = unique([...nextDraft.gapsOrWeakAreas, ...extractGapSignals(answer), answer]).slice(0, 6);
+    const gaps = extractGapSignals(answer);
+    if (gaps.length) nextDraft.gapsOrWeakAreas = unique([...nextDraft.gapsOrWeakAreas, ...gaps]).slice(0, 6);
   }
 
   const withUserMessage = addMessage(session, userMessage);
@@ -783,9 +803,14 @@ function isReadyField(session: InterviewSession, key: keyof InterviewResumeDraft
 }
 
 export function canGenerateResumeFromInterview(session: InterviewSession) {
+  const hasExperienceProof =
+    isReadyField(session, "roles") ||
+    fieldStatus(session, "projects") === "strong" ||
+    (isReadyField(session, "education") && (isReadyField(session, "skills") || isReadyField(session, "tools")));
+
   return (
     isReadyField(session, "targetRole") &&
-    isReadyField(session, "roles") &&
+    hasExperienceProof &&
     isReadyField(session, "responsibilities") &&
     (isReadyField(session, "skills") || isReadyField(session, "tools")) &&
     (isReadyField(session, "achievements") || isReadyField(session, "projects"))
@@ -831,14 +856,37 @@ export function assistantQuestionForStage(stageId: InterviewStageId) {
 
 function questionWasAsked(session: InterviewSession, question: string) {
   const normalized = normalizeQuestion(question);
+  const topic = questionTopic(question);
   return (
     session.memory.repeatedQuestionProtection.includes(normalized) ||
+    session.memory.followUpHistory.some((followUp) => questionTopic(followUp.question) === topic && topic !== "general") ||
     session.messages.some((message) => message.role === "assistant" && normalizeQuestion(message.content).includes(normalized))
   );
 }
 
 function avoidRepeat(session: InterviewSession, options: string[]) {
-  return options.find((option) => !questionWasAsked(session, option)) ?? options[0];
+  return options.find((option) => !questionWasAsked(session, option)) ?? options.find((option) => normalizeQuestion(option) !== normalizeQuestion(session.memory.followUpHistory.at(-1)?.question ?? "")) ?? options[0];
+}
+
+function questionTopic(question: string) {
+  const normalized = normalizeQuestion(question);
+  if (/title company|job called|who was it|how long/.test(normalized)) return "recent_role_identity";
+  if (/workplace|customer setting|work setting/.test(normalized)) return "work_setting";
+  if (/what should i call|resume label|call that experience/.test(normalized)) return "resume_label";
+  if (/paid work|school|volunteering|personal project/.test(normalized)) return "proof_type";
+  if (/recent role|main recent experience/.test(normalized)) return "recent_role_identity";
+  if (/target|job title|role should this resume|role are you targeting/.test(normalized)) return "target_role";
+  if (/problems were you solving|problems did you solve|solving most often/.test(normalized)) return "problem_solving";
+  if (/requests|workflows|customers|records|schedules|systems|issues/.test(normalized)) return "workflow_scope";
+  if (/best prepared|prepared you/.test(normalized)) return "role_bridge";
+  if (/responsibilities were you trusted|trusted with|most weeks|every shift|duties/.test(normalized)) return "responsibility_detail";
+  if (/responsibil/.test(normalized)) return "responsibilities";
+  if (/measurable|volume|how many|scale|customers|tickets|calls|reports/.test(normalized)) return "metrics";
+  if (/tools|software|systems|platforms|skills|equipment|workflows/.test(normalized)) return "tools";
+  if (/project|portfolio|proof|dashboard|launch/.test(normalized)) return "projects";
+  if (/improved|result|win|outcome|changed|speed|accuracy/.test(normalized)) return "results";
+  if (/education|certification|training|course|degree/.test(normalized)) return "education";
+  return "general";
 }
 
 function selectFollowUp(session: InterviewSession): { intent: AssistantIntent; question: string } {
@@ -873,8 +921,11 @@ function selectFollowUp(session: InterviewSession): { intent: AssistantIntent; q
       intent: "clarify",
       question: avoidRepeat(session, [
         "Tell me your title, company, and approximate dates for your most recent work.",
-        "What was the job called, who was it with, and how long were you there?",
-        "What role should I treat as your main recent experience?"
+        "If the title is hard to name, what kind of workplace or customer setting was it?",
+        "What should I call that experience on a resume if we do not have an exact title?",
+        "Was this paid work, school, volunteering, or a personal project?",
+        "Give me any employer, school, project, or team name connected to that experience.",
+        "What context should a recruiter know about where that work happened?"
       ])
     };
   }
@@ -1162,16 +1213,25 @@ function metricForPattern(metrics: string, pattern: RegExp) {
 export function convertInterviewDraftToExistingResumeInput(session: InterviewSession): IntakeData {
   const draft = session.resumeDraft;
   const role = draft.roles[0];
-  const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, role?.title ?? ""].join(" "));
+  const projectFallbackRole = !role && draft.projects.length
+    ? {
+        title: "Project Experience",
+        company: draft.education ? "Academic / Independent Projects" : "Independent Projects",
+        timeInRole: "",
+        notes: draft.projects
+      }
+    : undefined;
+  const primaryRole = role ?? projectFallbackRole;
+  const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, primaryRole?.title ?? ""].join(" "));
   const metrics = draft.metrics.join(", ");
 
   return {
     ...initialIntake,
     targetJobTitle: draft.targetRole || initialIntake.targetJobTitle,
     roleFamily,
-    currentTitle: role?.title ?? "",
-    currentCompany: role?.company ?? "",
-    currentTime: role?.timeInRole ?? "",
+    currentTitle: primaryRole?.title ?? "",
+    currentCompany: primaryRole?.company ?? "",
+    currentTime: primaryRole?.timeInRole ?? "",
     tools: draft.tools.join(", "),
     responsibilities: draft.responsibilities.join(", "),
     selectedResponsibilities: unique([...draft.responsibilities, ...draft.skills]).slice(0, 10),

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "smoke:generator": "node scripts/smoke-generator.mjs"
+    "smoke:generator": "node scripts/smoke-generator.mjs",
+    "smoke:interview": "node scripts/interview-mode-simulation.mjs"
   },
   "dependencies": {
     "next": "^16.2.9",
