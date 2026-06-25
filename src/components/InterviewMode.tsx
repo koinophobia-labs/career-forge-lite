@@ -3,13 +3,13 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  assistantQuestionForStage,
   canGenerateResumeFromInterview,
   convertInterviewDraftToExistingResumeInput,
   createAssistantInterviewMessage,
   createInitialInterviewSession,
   createUserInterviewMessage,
   getMissingOrWeakFields,
+  getNextAssistantQuestion,
   interviewStages,
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
@@ -34,6 +34,26 @@ export function InterviewMode() {
   );
   const missingFields = useMemo(() => getMissingOrWeakFields(session), [session]);
   const canGenerate = canGenerateResumeFromInterview(session);
+  const statusCounts = useMemo(
+    () =>
+      session.fieldStatuses.reduce(
+        (counts, field) => ({ ...counts, [field.status]: counts[field.status] + 1 }),
+        { empty: 0, weak: 0, usable: 0, strong: 0 }
+      ),
+    [session.fieldStatuses]
+  );
+  const draftPreview = useMemo(
+    () => [
+      ["Target role", session.resumeDraft.targetRole],
+      ["Responsibilities", session.resumeDraft.responsibilities.join(", ")],
+      ["Achievements", session.resumeDraft.achievements.join(", ")],
+      ["Metrics", session.resumeDraft.metrics.join(", ")],
+      ["Tools", session.resumeDraft.tools.join(", ")],
+      ["Skills", session.resumeDraft.skills.join(", ")],
+      ["Projects", session.resumeDraft.projects.join(", ")]
+    ],
+    [session.resumeDraft]
+  );
 
   function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +62,7 @@ export function InterviewMode() {
 
     const userMessage = createUserInterviewMessage(content);
     const updated = updateInterviewDraftFromUserAnswer(session, userMessage);
-    const nextPrompt = assistantQuestionForStage(updated.currentStage);
+    const nextPrompt = getNextAssistantQuestion(updated);
     const nextSession: InterviewSession = {
       ...updated,
       messages: [...updated.messages, createAssistantInterviewMessage(nextPrompt)]
@@ -148,6 +168,19 @@ export function InterviewMode() {
               />
             </div>
             <p className="mt-2 text-sm font-bold text-cyan">{session.resumeDraft.confidenceScore}% structured signal</p>
+            <div className="mt-4 grid grid-cols-4 gap-2 text-center text-[0.65rem] font-black uppercase tracking-[0.12em]">
+              {[
+                ["Strong", statusCounts.strong, "text-cyan"],
+                ["Usable", statusCounts.usable, "text-gold"],
+                ["Weak", statusCounts.weak, "text-ember"],
+                ["Empty", statusCounts.empty, "text-paper/45"]
+              ].map(([label, count, tone]) => (
+                <div key={label} className="rounded-md border border-white/10 bg-white/5 px-2 py-2">
+                  <span className={`block text-lg ${tone}`}>{count}</span>
+                  <span className="text-paper/45">{label}</span>
+                </div>
+              ))}
+            </div>
 
             <div className="mt-6 space-y-2">
               {session.fieldStatuses.map((field) => (
@@ -173,6 +206,18 @@ export function InterviewMode() {
                 <p className="mt-3 text-sm text-cyan">Minimum interview signal is ready.</p>
               )}
             </div>
+
+            <details className="mt-4 rounded-md border border-white/10 bg-white/5 p-4">
+              <summary className="cursor-pointer text-sm font-bold text-paper">Extracted draft preview</summary>
+              <div className="mt-4 space-y-3">
+                {draftPreview.map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/42">{label}</p>
+                    <p className="mt-1 text-sm leading-6 text-paper/70">{value || "Not captured yet"}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
 
             <button
               type="button"

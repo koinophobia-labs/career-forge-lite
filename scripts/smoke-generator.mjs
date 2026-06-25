@@ -54,8 +54,9 @@ const {
   convertInterviewDraftToExistingResumeInput,
   createInitialInterviewSession,
   createUserInterviewMessage,
+  getCurrentFieldStatuses,
   getMissingOrWeakFields,
-  getNextInterviewStage,
+  getNextAssistantQuestion,
   updateInterviewDraftFromUserAnswer
 } = loadTsModule(path.join(root, "src/lib/interview-mode.ts"));
 
@@ -252,22 +253,61 @@ assert(interviewSession.messages[0]?.role === "assistant", "interview starts wit
 assert(getMissingOrWeakFields(interviewSession).some((field) => field.fieldKey === "targetRole"), "initial interview tracks missing target role");
 assert(!canGenerateResumeFromInterview(interviewSession), "interview cannot generate before required fields");
 
+let weakInterviewSession = updateInterviewDraftFromUserAnswer(
+  createInitialInterviewSession(),
+  createUserInterviewMessage("cs")
+);
+assert(weakInterviewSession.currentStage === "role_targeting", "weak target answer stays on target stage");
+assert(/exact job title|targeting|industry|lane/i.test(getNextAssistantQuestion(weakInterviewSession)), "weak target gets focused follow-up");
+
 interviewSession = updateInterviewDraftFromUserAnswer(
   interviewSession,
   createUserInterviewMessage("Customer Success Associate in technology")
 );
 assert(interviewSession.resumeDraft.targetRole.includes("Customer Success Associate"), "interview captures target role");
-assert(getNextInterviewStage(interviewSession).id === "current_or_recent_role", "interview routes toward missing work history");
+assert(interviewSession.resumeDraft.targetIndustry.toLowerCase().includes("technology"), "interview captures target industry");
+assert(interviewSession.currentStage === "background_overview", "usable target advances to background stage");
+
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("I have customer-facing gaming experience and operations support background.")
+);
+assert(interviewSession.currentStage === "current_or_recent_role", "usable background advances to role stage");
 
 interviewSession = updateInterviewDraftFromUserAnswer(
   interviewSession,
   createUserInterviewMessage("I worked as a Sportsbook Ticket Writer at DraftKings from Jan 2024 - Present.")
 );
+assert(interviewSession.resumeDraft.roles[0]?.title === "Sportsbook Ticket Writer", "interview extracts role title");
+assert(interviewSession.resumeDraft.roles[0]?.company === "DraftKings", "interview extracts role company");
+assert(interviewSession.currentStage === "responsibilities", "usable role advances to responsibilities");
+
 interviewSession = updateInterviewDraftFromUserAnswer(
   interviewSession,
-  createUserInterviewMessage("I handled customer communication, payment processing, issue escalation, and accurate records.")
+  createUserInterviewMessage("I handled customer communication, payment processing, issue escalation, accurate records, and wagering transactions.")
 );
-assert(canGenerateResumeFromInterview(interviewSession), "interview can generate after target, role, and responsibilities");
+assert(interviewSession.resumeDraft.responsibilities.some((item) => /customer communication/i.test(item)), "interview extracts responsibilities");
+assert(!canGenerateResumeFromInterview(interviewSession), "interview still requires tools or skills and achievement/project");
+
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("I improved response consistency, reduced transaction errors, and supported 50+ weekly customers.")
+);
+assert(interviewSession.resumeDraft.achievements.some((item) => /improved response consistency/i.test(item)), "interview extracts achievements");
+assert(interviewSession.resumeDraft.metrics.some((item) => /50\+ weekly customers/i.test(item)), "interview extracts metrics");
+
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("I used Zendesk, Excel, Slack, and internal payment systems. Skills include documentation and record keeping.")
+);
+assert(interviewSession.resumeDraft.tools.includes("Zendesk"), "interview extracts known tools");
+assert(interviewSession.resumeDraft.skills.some((item) => /Documentation/i.test(item)), "interview extracts skills");
+assert(canGenerateResumeFromInterview(interviewSession), "interview can generate after minimum fields are usable");
+assert(/project|education|certifications|training|resume draft|generate/i.test(getNextAssistantQuestion(interviewSession)), "assistant question progresses after readiness");
+
+const statuses = getCurrentFieldStatuses(interviewSession);
+assert(statuses.find((field) => field.fieldKey === "responsibilities")?.status === "strong", "responsibility status uses specificity");
+assert(["usable", "strong"].includes(statuses.find((field) => field.fieldKey === "metrics")?.status), "metric status becomes usable or strong");
 
 interviewSession = {
   ...interviewSession,

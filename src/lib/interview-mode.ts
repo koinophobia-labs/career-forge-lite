@@ -1,4 +1,4 @@
-import { initialIntake } from "@/lib/career-data";
+import { allToolOptions, initialIntake } from "@/lib/career-data";
 import type { IntakeData, RoleFamily } from "@/types/career";
 import type {
   InterviewFieldStatus,
@@ -13,10 +13,10 @@ export const interviewStages: InterviewStage[] = [
   {
     id: "role_targeting",
     label: "Role Targeting",
-    goal: "Understand the target job and direction.",
+    goal: "Understand the target job, lane, and direction.",
     requiredFields: ["targetRole", "targetIndustry"],
-    exampleAssistantQuestion: "What role are you aiming for, and what kind of company or industry are you targeting?",
-    completionCriteria: "Target role is usable and industry or lane is at least weak."
+    exampleAssistantQuestion: "What kind of role are you targeting, and what industry is it in?",
+    completionCriteria: "Target role is usable and role context is at least weak."
   },
   {
     id: "background_overview",
@@ -29,18 +29,18 @@ export const interviewStages: InterviewStage[] = [
   {
     id: "current_or_recent_role",
     label: "Current Or Recent Role",
-    goal: "Capture current or most recent title, company, and time in role.",
+    goal: "Capture current or most recent title, company, time in role, and context.",
     requiredFields: ["roles"],
     exampleAssistantQuestion: "What is your current or most recent role, where did you do it, and when?",
-    completionCriteria: "At least one role has a title."
+    completionCriteria: "At least one role has a usable title plus company or timing context."
   },
   {
     id: "responsibilities",
     label: "Responsibilities",
     goal: "Extract confirmed work responsibilities.",
     requiredFields: ["responsibilities"],
-    exampleAssistantQuestion: "What did you actually handle day to day? Plain language is perfect.",
-    completionCriteria: "At least two responsibilities are captured."
+    exampleAssistantQuestion: "What did you actually do day to day in that role?",
+    completionCriteria: "At least two specific responsibilities are captured."
   },
   {
     id: "achievements",
@@ -48,22 +48,22 @@ export const interviewStages: InterviewStage[] = [
     goal: "Find outcomes, wins, or useful work improvements.",
     requiredFields: ["achievements"],
     exampleAssistantQuestion: "What improved because of your work, even in a small way?",
-    completionCriteria: "At least one achievement or improvement is captured."
+    completionCriteria: "At least one result, improvement, or project proof is captured."
   },
   {
     id: "metrics",
     label: "Metrics",
     goal: "Collect scope numbers and estimates.",
     requiredFields: ["metrics"],
-    exampleAssistantQuestion: "What volume did you handle: customers, tickets, calls, reports, money, team size, or projects?",
-    completionCriteria: "At least one metric or estimate is captured."
+    exampleAssistantQuestion: "Can you give me one measurable result, even approximate?",
+    completionCriteria: "Metrics are captured or the user has provided a best-effort answer."
   },
   {
     id: "tools_and_skills",
     label: "Tools And Skills",
-    goal: "Capture tools, platforms, and transferable skills.",
+    goal: "Capture tools, platforms, systems, and transferable skills.",
     requiredFields: ["tools", "skills"],
-    exampleAssistantQuestion: "What tools, systems, or skills did you use regularly?",
+    exampleAssistantQuestion: "What tools, platforms, systems, or skills did you use regularly?",
     completionCriteria: "Tools or skills are usable."
   },
   {
@@ -71,13 +71,13 @@ export const interviewStages: InterviewStage[] = [
     label: "Projects Or Portfolio",
     goal: "Capture optional projects, links, or portfolio proof.",
     requiredFields: ["projects"],
-    exampleAssistantQuestion: "Any projects, portfolio links, or examples of work you want reflected?",
+    exampleAssistantQuestion: "What project best proves you can do this job?",
     completionCriteria: "Optional stage is complete when answered or skipped."
   },
   {
     id: "education_and_certifications",
     label: "Education And Certifications",
-    goal: "Capture education, certificates, or training.",
+    goal: "Capture education, certificates, training, or courses.",
     requiredFields: ["education", "certifications"],
     exampleAssistantQuestion: "What education, certifications, training, or courses should appear?",
     completionCriteria: "Education/certification is captured or skipped."
@@ -87,14 +87,14 @@ export const interviewStages: InterviewStage[] = [
     label: "Gaps And Positioning",
     goal: "Identify weak areas and positioning concerns.",
     requiredFields: ["gapsOrWeakAreas"],
-    exampleAssistantQuestion: "Anything we should position carefully, like a gap, career change, or limited direct experience?",
+    exampleAssistantQuestion: "What part of your background might look weak to a recruiter?",
     completionCriteria: "Positioning notes are captured or skipped."
   },
   {
     id: "final_resume_review",
     label: "Final Resume Review",
     goal: "Confirm readiness before generating resume input.",
-    requiredFields: ["targetRole", "roles", "responsibilities", "tools"],
+    requiredFields: ["targetRole", "roles", "responsibilities", "tools", "skills", "achievements", "projects"],
     exampleAssistantQuestion: "Reviewing what we have: what is missing or inaccurate before I generate the resume package?",
     completionCriteria: "Minimum resume fields are usable."
   }
@@ -102,11 +102,18 @@ export const interviewStages: InterviewStage[] = [
 
 const requiredStatusFields: Array<{ key: keyof InterviewResumeDraft; label: string }> = [
   { key: "targetRole", label: "Target role" },
+  { key: "targetIndustry", label: "Target industry" },
+  { key: "experienceLevel", label: "Experience level" },
   { key: "roles", label: "Work history" },
   { key: "responsibilities", label: "Responsibilities" },
+  { key: "achievements", label: "Achievements" },
   { key: "metrics", label: "Scope or metrics" },
   { key: "tools", label: "Tools" },
-  { key: "skills", label: "Skills" }
+  { key: "skills", label: "Skills" },
+  { key: "projects", label: "Projects" },
+  { key: "education", label: "Education" },
+  { key: "certifications", label: "Certifications" },
+  { key: "gapsOrWeakAreas", label: "Positioning notes" }
 ];
 
 const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
@@ -119,6 +126,43 @@ const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
   ["Security", /security|safety|access control|incident|surveillance|patrol/i],
   ["Tech", /qa|tester|product|technical operations|implementation|data associate|software|web/i],
   ["Customer Success", /customer|client|support|success|onboarding|retention|member service|experience/i]
+];
+
+const actionVerbPattern =
+  /\b(improved|built|led|created|reduced|increased|launched|managed|automated|coordinated|supported|handled|resolved|documented|tracked|prepared|maintained|analyzed|trained|implemented|processed|escalated)\b/i;
+const achievementVerbPattern = /\b(improved|built|led|created|reduced|increased|launched|automated|implemented|trained|won|saved|grew|delivered)\b/i;
+const responsibilityPattern =
+  /\b(responsible for|handled|managed|supported|coordinated|worked on|owned|helped with|processed|maintained|tracked|documented|resolved|prepared|scheduled|communicated|escalated)\b/i;
+const educationPattern = /\b(degree|certification|certificate|bootcamp|course|university|college|school|training|license|diploma|bachelor'?s?|master'?s?)\b/i;
+const gapPattern = /\b(i don'?t have|i lack|not much experience|still learning|gap|career change|limited direct|no direct|new to)\b/i;
+const skipPattern = /\b(skip|none|n\/a|not applicable|no projects|nothing to add|no education|no cert|no gap)\b/i;
+const weakAnswerPattern = /^(ok|yes|no|none|n\/a|test|asdf|idk|not sure|maybe|.)$/i;
+const metricPattern =
+  /\b(?:\$?\d[\d,.]*\+?(?:%|k|m| hours?| minutes?| days?| weeks?| months?| years?)?\s*(?:customers|clients|users|tickets|calls|reports|projects|transactions|orders|accounts|team members|people|cases|requests|dollars|revenue|budget|weekly|monthly|daily|per week|per month|per day)?|\$\d[\d,.]*\+?|\d+%\+?)\b(?:[^,.]*)/gi;
+
+const skillKeywords = [
+  "customer communication",
+  "client communication",
+  "documentation",
+  "record keeping",
+  "issue escalation",
+  "conflict resolution",
+  "scheduling",
+  "reporting",
+  "data entry",
+  "process improvement",
+  "quality control",
+  "team coordination",
+  "stakeholder communication",
+  "troubleshooting",
+  "cash handling",
+  "payment processing",
+  "compliance",
+  "policy enforcement",
+  "inventory tracking",
+  "training",
+  "follow-up",
+  "time management"
 ];
 
 function now() {
@@ -148,11 +192,20 @@ function emptyDraft(): InterviewResumeDraft {
   };
 }
 
+function cleanItem(item: string) {
+  return item
+    .replace(/^(i|we)\s+(used|use|worked with|work with|handled|managed|supported|coordinated|created|built|led|was responsible for)\s+/i, "")
+    .replace(/^(and|also|plus|including)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/g, "")
+    .trim();
+}
+
 function unique(items: string[]) {
   const seen = new Set<string>();
   return items
-    .map((item) => item.trim())
-    .filter(Boolean)
+    .map(cleanItem)
+    .filter((item) => item.length > 1 && !weakAnswerPattern.test(item))
     .filter((item) => {
       const key = item.toLowerCase();
       if (seen.has(key)) return false;
@@ -161,16 +214,111 @@ function unique(items: string[]) {
     });
 }
 
+function titleCase(value: string) {
+  const acronyms = new Set(["ai", "api", "ats", "crm", "css", "html", "it", "kpi", "pos", "qa", "sql", "ui", "ux"]);
+  return value
+    .split(" ")
+    .map((part) => {
+      const clean = part.toLowerCase();
+      if (acronyms.has(clean)) return clean.toUpperCase();
+      return clean.charAt(0).toUpperCase() + clean.slice(1);
+    })
+    .join(" ");
+}
+
 function splitSignals(value: string) {
   return unique(
     value
-      .split(/,|;|\n|\band\b/i)
-      .map((item) => item.replace(/^(i|we)\s+/i, "").trim())
+      .split(/,|;|\n|•|\band\b/i)
+      .map((item) => item.trim())
       .filter((item) => item.length > 2)
   );
 }
 
-function scoreStatus(values: string[]): InterviewFieldStatus["status"] {
+function splitSentences(value: string) {
+  return unique(value.split(/(?<=[.!?])\s+|\n+/).filter((item) => item.trim().length > 2));
+}
+
+function hasSpecificSignal(value: string) {
+  return /\d|\$|%|\b(Salesforce|HubSpot|Zendesk|Intercom|ServiceNow|Jira|Asana|Trello|Slack|Excel|Google Sheets|Active Directory|SQL|Python|Tableau|Power BI)\b/i.test(
+    value
+  );
+}
+
+function valuesForField(draft: InterviewResumeDraft, key: keyof InterviewResumeDraft) {
+  const raw = draft[key];
+  if (Array.isArray(raw)) {
+    return raw.map((item) => (typeof item === "string" ? item : [item.title, item.company, item.timeInRole, ...item.notes].join(" "))).filter(Boolean);
+  }
+  return raw ? [String(raw)] : [];
+}
+
+function scoreField(key: keyof InterviewResumeDraft, values: string[], draft: InterviewResumeDraft): InterviewFieldStatus["status"] {
+  const joined = values.join(" ").trim();
+  if (!values.length || !joined) return "empty";
+  if (values.every((value) => weakAnswerPattern.test(value))) return "weak";
+
+  const specificity = values.filter(hasSpecificSignal).length;
+  const hasAction = actionVerbPattern.test(joined) || responsibilityPattern.test(joined);
+  const hasMetric = /\d|\$|%/.test(joined);
+  const hasMultiple = values.length >= 2;
+
+  if (key === "targetRole") {
+    if (joined.length < 4) return "weak";
+    return /\b(associate|assistant|coordinator|specialist|analyst|technician|representative|support|success|operations|admin|sales|project|developer|tester)\b/i.test(joined)
+      ? "strong"
+      : "usable";
+  }
+
+  if (key === "roles") {
+    const role = draft.roles[0];
+    if (!role?.title) return "empty";
+    if (role.title.length < 4) return "weak";
+    if (role.company || role.timeInRole || role.notes.join(" ").length > 60) return "strong";
+    return "usable";
+  }
+
+  if (key === "responsibilities") {
+    if (values.length >= 3 && hasAction) return "strong";
+    if (values.length >= 2 || joined.length > 45) return "usable";
+    return "weak";
+  }
+
+  if (key === "achievements" || key === "projects") {
+    if (hasMetric || (hasAction && joined.length > 45) || values.length >= 2) return "strong";
+    return joined.length > 18 ? "usable" : "weak";
+  }
+
+  if (key === "metrics") {
+    if (values.length >= 2 || /\$|%|\d+\+/.test(joined)) return "strong";
+    return /\d/.test(joined) ? "usable" : "weak";
+  }
+
+  if (key === "tools") {
+    if (values.length >= 3 || specificity >= 2) return "strong";
+    return values.length >= 1 ? "usable" : "empty";
+  }
+
+  if (key === "skills") {
+    if (values.length >= 4) return "strong";
+    if (values.length >= 2 || joined.length > 35) return "usable";
+    return "weak";
+  }
+
+  if (key === "targetIndustry" || key === "experienceLevel" || key === "education") {
+    if (joined.length < 4) return "weak";
+    return joined.length > 35 || hasSpecificSignal(joined) ? "strong" : "usable";
+  }
+
+  if (key === "certifications" || key === "gapsOrWeakAreas") {
+    if (hasMultiple || joined.length > 40) return "strong";
+    return joined.length > 4 ? "usable" : "weak";
+  }
+
+  return scoreGeneric(values);
+}
+
+function scoreGeneric(values: string[]): InterviewFieldStatus["status"] {
   const totalLength = values.join(" ").length;
   if (!values.length) return "empty";
   if (values.length >= 3 || totalLength > 80) return "strong";
@@ -179,36 +327,31 @@ function scoreStatus(values: string[]): InterviewFieldStatus["status"] {
 }
 
 function statusForField(draft: InterviewResumeDraft, key: keyof InterviewResumeDraft, label: string, messages: InterviewMessage[]): InterviewFieldStatus {
-  const raw = draft[key];
-  const values = Array.isArray(raw)
-    ? raw.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).filter(Boolean)
-    : raw
-      ? [String(raw)]
-      : [];
+  const values = valuesForField(draft, key);
   const evidenceFromMessages = messages
     .filter((message) => message.role === "user")
-    .slice(-4)
+    .slice(-5)
     .map((message) => message.id);
-  const status = scoreStatus(values);
+  const status = scoreField(key, values, draft);
 
   return {
     fieldKey: key,
     label,
     status,
     evidenceFromMessages: values.length ? evidenceFromMessages : [],
-    notes: status === "empty" ? `${label} still needs an answer.` : `${label} has ${status} signal.`
+    notes: status === "empty" ? `${label} still needs an answer.` : `${label} has ${status} interview signal.`
   };
 }
 
 function calculateConfidence(statuses: InterviewFieldStatus[]) {
-  const weights = { empty: 0, weak: 0.3, usable: 0.72, strong: 1 };
-  const total = statuses.reduce((sum, status) => sum + weights[status.status], 0);
-  return Math.round((total / statuses.length) * 100);
+  const weights = { empty: 0, weak: 0.25, usable: 0.72, strong: 1 };
+  const core = statuses.filter((status) => ["targetRole", "roles", "responsibilities", "achievements", "projects", "tools", "skills"].includes(String(status.fieldKey)));
+  const total = core.reduce((sum, status) => sum + weights[status.status], 0);
+  return Math.round((total / Math.max(core.length, 1)) * 100);
 }
 
 export function getCurrentFieldStatuses(session: InterviewSession): InterviewFieldStatus[] {
-  const statuses = requiredStatusFields.map((field) => statusForField(session.resumeDraft, field.key, field.label, session.messages));
-  return statuses;
+  return requiredStatusFields.map((field) => statusForField(session.resumeDraft, field.key, field.label, session.messages));
 }
 
 function withStatuses(session: InterviewSession): InterviewSession {
@@ -249,14 +392,31 @@ function inferRoleFamily(text: string): RoleFamily {
   return roleFamilyKeywords.find(([, pattern]) => pattern.test(text))?.[0] ?? "Customer Success";
 }
 
+function extractTarget(answer: string) {
+  const cleaned = answer
+    .replace(/^(i want to be|i'?m aiming for|aiming for|targeting|looking for|my target is|target role is)\s+/i, "")
+    .trim();
+  const industryMatch = cleaned.match(/\b(?:in|within|for)\s+([A-Za-z /&-]{3,48})$/i);
+  const rolePart = industryMatch ? cleaned.slice(0, industryMatch.index).trim() : cleaned;
+  const experienceMatch = answer.match(/\b(entry[- ]level|early[- ]career|associate[- ]level|junior|mid[- ]level|senior|career changer)\b/i);
+
+  return {
+    targetRole: cleanItem(rolePart.replace(/[,.]$/g, "")),
+    targetIndustry: industryMatch?.[1]?.trim() ?? "",
+    experienceLevel: experienceMatch?.[1] ? titleCase(experienceMatch[1].replace("-", " ")) : ""
+  };
+}
+
 function extractRole(answer: string) {
   const atMatch = answer.match(
-    /(?:as|role is|title is|worked as|i'm|i am|was)\s+(?:an?\s+)?([^,.]+?)(?:\s+at\s+([^,.]+?))?(?:\s+(?:from|since|for)\s+([^,.]+))?(?:,|\.|$)/i
+    /(?:as|role is|title is|worked as|i'm|i am|was|currently|most recent role is)\s+(?:an?\s+)?([^,.]+?)(?:\s+at\s+([^,.]+?))?(?:\s+(?:from|since|for)\s+([^,.]+))?(?:,|\.|$)/i
   );
-  const companyMatch = answer.match(/\bat\s+([A-Z][A-Za-z0-9&.\-\s]{2,40})(?:,|\.| from| since| for|$)/);
+  const companyMatch = answer.match(/\bat\s+([A-Z][A-Za-z0-9&.'’\-\s]{2,54})(?:,|\.| from| since| for|$)/);
   const timeMatch = answer.match(/(?:from|since|for)\s+([^,.]+)/i);
+  const title = atMatch?.[1]?.trim() ?? "";
+
   return {
-    title: atMatch?.[1]?.trim() ?? "",
+    title,
     company: atMatch?.[2]?.trim() ?? companyMatch?.[1]?.trim() ?? "",
     timeInRole: atMatch?.[3]?.trim() ?? timeMatch?.[1]?.trim() ?? "",
     notes: [answer]
@@ -273,93 +433,167 @@ function mergeRole(existing: InterviewResumeDraft["roles"], answer: string) {
 }
 
 function extractToolSignals(answer: string) {
-  const toolKeywords = answer.match(/\b(Salesforce|HubSpot|Zendesk|Intercom|ServiceNow|Jira|Asana|Trello|Slack|Excel|Google Sheets|Google Workspace|Microsoft Office|Active Directory|SQL|Python|Tableau|Power BI|Notion|Airtable|POS Systems)\b/gi);
-  return unique(toolKeywords ?? []);
+  const matchedTools = allToolOptions.filter((tool) => new RegExp(`\\b${tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(answer));
+  const toolClause = answer.match(/\b(?:tools? like|used|worked with|platforms? like|systems? like)\s+([^.;]+)/i)?.[1] ?? "";
+  const clauseTools = splitSignals(toolClause).filter((item) => item.length <= 32);
+  return unique([...matchedTools, ...clauseTools]).slice(0, 12);
 }
 
 function extractMetricSignals(answer: string) {
-  return unique(answer.match(/\b(?:\d+[\w+%$-]*\s+)?(?:customers|clients|users|tickets|calls|reports|projects|team members|people|transactions|orders|accounts|dollars|revenue|budget|weekly|monthly|daily)\b[^,.]*/gi) ?? []);
+  return unique(answer.match(metricPattern) ?? []).slice(0, 10);
+}
+
+function extractResponsibilitySignals(answer: string) {
+  const sentenceSignals = splitSentences(answer).filter((sentence) => responsibilityPattern.test(sentence));
+  const listSignals = responsibilityPattern.test(answer) ? splitSignals(answer.replace(responsibilityPattern, "")) : [];
+  return unique([...sentenceSignals, ...listSignals]).slice(0, 12);
+}
+
+function extractAchievementSignals(answer: string) {
+  return unique(splitSentences(answer).filter((sentence) => achievementVerbPattern.test(sentence))).slice(0, 10);
+}
+
+function extractEducationSignals(answer: string) {
+  if (!educationPattern.test(answer)) return { education: "", certifications: [] };
+  const certifications = splitSignals(answer).filter((item) => /\b(certification|certificate|certified|license|bootcamp|course|training)\b/i.test(item));
+  const education = /\b(university|college|school|degree|bachelor'?s?|master'?s?|diploma)\b/i.test(answer) ? answer : "";
+  return { education, certifications };
+}
+
+function extractSkillSignals(answer: string) {
+  const lower = answer.toLowerCase();
+  const matched = skillKeywords.filter((skill) => lower.includes(skill));
+  const skillClause = answer.match(/\b(?:skills? like|strengths? (?:are|include)|good at)\s+([^.;]+)/i)?.[1] ?? "";
+  return unique([...matched.map(titleCase), ...splitSignals(skillClause).map(titleCase)]).slice(0, 12);
+}
+
+function extractProjectSignals(answer: string) {
+  if (!/\b(project|portfolio|built|created|launched|implemented|case study|website|dashboard|workflow|automation)\b/i.test(answer)) return [];
+  return unique(splitSentences(answer).length ? splitSentences(answer) : splitSignals(answer)).slice(0, 8);
+}
+
+function extractGapSignals(answer: string) {
+  if (!gapPattern.test(answer)) return [];
+  return unique(splitSentences(answer).length ? splitSentences(answer) : [answer]).slice(0, 6);
+}
+
+function applyGeneralExtraction(draft: InterviewResumeDraft, answer: string) {
+  const nextDraft = { ...draft };
+  const metrics = extractMetricSignals(answer);
+  const tools = extractToolSignals(answer);
+  const responsibilities = extractResponsibilitySignals(answer);
+  const achievements = extractAchievementSignals(answer);
+  const skills = extractSkillSignals(answer);
+  const projects = extractProjectSignals(answer);
+  const gaps = extractGapSignals(answer);
+  const education = extractEducationSignals(answer);
+
+  nextDraft.metrics = unique([...nextDraft.metrics, ...metrics]).slice(0, 10);
+  nextDraft.tools = unique([...nextDraft.tools, ...tools]).slice(0, 12);
+  nextDraft.responsibilities = unique([...nextDraft.responsibilities, ...responsibilities]).slice(0, 12);
+  nextDraft.achievements = unique([...nextDraft.achievements, ...achievements]).slice(0, 10);
+  nextDraft.skills = unique([...nextDraft.skills, ...skills]).slice(0, 12);
+  nextDraft.projects = unique([...nextDraft.projects, ...projects]).slice(0, 8);
+  nextDraft.gapsOrWeakAreas = unique([...nextDraft.gapsOrWeakAreas, ...gaps]).slice(0, 6);
+  nextDraft.certifications = unique([...nextDraft.certifications, ...education.certifications]).slice(0, 6);
+  nextDraft.education = nextDraft.education || education.education;
+
+  return nextDraft;
 }
 
 function addMessage(session: InterviewSession, message: InterviewMessage) {
   return { ...session, messages: [...session.messages, message] };
 }
 
+function isStageSatisfied(session: InterviewSession, stageId: InterviewStageId) {
+  const statuses = session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session);
+  const status = (key: keyof InterviewResumeDraft) => statuses.find((field) => field.fieldKey === key)?.status ?? "empty";
+  const isUsable = (key: keyof InterviewResumeDraft) => ["usable", "strong"].includes(status(key));
+  const answeredCurrentStage = session.completedStages.includes(stageId);
+
+  if (stageId === "role_targeting") return isUsable("targetRole");
+  if (stageId === "background_overview") return isUsable("experienceLevel") || isUsable("roles");
+  if (stageId === "current_or_recent_role") return isUsable("roles");
+  if (stageId === "responsibilities") return isUsable("responsibilities");
+  if (stageId === "achievements") return isUsable("achievements") || isUsable("projects");
+  if (stageId === "metrics") return isUsable("metrics") || answeredCurrentStage;
+  if (stageId === "tools_and_skills") return isUsable("tools") || isUsable("skills");
+  if (stageId === "projects_or_portfolio") return isUsable("projects") || answeredCurrentStage;
+  if (stageId === "education_and_certifications") return isUsable("education") || isUsable("certifications") || answeredCurrentStage;
+  if (stageId === "gaps_and_positioning") return isUsable("gapsOrWeakAreas") || answeredCurrentStage;
+  return canGenerateResumeFromInterview(session);
+}
+
 export function updateInterviewDraftFromUserAnswer(session: InterviewSession, userMessage: InterviewMessage): InterviewSession {
   const answer = userMessage.content.trim();
-  const draft = session.resumeDraft;
-  const nextDraft: InterviewResumeDraft = { ...draft };
+  const nextDraft: InterviewResumeDraft = applyGeneralExtraction(session.resumeDraft, answer);
 
   if (session.currentStage === "role_targeting") {
-    nextDraft.targetRole = answer;
-    const industryMatch = answer.match(/\b(?:in|for|at)\s+([A-Za-z /&-]+)$/i);
-    nextDraft.targetIndustry = industryMatch?.[1]?.trim() ?? nextDraft.targetIndustry;
+    const target = extractTarget(answer);
+    nextDraft.targetRole = target.targetRole || nextDraft.targetRole;
+    nextDraft.targetIndustry = target.targetIndustry || nextDraft.targetIndustry;
+    nextDraft.experienceLevel = target.experienceLevel || nextDraft.experienceLevel;
   }
 
   if (session.currentStage === "background_overview") {
-    nextDraft.experienceLevel = answer.length > 80 ? "Early-career with multiple work signals" : answer;
+    nextDraft.experienceLevel = nextDraft.experienceLevel || (answer.length > 80 ? "Early-career with multiple work signals" : answer);
+    nextDraft.roles = mergeRole(nextDraft.roles, answer);
   }
 
   if (session.currentStage === "current_or_recent_role") {
     nextDraft.roles = mergeRole(nextDraft.roles, answer);
   }
 
-  if (session.currentStage === "responsibilities") {
-    nextDraft.responsibilities = unique([...nextDraft.responsibilities, ...splitSignals(answer)]).slice(0, 10);
+  if (session.currentStage === "responsibilities" && !nextDraft.responsibilities.length) {
+    nextDraft.responsibilities = unique([...nextDraft.responsibilities, ...splitSignals(answer)]).slice(0, 12);
   }
 
-  if (session.currentStage === "achievements") {
-    nextDraft.achievements = unique([...nextDraft.achievements, ...splitSignals(answer)]).slice(0, 8);
+  if (session.currentStage === "achievements" && !nextDraft.achievements.length && !skipPattern.test(answer)) {
+    nextDraft.achievements = unique([...nextDraft.achievements, answer]).slice(0, 10);
   }
 
-  if (session.currentStage === "metrics") {
-    nextDraft.metrics = unique([...nextDraft.metrics, ...extractMetricSignals(answer), ...splitSignals(answer).filter((item) => /\d/.test(item))]).slice(0, 8);
+  if (session.currentStage === "metrics" && !nextDraft.metrics.length && /\d/.test(answer)) {
+    nextDraft.metrics = unique([...nextDraft.metrics, answer]).slice(0, 10);
   }
 
   if (session.currentStage === "tools_and_skills") {
-    nextDraft.tools = unique([...nextDraft.tools, ...extractToolSignals(answer)]).slice(0, 8);
-    nextDraft.skills = unique([...nextDraft.skills, ...splitSignals(answer).filter((item) => !extractToolSignals(answer).includes(item))]).slice(0, 10);
+    const extraSkills = splitSignals(answer).filter((item) => !nextDraft.tools.some((tool) => tool.toLowerCase() === item.toLowerCase()));
+    nextDraft.skills = unique([...nextDraft.skills, ...extraSkills.map(titleCase)]).slice(0, 12);
   }
 
-  if (session.currentStage === "projects_or_portfolio") {
-    nextDraft.projects = unique([...nextDraft.projects, ...splitSignals(answer)]).slice(0, 6);
+  if (session.currentStage === "projects_or_portfolio" && !skipPattern.test(answer)) {
+    nextDraft.projects = unique([...nextDraft.projects, ...extractProjectSignals(answer), answer]).slice(0, 8);
   }
 
   if (session.currentStage === "education_and_certifications") {
-    if (/cert|certificate|license|training/i.test(answer)) {
-      nextDraft.certifications = unique([...nextDraft.certifications, ...splitSignals(answer)]).slice(0, 6);
-    } else {
-      nextDraft.education = answer;
-    }
+    const education = extractEducationSignals(answer);
+    nextDraft.certifications = unique([...nextDraft.certifications, ...education.certifications]).slice(0, 6);
+    if (education.education || (!skipPattern.test(answer) && answer.length > 4)) nextDraft.education = education.education || answer;
   }
 
-  if (session.currentStage === "gaps_and_positioning") {
-    nextDraft.gapsOrWeakAreas = unique([...nextDraft.gapsOrWeakAreas, ...splitSignals(answer)]).slice(0, 6);
+  if (session.currentStage === "gaps_and_positioning" && !skipPattern.test(answer)) {
+    nextDraft.gapsOrWeakAreas = unique([...nextDraft.gapsOrWeakAreas, ...extractGapSignals(answer), answer]).slice(0, 6);
   }
 
   const withUserMessage = addMessage(session, userMessage);
   const completedStages = unique([...session.completedStages, session.currentStage]) as InterviewStageId[];
-  const stagedSession = withStatuses({
-    ...withUserMessage,
-    resumeDraft: nextDraft,
-    completedStages,
-    currentStage: getNextInterviewStage({ ...withUserMessage, resumeDraft: nextDraft, completedStages, fieldStatuses: [] }).id
-  });
+  const statusSession = withStatuses({ ...withUserMessage, resumeDraft: nextDraft, completedStages });
+  const nextStage = getNextInterviewStage(statusSession);
 
-  return stagedSession;
+  return withStatuses({
+    ...statusSession,
+    currentStage: nextStage.id
+  });
 }
 
 export function getNextInterviewStage(session: InterviewSession): InterviewStage {
-  const missing = getMissingOrWeakFields(session);
-  if (missing.some((field) => field.fieldKey === "targetRole")) return interviewStages[0];
-  if (missing.some((field) => field.fieldKey === "roles")) return interviewStages[2];
-  if (missing.some((field) => field.fieldKey === "responsibilities")) return interviewStages[3];
-  if (missing.some((field) => field.fieldKey === "metrics")) return interviewStages[5];
-  if (missing.some((field) => field.fieldKey === "tools" || field.fieldKey === "skills")) return interviewStages[6];
-
   const currentIndex = interviewStages.findIndex((stage) => stage.id === session.currentStage);
-  const nextUncompleted = interviewStages.find((stage, index) => index > currentIndex && !session.completedStages.includes(stage.id));
-  return nextUncompleted ?? interviewStages.at(-1)!;
+  const currentStage = interviewStages[currentIndex] ?? interviewStages[0];
+
+  if (!isStageSatisfied(session, currentStage.id)) return currentStage;
+
+  const nextStage = interviewStages.find((stage, index) => index > currentIndex && !isStageSatisfied(session, stage.id));
+  return nextStage ?? interviewStages.at(-1)!;
 }
 
 export function getMissingOrWeakFields(session: InterviewSession): InterviewFieldStatus[] {
@@ -367,17 +601,125 @@ export function getMissingOrWeakFields(session: InterviewSession): InterviewFiel
   return statuses.filter((field) => field.status === "empty" || field.status === "weak");
 }
 
-export function canGenerateResumeFromInterview(session: InterviewSession) {
+function fieldStatus(session: InterviewSession, key: keyof InterviewResumeDraft) {
   const statuses = session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session);
-  const requiredUsable = ["targetRole", "roles", "responsibilities"];
-  return requiredUsable.every((key) => {
-    const status = statuses.find((field) => field.fieldKey === key)?.status;
-    return status === "usable" || status === "strong";
-  });
+  return statuses.find((field) => field.fieldKey === key)?.status ?? "empty";
+}
+
+function isReadyField(session: InterviewSession, key: keyof InterviewResumeDraft) {
+  return ["usable", "strong"].includes(fieldStatus(session, key));
+}
+
+export function canGenerateResumeFromInterview(session: InterviewSession) {
+  return (
+    isReadyField(session, "targetRole") &&
+    isReadyField(session, "roles") &&
+    isReadyField(session, "responsibilities") &&
+    (isReadyField(session, "skills") || isReadyField(session, "tools")) &&
+    (isReadyField(session, "achievements") || isReadyField(session, "projects"))
+  );
 }
 
 export function assistantQuestionForStage(stageId: InterviewStageId) {
   return interviewStages.find((stage) => stage.id === stageId)?.exampleAssistantQuestion ?? interviewStages[0].exampleAssistantQuestion;
+}
+
+function avoidRepeat(session: InterviewSession, options: string[]) {
+  const recentAssistant = [...session.messages].reverse().find((message) => message.role === "assistant")?.content;
+  return options.find((option) => option !== recentAssistant) ?? options[0];
+}
+
+export function getNextAssistantQuestion(session: InterviewSession): string {
+  const weak = getMissingOrWeakFields(session);
+  const weakKeys = new Set(weak.map((field) => field.fieldKey));
+
+  if (session.currentStage === "role_targeting") {
+    return avoidRepeat(session, [
+      "What kind of role are you targeting, and what industry is it in?",
+      "Give me the exact job title you want next, plus the lane or industry if you know it.",
+      "Are you aiming for customer success, operations, admin, IT, project coordination, sales, business, or tech?"
+    ]);
+  }
+
+  if (session.currentStage === "background_overview") {
+    return avoidRepeat(session, [
+      "Give me the quick version of your work background so far.",
+      "How would you describe your experience level and the kind of work you have done most?",
+      "What jobs or environments should this resume translate into stronger career language?"
+    ]);
+  }
+
+  if (session.currentStage === "current_or_recent_role") {
+    return avoidRepeat(session, [
+      "What is your current or most recent role, where did you do it, and when?",
+      "Tell me your title, company, and approximate dates for your most recent work.",
+      "What was the job called, who was it with, and how long were you there?"
+    ]);
+  }
+
+  if (session.currentStage === "responsibilities") {
+    return avoidRepeat(session, [
+      weakKeys.has("responsibilities")
+        ? "What did you actually do day to day in that role? Give me 2-4 concrete duties."
+        : "What other duties should be included so the resume feels accurate?",
+      "What requests, workflows, customers, records, schedules, systems, or issues did you handle?",
+      "Plain language is fine: what were you responsible for most weeks?"
+    ]);
+  }
+
+  if (session.currentStage === "achievements") {
+    return avoidRepeat(session, [
+      "What improved because of your work, even in a small way?",
+      "Can you name one result, win, project, customer outcome, or process improvement?",
+      "Did your work improve speed, accuracy, customer satisfaction, reliability, compliance, or efficiency?"
+    ]);
+  }
+
+  if (session.currentStage === "metrics") {
+    return avoidRepeat(session, [
+      "Can you give me one measurable result, even approximate?",
+      "What volume did you handle: customers, tickets, calls, reports, money, team size, projects, or transactions?",
+      "Estimate if needed: how many people, requests, reports, calls, or projects did you support?"
+    ]);
+  }
+
+  if (session.currentStage === "tools_and_skills") {
+    return avoidRepeat(session, [
+      "What tools, platforms, systems, or skills did you use regularly?",
+      "List the software, systems, ticketing tools, spreadsheets, CRMs, or communication tools you touched.",
+      "What skills should a recruiter see quickly: documentation, troubleshooting, customer communication, reporting, scheduling, or something else?"
+    ]);
+  }
+
+  if (session.currentStage === "projects_or_portfolio") {
+    return avoidRepeat(session, [
+      "What project best proves you can do this job?",
+      "Any project, portfolio link, workflow, report, dashboard, launch, or improvement worth mentioning?",
+      "If there is no project to include, say skip and we will move on."
+    ]);
+  }
+
+  if (session.currentStage === "education_and_certifications") {
+    return avoidRepeat(session, [
+      "What education, certifications, training, bootcamps, or courses should appear?",
+      "Any degree, certificate, license, course, or training that supports this target role?",
+      "If there is no education or certification to include right now, say skip."
+    ]);
+  }
+
+  if (session.currentStage === "gaps_and_positioning") {
+    return avoidRepeat(session, [
+      "What part of your background might look weak to a recruiter?",
+      "Anything we should position carefully, like a gap, career change, limited direct experience, or still-learning area?",
+      "If nothing needs positioning, say skip and Career Forge will prepare the draft."
+    ]);
+  }
+
+  if (!canGenerateResumeFromInterview(session)) {
+    return "I still need a target role, one role, responsibilities, tools or skills, and one achievement or project. What can you add?";
+  }
+
+  return "The resume draft has enough signal. Anything missing or inaccurate before generating the package?";
 }
 
 export function createUserInterviewMessage(content: string): InterviewMessage {
@@ -388,17 +730,22 @@ export function createAssistantInterviewMessage(content: string): InterviewMessa
   return { id: makeId("msg"), role: "assistant", content, createdAt: now() };
 }
 
+function metricForPattern(metrics: string, pattern: RegExp) {
+  return metrics
+    .split(",")
+    .map((metric) => metric.trim())
+    .find((metric) => pattern.test(metric)) ?? "";
+}
+
 export function convertInterviewDraftToExistingResumeInput(session: InterviewSession): IntakeData {
   const draft = session.resumeDraft;
   const role = draft.roles[0];
-  const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities].join(" "));
+  const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, role?.title ?? ""].join(" "));
   const metrics = draft.metrics.join(", ");
 
   return {
     ...initialIntake,
-    fullName: "Candidate Name",
-    email: "candidate@email.com",
-    targetJobTitle: draft.targetRole,
+    targetJobTitle: draft.targetRole || initialIntake.targetJobTitle,
     roleFamily,
     currentTitle: role?.title ?? "",
     currentCompany: role?.company ?? "",
@@ -406,16 +753,17 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     tools: draft.tools.join(", "),
     responsibilities: draft.responsibilities.join(", "),
     selectedResponsibilities: unique([...draft.responsibilities, ...draft.skills]).slice(0, 10),
-    customersServed: /customer|client|user/i.test(metrics) ? metrics : "",
-    ticketsHandled: /ticket|case|issue/i.test(metrics) ? metrics : "",
-    projectsSupported: /project/i.test(metrics) ? metrics : "",
-    teamSizeSupported: /team|people|members/i.test(metrics) ? metrics : "",
-    callsHandled: /call/i.test(metrics) ? metrics : "",
-    reportsCreated: /report|document/i.test(metrics) ? metrics : "",
-    selectedOutcomes: draft.achievements.slice(0, 3),
+    customersServed: metricForPattern(metrics, /customer|client|user|people/i),
+    ticketsHandled: metricForPattern(metrics, /ticket|case|issue|request/i),
+    projectsSupported: metricForPattern(metrics, /project|launch|implementation/i),
+    teamSizeSupported: metricForPattern(metrics, /team|people|members|staff/i),
+    callsHandled: metricForPattern(metrics, /call/i),
+    revenueInfluenced: metricForPattern(metrics, /\$|revenue|budget|money|dollars/i),
+    reportsCreated: metricForPattern(metrics, /report|document|dashboard/i),
+    selectedOutcomes: unique([...draft.achievements, ...draft.projects]).slice(0, 3),
     outcomes: draft.achievements.join(", "),
     customRoleIndustry: draft.targetIndustry,
     customRoleTransferableSkills: draft.skills,
-    customRoleNotes: unique([...draft.projects, ...draft.gapsOrWeakAreas]).join(", ")
+    customRoleNotes: unique([...draft.projects, ...draft.gapsOrWeakAreas, draft.education, ...draft.certifications]).join(", ")
   };
 }
