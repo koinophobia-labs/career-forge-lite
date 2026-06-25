@@ -58,6 +58,7 @@ const {
   canGenerateResumeFromInterview,
   convertInterviewDraftToExistingResumeInput,
   createInitialInterviewSession,
+  createNextAssistantInterviewTurn,
   createUserInterviewMessage,
   generateResumePackageFromInterview,
   getInterviewCoachingMessages,
@@ -66,6 +67,7 @@ const {
   getInterviewResumeStrengthLabel,
   getMissingOrWeakFields,
   getNextAssistantQuestion,
+  getSmartInterviewSummary,
   getWeakestInterviewStage,
   updateInterviewDraftFromUserAnswer
 } = loadTsModule(path.join(root, "src/lib/interview-mode.ts"));
@@ -268,13 +270,22 @@ assert(canUseInterviewMode(), "interview mode can be used in preview");
 assert(getInterviewModeLimitState(interviewSession).answerLimit === 6, "interview preview has answer limit");
 assert(!getInterviewModeLimitState(interviewSession).isLocked, "fresh interview preview is not locked");
 assert(getInterviewCoachingMessages(interviewSession).some((message) => /target role/i.test(message)), "weak target coaching exists");
+assert(interviewSession.memory.repeatedQuestionProtection.length >= 1, "initial conversation memory tracks asked question");
 
 let weakInterviewSession = updateInterviewDraftFromUserAnswer(
   createInitialInterviewSession(),
   createUserInterviewMessage("cs")
 );
 assert(weakInterviewSession.currentStage === "role_targeting", "weak target answer stays on target stage");
-assert(/exact job title|targeting|industry|lane/i.test(getNextAssistantQuestion(weakInterviewSession)), "weak target gets focused follow-up");
+const weakFollowUp = getNextAssistantQuestion(weakInterviewSession);
+assert(/That is a start|helpful|Got it/i.test(weakFollowUp), "assistant acknowledges weak answer");
+assert(/exact job title|targeting|industry|lane|role/i.test(weakFollowUp), "weak target gets focused follow-up");
+const weakTurn = createNextAssistantInterviewTurn(weakInterviewSession);
+assert(weakTurn.memory.followUpHistory.length > weakInterviewSession.memory.followUpHistory.length, "assistant turn records follow-up history");
+assert(weakTurn.memory.repeatedQuestionProtection.length > weakInterviewSession.memory.repeatedQuestionProtection.length, "assistant turn records duplicate protection");
+
+const repeatQuestion = getNextAssistantQuestion(weakTurn);
+assert(repeatQuestion !== weakTurn.messages.at(-1)?.content, "duplicate question prevention changes repeated assistant response");
 
 interviewSession = updateInterviewDraftFromUserAnswer(
   interviewSession,
@@ -283,6 +294,7 @@ interviewSession = updateInterviewDraftFromUserAnswer(
 assert(interviewSession.resumeDraft.targetRole.includes("Customer Success Associate"), "interview captures target role");
 assert(interviewSession.resumeDraft.targetIndustry.toLowerCase().includes("technology"), "interview captures target industry");
 assert(interviewSession.currentStage === "background_overview", "usable target advances to background stage");
+assert(interviewSession.memory.discoveredFacts.some((fact) => /Customer Success Associate/i.test(fact)), "conversation memory stores discovered target");
 
 interviewSession = updateInterviewDraftFromUserAnswer(
   interviewSession,
@@ -319,8 +331,14 @@ interviewSession = updateInterviewDraftFromUserAnswer(
 assert(interviewSession.resumeDraft.tools.includes("Zendesk"), "interview extracts known tools");
 assert(interviewSession.resumeDraft.skills.some((item) => /Documentation/i.test(item)), "interview extracts skills");
 assert(canGenerateResumeFromInterview(interviewSession), "interview can generate after minimum fields are usable");
-assert(/project|education|certifications|training|resume draft|generate/i.test(getNextAssistantQuestion(interviewSession)), "assistant question progresses after readiness");
+const readyFollowUp = getNextAssistantQuestion(interviewSession);
+assert(/Nice|helpful|Perfect|Excellent|Great|That/i.test(readyFollowUp), "assistant acknowledges useful answer");
+assert(/project|education|certifications|training|resume draft|generate|proof/i.test(readyFollowUp), "assistant question progresses after readiness");
 assert(["Usable", "Strong", "Application Ready"].includes(getInterviewResumeStrengthLabel(interviewSession)), "review strength label is available");
+assert(interviewSession.memory.conversationScore > 0, "conversation score increases with useful answers");
+const smartSummary = getSmartInterviewSummary(interviewSession);
+assert(smartSummary.learned.some((fact) => /DraftKings|Customer Success/i.test(fact)), "smart summary includes learned facts");
+assert(Array.isArray(smartSummary.stillLearning), "smart summary includes open topics");
 
 const statuses = getCurrentFieldStatuses(interviewSession);
 assert(statuses.find((field) => field.fieldKey === "responsibilities")?.status === "strong", "responsibility status uses specificity");

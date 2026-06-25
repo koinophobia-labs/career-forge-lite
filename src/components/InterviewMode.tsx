@@ -8,16 +8,15 @@ import { PremiumBadge, PremiumLockedPanel, PremiumPreviewMeter, UpgradeCallout }
 import { ResumePreview } from "@/components/ResumePreview";
 import {
   canGenerateResumeFromInterview,
-  createAssistantInterviewMessage,
   createInitialInterviewSession,
+  createNextAssistantInterviewTurn,
   createUserInterviewMessage,
   generateResumePackageFromInterview,
   getInterviewCoachingMessages,
   getMissingOrWeakFields,
-  getNextAssistantQuestion,
+  getSmartInterviewSummary,
   getWeakestInterviewStage,
   type InterviewGeneratedPackage,
-  interviewStages,
   markInterviewReadyForGeneration,
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
@@ -39,16 +38,14 @@ export function InterviewMode() {
   const [session, setSession] = useState<InterviewSession>(() => createInitialInterviewSession());
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<InterviewModeState>("interview");
+  const [isThinking, setIsThinking] = useState(false);
   const [generatedPackage, setGeneratedPackage] = useState<InterviewGeneratedPackage | null>(null);
 
-  const currentStage = useMemo(
-    () => interviewStages.find((stage) => stage.id === session.currentStage) ?? interviewStages[0],
-    [session.currentStage]
-  );
   const missingFields = useMemo(() => getMissingOrWeakFields(session), [session]);
   const canGenerate = canGenerateResumeFromInterview(session);
   const limitState = useMemo(() => getInterviewModeLimitState(session), [session]);
   const coachingMessages = useMemo(() => getInterviewCoachingMessages(session), [session]);
+  const smartSummary = useMemo(() => getSmartInterviewSummary(session), [session]);
   const statusCounts = useMemo(
     () =>
       session.fieldStatuses.reduce(
@@ -77,14 +74,13 @@ export function InterviewMode() {
 
     const userMessage = createUserInterviewMessage(content);
     const updated = updateInterviewDraftFromUserAnswer(session, userMessage);
-    const nextPrompt = getNextAssistantQuestion(updated);
-    const nextSession: InterviewSession = {
-      ...updated,
-      messages: [...updated.messages, createAssistantInterviewMessage(nextPrompt)]
-    };
-
-    setSession(nextSession);
+    setSession(updated);
     setInput("");
+    setIsThinking(true);
+    window.setTimeout(() => {
+      setSession(createNextAssistantInterviewTurn(updated));
+      setIsThinking(false);
+    }, 180);
   }
 
   function handleGenerate() {
@@ -106,10 +102,7 @@ export function InterviewMode() {
   function handleImproveWeakAreas() {
     const weakestStage = getWeakestInterviewStage(session);
     const targetedSession: InterviewSession = { ...session, currentStage: weakestStage };
-    setSession({
-      ...targetedSession,
-      messages: [...targetedSession.messages, createAssistantInterviewMessage(getNextAssistantQuestion(targetedSession))]
-    });
+    setSession(createNextAssistantInterviewTurn(targetedSession));
     setMode("interview");
   }
 
@@ -117,6 +110,7 @@ export function InterviewMode() {
     setSession(createInitialInterviewSession());
     setGeneratedPackage(null);
     setInput("");
+    setIsThinking(false);
     setMode("interview");
   }
 
@@ -285,9 +279,11 @@ export function InterviewMode() {
 
             <div className="mt-7 rounded-md border border-white/10 bg-obsidian/45">
               <div className="border-b border-white/10 px-4 py-3">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/50">Current stage</p>
-                <h2 className="mt-1 text-lg font-bold text-paper">{currentStage.label}</h2>
-                <p className="mt-1 text-sm leading-6 text-paper/60">{currentStage.goal}</p>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/50">Interview Progress</p>
+                <h2 className="mt-1 text-lg font-bold text-paper">You are talking to Career Forge.</h2>
+                <p className="mt-1 text-sm leading-6 text-paper/60">
+                  I will remember what you share, ask follow-ups, and pull out resume-ready proof as we go.
+                </p>
               </div>
 
               <div className="max-h-[31rem] space-y-3 overflow-y-auto px-4 py-4">
@@ -306,6 +302,12 @@ export function InterviewMode() {
                     <p className="text-sm leading-6">{message.content}</p>
                   </article>
                 ))}
+                {isThinking && (
+                  <article className="max-w-[88%] rounded-md border border-cyan/20 bg-cyan/10 px-4 py-3 text-paper">
+                    <p className="mb-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/42">Career Forge</p>
+                    <p className="text-sm leading-6">Thinking... Generating next question...</p>
+                  </article>
+                )}
               </div>
 
               <form onSubmit={handleSend} className="border-t border-white/10 p-4">
@@ -345,7 +347,33 @@ export function InterviewMode() {
             <div className="mt-4">
               <UpgradeCallout />
             </div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/52">Resume readiness</p>
+            <div className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
+              <h2 className="text-sm font-bold text-paper">So far I&apos;ve learned</h2>
+              {smartSummary.learned.length ? (
+                <ul className="mt-3 space-y-2 text-sm text-paper/70">
+                  {smartSummary.learned.map((fact) => (
+                    <li key={fact}>Learned: {fact}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-paper/55">I am still learning your target role and recent experience.</p>
+              )}
+              {smartSummary.stillLearning.length > 0 && (
+                <>
+                  <h3 className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-paper/42">Still trying to learn</h3>
+                  <ul className="mt-2 space-y-2 text-sm text-paper/55">
+                    {smartSummary.stillLearning.map((item) => (
+                      <li key={item}>Open: {item}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-cyan">
+                Conversation quality: {smartSummary.conversationScore}
+              </p>
+            </div>
+
+            <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-paper/52">Resume readiness</p>
             <div className="mt-3 h-2 rounded-full bg-white/10">
               <div
                 className="h-2 rounded-full bg-cyan transition-all"

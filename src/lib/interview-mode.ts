@@ -2,6 +2,8 @@ import { allToolOptions, initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
 import type { IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 import type {
+  AssistantIntent,
+  ConversationMemory,
   InterviewFieldStatus,
   InterviewMessage,
   InterviewResumeDraft,
@@ -193,6 +195,21 @@ function emptyDraft(): InterviewResumeDraft {
   };
 }
 
+function emptyMemory(): ConversationMemory {
+  return {
+    discoveredFacts: [],
+    acknowledgedFacts: [],
+    discussedTopics: [],
+    completedTopics: [],
+    unansweredTopics: ["target role", "recent role", "responsibilities", "results", "tools", "metrics"],
+    followUpHistory: [],
+    repeatedQuestionProtection: [],
+    lastAssistantIntent: "",
+    lastUserIntent: "",
+    conversationScore: 0
+  };
+}
+
 function cleanItem(item: string) {
   return item
     .replace(/^(i|we)\s+(used|use|worked with|work with|handled|managed|supported|coordinated|created|built|led|was responsible for)\s+/i, "")
@@ -373,7 +390,8 @@ export function createInitialInterviewSession(): InterviewSession {
   const initialMessage: InterviewMessage = {
     id: makeId("msg"),
     role: "assistant",
-    content: interviewStages[0].exampleAssistantQuestion,
+    content:
+      "Welcome. We will build this like a career-coach conversation, not a form.\n\nWhat kind of role are you targeting, and what industry is it in?",
     createdAt
   };
 
@@ -381,6 +399,19 @@ export function createInitialInterviewSession(): InterviewSession {
     id: makeId("interview"),
     messages: [initialMessage],
     resumeDraft: emptyDraft(),
+    memory: {
+      ...emptyMemory(),
+      followUpHistory: [
+        {
+          intent: "clarify",
+          question: "What kind of role are you targeting, and what industry is it in?",
+          stage: "role_targeting",
+          createdAt
+        }
+      ],
+      repeatedQuestionProtection: ["what kind of role are you targeting and what industry is it in"],
+      lastAssistantIntent: "clarify"
+    },
     fieldStatuses: [],
     currentStage: "role_targeting",
     completedStages: [],
@@ -512,6 +543,131 @@ function addMessage(session: InterviewSession, message: InterviewMessage) {
   return { ...session, messages: [...session.messages, message] };
 }
 
+function normalizeQuestion(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function lastUserAnswer(session: InterviewSession) {
+  return [...session.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+}
+
+function inferUserIntent(answer: string) {
+  if (weakAnswerPattern.test(answer) || answer.trim().split(/\s+/).length < 4) return "vague_answer";
+  if (extractMetricSignals(answer).length) return "shared_metrics";
+  if (extractToolSignals(answer).length) return "shared_tools";
+  if (extractAchievementSignals(answer).length) return "shared_results";
+  if (/\b(led|supervised|trained|managed a team|mentored)\b/i.test(answer)) return "shared_leadership";
+  if (/\b(problem|issue|challenge|resolved|fixed|troubleshot)\b/i.test(answer)) return "shared_problem_solving";
+  return "detailed_answer";
+}
+
+function factsFromDraft(draft: InterviewResumeDraft) {
+  const role = draft.roles[0];
+  return unique([
+    draft.targetRole ? `Targeting ${draft.targetRole}` : "",
+    draft.targetIndustry ? `Interested in ${draft.targetIndustry}` : "",
+    role?.title ? `${role.title}${role.company ? ` at ${role.company}` : ""}${role.timeInRole ? ` (${role.timeInRole})` : ""}` : "",
+    ...draft.tools.slice(0, 3).map((tool) => `Used ${tool}`),
+    ...draft.metrics.slice(0, 2),
+    ...draft.achievements.slice(0, 2)
+  ]);
+}
+
+function topicsFromDraft(draft: InterviewResumeDraft) {
+  return unique([
+    draft.targetRole ? "target role" : "",
+    draft.roles.length ? "recent role" : "",
+    draft.responsibilities.length ? "responsibilities" : "",
+    draft.tools.length || draft.skills.length ? "tools and skills" : "",
+    draft.metrics.length ? "scope and metrics" : "",
+    draft.achievements.length ? "results" : "",
+    draft.projects.length ? "projects" : "",
+    draft.education || draft.certifications.length ? "education and certifications" : ""
+  ]);
+}
+
+function scoreConversation(answer: string, session: InterviewSession) {
+  let score = session.memory.conversationScore;
+  const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+  const repeated = session.messages.filter((message) => message.role === "user" && message.content.toLowerCase() === answer.toLowerCase()).length > 1;
+
+  if (wordCount >= 8) score += 2;
+  if (wordCount >= 18) score += 2;
+  if (extractMetricSignals(answer).length) score += 3;
+  if (extractToolSignals(answer).length) score += 2;
+  if (extractAchievementSignals(answer).length) score += 3;
+  if (/\b(led|trained|supervised|mentored|managed a team)\b/i.test(answer)) score += 2;
+  if (weakAnswerPattern.test(answer) || wordCount < 4) score -= 2;
+  if (repeated) score -= 2;
+
+  return Math.max(0, Math.min(score, 100));
+}
+
+function updateConversationMemory(previousSession: InterviewSession, nextSession: InterviewSession, answer: string): ConversationMemory {
+  const discoveredFacts = unique([...previousSession.memory.discoveredFacts, ...factsFromDraft(nextSession.resumeDraft)]).slice(0, 16);
+  const discussedTopics = unique([...previousSession.memory.discussedTopics, ...topicsFromDraft(nextSession.resumeDraft), previousSession.currentStage.replaceAll("_", " ")]).slice(0, 16);
+  const completedTopics = unique([
+    ...previousSession.memory.completedTopics,
+    ...nextSession.fieldStatuses.filter((field) => field.status === "usable" || field.status === "strong").map((field) => field.label)
+  ]).slice(0, 16);
+  const unansweredTopics = ["target role", "recent role", "responsibilities", "results", "tools", "metrics", "projects"].filter(
+    (topic) => !discussedTopics.includes(topic) && !completedTopics.some((complete) => complete.toLowerCase().includes(topic.split(" ")[0]))
+  );
+
+  return {
+    ...previousSession.memory,
+    discoveredFacts,
+    discussedTopics,
+    completedTopics,
+    unansweredTopics,
+    lastUserIntent: inferUserIntent(answer),
+    conversationScore: scoreConversation(answer, nextSession)
+  };
+}
+
+function acknowledgementFor(session: InterviewSession) {
+  const answer = lastUserAnswer(session);
+  const draft = session.resumeDraft;
+  const role = draft.roles[0];
+
+  if (!answer) return "Got it.";
+  if (role?.company && role.timeInRole && answer.toLowerCase().includes(role.company.toLowerCase())) {
+    return `Great. ${role.timeInRole} at ${role.company} gives us solid recent experience.`;
+  }
+  if (role?.title && answer.toLowerCase().includes(role.title.toLowerCase())) {
+    return `That helps. I will treat ${role.title} as an important part of your background.`;
+  }
+  if (draft.tools.some((tool) => answer.toLowerCase().includes(tool.toLowerCase()))) {
+    return `Nice. Those tools give the resume more concrete proof.`;
+  }
+  if (extractMetricSignals(answer).length) {
+    return `Perfect. Those numbers make the story more credible.`;
+  }
+  if (extractAchievementSignals(answer).length) {
+    return `Excellent. That gives us a result to build around.`;
+  }
+  if (inferUserIntent(answer) === "vague_answer") {
+    return `That is a start. I need one more concrete detail so this does not sound generic.`;
+  }
+  return `That is helpful. I am adding that to the picture.`;
+}
+
+function transitionFor(intent: AssistantIntent, session: InterviewSession) {
+  if (intent === "quantify") return "Now I want to understand the scale of the work.";
+  if (intent === "discover_tools") return "Now I want to understand the tools behind that work.";
+  if (intent === "discover_results") return "Now I know what you did. I am missing how successful it was.";
+  if (intent === "discover_project") return "Let's find one example that proves you can do the target role.";
+  if (intent === "discover_leadership") return "Let's see if there is leadership or ownership we should surface.";
+  if (intent === "discover_problem_solving") return "Let's unpack the problems you were trusted to solve.";
+  if (intent === "deepen") return "Let's make that more specific.";
+  if (intent === "transition" && canGenerateResumeFromInterview(session)) return "We have enough to draft, but one final check can make it stronger.";
+  return "Let's keep building the strongest version of this.";
+}
+
 function isStageSatisfied(session: InterviewSession, stageId: InterviewStageId) {
   const statuses = session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session);
   const status = (key: keyof InterviewResumeDraft) => statuses.find((field) => field.fieldKey === key)?.status ?? "empty";
@@ -585,10 +741,14 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
   const withUserMessage = addMessage(session, userMessage);
   const completedStages = unique([...session.completedStages, session.currentStage]) as InterviewStageId[];
   const statusSession = withStatuses({ ...withUserMessage, resumeDraft: nextDraft, completedStages });
-  const nextStage = getNextInterviewStage(statusSession);
+  const memorySession = {
+    ...statusSession,
+    memory: updateConversationMemory(session, statusSession, answer)
+  };
+  const nextStage = getNextInterviewStage(memorySession);
 
   return withStatuses({
-    ...statusSession,
+    ...memorySession,
     currentStage: nextStage.id
   });
 }
@@ -669,102 +829,180 @@ export function assistantQuestionForStage(stageId: InterviewStageId) {
   return interviewStages.find((stage) => stage.id === stageId)?.exampleAssistantQuestion ?? interviewStages[0].exampleAssistantQuestion;
 }
 
-function avoidRepeat(session: InterviewSession, options: string[]) {
-  const recentAssistant = [...session.messages].reverse().find((message) => message.role === "assistant")?.content;
-  return options.find((option) => option !== recentAssistant) ?? options[0];
+function questionWasAsked(session: InterviewSession, question: string) {
+  const normalized = normalizeQuestion(question);
+  return (
+    session.memory.repeatedQuestionProtection.includes(normalized) ||
+    session.messages.some((message) => message.role === "assistant" && normalizeQuestion(message.content).includes(normalized))
+  );
 }
 
-export function getNextAssistantQuestion(session: InterviewSession): string {
+function avoidRepeat(session: InterviewSession, options: string[]) {
+  return options.find((option) => !questionWasAsked(session, option)) ?? options[0];
+}
+
+function selectFollowUp(session: InterviewSession): { intent: AssistantIntent; question: string } {
   const weak = getMissingOrWeakFields(session);
   const weakKeys = new Set(weak.map((field) => field.fieldKey));
+  const userIntent = session.memory.lastUserIntent;
 
   if (session.currentStage === "role_targeting") {
-    return avoidRepeat(session, [
-      "What kind of role are you targeting, and what industry is it in?",
-      "Give me the exact job title you want next, plus the lane or industry if you know it.",
-      "Are you aiming for customer success, operations, admin, IT, project coordination, sales, business, or tech?"
-    ]);
+    return {
+      intent: "clarify",
+      question: avoidRepeat(session, [
+        "What kind of role are you targeting, and what industry is it in?",
+        "Give me the exact job title you want next, plus the lane or industry if you know it.",
+        "What role should this resume point toward?"
+      ])
+    };
   }
 
   if (session.currentStage === "background_overview") {
-    return avoidRepeat(session, [
-      "Give me the quick version of your work background so far.",
-      "How would you describe your experience level and the kind of work you have done most?",
-      "What jobs or environments should this resume translate into stronger career language?"
-    ]);
+    return {
+      intent: "deepen",
+      question: avoidRepeat(session, [
+        "Give me the quick version of your work background so far.",
+        "What jobs or environments should this resume translate into stronger career language?",
+        "What part of your background best connects to the role you want next?"
+      ])
+    };
   }
 
   if (session.currentStage === "current_or_recent_role") {
-    return avoidRepeat(session, [
-      "What is your current or most recent role, where did you do it, and when?",
-      "Tell me your title, company, and approximate dates for your most recent work.",
-      "What was the job called, who was it with, and how long were you there?"
-    ]);
+    return {
+      intent: "clarify",
+      question: avoidRepeat(session, [
+        "Tell me your title, company, and approximate dates for your most recent work.",
+        "What was the job called, who was it with, and how long were you there?",
+        "What role should I treat as your main recent experience?"
+      ])
+    };
   }
 
   if (session.currentStage === "responsibilities") {
-    return avoidRepeat(session, [
-      weakKeys.has("responsibilities")
-        ? "What did you actually do day to day in that role? Give me 2-4 concrete duties."
-        : "What other duties should be included so the resume feels accurate?",
-      "What requests, workflows, customers, records, schedules, systems, or issues did you handle?",
-      "Plain language is fine: what were you responsible for most weeks?"
-    ]);
+    const weakAnswer = userIntent === "vague_answer";
+    return {
+      intent: weakAnswer ? "discover_problem_solving" : "deepen",
+      question: avoidRepeat(session, [
+        weakAnswer
+          ? "What kinds of problems were you solving most often?"
+          : weakKeys.has("responsibilities")
+            ? "What responsibilities were you trusted with most weeks?"
+            : "What part of that job best prepared you for the role you are applying for?",
+        "What requests, workflows, customers, records, schedules, systems, or issues did you handle?",
+        "What responsibilities came with that role every shift?"
+      ])
+    };
   }
 
   if (session.currentStage === "achievements") {
-    return avoidRepeat(session, [
-      "What improved because of your work, even in a small way?",
-      "Can you name one result, win, project, customer outcome, or process improvement?",
-      "Did your work improve speed, accuracy, customer satisfaction, reliability, compliance, or efficiency?"
-    ]);
+    return {
+      intent: "discover_results",
+      question: avoidRepeat(session, [
+        "What changed because of your work?",
+        "Can you name one result, win, customer outcome, or process improvement?",
+        "Did your work improve speed, accuracy, customer satisfaction, reliability, compliance, or efficiency?"
+      ])
+    };
   }
 
   if (session.currentStage === "metrics") {
-    return avoidRepeat(session, [
-      "Can you give me one measurable result, even approximate?",
-      "What volume did you handle: customers, tickets, calls, reports, money, team size, projects, or transactions?",
-      "Estimate if needed: how many people, requests, reports, calls, or projects did you support?"
-    ]);
+    return {
+      intent: "quantify",
+      question: avoidRepeat(session, [
+        "Can you give me one measurable result, even approximate?",
+        "What volume did you handle: customers, tickets, calls, reports, money, team size, projects, or transactions?",
+        "Estimate if needed: how many people, requests, reports, calls, or projects did you support?"
+      ])
+    };
   }
 
   if (session.currentStage === "tools_and_skills") {
-    return avoidRepeat(session, [
-      "What tools, platforms, systems, or skills did you use regularly?",
-      "List the software, systems, ticketing tools, spreadsheets, CRMs, or communication tools you touched.",
-      "What skills should a recruiter see quickly: documentation, troubleshooting, customer communication, reporting, scheduling, or something else?"
-    ]);
+    return {
+      intent: "discover_tools",
+      question: avoidRepeat(session, [
+        "What software, systems, platforms, equipment, or workflows did you use every day?",
+        "List the ticketing tools, spreadsheets, CRMs, communication tools, or internal systems you touched.",
+        "What skills should a recruiter see quickly: documentation, troubleshooting, customer communication, reporting, scheduling, or something else?"
+      ])
+    };
   }
 
   if (session.currentStage === "projects_or_portfolio") {
-    return avoidRepeat(session, [
-      "What project best proves you can do this job?",
-      "Any project, portfolio link, workflow, report, dashboard, launch, or improvement worth mentioning?",
-      "If there is no project to include, say skip and we will move on."
-    ]);
+    return {
+      intent: "discover_project",
+      question: avoidRepeat(session, [
+        "What project best proves you can do this job?",
+        "Any project, portfolio link, workflow, report, dashboard, launch, or improvement worth mentioning?",
+        "If there is no project to include, say skip and we will move on."
+      ])
+    };
   }
 
   if (session.currentStage === "education_and_certifications") {
-    return avoidRepeat(session, [
-      "What education, certifications, training, bootcamps, or courses should appear?",
-      "Any degree, certificate, license, course, or training that supports this target role?",
-      "If there is no education or certification to include right now, say skip."
-    ]);
+    return {
+      intent: "clarify",
+      question: avoidRepeat(session, [
+        "What education, certifications, training, bootcamps, or courses should appear?",
+        "Any degree, certificate, license, course, or training that supports this target role?",
+        "If there is no education or certification to include right now, say skip."
+      ])
+    };
   }
 
   if (session.currentStage === "gaps_and_positioning") {
-    return avoidRepeat(session, [
-      "What part of your background might look weak to a recruiter?",
-      "Anything we should position carefully, like a gap, career change, limited direct experience, or still-learning area?",
-      "If nothing needs positioning, say skip and Career Forge will prepare the draft."
-    ]);
+    return {
+      intent: "clarify",
+      question: avoidRepeat(session, [
+        "What part of your background might look weak to a recruiter?",
+        "Anything we should position carefully, like a gap, career change, limited direct experience, or still-learning area?",
+        "If nothing needs positioning, say skip and Career Forge will prepare the draft."
+      ])
+    };
   }
 
   if (!canGenerateResumeFromInterview(session)) {
-    return "I still need a target role, one role, responsibilities, tools or skills, and one achievement or project. What can you add?";
+    return {
+      intent: "clarify",
+      question: avoidRepeat(session, [
+        "I still need a target role, one role, responsibilities, tools or skills, and one achievement or project. What can you add?",
+        "What is the most useful missing detail we should add before generating?"
+      ])
+    };
   }
 
-  return "The resume draft has enough signal. Anything missing or inaccurate before generating the package?";
+  return {
+    intent: "transition",
+    question: avoidRepeat(session, [
+      "Anything missing or inaccurate before generating the package?",
+      "Do you want to add one more proof point before I build the resume package?"
+    ])
+  };
+}
+
+export function getNextAssistantQuestion(session: InterviewSession): string {
+  const followUp = selectFollowUp(session);
+  return `${acknowledgementFor(session)}\n\n${transitionFor(followUp.intent, session)}\n\n${followUp.question}`;
+}
+
+export function createNextAssistantInterviewTurn(session: InterviewSession): InterviewSession {
+  const followUp = selectFollowUp(session);
+  const content = `${acknowledgementFor(session)}\n\n${transitionFor(followUp.intent, session)}\n\n${followUp.question}`;
+  const message = createAssistantInterviewMessage(content);
+  return {
+    ...session,
+    messages: [...session.messages, message],
+    memory: {
+      ...session.memory,
+      acknowledgedFacts: unique([...session.memory.acknowledgedFacts, ...factsFromDraft(session.resumeDraft)]).slice(0, 16),
+      followUpHistory: [
+        ...session.memory.followUpHistory,
+        { intent: followUp.intent, question: followUp.question, stage: session.currentStage, createdAt: message.createdAt }
+      ].slice(-24),
+      repeatedQuestionProtection: unique([...session.memory.repeatedQuestionProtection, normalizeQuestion(followUp.question)]).slice(-40),
+      lastAssistantIntent: followUp.intent
+    }
+  };
 }
 
 export function createUserInterviewMessage(content: string): InterviewMessage {
@@ -891,6 +1129,27 @@ export function getInterviewCoachingMessages(session: InterviewSession): string[
   }
 
   return messages.slice(0, 3);
+}
+
+export function getSmartInterviewSummary(session: InterviewSession): { learned: string[]; stillLearning: string[]; conversationScore: number } {
+  const learned = unique([...session.memory.discoveredFacts, ...factsFromDraft(session.resumeDraft)]).slice(0, 6);
+  const statuses = statusByKey(session);
+  const stillLearningPairs: Array<[string, string | undefined]> = [
+    ["Biggest accomplishment", statuses.get("achievements")?.status],
+    ["Technologies or systems", statuses.get("tools")?.status === "empty" && statuses.get("skills")?.status === "empty" ? "empty" : "usable"],
+    ["Metrics or scale", statuses.get("metrics")?.status],
+    ["Project proof", statuses.get("projects")?.status],
+    ["Leadership examples", session.memory.discussedTopics.includes("leadership") ? "usable" : "weak"]
+  ];
+  const stillLearning = stillLearningPairs
+    .filter(([, status]) => status === "empty" || status === "weak")
+    .map(([label]) => label);
+
+  return {
+    learned,
+    stillLearning: stillLearning.slice(0, 5),
+    conversationScore: session.memory.conversationScore
+  };
 }
 
 function metricForPattern(metrics: string, pattern: RegExp) {

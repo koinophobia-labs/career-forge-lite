@@ -17,6 +17,18 @@ export type InterviewStageId =
 
 export type InterviewFieldStrength = "empty" | "weak" | "usable" | "strong";
 
+export type AssistantIntent =
+  | "clarify"
+  | "deepen"
+  | "quantify"
+  | "discover_tools"
+  | "discover_results"
+  | "discover_leadership"
+  | "discover_problem_solving"
+  | "discover_project"
+  | "discover_scope"
+  | "transition";
+
 export type InterviewMessage = {
   id: string;
   role: InterviewRole;
@@ -65,10 +77,31 @@ export type InterviewStage = {
   completionCriteria: string;
 };
 
+export type ConversationFollowUp = {
+  intent: AssistantIntent;
+  question: string;
+  stage: InterviewStageId;
+  createdAt: string;
+};
+
+export type ConversationMemory = {
+  discoveredFacts: string[];
+  acknowledgedFacts: string[];
+  discussedTopics: string[];
+  completedTopics: string[];
+  unansweredTopics: string[];
+  followUpHistory: ConversationFollowUp[];
+  repeatedQuestionProtection: string[];
+  lastAssistantIntent: AssistantIntent | "";
+  lastUserIntent: string;
+  conversationScore: number;
+};
+
 export type InterviewSession = {
   id: string;
   messages: InterviewMessage[];
   resumeDraft: InterviewResumeDraft;
+  memory: ConversationMemory;
   fieldStatuses: InterviewFieldStatus[];
   currentStage: InterviewStageId;
   completedStages: InterviewStageId[];
