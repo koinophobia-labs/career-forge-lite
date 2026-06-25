@@ -85,5 +85,5 @@ If critical details are missing, Tell My Story asks one focused follow-up instea
 
 ## Commit / Push
 
-- Commit hash: pending
-- Push result: pending
+- Implementation commit hash: `f010e99`
+- Push result: succeeded to `origin/main`
