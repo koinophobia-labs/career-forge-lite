@@ -515,6 +515,8 @@ assert(pageSource.includes('onClick={() => jump("intake")}'), "guided interview 
 assert(pageSource.includes('href="/story"'), "tell-my-story path opens story intake mode");
 assert(tellMyStorySource.includes("Tell Career Forge about your work history."), "story mode has required story input screen");
 assert(tellMyStorySource.includes("I read this as..."), "story mode shows extracted dossier");
+assert(tellMyStorySource.includes("Captured") && tellMyStorySource.includes("Still helpful"), "story mode shows missing-info checklist");
+assert(tellMyStorySource.includes("Focused follow-up") && tellMyStorySource.includes("You will not need to restart"), "story mode asks focused follow-ups without restart");
 assert(tellMyStorySource.includes("Looks right") && tellMyStorySource.includes("Edit details") && tellMyStorySource.includes("Add more context"), "story mode supports dossier actions");
 assert(storyModeSource.includes("parseRoleAnswer") && storyModeSource.includes("parseStoryToDossier"), "story mode uses deterministic natural role parser");
 assert(resumePreviewSource.includes("Before you apply"), "resume review includes before-apply checklist");
@@ -595,6 +597,15 @@ assert(storyDossier.intake.currentTitle === "Sportsbook Ticket Writer", "story m
 assert(storyDossier.intake.currentCompany === "DraftKings", "story mode feeds parsed company into intake");
 assert(storyDossier.intake.targetJobTitle, "story mode creates a usable target role fallback");
 assert(generateResumePackage(storyDossier.intake).summary.trim(), "story mode intake feeds existing resume generator");
+assert(storyDossier.capturedFields.includes("Role") && storyDossier.capturedFields.includes("Company") && storyDossier.capturedFields.includes("Dates"), "story mode checklist marks role company dates captured");
+assert(storyDossier.stillHelpfulFields.includes("Contact") && storyDossier.stillHelpfulFields.includes("Tools"), "story mode checklist identifies helpful missing fields");
+
+const partialStoryDossier = parseStoryToDossier("I worked at DraftKings as a sportsbook writer from 2023 to now.");
+assert(partialStoryDossier.capturedFields.includes("Role"), "partial story captures role");
+assert(partialStoryDossier.capturedFields.includes("Company"), "partial story captures company");
+assert(partialStoryDossier.stillHelpfulFields.includes("Responsibilities"), "partial story asks for missing responsibilities");
+assert(partialStoryDossier.stillHelpfulFields.includes("Scope"), "partial story asks for missing scope");
+assert(partialStoryDossier.focusedFollowUp.length > 10, "partial story gets one focused follow-up");
 
 const customRoleData = {
   ...initialIntake,

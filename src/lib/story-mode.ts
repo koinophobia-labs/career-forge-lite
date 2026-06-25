@@ -11,6 +11,8 @@ import type { IntakeData, RoleFamily } from "@/types/career";
 export type StoryDossier = {
   intake: IntakeData;
   confidence: "needs_follow_up" | "usable" | "strong";
+  capturedFields: string[];
+  stillHelpfulFields: string[];
   extracted: {
     role: string;
     company: string;
@@ -23,6 +25,7 @@ export type StoryDossier = {
     transferableSignals: string[];
   };
   missingCriticalDetails: string[];
+  nextMissingField: string;
   focusedFollowUp: string;
 };
 
@@ -172,6 +175,18 @@ function inferTargetRole(story: string, roleTitle: string, roleFamily: RoleFamil
   return fallbackByFamily[roleFamily];
 }
 
+function hasExplicitTarget(story: string) {
+  return /\b(?:targeting|applying for|aiming for|want to be|looking for)\s+(?:a|an)?\s*([^,.]+)/i.test(story);
+}
+
+function extractEmail(story: string) {
+  return story.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] ?? "";
+}
+
+function extractName(story: string) {
+  return titleCase(story.match(/\bmy name is\s+([A-Za-z][A-Za-z' -]{1,48})(?:\.|,| and|$)/i)?.[1] ?? "");
+}
+
 function extractRole(story: string) {
   const sentences = splitSentences(story);
   const parsed = sentences
@@ -204,7 +219,7 @@ function extractResponsibilities(story: string, roleFamily: RoleFamily) {
 
 function extractScope(story: string) {
   return unique(story.match(scopePattern) ?? [])
-    .filter((item) => !/^(?:19|20)\d{2}(?:\s*-\s*present)?$/i.test(item))
+    .filter((item) => !/^(?:19|20)\d{2}(?:\s*(?:-|to)\s*(?:present|now|current|(?:19|20)\d{2}))?$/i.test(item))
     .slice(0, 8);
 }
 
@@ -220,17 +235,58 @@ function metricForPattern(metrics: string[], pattern: RegExp) {
 }
 
 function focusedFollowUp(missing: string[]) {
+  if (missing.includes("contact")) return "What name and email should recruiters use?";
   if (missing.includes("target role")) return "What role should this resume target?";
   if (missing.includes("recent role")) return "What was your title, company, and approximate date range?";
+  if (missing.includes("tools")) return "What tools, software, systems, or equipment did you use?";
   if (missing.includes("responsibilities")) return "What work were you trusted with most often?";
-  if (missing.includes("tools or skills")) return "What tools, software, systems, or skills did you use?";
+  if (missing.includes("scope")) return "What workload or scale can you estimate: customers, tickets, calls, money, reports, or projects?";
+  if (missing.includes("outcomes")) return "What improved because of your work: speed, accuracy, customer satisfaction, efficiency, reliability, or compliance?";
+  if (missing.includes("education")) return "Any education, certification, training, or coursework you want included?";
   return "What result, improvement, volume, or scope can you add?";
+}
+
+function contactCaptured(story: string, intake: IntakeData) {
+  return Boolean(intake.fullName || intake.email || /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(story));
+}
+
+function educationCaptured(story: string, intake: IntakeData) {
+  return Boolean(intake.customRoleNotes.match(/\b(education|certification|course|training|degree|school|college|university)\b/i) || /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(story));
+}
+
+function buildInfoChecklist(story: string, intake: IntakeData, role: { title: string; company: string; dates: string }, extracted: {
+  targetRole: string;
+  responsibilities: string[];
+  tools: string[];
+  scope: string[];
+  transferableSignals: string[];
+}) {
+  const fieldChecks = [
+    ["Role", Boolean(role.title)],
+    ["Company", Boolean(role.company)],
+    ["Dates", Boolean(role.dates)],
+    ["Target role", Boolean(extracted.targetRole)],
+    ["Contact", contactCaptured(story, intake)],
+    ["Tools", extracted.tools.length > 0],
+    ["Responsibilities", extracted.responsibilities.length > 0],
+    ["Scope", extracted.scope.length > 0],
+    ["Outcomes", extracted.transferableSignals.length > 0 || intake.selectedOutcomes.length > 0],
+    ["Education", educationCaptured(story, intake)]
+  ] as const;
+
+  return {
+    capturedFields: fieldChecks.filter(([, captured]) => captured).map(([label]) => label),
+    stillHelpfulFields: fieldChecks.filter(([, captured]) => !captured).map(([label]) => label)
+  };
 }
 
 export function parseStoryToDossier(story: string, previousIntake: IntakeData = initialIntake): StoryDossier {
   const role = extractRole(story);
   const roleFamily = role.family ?? inferRoleFamily(story, role.title);
   const targetRole = inferTargetRole(story, role.title, roleFamily);
+  const explicitTarget = hasExplicitTarget(story);
+  const email = extractEmail(story);
+  const name = extractName(story);
   const responsibilities = extractResponsibilities(story, roleFamily);
   const tools = extractTools(story);
   const scope = extractScope(story);
@@ -239,18 +295,18 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     /accuracy|satisfaction|efficiency|reliability|compliance|speed|retention|revenue/i.test(item)
   );
   const roleSummary = [role.title, role.company, role.dates].filter(Boolean).join(" | ");
-  const missingCriticalDetails = [
-    targetRole ? "" : "target role",
-    role.title && role.company ? "" : "recent role",
-    responsibilities.length ? "" : "responsibilities",
-    tools.length || transferableSignals.length ? "" : "tools or skills"
-  ].filter(Boolean);
-  const confidence: StoryDossier["confidence"] =
-    missingCriticalDetails.length > 1 ? "needs_follow_up" : scope.length || transferableSignals.length >= 3 ? "strong" : "usable";
-
+  const extracted = {
+    targetRole,
+    responsibilities,
+    tools,
+    scope,
+    transferableSignals
+  };
   const intake: IntakeData = {
     ...previousIntake,
-    targetJobTitle: previousIntake.targetJobTitle || targetRole,
+    fullName: previousIntake.fullName || name,
+    email: previousIntake.email || email,
+    targetJobTitle: explicitTarget ? targetRole : previousIntake.targetJobTitle || targetRole,
     roleFamily,
     currentTitle: previousIntake.currentTitle || role.title,
     currentCompany: previousIntake.currentCompany || role.company,
@@ -270,10 +326,25 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     outcomes: unique([previousIntake.outcomes, ...transferableSignals]).join(", "),
     customRoleNotes: unique([previousIntake.customRoleNotes, roleSummary, ...scope, ...transferableSignals]).join(", ")
   };
+  const checklist = buildInfoChecklist(story, intake, role, extracted);
+  const missingCriticalDetails = [
+    checklist.stillHelpfulFields.includes("Contact") ? "contact" : "",
+    targetRole ? "" : "target role",
+    role.title && role.company ? "" : "recent role",
+    responsibilities.length ? "" : "responsibilities",
+    tools.length ? "" : "tools",
+    scope.length ? "" : "scope",
+    transferableSignals.length || intake.selectedOutcomes.length ? "" : "outcomes",
+    checklist.stillHelpfulFields.includes("Education") ? "education" : ""
+  ].filter(Boolean);
+  const confidence: StoryDossier["confidence"] =
+    missingCriticalDetails.length > 1 ? "needs_follow_up" : scope.length || transferableSignals.length >= 3 ? "strong" : "usable";
 
   return {
     intake,
     confidence,
+    capturedFields: checklist.capturedFields,
+    stillHelpfulFields: checklist.stillHelpfulFields,
     extracted: {
       role: role.title,
       company: role.company,
@@ -286,6 +357,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
       transferableSignals
     },
     missingCriticalDetails,
+    nextMissingField: missingCriticalDetails[0] ?? "",
     focusedFollowUp: focusedFollowUp(missingCriticalDetails)
   };
 }

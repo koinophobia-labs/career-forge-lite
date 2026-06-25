@@ -44,7 +44,7 @@ export function TellMyStoryMode() {
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
 
   const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
-  const canGenerate = dossier ? dossier.missingCriticalDetails.length <= 1 : false;
+  const canGenerate = dossier ? Boolean(intake.targetJobTitle && intake.currentTitle && intake.currentCompany && intake.selectedResponsibilities.length) : false;
 
   function parseStory(nextStory = combinedStory) {
     const nextDossier = parseStoryToDossier(nextStory, intake);
@@ -62,7 +62,9 @@ export function TellMyStoryMode() {
   function handleAddContext(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!context.trim()) return;
-    parseStory(combinedStory);
+    const nextStory = combinedStory;
+    setStory(nextStory);
+    parseStory(nextStory);
     setContext("");
   }
 
@@ -210,6 +212,34 @@ export function TellMyStoryMode() {
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4">
+                <p className="text-sm font-bold text-cyan">Captured</p>
+                <div className="mt-3 space-y-2">
+                  {dossier.capturedFields.length ? (
+                    dossier.capturedFields.map((field) => (
+                      <p key={field} className="text-sm font-semibold text-paper/75">
+                        ✓ {field}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-sm text-paper/55">Nothing solid yet. Add one more sentence about your role.</p>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-md border border-gold/20 bg-gold/10 p-4">
+                <p className="text-sm font-bold text-gold">Still helpful</p>
+                <div className="mt-3 space-y-2">
+                  {dossier.stillHelpfulFields.length ? (
+                    dossier.stillHelpfulFields.slice(0, 6).map((field) => (
+                      <p key={field} className="text-sm font-semibold text-paper/75">
+                        • {field}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-sm text-paper/65">You gave Career Forge enough signal for a strong first draft.</p>
+                  )}
+                </div>
+              </div>
               <DossierRow label="Target role" value={dossier.extracted.targetRole} />
               <DossierRow label="Role family" value={dossier.extracted.roleFamily} />
               <DossierRow label="Responsibilities" value={dossier.extracted.responsibilities} />
@@ -218,9 +248,11 @@ export function TellMyStoryMode() {
               <DossierRow label="Transferable signals" value={dossier.extracted.transferableSignals} />
             </div>
 
-            {dossier.missingCriticalDetails.length > 0 && (
+            {dossier.stillHelpfulFields.length > 0 && (
               <div className="mt-5 rounded-md border border-ember/25 bg-ember/10 p-4">
-                <p className="text-sm font-bold text-ember">Focused follow-up</p>
+                <p className="text-sm font-bold text-ember">
+                  Focused follow-up{dossier.nextMissingField ? `: ${dossier.nextMissingField}` : ""}
+                </p>
                 <p className="mt-2 text-sm leading-6 text-paper/70">{dossier.focusedFollowUp}</p>
               </div>
             )}
@@ -251,7 +283,7 @@ export function TellMyStoryMode() {
 
             <form onSubmit={handleAddContext} className="mt-5 rounded-md border border-white/10 bg-white/5 p-4">
               <label htmlFor="context" className="text-sm font-bold text-paper">
-                Add more context
+                {dossier.focusedFollowUp || "Add more context"}
               </label>
               <textarea
                 id="context"
@@ -295,7 +327,7 @@ export function TellMyStoryMode() {
             </div>
             {!canGenerate && (
               <p className="mt-3 text-sm leading-6 text-paper/55">
-                Add the focused detail above before generating so the resume does not come out generic.
+                Add the focused detail above before generating so the resume does not come out generic. You will not need to restart.
               </p>
             )}
           </section>
