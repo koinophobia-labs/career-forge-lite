@@ -17,6 +17,7 @@ import {
   allToolOptions,
   toolSuggestionsByFamily
 } from "@/lib/career-data";
+import { formatParsedRoleConfirmation, parseRoleAnswer, type ParsedRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
 type IntakeFormProps = {
@@ -60,6 +61,14 @@ type QuickStartPath =
   | "internal_application";
 
 type MomentumStage = "Identity" | "Target" | "Experience" | "Arsenal" | "Proof" | "Review";
+type RoleSlot = "current" | "previous" | "additional";
+
+type RoleSlotConfig = {
+  companyKey: "currentCompany" | "previousCompany" | "additionalCompany";
+  inputPlaceholder: string;
+  timeKey: "currentTime" | "previousTime" | "additionalTime";
+  titleKey: "currentTitle" | "previousTitle" | "additionalTitle";
+};
 
 const requiredKeys: Array<keyof IntakeData> = ["fullName", "email", "targetJobTitle", "currentTitle"];
 
@@ -96,8 +105,8 @@ const questions: Question[] = [
   },
   {
     id: "current_role",
-    title: "What's your current or most recent role?",
-    helper: "Start with the role that should carry the most weight.",
+    title: "Tell me about your most recent role.",
+    helper: "Example: I worked at DraftKings as a sportsbook writer from 2024 to now.",
     validate: ["currentTitle"]
   },
   {
@@ -108,14 +117,14 @@ const questions: Question[] = [
   },
   {
     id: "previous_role",
-    title: "Add a previous role?",
-    helper: "Skip if this does not apply. A short title, company, and date range is enough.",
+    title: "Tell me about a previous role.",
+    helper: "Natural answers are fine. Example: I was a security officer at Allied Universal for two years.",
     validate: []
   },
   {
     id: "additional_role",
-    title: "Add one more role?",
-    helper: "Optional. Use this for one extra job, campus role, internship, or relevant work experience.",
+    title: "Want to add one more role?",
+    helper: "Optional. Describe it naturally or skip if this does not apply.",
     validate: []
   },
   {
@@ -192,6 +201,27 @@ const stageConfirmations: Record<MomentumStage, string> = {
   Arsenal: "Experience signals captured",
   Proof: "Proof signals added",
   Review: "Resume package ready"
+};
+
+const roleSlotConfigs: Record<RoleSlot, RoleSlotConfig> = {
+  current: {
+    companyKey: "currentCompany",
+    inputPlaceholder: "I worked at DraftKings as a sportsbook writer from 2024 to now.",
+    timeKey: "currentTime",
+    titleKey: "currentTitle"
+  },
+  previous: {
+    companyKey: "previousCompany",
+    inputPlaceholder: "I was a security officer at Allied Universal for two years.",
+    timeKey: "previousTime",
+    titleKey: "previousTitle"
+  },
+  additional: {
+    companyKey: "additionalCompany",
+    inputPlaceholder: "I founded Koinophobia Labs in 2025.",
+    timeKey: "additionalTime",
+    titleKey: "additionalTitle"
+  }
 };
 
 const allScopeFields: Array<{ key: keyof IntakeData; label: string }> = [
@@ -345,6 +375,17 @@ export function IntakeForm({
   const [customTransferableSkill, setCustomTransferableSkill] = useState("");
   const [quickStartPath, setQuickStartPath] = useState<QuickStartPath>("first_resume");
   const [showHelpMeThink, setShowHelpMeThink] = useState(false);
+  const [naturalRoleInputs, setNaturalRoleInputs] = useState<Record<RoleSlot, string>>({
+    additional: "",
+    current: "",
+    previous: ""
+  });
+  const [parsedRoleAnswers, setParsedRoleAnswers] = useState<Partial<Record<RoleSlot, ParsedRoleAnswer>>>({});
+  const [roleEditMode, setRoleEditMode] = useState<Record<RoleSlot, boolean>>({
+    additional: false,
+    current: false,
+    previous: false
+  });
   const question = questions[questionIndex];
   const suggestions = responsibilitySuggestions[data.roleFamily];
   const actionSuggestions = actionSuggestionsByFamily[data.roleFamily];
@@ -422,6 +463,34 @@ export function IntakeForm({
 
   function update<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
     onChange({ ...data, [key]: value });
+  }
+
+  function applyParsedRole(slot: RoleSlot, parsed: ParsedRoleAnswer, nextData = data) {
+    const config = roleSlotConfigs[slot];
+    return {
+      ...nextData,
+      [config.titleKey]: parsed.title || String(nextData[config.titleKey]),
+      [config.companyKey]: parsed.company || String(nextData[config.companyKey]),
+      [config.timeKey]: parsed.dates || String(nextData[config.timeKey])
+    };
+  }
+
+  function updateNaturalRoleInput(slot: RoleSlot, value: string) {
+    setNaturalRoleInputs((current) => ({ ...current, [slot]: value }));
+    const parsed = parseRoleAnswer(value);
+    setParsedRoleAnswers((current) => ({ ...current, [slot]: parsed }));
+    setRoleEditMode((current) => ({ ...current, [slot]: parsed.confidence === "low" }));
+
+    if (parsed.title || parsed.company || parsed.dates) {
+      onChange(applyParsedRole(slot, parsed));
+    }
+  }
+
+  function roleFollowUp(parsed: ParsedRoleAnswer) {
+    if (parsed.missingField === "title") return "What was your title?";
+    if (parsed.missingField === "company") return "What company was that with?";
+    if (parsed.missingField === "dates") return "What dates or time in role should I use?";
+    return "Confirm the details before moving on.";
   }
 
   function getSectionState(label: string, strong: boolean, good: boolean, needsMoreDetail = false) {
@@ -1140,6 +1209,65 @@ export function IntakeForm({
     );
   }
 
+  function renderNaturalRoleQuestion(slot: RoleSlot, label: string) {
+    const config = roleSlotConfigs[slot];
+    const parsed = parsedRoleAnswers[slot];
+    const editMode = roleEditMode[slot];
+    const hasStructuredValue = Boolean(
+      String(data[config.titleKey]).trim() || String(data[config.companyKey]).trim() || String(data[config.timeKey]).trim()
+    );
+
+    return (
+      <div className="space-y-5">
+        <label className="block">
+          <span className="mb-2 block text-sm font-bold text-ink">{label}</span>
+          <span className="mb-2 block text-sm leading-5 text-ink/60">
+            You can answer naturally. Career Forge will pull out the title, company, and dates when it can.
+          </span>
+          <textarea
+            value={naturalRoleInputs[slot]}
+            onChange={(event) => updateNaturalRoleInput(slot, event.target.value)}
+            placeholder={config.inputPlaceholder}
+            rows={3}
+            className="trust-input w-full rounded-md border px-4 py-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+          />
+        </label>
+
+        {parsed && hasStructuredValue && !editMode && (
+          <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4">
+            <p className="text-sm font-bold text-ink">I read that as:</p>
+            <p className="mt-2 text-base font-black text-spruce">{formatParsedRoleConfirmation(parsed)}</p>
+            {parsed.confidence !== "high" && <p className="mt-2 text-sm leading-6 text-ink/65">{roleFollowUp(parsed)}</p>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setRoleEditMode((current) => ({ ...current, [slot]: false }))}
+                className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+              >
+                Looks right
+              </button>
+              <button
+                type="button"
+                onClick={() => setRoleEditMode((current) => ({ ...current, [slot]: true }))}
+                className="rounded-md border border-ink/15 bg-white px-4 py-2 text-sm font-bold text-ink transition hover:border-gold"
+              >
+                Edit details
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(editMode || !hasStructuredValue) && (
+          <div className="grid gap-4 rounded-md bg-white p-4 md:grid-cols-3">
+            {renderField(config.titleKey, "Title", slot === "current" ? "Sportsbook Writer" : "Security Officer")}
+            {renderCompanyPicker(config.companyKey, "Company")}
+            {renderField(config.timeKey, "Dates or time in role", slot === "current" ? "2024-Present" : "2 years")}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderQuestion() {
     switch (question.id) {
       case "quick_start":
@@ -1268,7 +1396,7 @@ export function IntakeForm({
           </div>
         );
       case "current_role":
-        return renderField("currentTitle", "What should we call your most recent experience?", "Support Specialist", "text", "This can be a job, internship, project, campus role, volunteer role, or freelance work.");
+        return renderNaturalRoleQuestion("current", "Tell me about your most recent role.");
       case "current_company":
         return (
           <div className="grid gap-5">
@@ -1277,21 +1405,9 @@ export function IntakeForm({
           </div>
         );
       case "previous_role":
-        return (
-          <div className="grid gap-5">
-            {renderField("previousTitle", "Previous role", "Administrative Assistant", "text", "Skip if this does not apply.")}
-            {renderCompanyPicker("previousCompany", "Previous company")}
-            {renderField("previousTime", "Dates or time in role", "Jun 2022 - Dec 2023")}
-          </div>
-        );
+        return renderNaturalRoleQuestion("previous", "Tell me about a previous role.");
       case "additional_role":
-        return (
-          <div className="grid gap-5">
-            {renderField("additionalTitle", "Optional third role", "Campus Assistant", "text", "Skip if this does not apply.")}
-            {renderCompanyPicker("additionalCompany", "Additional company")}
-            {renderField("additionalTime", "Dates or time in role", "Sep 2021 - May 2022")}
-          </div>
-        );
+        return renderNaturalRoleQuestion("additional", "Want to add one more role?");
       case "tools":
         return (
           <div className="space-y-5">

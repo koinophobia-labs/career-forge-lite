@@ -58,6 +58,10 @@ const {
   polishResumeSentence
 } = loadTsModule(path.join(root, "src/lib/resume-intelligence.ts"));
 const {
+  formatParsedRoleConfirmation,
+  parseRoleAnswer
+} = loadTsModule(path.join(root, "src/lib/natural-role-parser.ts"));
+const {
   canUseInterviewMode,
   getFeatureAccess,
   getInterviewModeLimitState
@@ -522,7 +526,46 @@ assert(
   "free builder uses outcome-based continue labels"
 );
 assert(intakeSource.includes("You gave Career Forge enough signal to build your first resume package."), "free builder completion summary exists");
+assert(intakeSource.includes("I read that as:") && intakeSource.includes("Looks right") && intakeSource.includes("Edit details"), "free builder confirms parsed natural role answers");
+assert(intakeSource.includes("What was your title?") && intakeSource.includes("What company was that with?"), "free builder has focused low-confidence parsing fallbacks");
 assert(!intakeSource.includes("Question {String(questionIndex"), "free builder does not show question count progress");
+
+const foundedParse = parseRoleAnswer("I founded Koinophobia Labs in 2025");
+assert(foundedParse.title === "Founder", "natural parser extracts founder title");
+assert(foundedParse.company === "Koinophobia Labs", "natural parser extracts founded company");
+assert(foundedParse.dates === "2025-Present", "natural parser converts founded year to present");
+assert(formatParsedRoleConfirmation(foundedParse).includes("Founder at Koinophobia Labs"), "natural parser formats confirmation");
+
+const workedParse = parseRoleAnswer("I worked at DraftKings as a sportsbook writer from 2024 to now");
+assert(workedParse.company === "Draftkings" || workedParse.company === "DraftKings", "natural parser extracts worked-at company");
+assert(workedParse.title === "Sportsbook Writer", "natural parser extracts worked-at title");
+assert(workedParse.dates === "2024-Present", "natural parser converts now to present");
+
+const securityParse = parseRoleAnswer("I was a security officer at Allied Universal for two years");
+assert(securityParse.title === "Security Officer", "natural parser extracts role at company title");
+assert(securityParse.company === "Allied Universal", "natural parser extracts role at company company");
+assert(securityParse.dates === "2 years", "natural parser converts word duration");
+
+const lowConfidenceParse = parseRoleAnswer("I helped at the front desk");
+assert(lowConfidenceParse.confidence === "low" && lowConfidenceParse.missingField === "title", "natural parser flags low-confidence missing title");
+
+const parsedRoleResume = generateResumePackage({
+  ...initialIntake,
+  fullName: "Parsed Role Candidate",
+  email: "parsed.role@example.com",
+  targetJobTitle: "Technical Product Analyst",
+  roleFamily: "Tech",
+  currentTitle: foundedParse.title,
+  currentCompany: foundedParse.company,
+  currentTime: foundedParse.dates,
+  tools: "GitHub, Vercel, Next.js",
+  selectedResponsibilities: ["Documentation", "Testing", "Implementation support"],
+  selectedActions: ["documented fixes", "tracked work"],
+  projectsSupported: "3 shipped projects",
+  selectedOutcomes: ["Reliability"]
+});
+const parsedRoleExport = resumeToText({ ...initialIntake, fullName: "Parsed Role Candidate", email: "parsed.role@example.com" }, parsedRoleResume);
+assert(parsedRoleExport.includes("Founder | Koinophobia Labs | 2025-Present"), "generated resume uses parsed role fields");
 
 const customRoleData = {
   ...initialIntake,
