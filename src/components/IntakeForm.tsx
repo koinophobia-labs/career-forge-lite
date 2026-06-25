@@ -1685,7 +1685,7 @@ export function IntakeForm({
                 type="submit"
                 className="min-h-12 rounded-md bg-ink px-6 font-bold text-paper transition hover:bg-gold hover:text-ink"
               >
-                {questionIndex === questions.length - 1 ? "Generate Resume Package" : "Continue"}
+                {questionIndex === questions.length - 1 ? "Generate Resume" : "Continue"}
               </button>
             </div>
           </div>

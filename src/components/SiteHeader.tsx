@@ -5,8 +5,9 @@ type SiteHeaderProps = {
 };
 
 const navItems = [
-  ["Product Lab", "#landing"],
-  ["How It Works", "#proof"],
+  ["Overview", "#landing"],
+  ["Choose Path", "#paths"],
+  ["Why Trust It", "#trust"],
   ["Receipts", "#ats-checks"],
   ["About", "#ecosystem"]
 ];
@@ -51,7 +52,7 @@ export function SiteHeader({ onStart }: SiteHeaderProps) {
             onClick={onStart}
             className="rounded-md bg-gold px-4 py-2 font-black text-ink transition hover:bg-cyan"
           >
-            Start the Interview
+            Build Resume
           </button>
         </nav>
       </div>

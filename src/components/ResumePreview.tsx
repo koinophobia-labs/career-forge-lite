@@ -40,9 +40,9 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="trust-kicker text-sm font-bold uppercase">resume://draft</p>
-          <h2 className="mt-3 text-3xl font-bold text-paper">Review the package before it ships.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-paper">Review your resume before you apply.</h2>
           <p className="mt-3 max-w-2xl text-paper/70">
-            Edit the draft like a final pass. The resume content itself remains neutral, single-column, and ATS-safe.
+            Check the language, confirm every detail is true, and add missing numbers if you have them.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -191,6 +191,25 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
           </section>
         </div>
       </article>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <article className="trust-card rounded-md p-5">
+          <h3 className="text-xl font-bold text-paper">Can I submit this?</h3>
+          <p className="mt-3 text-sm leading-6 text-paper/70">
+            Use this as a strong first draft. Before applying, tailor the top skills and bullets to the job description you are targeting.
+          </p>
+        </article>
+        <article className="trust-card rounded-md p-5">
+          <h3 className="text-xl font-bold text-paper">Before you apply</h3>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {["Tailor for each job", "Add missing metrics if possible", "Review every line for accuracy", "Save a clean copy"].map((item) => (
+              <span key={item} className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-paper/72">
+                {item}
+              </span>
+            ))}
+          </div>
+        </article>
+      </div>
     </section>
   );
 }

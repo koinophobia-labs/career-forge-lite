@@ -421,8 +421,10 @@ const interviewModeSource = fs.readFileSync(path.join(root, "src/components/Inte
 const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
 const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
 const intakeSource = fs.readFileSync(path.join(root, "src/components/IntakeForm.tsx"), "utf8");
+const resumePreviewSource = fs.readFileSync(path.join(root, "src/components/ResumePreview.tsx"), "utf8");
+const pageSource = fs.readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 assert(interviewModeSource.includes("Let Career Forge interview you."), "first-screen value proposition exists");
-assert(interviewModeSource.includes("Build your resume") || landingSource.includes("Build your resume"), "premium entry helper copy exists");
+assert(landingSource.includes("guided questions") && landingSource.includes("conversational interview"), "two-path positioning copy exists");
 assert(interviewModeSource.includes("Resume Readiness"), "sidebar coach dashboard copy exists");
 assert(interviewModeSource.includes("Resume Strength"), "review screen strength label copy exists");
 assert(interviewModeSource.includes("Your interview-built resume draft"), "review screen title exists");
@@ -432,7 +434,15 @@ assert(!interviewModeSource.includes("Current stage"), "internal stage wording i
 assert(!interviewModeSource.includes("structured signal"), "debug readiness wording is hidden from UI");
 assert(premiumSource.includes("Interview Mode is planned as a premium feature"), "locked panel copy exists");
 assert(landingSource.includes("Premium Preview"), "landing page premium badge copy exists");
-assert(landingSource.includes("Start the Interview"), "static builder entry remains available");
+assert(landingSource.includes("Turn your experience into a") && landingSource.includes("recruiter-ready"), "landing page states core product promise");
+assert(landingSource.includes("Build My Resume"), "primary landing CTA exists");
+assert(landingSource.includes("Try Interview Mode"), "secondary landing CTA exists");
+assert(landingSource.includes("Choose your path"), "landing page explains two paths");
+assert(landingSource.includes("Guided Builder") && landingSource.includes("Interview Mode"), "landing page compares builder and interview paths");
+assert(landingSource.includes("Doesn't invent achievements"), "landing page trust copy exists");
+assert(pageSource.includes("Choose Path") && pageSource.includes("Build Resume") && pageSource.includes("Review Resume"), "app workflow labels are launch-ready");
+assert(resumePreviewSource.includes("Before you apply"), "resume review includes before-apply checklist");
+assert(resumePreviewSource.includes("Tailor for each job"), "resume review includes practical next steps");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
 assert(intakeSource.includes("I'm building my first resume"), "free builder quick start path exists");
 assert(intakeSource.includes("Help Me Think"), "free builder help-me-think support exists");

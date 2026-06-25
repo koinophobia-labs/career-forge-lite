@@ -191,7 +191,7 @@ export function InterviewMode() {
               <span>
                 <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
                 <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
-                  Interview Resume Review
+                  Review Resume
                 </span>
               </span>
             </Link>
