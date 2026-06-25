@@ -42,6 +42,9 @@ export function SiteHeader({ onStart }: SiteHeaderProps) {
             className="rounded-md border border-cyan/25 px-3 py-2 text-cyan transition hover:border-gold hover:text-gold"
           >
             Interview Mode
+            <span className="ml-2 rounded-sm bg-cyan/10 px-2 py-1 text-[0.58rem] uppercase tracking-[0.12em]">
+              Premium Preview
+            </span>
           </a>
           <button
             type="button"

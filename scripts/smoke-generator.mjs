@@ -50,13 +50,20 @@ const {
 } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 const { educationPlaceholder, resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
 const {
+  canUseInterviewMode,
+  getFeatureAccess,
+  getInterviewModeLimitState
+} = loadTsModule(path.join(root, "src/lib/feature-access.ts"));
+const {
   canGenerateResumeFromInterview,
   convertInterviewDraftToExistingResumeInput,
   createInitialInterviewSession,
   createUserInterviewMessage,
   generateResumePackageFromInterview,
+  getInterviewCoachingMessages,
   getCurrentFieldStatuses,
   getInterviewResumeReadinessSummary,
+  getInterviewResumeStrengthLabel,
   getMissingOrWeakFields,
   getNextAssistantQuestion,
   getWeakestInterviewStage,
@@ -255,6 +262,12 @@ assert(interviewSession.currentStage === "role_targeting", "interview starts at 
 assert(interviewSession.messages[0]?.role === "assistant", "interview starts with assistant question");
 assert(getMissingOrWeakFields(interviewSession).some((field) => field.fieldKey === "targetRole"), "initial interview tracks missing target role");
 assert(!canGenerateResumeFromInterview(interviewSession), "interview cannot generate before required fields");
+assert(getFeatureAccess("static_builder").accessLevel === "free", "static builder remains free");
+assert(getFeatureAccess("interview_mode").accessLevel === "premium_preview", "interview mode defaults to premium preview");
+assert(canUseInterviewMode(), "interview mode can be used in preview");
+assert(getInterviewModeLimitState(interviewSession).answerLimit === 6, "interview preview has answer limit");
+assert(!getInterviewModeLimitState(interviewSession).isLocked, "fresh interview preview is not locked");
+assert(getInterviewCoachingMessages(interviewSession).some((message) => /target role/i.test(message)), "weak target coaching exists");
 
 let weakInterviewSession = updateInterviewDraftFromUserAnswer(
   createInitialInterviewSession(),
@@ -307,6 +320,7 @@ assert(interviewSession.resumeDraft.tools.includes("Zendesk"), "interview extrac
 assert(interviewSession.resumeDraft.skills.some((item) => /Documentation/i.test(item)), "interview extracts skills");
 assert(canGenerateResumeFromInterview(interviewSession), "interview can generate after minimum fields are usable");
 assert(/project|education|certifications|training|resume draft|generate/i.test(getNextAssistantQuestion(interviewSession)), "assistant question progresses after readiness");
+assert(["Usable", "Strong", "Application Ready"].includes(getInterviewResumeStrengthLabel(interviewSession)), "review strength label is available");
 
 const statuses = getCurrentFieldStatuses(interviewSession);
 assert(statuses.find((field) => field.fieldKey === "responsibilities")?.status === "strong", "responsibility status uses specificity");
@@ -357,6 +371,7 @@ for (const answer of [
 assert(canGenerateResumeFromInterview(noMetricSession), "interview can generate without metrics when other proof exists");
 const noMetricSummary = getInterviewResumeReadinessSummary(noMetricSession);
 assert(noMetricSummary.weakAreas.some((area) => /Scope or metrics/i.test(area)), "missing metrics appear as coaching note");
+assert(getInterviewCoachingMessages(noMetricSession).some((message) => /Numbers help recruiters/i.test(message)), "weak metrics coaching exists");
 const noMetricPackage = generateResumePackageFromInterview(noMetricSession);
 const noMetricText = resumeToText(noMetricPackage.intake, noMetricPackage.resume);
 assert(!/fake metric|measurable impact|customers helped/i.test(noMetricText), "missing metrics coaching does not enter resume output");
@@ -367,6 +382,31 @@ noMetricSession = {
 const gapPackage = generateResumePackageFromInterview(noMetricSession);
 assert(!resumeToText(gapPackage.intake, gapPackage.resume).includes("still learning SQL"), "gap notes stay out of resume output");
 assert(getWeakestInterviewStage(noMetricSession) === "metrics", "Improve Weak Areas routes to weakest useful stage");
+
+let limitSession = createInitialInterviewSession();
+for (const answer of [
+  "Customer Success Associate in technology",
+  "I have customer-facing support experience.",
+  "I worked as a Support Associate at Local Business from 2023 - 2024.",
+  "I handled customer communication, support tickets, CRM updates, and issue escalation.",
+  "I improved follow-up consistency and created cleaner records.",
+  "I used Zendesk, Excel, Slack, documentation, and record keeping."
+]) {
+  limitSession = updateInterviewDraftFromUserAnswer(limitSession, createUserInterviewMessage(answer));
+}
+const limitState = getInterviewModeLimitState(limitSession);
+assert(limitState.answerCount === 6, "preview answer count tracks user turns");
+assert(limitState.isLocked, "preview locks after answer limit");
+assert(limitState.label.includes("Premium Preview"), "preview state has premium label");
+
+const interviewModeSource = fs.readFileSync(path.join(root, "src/components/InterviewMode.tsx"), "utf8");
+const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
+const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
+assert(interviewModeSource.includes("Stop filling out forms"), "premium interview page copy exists");
+assert(interviewModeSource.includes("Resume Strength"), "review screen strength label copy exists");
+assert(premiumSource.includes("Interview Mode is planned as a premium feature"), "locked panel copy exists");
+assert(landingSource.includes("Premium Preview"), "landing page premium badge copy exists");
+assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
 
 const customRoleData = {
   ...initialIntake,

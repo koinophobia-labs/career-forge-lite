@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { CopyButton } from "@/components/CopyButton";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
+import { PremiumBadge, PremiumLockedPanel, PremiumPreviewMeter, UpgradeCallout } from "@/components/PremiumAccess";
 import { ResumePreview } from "@/components/ResumePreview";
 import {
   canGenerateResumeFromInterview,
@@ -11,6 +12,7 @@ import {
   createInitialInterviewSession,
   createUserInterviewMessage,
   generateResumePackageFromInterview,
+  getInterviewCoachingMessages,
   getMissingOrWeakFields,
   getNextAssistantQuestion,
   getWeakestInterviewStage,
@@ -19,6 +21,7 @@ import {
   markInterviewReadyForGeneration,
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
+import { getInterviewModeLimitState } from "@/lib/feature-access";
 import { resumeToText } from "@/lib/resume-export";
 import type { ResumePackage } from "@/types/career";
 import type { InterviewSession } from "@/types/interview";
@@ -44,6 +47,8 @@ export function InterviewMode() {
   );
   const missingFields = useMemo(() => getMissingOrWeakFields(session), [session]);
   const canGenerate = canGenerateResumeFromInterview(session);
+  const limitState = useMemo(() => getInterviewModeLimitState(session), [session]);
+  const coachingMessages = useMemo(() => getInterviewCoachingMessages(session), [session]);
   const statusCounts = useMemo(
     () =>
       session.fieldStatuses.reduce(
@@ -68,7 +73,7 @@ export function InterviewMode() {
   function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
-    if (!content) return;
+    if (!content || limitState.isLocked) return;
 
     const userMessage = createUserInterviewMessage(content);
     const updated = updateInterviewDraftFromUserAnswer(session, userMessage);
@@ -135,6 +140,7 @@ export function InterviewMode() {
               </span>
             </Link>
             <div className="flex flex-wrap gap-2">
+              <PremiumBadge />
               <button
                 type="button"
                 onClick={() => setMode("interview")}
@@ -169,10 +175,8 @@ export function InterviewMode() {
                 </p>
               </div>
               <div className="rounded-md border border-white/10 bg-white/5 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Readiness</p>
-                <p className="mt-2 text-lg font-bold text-cyan">
-                  {generatedPackage.readiness.ready ? "Ready to generate" : "Needs more signal"}
-                </p>
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Resume Strength</p>
+                <p className="mt-2 text-lg font-bold text-cyan">{generatedPackage.readiness.strengthLabel}</p>
                 <p className="mt-2 text-sm leading-6 text-paper/62">{generatedPackage.readiness.suggestedNextQuestion}</p>
               </div>
             </div>
@@ -204,11 +208,11 @@ export function InterviewMode() {
             </div>
 
             <div className="trust-panel rounded-md p-5">
-              <h2 className="text-lg font-bold text-paper">Weak Areas / Improve Before Applying</h2>
+              <h2 className="text-lg font-bold text-paper">Next Improvement Targets</h2>
               <div className="mt-4 space-y-3 text-sm leading-6 text-paper/68">
                 {missingMetrics && (
                   <p className="rounded-md border border-ember/20 bg-ember/10 p-3 text-ember">
-                    The resume would improve with measurable impact, such as customers helped, tickets handled, reports created, transaction volume, or time saved.
+                    Missing metrics reduce resume strength, but Career Forge will not invent them. Add measurable impact such as customers helped, tickets handled, reports created, transaction volume, or time saved.
                   </p>
                 )}
                 {weakAreas.length ? (
@@ -253,19 +257,31 @@ export function InterviewMode() {
               </span>
             </span>
           </Link>
-          <span className="rounded-md border border-cyan/25 bg-cyan/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-cyan">
-            Premium Preview / No Paywall
-          </span>
+          <PremiumBadge />
         </div>
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="trust-panel rounded-md p-5 sm:p-7">
             <p className="trust-kicker text-xs font-black uppercase">career://interview-mode</p>
-            <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Career Forge Interview Mode</h1>
+            <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">
+              Stop filling out forms. Answer like you are talking to a career coach.
+            </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
-              Answer questions conversationally. Career Forge will pull resume-ready material from your answers and map it
-              into the same ATS-safe resume structure used by the current builder.
+              Career Forge interviews you, asks follow-ups, extracts proof, and turns your answers into a recruiter-ready
+              resume plus LinkedIn headline. Best for people who know what they did, but struggle to write it.
             </p>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              {[
+                ["Smart follow-ups", "The interview asks for the next useful detail instead of dumping a long form on you."],
+                ["Proof extraction", "Responsibilities, tools, outcomes, and metrics are pulled into a structured draft."],
+                ["Resume + LinkedIn output", "Your answers flow into the existing ATS-safe resume and headline generator."]
+              ].map(([title, body]) => (
+                <article key={title} className="rounded-md border border-white/10 bg-white/5 p-4">
+                  <h2 className="text-sm font-bold text-paper">{title}</h2>
+                  <p className="mt-2 text-xs leading-5 text-paper/58">{body}</p>
+                </article>
+              ))}
+            </div>
 
             <div className="mt-7 rounded-md border border-white/10 bg-obsidian/45">
               <div className="border-b border-white/10 px-4 py-3">
@@ -300,15 +316,17 @@ export function InterviewMode() {
                   id="interview-answer"
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
+                  disabled={limitState.isLocked}
                   rows={4}
-                  placeholder="Plain language is fine. Career Forge will translate it."
-                  className="mt-2 w-full rounded-md border border-white/12 bg-white/8 px-4 py-3 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/35 focus:border-cyan"
+                  placeholder={limitState.isLocked ? "Premium preview limit reached." : "Plain language is fine. Career Forge will translate it."}
+                  className="mt-2 w-full rounded-md border border-white/12 bg-white/8 px-4 py-3 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/35 focus:border-cyan disabled:cursor-not-allowed disabled:opacity-55"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-paper/55">Estimate if you are not sure. Short answers are okay for this preview.</p>
                   <button
                     type="submit"
-                    className="min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan"
+                    disabled={limitState.isLocked}
+                    className="min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-paper/35"
                   >
                     Send Answer
                   </button>
@@ -318,6 +336,15 @@ export function InterviewMode() {
           </div>
 
           <aside className="trust-panel rounded-md p-5">
+            <PremiumPreviewMeter state={limitState} />
+            {limitState.isLocked && (
+              <div className="mt-4">
+                <PremiumLockedPanel onStartOver={handleStartOver} />
+              </div>
+            )}
+            <div className="mt-4">
+              <UpgradeCallout />
+            </div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/52">Resume readiness</p>
             <div className="mt-3 h-2 rounded-full bg-white/10">
               <div
@@ -339,6 +366,17 @@ export function InterviewMode() {
                 </div>
               ))}
             </div>
+
+            {coachingMessages.length > 0 && (
+              <div className="mt-6 rounded-md border border-gold/20 bg-gold/10 p-4">
+                <h2 className="text-sm font-bold text-paper">Career coach notes</h2>
+                <div className="mt-3 space-y-2 text-sm leading-6 text-paper/70">
+                  {coachingMessages.map((message) => (
+                    <p key={message}>{message}</p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 space-y-2">
               {session.fieldStatuses.map((field) => (

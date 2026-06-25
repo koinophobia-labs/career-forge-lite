@@ -68,10 +68,13 @@ export function LandingPage({ onStart }: LandingPageProps) {
               >
                 Try Interview Mode
                 <span className="ml-3 rounded-sm border border-cyan/30 px-2 py-1 text-[0.65rem] uppercase tracking-[0.12em]">
-                  Preview
+                  Premium Preview
                 </span>
               </a>
             </div>
+            <p className="mt-3 text-sm font-semibold text-paper/58">
+              Build your resume by conversation, or use the free guided builder below.
+            </p>
             <div className="mt-7 grid max-w-xl gap-2 text-xs font-bold uppercase tracking-[0.12em] text-paper/70 sm:grid-cols-3">
               {proofItems.map(([label, detail]) => (
                 <span key={label} className="rounded-md border border-white/12 bg-white/5 px-3 py-3">
@@ -144,7 +147,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
         <div className="grid gap-4 md:grid-cols-3">
           {[
             ["01 / Interview", "Guided prompts pull out role, tools, scope, responsibilities, and outcomes without making you write perfect resume copy first."],
-            ["02 / Translation", "The generator turns plain work into editable bullets, skills, a summary, and a concise LinkedIn headline."],
+            ["02 / Premium Preview", "Interview Mode asks smarter follow-ups and shows how conversational resume building will work as a premium path."],
             ["03 / Receipts", "ATS checks stay practical: standard headings, single column, skills, action verbs, and quantified context. No fake score."]
           ].map(([title, body]) => (
             <article key={title} className="trust-card rounded-md p-5">

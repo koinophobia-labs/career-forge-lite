@@ -788,6 +788,7 @@ export type InterviewReadinessSummary = {
   weakAreas: string[];
   suggestedNextQuestion: string;
   weakestStage: InterviewStageId;
+  strengthLabel: "Draft" | "Usable" | "Strong" | "Application Ready";
 };
 
 export type InterviewGeneratedPackage = {
@@ -850,8 +851,46 @@ export function getInterviewResumeReadinessSummary(session: InterviewSession): I
     strongestEvidence,
     weakAreas: weakAreas.length ? weakAreas : ready ? [] : ["Add more specific role, responsibility, tool, and result details."],
     suggestedNextQuestion: getNextAssistantQuestion(session),
-    weakestStage: getWeakestInterviewStage(session)
+    weakestStage: getWeakestInterviewStage(session),
+    strengthLabel: getInterviewResumeStrengthLabel(session)
   };
+}
+
+export function getInterviewResumeStrengthLabel(session: InterviewSession): InterviewReadinessSummary["strengthLabel"] {
+  const confidence = session.resumeDraft.confidenceScore;
+  const hasMetrics = session.resumeDraft.metrics.length > 0;
+  const strongCount = (session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session)).filter(
+    (field) => field.status === "strong"
+  ).length;
+
+  if (!canGenerateResumeFromInterview(session)) return "Draft";
+  if (confidence >= 82 && hasMetrics && strongCount >= 5) return "Application Ready";
+  if (confidence >= 68 && strongCount >= 4) return "Strong";
+  return "Usable";
+}
+
+export function getInterviewCoachingMessages(session: InterviewSession): string[] {
+  const statuses = statusByKey(session);
+  const messages: string[] = [];
+  const isWeak = (key: keyof InterviewResumeDraft) => {
+    const status = statuses.get(key)?.status ?? "empty";
+    return status === "empty" || status === "weak";
+  };
+
+  if (isWeak("targetRole")) {
+    messages.push("A clear target role helps Career Forge aim the resume instead of writing something generic.");
+  }
+  if (isWeak("metrics")) {
+    messages.push("Numbers help recruiters trust the story. Approximate volume, speed, dollars, percentages, or time saved all count.");
+  }
+  if (isWeak("achievements") && isWeak("projects")) {
+    messages.push("Try naming what changed because of your work: faster response, cleaner records, better follow-through, or fewer errors.");
+  }
+  if (isWeak("tools") && isWeak("skills")) {
+    messages.push("Mention systems, platforms, software, equipment, or workflows you used.");
+  }
+
+  return messages.slice(0, 3);
 }
 
 function metricForPattern(metrics: string, pattern: RegExp) {
