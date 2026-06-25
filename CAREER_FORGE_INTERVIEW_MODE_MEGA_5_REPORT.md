@@ -157,5 +157,5 @@ Add a Dossier Review step before generation that shows the user the structured f
 
 ## Git Status
 
-- Commit hash: Pending
+- Commit hash: `d7c4889`
 - Push result: Pending
