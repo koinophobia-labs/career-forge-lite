@@ -2,19 +2,28 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
+import { CopyButton } from "@/components/CopyButton";
+import { LinkedInPreview } from "@/components/LinkedInPreview";
+import { ResumePreview } from "@/components/ResumePreview";
 import {
   canGenerateResumeFromInterview,
-  convertInterviewDraftToExistingResumeInput,
   createAssistantInterviewMessage,
   createInitialInterviewSession,
   createUserInterviewMessage,
+  generateResumePackageFromInterview,
   getMissingOrWeakFields,
   getNextAssistantQuestion,
+  getWeakestInterviewStage,
+  type InterviewGeneratedPackage,
   interviewStages,
+  markInterviewReadyForGeneration,
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
-import { generateResumePackage } from "@/lib/generator";
+import { resumeToText } from "@/lib/resume-export";
+import type { ResumePackage } from "@/types/career";
 import type { InterviewSession } from "@/types/interview";
+
+type InterviewModeState = "interview" | "generating" | "review";
 
 function statusTone(status: string) {
   if (status === "strong") return "border-cyan/35 bg-cyan/10 text-cyan";
@@ -26,7 +35,8 @@ function statusTone(status: string) {
 export function InterviewMode() {
   const [session, setSession] = useState<InterviewSession>(() => createInitialInterviewSession());
   const [input, setInput] = useState("");
-  const [generatedNote, setGeneratedNote] = useState("");
+  const [mode, setMode] = useState<InterviewModeState>("interview");
+  const [generatedPackage, setGeneratedPackage] = useState<InterviewGeneratedPackage | null>(null);
 
   const currentStage = useMemo(
     () => interviewStages.find((stage) => stage.id === session.currentStage) ?? interviewStages[0],
@@ -70,14 +80,162 @@ export function InterviewMode() {
 
     setSession(nextSession);
     setInput("");
-    setGeneratedNote("");
   }
 
   function handleGenerate() {
     if (!canGenerate) return;
-    const intake = convertInterviewDraftToExistingResumeInput(session);
-    const resume = generateResumePackage(intake);
-    setGeneratedNote(`Resume package is ready for ${resume.linkedinHeadline}. Full review wiring comes next.`);
+    const readySession = markInterviewReadyForGeneration(session);
+    setSession(readySession);
+    setMode("generating");
+    window.setTimeout(() => {
+      setGeneratedPackage(generateResumePackageFromInterview(readySession));
+      setMode("review");
+    }, 220);
+  }
+
+  function updateGeneratedResume(resume: ResumePackage) {
+    if (!generatedPackage) return;
+    setGeneratedPackage({ ...generatedPackage, resume });
+  }
+
+  function handleImproveWeakAreas() {
+    const weakestStage = getWeakestInterviewStage(session);
+    const targetedSession: InterviewSession = { ...session, currentStage: weakestStage };
+    setSession({
+      ...targetedSession,
+      messages: [...targetedSession.messages, createAssistantInterviewMessage(getNextAssistantQuestion(targetedSession))]
+    });
+    setMode("interview");
+  }
+
+  function handleStartOver() {
+    setSession(createInitialInterviewSession());
+    setGeneratedPackage(null);
+    setInput("");
+    setMode("interview");
+  }
+
+  if (mode === "review" && generatedPackage) {
+    const weakAreas = generatedPackage.readiness.weakAreas;
+    const missingMetrics = !session.resumeDraft.metrics.length;
+
+    return (
+      <main className="min-h-screen px-5 py-8 sm:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+              <span className="logo-mark" aria-hidden="true">
+                CF
+              </span>
+              <span>
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
+                <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
+                  Interview Resume Review
+                </span>
+              </span>
+            </Link>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("interview")}
+                className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
+              >
+                Back to Interview
+              </button>
+              <button
+                type="button"
+                onClick={handleImproveWeakAreas}
+                className="rounded-md border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
+              >
+                Improve Weak Areas
+              </button>
+              <button
+                type="button"
+                onClick={handleStartOver}
+                className="rounded-md border border-ember/25 bg-ember/10 px-4 py-2 text-sm font-bold text-ember transition hover:border-ember"
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
+
+          <section className="trust-panel rounded-md p-5 sm:p-7">
+            <p className="trust-kicker text-xs font-black uppercase">resume://interview-generated</p>
+            <div className="mt-3 grid gap-5 lg:grid-cols-[1fr_22rem]">
+              <div>
+                <h1 className="text-3xl font-bold text-paper sm:text-5xl">Review the interview-built package.</h1>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
+                  This draft uses the same Career Forge generator as the standard builder. The panel below shows what evidence supported it and where another answer would strengthen it.
+                </p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/5 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Readiness</p>
+                <p className="mt-2 text-lg font-bold text-cyan">
+                  {generatedPackage.readiness.ready ? "Ready to generate" : "Needs more signal"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-paper/62">{generatedPackage.readiness.suggestedNextQuestion}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <CopyButton getText={() => resumeToText(generatedPackage.intake, generatedPackage.resume)} label="Copy Resume" />
+              <CopyButton getText={() => generatedPackage.resume.linkedinHeadline} label="Copy LinkedIn Headline" />
+            </div>
+          </section>
+
+          <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="trust-panel rounded-md p-5">
+              <h2 className="text-lg font-bold text-paper">Interview Extracted Evidence</h2>
+              <div className="mt-4 space-y-3">
+                {generatedPackage.evidence.length ? (
+                  generatedPackage.evidence.slice(0, 12).map((item) => (
+                    <article key={`${item.label}-${item.value}`} className="rounded-md border border-white/10 bg-white/5 p-3">
+                      <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-cyan">{item.label}</p>
+                      <p className="mt-1 text-sm font-bold text-paper">{item.value}</p>
+                      <p className="mt-2 text-xs leading-5 text-paper/55">
+                        Evidence: {item.evidence[0] || "Captured in the structured draft."}
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-paper/60">No evidence items were captured yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="trust-panel rounded-md p-5">
+              <h2 className="text-lg font-bold text-paper">Weak Areas / Improve Before Applying</h2>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-paper/68">
+                {missingMetrics && (
+                  <p className="rounded-md border border-ember/20 bg-ember/10 p-3 text-ember">
+                    The resume would improve with measurable impact, such as customers helped, tickets handled, reports created, transaction volume, or time saved.
+                  </p>
+                )}
+                {weakAreas.length ? (
+                  weakAreas.map((area) => (
+                    <p key={area} className="rounded-md border border-white/10 bg-white/5 p-3">
+                      {area}
+                    </p>
+                  ))
+                ) : (
+                  <p className="rounded-md border border-cyan/20 bg-cyan/10 p-3 text-cyan">
+                    The interview has enough signal for a first resume draft.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <ResumePreview
+            data={generatedPackage.intake}
+            resume={generatedPackage.resume}
+            template="Modern ATS"
+            onChange={updateGeneratedResume}
+          />
+          <LinkedInPreview resume={generatedPackage.resume} onChange={updateGeneratedResume} />
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -221,13 +379,12 @@ export function InterviewMode() {
 
             <button
               type="button"
-              disabled={!canGenerate}
+              disabled={!canGenerate || mode === "generating"}
               onClick={handleGenerate}
               className="mt-5 min-h-12 w-full rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-paper/35"
             >
-              Generate Resume
+              {mode === "generating" ? "Generating..." : "Generate Resume"}
             </button>
-            {generatedNote && <p className="mt-3 rounded-md border border-cyan/20 bg-cyan/10 p-3 text-sm text-cyan">{generatedNote}</p>}
           </aside>
         </section>
       </div>

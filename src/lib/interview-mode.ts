@@ -1,5 +1,6 @@
 import { allToolOptions, initialIntake } from "@/lib/career-data";
-import type { IntakeData, RoleFamily } from "@/types/career";
+import { generateResumePackage } from "@/lib/generator";
+import type { IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 import type {
   InterviewFieldStatus,
   InterviewMessage,
@@ -440,7 +441,13 @@ function extractToolSignals(answer: string) {
 }
 
 function extractMetricSignals(answer: string) {
-  return unique(answer.match(metricPattern) ?? []).slice(0, 10);
+  return unique(answer.match(metricPattern) ?? [])
+    .filter((metric) => {
+      const trimmed = metric.trim();
+      if (/^(?:19|20)\d{2}(?:\s*-\s*(?:present|(?:19|20)\d{2}))?$/i.test(trimmed)) return false;
+      return /\$|%|\+|customers?|clients?|users?|tickets?|calls?|reports?|projects?|transactions?|orders?|accounts?|team members?|people|cases?|requests?|revenue|budget|weekly|monthly|daily|per week|per month|per day|hours?|minutes?|days?|saved|reduced|increased/i.test(trimmed);
+    })
+    .slice(0, 10);
 }
 
 function extractResponsibilitySignals(answer: string) {
@@ -606,6 +613,11 @@ function fieldStatus(session: InterviewSession, key: keyof InterviewResumeDraft)
   return statuses.find((field) => field.fieldKey === key)?.status ?? "empty";
 }
 
+function statusByKey(session: InterviewSession) {
+  const statuses = session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session);
+  return new Map(statuses.map((status) => [status.fieldKey, status]));
+}
+
 function isReadyField(session: InterviewSession, key: keyof InterviewResumeDraft) {
   return ["usable", "strong"].includes(fieldStatus(session, key));
 }
@@ -618,6 +630,39 @@ export function canGenerateResumeFromInterview(session: InterviewSession) {
     (isReadyField(session, "skills") || isReadyField(session, "tools")) &&
     (isReadyField(session, "achievements") || isReadyField(session, "projects"))
   );
+}
+
+const stageForField: Partial<Record<keyof InterviewResumeDraft, InterviewStageId>> = {
+  targetRole: "role_targeting",
+  targetIndustry: "role_targeting",
+  experienceLevel: "background_overview",
+  roles: "current_or_recent_role",
+  responsibilities: "responsibilities",
+  achievements: "achievements",
+  metrics: "metrics",
+  tools: "tools_and_skills",
+  skills: "tools_and_skills",
+  projects: "projects_or_portfolio",
+  education: "education_and_certifications",
+  certifications: "education_and_certifications",
+  gapsOrWeakAreas: "gaps_and_positioning"
+};
+
+export function markInterviewReadyForGeneration(session: InterviewSession): InterviewSession {
+  return withStatuses({
+    ...session,
+    currentStage: canGenerateResumeFromInterview(session) ? "final_resume_review" : getWeakestInterviewStage(session)
+  });
+}
+
+export function getWeakestInterviewStage(session: InterviewSession): InterviewStageId {
+  const priority: Array<keyof InterviewResumeDraft> = ["targetRole", "roles", "responsibilities", "tools", "skills", "achievements", "projects", "metrics"];
+  const statuses = statusByKey(session);
+  const weakField = priority.find((key) => {
+    const status = statuses.get(key)?.status ?? "empty";
+    return status === "empty" || status === "weak";
+  });
+  return weakField ? stageForField[weakField] ?? "role_targeting" : session.currentStage;
 }
 
 export function assistantQuestionForStage(stageId: InterviewStageId) {
@@ -730,6 +775,85 @@ export function createAssistantInterviewMessage(content: string): InterviewMessa
   return { id: makeId("msg"), role: "assistant", content, createdAt: now() };
 }
 
+export type InterviewEvidenceItem = {
+  label: string;
+  value: string;
+  fieldKey: keyof InterviewResumeDraft;
+  evidence: string[];
+};
+
+export type InterviewReadinessSummary = {
+  ready: boolean;
+  strongestEvidence: string[];
+  weakAreas: string[];
+  suggestedNextQuestion: string;
+  weakestStage: InterviewStageId;
+};
+
+export type InterviewGeneratedPackage = {
+  intake: IntakeData;
+  resume: ResumePackage;
+  readiness: InterviewReadinessSummary;
+  evidence: InterviewEvidenceItem[];
+};
+
+function evidenceForValue(messages: InterviewMessage[], value: string) {
+  const normalized = value.toLowerCase();
+  const tokens = normalized.split(/\s+/).filter((token) => token.length > 3).slice(0, 5);
+  return messages
+    .filter((message) => message.role === "user")
+    .filter((message) => {
+      const content = message.content.toLowerCase();
+      return content.includes(normalized) || tokens.some((token) => content.includes(token));
+    })
+    .slice(-2)
+    .map((message) => message.content);
+}
+
+export function getInterviewEvidence(session: InterviewSession): InterviewEvidenceItem[] {
+  const draft = session.resumeDraft;
+  const evidenceSource: Array<[keyof InterviewResumeDraft, string, string[]]> = [
+    ["targetRole", "Target role", draft.targetRole ? [draft.targetRole] : []],
+    ["roles", "Role", draft.roles.map((role) => [role.title, role.company, role.timeInRole].filter(Boolean).join(" | "))],
+    ["responsibilities", "Responsibility", draft.responsibilities],
+    ["achievements", "Achievement", draft.achievements],
+    ["metrics", "Metric", draft.metrics],
+    ["tools", "Tool", draft.tools],
+    ["skills", "Skill", draft.skills],
+    ["projects", "Project", draft.projects]
+  ];
+
+  return evidenceSource.flatMap(([fieldKey, label, values]) =>
+    values.filter(Boolean).map((value) => ({
+      label,
+      value,
+      fieldKey,
+      evidence: evidenceForValue(session.messages, value)
+    }))
+  );
+}
+
+export function getInterviewResumeReadinessSummary(session: InterviewSession): InterviewReadinessSummary {
+  const ready = canGenerateResumeFromInterview(session);
+  const statuses = session.fieldStatuses.length ? session.fieldStatuses : getCurrentFieldStatuses(session);
+  const weakAreas = statuses
+    .filter((field) => field.status === "empty" || field.status === "weak")
+    .filter((field) => ["targetRole", "roles", "responsibilities", "achievements", "metrics", "tools", "skills", "projects"].includes(String(field.fieldKey)))
+    .map((field) => `${field.label}: ${field.status}`);
+  const strongestEvidence = getInterviewEvidence(session)
+    .filter((item) => item.evidence.length)
+    .slice(0, 6)
+    .map((item) => `${item.label}: ${item.value}`);
+
+  return {
+    ready,
+    strongestEvidence,
+    weakAreas: weakAreas.length ? weakAreas : ready ? [] : ["Add more specific role, responsibility, tool, and result details."],
+    suggestedNextQuestion: getNextAssistantQuestion(session),
+    weakestStage: getWeakestInterviewStage(session)
+  };
+}
+
 function metricForPattern(metrics: string, pattern: RegExp) {
   return metrics
     .split(",")
@@ -764,6 +888,17 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     outcomes: draft.achievements.join(", "),
     customRoleIndustry: draft.targetIndustry,
     customRoleTransferableSkills: draft.skills,
-    customRoleNotes: unique([...draft.projects, ...draft.gapsOrWeakAreas, draft.education, ...draft.certifications]).join(", ")
+    customRoleNotes: unique([...draft.projects, draft.education, ...draft.certifications]).join(", ")
+  };
+}
+
+export function generateResumePackageFromInterview(session: InterviewSession): InterviewGeneratedPackage {
+  const intake = convertInterviewDraftToExistingResumeInput(session);
+  const resume = generateResumePackage(intake);
+  return {
+    intake,
+    resume,
+    readiness: getInterviewResumeReadinessSummary(session),
+    evidence: getInterviewEvidence(session)
   };
 }

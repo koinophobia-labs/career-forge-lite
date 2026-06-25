@@ -54,9 +54,12 @@ const {
   convertInterviewDraftToExistingResumeInput,
   createInitialInterviewSession,
   createUserInterviewMessage,
+  generateResumePackageFromInterview,
   getCurrentFieldStatuses,
+  getInterviewResumeReadinessSummary,
   getMissingOrWeakFields,
   getNextAssistantQuestion,
+  getWeakestInterviewStage,
   updateInterviewDraftFromUserAnswer
 } = loadTsModule(path.join(root, "src/lib/interview-mode.ts"));
 
@@ -331,6 +334,39 @@ const interviewExport = resumeToText(interviewInput, interviewResume);
 assert(interviewExport.includes("Customer Success Associate"), "interview-generated export includes target role");
 assert(!interviewExport.includes(educationPlaceholder), "interview-generated export omits placeholder education");
 assert(!weakTerms.some((term) => interviewExport.toLowerCase().includes(term.toLowerCase())), "interview-generated export avoids weak/UI leakage");
+
+const interviewGeneratedPackage = generateResumePackageFromInterview(interviewSession);
+assert(interviewGeneratedPackage.resume.summary.trim(), "interview package has summary");
+assert(interviewGeneratedPackage.resume.experience.flatMap((role) => role.bullets).length >= 2, "interview package has bullets");
+assert(interviewGeneratedPackage.resume.coreSkills.length >= 3, "interview package has skills");
+assert(interviewGeneratedPackage.resume.linkedinHeadline.includes("Customer Success Associate"), "interview package has headline");
+assert(resumeToText(interviewGeneratedPackage.intake, interviewGeneratedPackage.resume).includes("SUMMARY"), "interview package has copy-safe resume text");
+assert(interviewGeneratedPackage.evidence.some((item) => item.evidence.length), "interview package exposes evidence");
+
+let noMetricSession = createInitialInterviewSession();
+for (const answer of [
+  "Administrative Assistant in business services",
+  "I have office support and customer-facing retail experience.",
+  "I worked as a Retail Associate at Target from 2022 - 2024.",
+  "I handled scheduling support, customer communication, records, returns, and store presentation.",
+  "I improved record accuracy and created smoother follow-up notes.",
+  "I used Google Workspace, Excel, Outlook, documentation, and data entry."
+]) {
+  noMetricSession = updateInterviewDraftFromUserAnswer(noMetricSession, createUserInterviewMessage(answer));
+}
+assert(canGenerateResumeFromInterview(noMetricSession), "interview can generate without metrics when other proof exists");
+const noMetricSummary = getInterviewResumeReadinessSummary(noMetricSession);
+assert(noMetricSummary.weakAreas.some((area) => /Scope or metrics/i.test(area)), "missing metrics appear as coaching note");
+const noMetricPackage = generateResumePackageFromInterview(noMetricSession);
+const noMetricText = resumeToText(noMetricPackage.intake, noMetricPackage.resume);
+assert(!/fake metric|measurable impact|customers helped/i.test(noMetricText), "missing metrics coaching does not enter resume output");
+noMetricSession = {
+  ...noMetricSession,
+  resumeDraft: { ...noMetricSession.resumeDraft, gapsOrWeakAreas: ["still learning SQL"] }
+};
+const gapPackage = generateResumePackageFromInterview(noMetricSession);
+assert(!resumeToText(gapPackage.intake, gapPackage.resume).includes("still learning SQL"), "gap notes stay out of resume output");
+assert(getWeakestInterviewStage(noMetricSession) === "metrics", "Improve Weak Areas routes to weakest useful stage");
 
 const customRoleData = {
   ...initialIntake,
