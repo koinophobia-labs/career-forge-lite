@@ -62,6 +62,15 @@ export function LandingPage({ onStart }: LandingPageProps) {
               >
                 View the Receipts
               </a>
+              <a
+                href="/interview"
+                className="inline-flex min-h-12 items-center rounded-md border border-cyan/25 bg-cyan/10 px-6 text-base font-bold text-cyan transition hover:border-gold hover:text-gold"
+              >
+                Try Interview Mode
+                <span className="ml-3 rounded-sm border border-cyan/30 px-2 py-1 text-[0.65rem] uppercase tracking-[0.12em]">
+                  Preview
+                </span>
+              </a>
             </div>
             <div className="mt-7 grid max-w-xl gap-2 text-xs font-bold uppercase tracking-[0.12em] text-paper/70 sm:grid-cols-3">
               {proofItems.map(([label, detail]) => (

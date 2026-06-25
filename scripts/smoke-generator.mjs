@@ -49,6 +49,15 @@ const {
   toolSuggestionsByFamily
 } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 const { educationPlaceholder, resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
+const {
+  canGenerateResumeFromInterview,
+  convertInterviewDraftToExistingResumeInput,
+  createInitialInterviewSession,
+  createUserInterviewMessage,
+  getMissingOrWeakFields,
+  getNextInterviewStage,
+  updateInterviewDraftFromUserAnswer
+} = loadTsModule(path.join(root, "src/lib/interview-mode.ts"));
 
 const personas = [
   {
@@ -236,6 +245,52 @@ const sportsbookArsenal = findJobArsenal("Sportsbook Ticket Writer");
 assert(sportsbookArsenal?.responsibilities.includes("Cash handling"), "sportsbook arsenal includes cash handling");
 assert(sportsbookArsenal?.workflows.includes("Shift balancing"), "sportsbook arsenal includes workflow prompts");
 assert(findJobArsenal("Security Officer")?.skills.includes("De-escalation"), "security arsenal includes de-escalation");
+
+let interviewSession = createInitialInterviewSession();
+assert(interviewSession.currentStage === "role_targeting", "interview starts at role targeting");
+assert(interviewSession.messages[0]?.role === "assistant", "interview starts with assistant question");
+assert(getMissingOrWeakFields(interviewSession).some((field) => field.fieldKey === "targetRole"), "initial interview tracks missing target role");
+assert(!canGenerateResumeFromInterview(interviewSession), "interview cannot generate before required fields");
+
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("Customer Success Associate in technology")
+);
+assert(interviewSession.resumeDraft.targetRole.includes("Customer Success Associate"), "interview captures target role");
+assert(getNextInterviewStage(interviewSession).id === "current_or_recent_role", "interview routes toward missing work history");
+
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("I worked as a Sportsbook Ticket Writer at DraftKings from Jan 2024 - Present.")
+);
+interviewSession = updateInterviewDraftFromUserAnswer(
+  interviewSession,
+  createUserInterviewMessage("I handled customer communication, payment processing, issue escalation, and accurate records.")
+);
+assert(canGenerateResumeFromInterview(interviewSession), "interview can generate after target, role, and responsibilities");
+
+interviewSession = {
+  ...interviewSession,
+  resumeDraft: {
+    ...interviewSession.resumeDraft,
+    achievements: ["improved response consistency"],
+    metrics: ["50+ weekly customers"],
+    tools: ["Zendesk", "Excel"],
+    skills: ["Customer Communication", "Record Keeping"],
+    education: "",
+    certifications: []
+  }
+};
+const interviewInput = convertInterviewDraftToExistingResumeInput(interviewSession);
+assert(interviewInput.targetJobTitle.includes("Customer Success Associate"), "interview converts target role to existing input");
+assert(interviewInput.currentTitle === "Sportsbook Ticket Writer", "interview converts current title to existing input");
+assert(interviewInput.currentCompany === "DraftKings", "interview converts company to existing input");
+assert(interviewInput.selectedResponsibilities.includes("Customer Communication"), "interview conversion keeps skills/responsibilities");
+const interviewResume = generateResumePackage(interviewInput);
+const interviewExport = resumeToText(interviewInput, interviewResume);
+assert(interviewExport.includes("Customer Success Associate"), "interview-generated export includes target role");
+assert(!interviewExport.includes(educationPlaceholder), "interview-generated export omits placeholder education");
+assert(!weakTerms.some((term) => interviewExport.toLowerCase().includes(term.toLowerCase())), "interview-generated export avoids weak/UI leakage");
 
 const customRoleData = {
   ...initialIntake,

@@ -37,6 +37,12 @@ export function SiteHeader({ onStart }: SiteHeaderProps) {
               {label}
             </a>
           ))}
+          <a
+            href="/interview"
+            className="rounded-md border border-cyan/25 px-3 py-2 text-cyan transition hover:border-gold hover:text-gold"
+          >
+            Interview Mode
+          </a>
           <button
             type="button"
             onClick={onStart}
