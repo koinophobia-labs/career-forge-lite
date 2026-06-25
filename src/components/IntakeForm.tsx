@@ -59,6 +59,8 @@ type QuickStartPath =
   | "project_based"
   | "internal_application";
 
+type MomentumStage = "Identity" | "Target" | "Experience" | "Arsenal" | "Proof" | "Review";
+
 const requiredKeys: Array<keyof IntakeData> = ["fullName", "email", "targetJobTitle", "currentTitle"];
 
 const questions: Question[] = [
@@ -162,6 +164,35 @@ const quickStartPaths: Array<{ id: QuickStartPath; label: string; helper: string
   { id: "project_based", label: "I have projects instead of work experience", helper: "We will treat projects, coursework, shipped work, or volunteer work as usable proof." },
   { id: "internal_application", label: "I'm applying internally", helper: "We will look for reliability, process knowledge, and cross-team support." }
 ];
+
+const momentumStages: MomentumStage[] = ["Identity", "Target", "Experience", "Arsenal", "Proof", "Review"];
+
+const questionStages: Record<Question["id"], MomentumStage> = {
+  quick_start: "Identity",
+  name: "Identity",
+  email: "Identity",
+  contact: "Identity",
+  target: "Target",
+  current_role: "Experience",
+  current_company: "Experience",
+  previous_role: "Experience",
+  additional_role: "Experience",
+  tools: "Arsenal",
+  responsibilities: "Arsenal",
+  scope: "Proof",
+  outcomes: "Proof",
+  template: "Review",
+  review: "Review"
+};
+
+const stageConfirmations: Record<MomentumStage, string> = {
+  Identity: "Dossier started",
+  Target: "Career lane locked",
+  Experience: "Experience frame captured",
+  Arsenal: "Experience signals captured",
+  Proof: "Proof signals added",
+  Review: "Resume package ready"
+};
 
 const allScopeFields: Array<{ key: keyof IntakeData; label: string }> = [
   { key: "customersServed", label: "Customers/users" },
@@ -355,6 +386,9 @@ export function IntakeForm({
   const showTargetMatches = targetSearchOpen && (!exactTargetMatch || Boolean(normalizedTargetQuery));
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
   const pathGuidance = quickStartPaths.find((path) => path.id === quickStartPath)?.helper ?? quickStartPaths[0].helper;
+  const currentStage = questionStages[question.id];
+  const currentStageIndex = momentumStages.indexOf(currentStage);
+  const stageProgress = Math.round(((currentStageIndex + 1) / momentumStages.length) * 100);
 
   const roleSummary = useMemo(() => {
     const roles = [
@@ -411,6 +445,26 @@ export function IntakeForm({
       (sections.reduce((sum, section) => sum + (section.status === "Strong" ? 1 : section.status === "Good" ? 0.68 : 0), 0) / sections.length) * 100
     );
     return { sections, score };
+  }
+
+  function getMomentumConfirmation() {
+    if (question.id === "target" && data.targetJobTitle.trim()) return `Lane locked: ${data.roleFamily}`;
+    if (question.id === "tools" && selectedTools.length) return "Tools added to your dossier";
+    if (question.id === "responsibilities" && (data.selectedResponsibilities.length || data.selectedActions.length)) {
+      return "Experience signals captured";
+    }
+    if (question.id === "review") return "Ready to forge resume package";
+    if (questionIndex > 0) return stageConfirmations[currentStage];
+    return "Dossier started";
+  }
+
+  function getContinueLabel() {
+    if (question.id === "target") return "Lock career lane";
+    if (question.id === "current_role" || question.id === "current_company") return "Add experience";
+    if (question.id === "tools" || question.id === "responsibilities") return "Capture signals";
+    if (question.id === "scope" || question.id === "outcomes" || question.id === "template") return "Review dossier";
+    if (question.id === "review") return "Forge resume";
+    return "Continue";
   }
 
   function setRoleFamily(roleFamily: RoleFamily) {
@@ -1580,42 +1634,54 @@ export function IntakeForm({
         );
       default:
         return (
-          <div className="grid gap-3 md:grid-cols-2">
-            <ReviewItem label="Quick start path" value={quickStartPaths.find((path) => path.id === quickStartPath)?.label ?? "First resume"} onEdit={() => goToQuestionId("quick_start")} />
-            <ReviewItem label="Contact" value={[data.fullName, data.email, data.phone, data.website].filter(Boolean).join(" / ")} onEdit={() => goToQuestionId("name")} />
-            <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestionId("target")} />
-            <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestionId("target")} />
-            <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestionId("current_role")} />
-            <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestionId("tools")} />
-            <ReviewItem
-              label="Responsibilities"
-              value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}
-              onEdit={() => goToQuestionId("responsibilities")}
-            />
-            {needsUnknownRoleContext && (
+          <div className="space-y-5">
+            <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Resume package ready</p>
+              <h3 className="mt-2 text-xl font-bold text-ink">You gave Career Forge enough signal to build your first resume package.</h3>
+              <div className="mt-4 grid gap-2 text-sm font-semibold text-ink/75 sm:grid-cols-2">
+                <span className="rounded-md bg-white/70 px-3 py-2">Role target: {data.targetJobTitle || "Not added yet"}</span>
+                <span className="rounded-md bg-white/70 px-3 py-2">Career lane: {data.roleFamily}</span>
+                <span className="rounded-md bg-white/70 px-3 py-2">Tools: {selectedTools.length || 0} captured</span>
+                <span className="rounded-md bg-white/70 px-3 py-2">Proof: {scopeSummary.length + data.selectedOutcomes.length} signals</span>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <ReviewItem label="Quick start path" value={quickStartPaths.find((path) => path.id === quickStartPath)?.label ?? "First resume"} onEdit={() => goToQuestionId("quick_start")} />
+              <ReviewItem label="Contact" value={[data.fullName, data.email, data.phone, data.website].filter(Boolean).join(" / ")} onEdit={() => goToQuestionId("name")} />
+              <ReviewItem label="Selected target role" value={data.targetJobTitle || "Not added yet"} onEdit={() => goToQuestionId("target")} />
+              <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestionId("target")} />
+              <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestionId("current_role")} />
+              <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestionId("tools")} />
               <ReviewItem
-                label="Custom role context"
-                value={formatReviewItems([
-                  data.customRoleIndustry ? `Industry: ${data.customRoleIndustry}` : "",
-                  data.customRoleWorkStyles.length ? `Work style: ${data.customRoleWorkStyles.join(", ")}` : "",
-                  data.customRoleTransferableSkills.length ? `Transferable skills: ${data.customRoleTransferableSkills.join(", ")}` : "",
-                  data.customRoleNotes ? `Notes: ${data.customRoleNotes}` : ""
-                ])}
+                label="Responsibilities"
+                value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}
                 onEdit={() => goToQuestionId("responsibilities")}
               />
-            )}
-            <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestionId("scope")} />
-            <ReviewItem
-              label="Outcomes"
-              value={formatReviewItems([...data.selectedOutcomes, data.outcomes])}
-              onEdit={() => goToQuestionId("outcomes")}
-            />
-            <ReviewItem
-              label="Adaptive signals"
-              value={`${data.roleFamily} scope prompts / ${roleOutcomes.join(", ")}`}
-              onEdit={() => goToQuestionId("target")}
-            />
-            <ReviewItem label="Template" value={selectedTemplate} onEdit={() => goToQuestionId("template")} />
+              {needsUnknownRoleContext && (
+                <ReviewItem
+                  label="Custom role context"
+                  value={formatReviewItems([
+                    data.customRoleIndustry ? `Industry: ${data.customRoleIndustry}` : "",
+                    data.customRoleWorkStyles.length ? `Work style: ${data.customRoleWorkStyles.join(", ")}` : "",
+                    data.customRoleTransferableSkills.length ? `Transferable skills: ${data.customRoleTransferableSkills.join(", ")}` : "",
+                    data.customRoleNotes ? `Notes: ${data.customRoleNotes}` : ""
+                  ])}
+                  onEdit={() => goToQuestionId("responsibilities")}
+                />
+              )}
+              <ReviewItem label="Scope" value={formatReviewItems(scopeSummary)} onEdit={() => goToQuestionId("scope")} />
+              <ReviewItem
+                label="Outcomes"
+                value={formatReviewItems([...data.selectedOutcomes, data.outcomes])}
+                onEdit={() => goToQuestionId("outcomes")}
+              />
+              <ReviewItem
+                label="Adaptive signals"
+                value={`${data.roleFamily} scope prompts / ${roleOutcomes.join(", ")}`}
+                onEdit={() => goToQuestionId("target")}
+              />
+              <ReviewItem label="Template" value={selectedTemplate} onEdit={() => goToQuestionId("template")} />
+            </div>
           </div>
         );
     }
@@ -1653,6 +1719,27 @@ export function IntakeForm({
               ))}
             </div>
           </div>
+          <div className="mt-5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10" aria-label={`Interview progress ${stageProgress}%`}>
+              <div className="completion-pulse h-full rounded-full bg-cyan transition-all duration-500" style={{ width: `${stageProgress}%` }} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {momentumStages.map((stage) => (
+                <span
+                  key={stage}
+                  className={`rounded-full border px-3 py-1.5 text-[0.68rem] font-black uppercase tracking-[0.12em] ${
+                    stage === currentStage
+                      ? "border-cyan bg-cyan/10 text-cyan"
+                      : momentumStages.indexOf(stage) < currentStageIndex
+                        ? "border-gold/35 bg-gold/10 text-gold"
+                        : "border-white/10 bg-white/5 text-paper/45"
+                  }`}
+                >
+                  {stage}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
@@ -1662,6 +1749,9 @@ export function IntakeForm({
             <p className="mt-4 text-sm leading-6 text-paper/68">{question.helper}</p>
             <p className="mt-3 text-sm leading-6 text-paper/58">{pathGuidance}</p>
             <p className="mt-5 rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm font-semibold text-cyan">
+              {getMomentumConfirmation()}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-paper/55">
               {questionIndex === questions.length - 1
                 ? `${selectedSignals} guided signals captured. Review before generating.`
                 : "One answer at a time. Short notes are enough."}
@@ -1685,7 +1775,7 @@ export function IntakeForm({
                 type="submit"
                 className="min-h-12 rounded-md bg-ink px-6 font-bold text-paper transition hover:bg-gold hover:text-ink"
               >
-                {questionIndex === questions.length - 1 ? "Generate Resume" : "Continue"}
+                {getContinueLabel()}
               </button>
             </div>
           </div>

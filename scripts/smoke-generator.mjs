@@ -509,6 +509,19 @@ assert(intakeSource.includes("Resume Readiness"), "free builder uses readiness p
 assert(intakeSource.includes("Ready to Generate"), "free builder readiness language exists");
 assert(intakeSource.includes("Approximate numbers are okay"), "free builder metric coaching exists");
 assert(intakeSource.includes("Needs More Detail") && intakeSource.includes("Missing"), "free builder confidence labels exist");
+assert(
+  ["Dossier started", "Career lane locked", "Experience signals captured", "Resume package ready"].every((copy) => intakeSource.includes(copy)),
+  "free builder includes professional momentum confirmations"
+);
+assert(
+  ["Identity", "Target", "Experience", "Arsenal", "Proof", "Review"].every((label) => intakeSource.includes(label)),
+  "free builder includes mission stage labels"
+);
+assert(
+  ["Lock career lane", "Add experience", "Capture signals", "Review dossier", "Forge resume"].every((copy) => intakeSource.includes(copy)),
+  "free builder uses outcome-based continue labels"
+);
+assert(intakeSource.includes("You gave Career Forge enough signal to build your first resume package."), "free builder completion summary exists");
 assert(!intakeSource.includes("Question {String(questionIndex"), "free builder does not show question count progress");
 
 const customRoleData = {

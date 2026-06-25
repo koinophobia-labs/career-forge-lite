@@ -117,6 +117,31 @@ textarea {
   color: #ff6a2b;
 }
 
+.completion-pulse {
+  animation: completion-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes completion-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .completion-pulse {
+    animation: none;
+  }
+}
+
 @media print {
   @page {
     margin: 0.42in;
