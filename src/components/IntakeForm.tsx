@@ -151,11 +151,11 @@ function mergeSelection(current: string, item: string) {
   return exists ? next.filter((value) => value.toLowerCase() !== normalized.toLowerCase()).join(", ") : [...next, normalized].join(", ");
 }
 
-function filterOptions(options: string[], query: string) {
+function filterOptions(options: string[], query: string, limit = 6) {
   const normalizedQuery = query.trim().toLowerCase();
   return options
     .filter((option) => !normalizedQuery || option.toLowerCase().includes(normalizedQuery))
-    .slice(0, 10);
+    .slice(0, limit);
 }
 
 function hasExactOption(options: string[], query: string) {
@@ -181,6 +181,7 @@ export function IntakeForm({
   const [customCompany, setCustomCompany] = useState("");
   const [toolSearch, setToolSearch] = useState("");
   const [toolSearchOpen, setToolSearchOpen] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
   const [customTool, setCustomTool] = useState("");
   const [responsibilitySearch, setResponsibilitySearch] = useState("");
   const [responsibilitySearchOpen, setResponsibilitySearchOpen] = useState(false);
@@ -193,8 +194,12 @@ export function IntakeForm({
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
   const selectedTools = splitSelections(data.tools);
   const roleAwareToolOptions = toolSuggestionsByFamily[data.roleFamily];
-  const toolMatches = filterOptions(toolSearch.trim() ? allToolOptions : roleAwareToolOptions, toolSearch);
-  const responsibilityMatches = filterOptions(suggestions, responsibilitySearch);
+  const toolMatches = filterOptions(
+    toolSearch.trim() ? allToolOptions : roleAwareToolOptions,
+    toolSearch,
+    toolSearch.trim() ? 8 : showMoreTools ? 12 : 6
+  );
+  const responsibilityMatches = filterOptions(suggestions, responsibilitySearch, responsibilitySearch.trim() ? 8 : 6);
   const normalizedTargetQuery = data.targetJobTitle.trim().toLowerCase();
   const exactTargetMatch = careerTargets.find((target) => target.title.toLowerCase() === normalizedTargetQuery);
   const targetMatches = careerTargets
@@ -205,7 +210,7 @@ export function IntakeForm({
       const aliases = target.aliases?.join(" ").toLowerCase() ?? "";
       return title.includes(normalizedTargetQuery) || family.includes(normalizedTargetQuery) || aliases.includes(normalizedTargetQuery);
     })
-    .slice(0, 12);
+    .slice(0, normalizedTargetQuery ? 8 : 6);
   const showTargetMatches = targetSearchOpen && (!exactTargetMatch || Boolean(normalizedTargetQuery));
   const progress = Math.round(((questionIndex + 1) / questions.length) * 100);
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
@@ -328,19 +333,19 @@ export function IntakeForm({
   }
 
   function renderScopeInput(field: { key: keyof IntakeData; label: string; placeholder?: string; hint?: string }) {
-    const quickChoices = scopeQuickChoices(field.key);
+    const quickChoices = scopeQuickChoices(field.key).slice(0, 3);
     return (
-      <div key={field.key} className="block">
-        <span className="mb-2 block text-sm font-semibold text-ink">{field.label}</span>
-        {field.hint && <span className="mb-2 block text-sm leading-5 text-ink/60">{field.hint}</span>}
-        <div className="mb-3 flex flex-wrap gap-2">
+      <div key={field.key} className="rounded-md bg-white p-4">
+        <span className="block text-sm font-bold text-ink">{field.label}</span>
+        {field.hint && <span className="mt-1 block text-sm leading-5 text-ink/55">{field.hint}</span>}
+        <div className="mt-3 flex flex-wrap gap-2">
           {quickChoices.map((choice) => (
             <button
               key={choice}
               type="button"
               onClick={() => update(field.key, choice as never)}
-              className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
-                String(data[field.key]) === choice ? "border-gold bg-gold/20 text-ink" : "border-ink/12 bg-paper/70 text-ink hover:border-spruce"
+              className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                String(data[field.key]) === choice ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
               }`}
             >
               {choice}
@@ -352,7 +357,7 @@ export function IntakeForm({
           value={String(data[field.key])}
           onChange={(event) => update(field.key, event.target.value as never)}
           placeholder={field.placeholder ?? "Custom estimate"}
-          className="trust-input min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+          className="trust-input mt-3 min-h-11 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
         />
       </div>
     );
@@ -373,14 +378,16 @@ export function IntakeForm({
 
   function renderCompanyPicker(key: "currentCompany" | "previousCompany" | "additionalCompany", label: string) {
     const value = String(data[key]);
-    const matches = filterOptions(companySuggestions, value || customCompany);
+    const companyQuery = value || customCompany;
+    const matches = filterOptions(companySuggestions, companyQuery, companyQuery.trim() ? 8 : 5);
     const showMatches = activeCompanyKey === key;
     const hasExactCompany = hasExactOption(companySuggestions, value);
 
     return (
-      <div className="rounded-md border border-ink/10 bg-white p-4">
+      <div className="rounded-md bg-white p-4">
         <label className="block">
           <span className="mb-2 block text-sm font-bold text-ink">{label}</span>
+          <span className="mb-3 block text-sm leading-5 text-ink/55">Start typing to narrow the list, or choose a common suggestion.</span>
           <input
             type="text"
             value={value}
@@ -397,8 +404,8 @@ export function IntakeForm({
           />
         </label>
         {showMatches && (
-          <div className="mt-3 rounded-md border border-ink/10 bg-paper p-2 shadow-soft">
-            <div className="grid gap-2 sm:grid-cols-2">
+          <div className="mt-3 rounded-md bg-paper p-2 shadow-soft">
+            <div className="grid gap-2">
               {matches.map((company) => (
                 <button
                   key={company}
@@ -418,8 +425,8 @@ export function IntakeForm({
             )}
           </div>
         )}
-        <div className="mt-4 border-t border-ink/10 pt-3">
-          <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+        <div className="mt-4 pt-1">
+          <span className="mb-2 block text-sm font-semibold text-ink/70">Can&apos;t find it?</span>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
@@ -541,30 +548,25 @@ export function IntakeForm({
               )}
             </label>
             {showTargetMatches && (
-              <div className="rounded-md border border-ink/10 bg-white p-4 shadow-soft">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Career target matches</p>
-                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-ink/50">
-                    Showing top {targetMatches.length || 0} of {careerTargets.length}
-                  </span>
-                </div>
+              <div className="rounded-md bg-white p-3 shadow-soft">
+                <p className="mb-3 text-sm leading-5 text-ink/60">Start typing to narrow the list.</p>
                 {targetMatches.length ? (
-                  <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                  <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                     {targetMatches.map((target) => (
                       <button
                         key={`${target.title}-${target.roleFamily}`}
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => selectCareerTarget(target)}
-                        className={`rounded-md border p-3 text-left transition ${
+                        className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition ${
                           data.targetJobTitle === target.title && data.roleFamily === target.roleFamily
                             ? "border-gold bg-gold/20"
-                            : "border-ink/12 bg-paper/70 hover:border-spruce"
+                            : "border-ink/10 bg-paper hover:border-spruce"
                         }`}
                       >
-                        <span className="block text-sm font-bold text-ink">{target.title}</span>
-                        <span className="mt-1 block text-xs font-black uppercase tracking-[0.12em] text-spruce">
-                          Tailors for {target.roleFamily}
+                        <span className="text-sm font-bold text-ink">{target.title}</span>
+                        <span className="shrink-0 rounded-full border border-cyan/20 bg-cyan/10 px-2 py-1 text-[0.68rem] font-bold text-spruce">
+                          {target.roleFamily}
                         </span>
                       </button>
                     ))}
@@ -587,18 +589,18 @@ export function IntakeForm({
               </button>
             </div>
             {showRoleFamilyOptions && (
-              <div className="rounded-md border border-ink/10 bg-white p-4">
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Choose a different lane</p>
+              <div className="rounded-md bg-white p-4">
+                <p className="text-sm font-bold text-ink">Choose a different lane</p>
                 <p className="mt-2 text-sm leading-6 text-ink/65">
                   This only changes the prompts and resume tailoring. Use it if Career Forge guessed the wrong direction.
                 </p>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-4 flex flex-wrap gap-2">
                   {roleFamilies.map((roleFamily) => (
                     <button
                       key={roleFamily}
                       type="button"
                       onClick={() => setRoleFamily(roleFamily)}
-                      className={`min-h-12 rounded-md border px-4 text-left text-sm font-bold transition ${
+                      className={`rounded-full border px-3 py-2 text-sm font-bold transition ${
                         data.roleFamily === roleFamily
                           ? "border-gold bg-gold text-ink"
                           : "border-ink/15 bg-paper/70 text-ink hover:border-spruce"
@@ -640,9 +642,9 @@ export function IntakeForm({
       case 8:
         return (
           <div className="space-y-5">
-            <div className="rounded-md border border-ink/10 bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Suggested for {data.roleFamily}</p>
-              <p className="mt-2 text-sm leading-6 text-ink/65">Select everything you used. Search or add a custom tool if it is missing.</p>
+            <div className="rounded-md bg-white p-4">
+              <p className="text-sm font-bold text-ink">Suggested for {data.roleFamily}</p>
+              <p className="mt-1 text-sm leading-6 text-ink/60">Pick tools you used. Search if you do not see one.</p>
               <input
                 type="text"
                 value={toolSearch}
@@ -661,7 +663,7 @@ export function IntakeForm({
                 className="trust-input mt-4 min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
               />
               {toolSearchOpen && (
-                <div className="mt-4 rounded-md border border-ink/10 bg-paper p-2 shadow-soft">
+                <div className="mt-4 rounded-md bg-paper p-2 shadow-soft">
                   <div className="flex flex-wrap gap-2">
                     {toolMatches.map((tool) => (
                       <button
@@ -680,10 +682,19 @@ export function IntakeForm({
                     ))}
                   </div>
                   {!toolMatches.length && <p className="px-2 py-3 text-sm leading-6 text-ink/65">No tool match. Add a custom tool below.</p>}
+                  {!toolSearch.trim() && roleAwareToolOptions.length > 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMoreTools((value) => !value)}
+                      className="mt-3 rounded-md border border-ink/15 bg-white px-3 py-2 text-sm font-bold text-ink transition hover:border-gold"
+                    >
+                      {showMoreTools ? "Fewer suggestions" : "More suggestions"}
+                    </button>
+                  )}
                 </div>
               )}
-              <div className="mt-4 border-t border-ink/10 pt-3">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+              <div className="mt-4 pt-1">
+                <span className="mb-2 block text-sm font-semibold text-ink/70">Can&apos;t find it?</span>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
@@ -698,8 +709,8 @@ export function IntakeForm({
                 </div>
               </div>
             </div>
-            <div className="rounded-md border border-ink/10 bg-paper p-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.14em] text-spruce">Selected tools</h3>
+            <div className="rounded-md bg-paper p-4">
+              <h3 className="text-sm font-bold text-ink">Selected tools</h3>
               {selectedTools.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedTools.map((tool) => (
@@ -707,7 +718,7 @@ export function IntakeForm({
                       key={tool}
                       type="button"
                       onClick={() => toggleTool(tool)}
-                      className="rounded-md border border-gold/40 bg-gold/15 px-3 py-2 text-sm font-semibold text-ink"
+                      className="rounded-full border border-gold/40 bg-gold/15 px-3 py-2 text-sm font-semibold text-ink"
                     >
                       {tool}
                     </button>
@@ -722,8 +733,9 @@ export function IntakeForm({
       case 9:
         return (
           <div className="space-y-5">
-            <div>
-              <span className="mb-3 block text-sm font-bold text-ink">Did your work include any of these?</span>
+            <div className="rounded-md bg-white p-4">
+              <span className="mb-1 block text-sm font-bold text-ink">Did your work include any of these?</span>
+              <span className="mb-3 block text-sm leading-5 text-ink/60">Choose a few. Search or add your own if needed.</span>
               <input
                 type="text"
                 value={responsibilitySearch}
@@ -742,7 +754,7 @@ export function IntakeForm({
                 className="trust-input mb-4 min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
               />
               {responsibilitySearchOpen && (
-                <div className="rounded-md border border-ink/10 bg-paper p-2 shadow-soft">
+                <div className="rounded-md bg-paper p-2 shadow-soft">
                   <div className="flex flex-wrap gap-2">
                     {responsibilityMatches.map((item) => (
                       <button
@@ -765,8 +777,8 @@ export function IntakeForm({
                   )}
                 </div>
               )}
-              <div className="mt-4 rounded-md border border-ink/10 bg-paper p-3">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Selected responsibilities</span>
+              <div className="mt-4 rounded-md bg-paper p-3">
+                <span className="mb-2 block text-sm font-bold text-ink">Selected responsibilities</span>
                 {data.selectedResponsibilities.length ? (
                   <div className="flex flex-wrap gap-2">
                     {data.selectedResponsibilities.map((item) => (
@@ -774,7 +786,7 @@ export function IntakeForm({
                         key={item}
                         type="button"
                         onClick={() => toggleResponsibility(item)}
-                        className="rounded-md border border-gold/40 bg-gold/15 px-3 py-2 text-sm font-semibold text-ink"
+                        className="rounded-full border border-gold/40 bg-gold/15 px-3 py-2 text-sm font-semibold text-ink"
                       >
                         {item}
                       </button>
@@ -784,8 +796,8 @@ export function IntakeForm({
                   <p className="text-sm leading-6 text-ink/65">No responsibilities selected yet.</p>
                 )}
               </div>
-              <div className="mt-4 rounded-md border border-ink/10 bg-white p-3">
-                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-spruce">Can&apos;t find it?</span>
+              <div className="mt-4">
+                <span className="mb-2 block text-sm font-semibold text-ink/70">Can&apos;t find it?</span>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
@@ -800,7 +812,7 @@ export function IntakeForm({
                 </div>
               </div>
             </div>
-            <div className="rounded-md border border-ink/10 bg-white p-3">
+            <div className="rounded-md bg-white p-4">
               <span className="mb-2 block text-sm font-bold text-ink">Which of these did you do most?</span>
               <span className="mb-3 block text-sm leading-5 text-ink/60">
                 Pick a few action signals. This helps Career Forge write bullets with less generic language.
@@ -838,35 +850,35 @@ export function IntakeForm({
           </div>
         );
       case 10:
-        const additionalScopeFields = allScopeFields.filter(
-          (field) => !roleScopePrompts.some((prompt) => prompt.key === field.key)
-        );
+        const visibleScopePrompts = roleScopePrompts.slice(0, 3);
+        const additionalScopeFields = [
+          ...roleScopePrompts.slice(3),
+          ...allScopeFields.filter((field) => !roleScopePrompts.some((prompt) => prompt.key === field.key))
+        ];
 
         return (
           <div className="space-y-5">
-            <div className="rounded-md border border-ink/10 bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-spruce">
-                Adaptive prompts for {data.roleFamily}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-ink/65">
-                These are the scope signals most likely to strengthen this role family. Estimate if you are not sure.
+            <div className="rounded-md bg-white p-4">
+              <p className="text-sm font-bold text-ink">Most useful numbers for {data.roleFamily}</p>
+              <p className="mt-1 text-sm leading-6 text-ink/60">
+                Estimate if you are not sure. Even rough volume makes the resume stronger.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {roleScopePrompts.map(renderScopeInput)}
+            <div className="grid gap-4">
+              {visibleScopePrompts.map(renderScopeInput)}
             </div>
             <details
               open={showAllScope}
               onToggle={(event) => setShowAllScope(event.currentTarget.open)}
-              className="rounded-md border border-ink/10 bg-white p-4"
+              className="rounded-md bg-white p-4"
             >
-              <summary className="cursor-pointer text-sm font-black uppercase tracking-[0.12em] text-ink">
+              <summary className="cursor-pointer text-sm font-bold text-ink">
                 Add more scope details
               </summary>
               <p className="mt-2 text-sm leading-6 text-ink/65">
                 Use this only if another number helps tell the truth of your work.
               </p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4">
                 {additionalScopeFields.map((field) => renderScopeInput({ ...field, placeholder: "Optional estimate" }))}
               </div>
             </details>
