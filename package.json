@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke:generator": "node scripts/smoke-generator.mjs",
-    "smoke:interview": "node scripts/interview-mode-simulation.mjs"
+    "smoke:interview": "node scripts/interview-mode-simulation.mjs",
+    "smoke:resume-intelligence": "node scripts/resume-intelligence-gauntlet.mjs"
   },
   "dependencies": {
     "next": "^16.2.9",

@@ -2,6 +2,7 @@
 
 import { CopyButton } from "@/components/CopyButton";
 import { experienceToText, isPlaceholderEducation, normalizeHeaderName, resumeToText, roleHasContent } from "@/lib/resume-export";
+import { analyzeResumeQuality } from "@/lib/resume-intelligence";
 import type { ExperienceRole, IntakeData, ResumePackage, TemplateStyle } from "@/types/career";
 
 type ResumePreviewProps = {
@@ -23,6 +24,7 @@ function updateRole(role: ExperienceRole, patch: Partial<ExperienceRole>) {
 
 export function ResumePreview({ data, resume, template, onChange }: ResumePreviewProps) {
   const printableSkills = resume.coreSkills.filter((skill) => skill.trim());
+  const quality = analyzeResumeQuality(data, resume);
 
   function setExperience(index: number, role: ExperienceRole) {
     const next = resume.experience.map((item, itemIndex) => (itemIndex === index ? role : item));
@@ -55,6 +57,38 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
             Print / Save PDF
           </button>
         </div>
+      </div>
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
+        <article className="trust-card rounded-md p-5">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Resume Quality</p>
+          <h3 className="mt-2 text-3xl font-bold text-paper">{quality.rating}</h3>
+          <p className="mt-3 text-sm leading-6 text-paper/68">
+            This is a writing-quality signal, not an ATS score. It checks clarity, specificity, formatting consistency, and missing proof.
+          </p>
+        </article>
+        <article className="trust-card rounded-md p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-bold text-paper">Strongest sections</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {quality.strongestSections.map((item) => (
+                  <span key={item} className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-2 text-sm font-semibold text-cyan">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-paper">Suggested improvements</h3>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-paper/68">
+                {quality.suggestedImprovements.slice(0, 3).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </article>
       </div>
 
       <article

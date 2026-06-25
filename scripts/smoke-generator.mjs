@@ -50,6 +50,12 @@ const {
 } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 const { educationPlaceholder, resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
 const {
+  analyzeResumeQuality,
+  polishBullets,
+  polishResumePackage,
+  polishResumeSentence
+} = loadTsModule(path.join(root, "src/lib/resume-intelligence.ts"));
+const {
   canUseInterviewMode,
   getFeatureAccess,
   getInterviewModeLimitState
@@ -249,6 +255,29 @@ assert(searchableOptions(toolSuggestionsByFamily["IT Support"], "service").inclu
 assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
 assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
+
+assert(polishResumeSentence("i helped customers").includes("Assisted customers"), "grammar pipeline strengthens weak customer phrasing");
+assert(polishResumeSentence("i stocked shelves").includes("Maintained organized inventory"), "grammar pipeline rewrites stock phrasing professionally");
+const diversifiedBullets = polishBullets(["Managed customer requests.", "Managed customer records.", "Managed follow-ups."]);
+assert(new Set(diversifiedBullets.map((bullet) => bullet.split(" ")[0])).size === diversifiedBullets.length, "action verb diversity helper varies repeated openers");
+const polishedPackage = polishResumePackage({
+  summary: "customer sucess candidate with comunication experience",
+  coreSkills: ["crm", "crm", "adminstrative support"],
+  experience: [
+    {
+      title: "Support Associate",
+      company: "Example Co",
+      time: "2024",
+      bullets: ["helped customers", "worked on records", "stuff and things"]
+    }
+  ],
+  education: educationPlaceholder,
+  linkedinHeadline: "Customer Success Associate | crm | Client Experience",
+  linkedinSummary: "i helped customers"
+});
+assert(/customer success/i.test(polishedPackage.summary) && polishedPackage.summary.endsWith("."), "resume intelligence fixes spelling and punctuation");
+assert(polishedPackage.coreSkills.filter((skill) => skill === "CRM").length === 1, "resume intelligence normalizes and deduplicates skills");
+assert(!/stuff|things/i.test(polishedPackage.experience[0].bullets.join(" ")), "resume intelligence removes weak filler terms");
 
 const supportSpecialistTarget = findCareerTarget("Support Specialist");
 assert(supportSpecialistTarget?.roleFamily === "Customer Success", "known role auto-maps to role family");
@@ -533,11 +562,13 @@ const unknownRoleData = {
 };
 const unknownRoleResume = generateResumePackage(unknownRoleData);
 const unknownRoleExport = resumeToText(unknownRoleData, unknownRoleResume);
+const unknownRoleQuality = analyzeResumeQuality(unknownRoleData, unknownRoleResume);
 assert(unknownRoleResume.coreSkills.includes("Payment Processing"), "fallback skills reach core skills");
 assert(/gaming and customer transaction environment|payment handling|policy enforcement|record keeping/i.test(unknownRoleExport), "fallback context reaches output");
 assert(unknownRoleResume.experience.flatMap((role) => role.bullets).every((bullet) => bullet.trim()), "unknown role has no blank bullets");
 assert(!unknownRoleExport.includes(educationPlaceholder), "unknown role export omits placeholder education");
 assert(!weakTerms.some((term) => unknownRoleExport.toLowerCase().includes(term.toLowerCase())), "unknown role has no weak leakage");
+assert(["Good", "Strong", "Excellent"].includes(unknownRoleQuality.rating), "unknown role receives usable resume quality rating");
 
 for (const persona of personas) {
   const data = {
@@ -550,17 +581,30 @@ for (const persona of personas) {
   const exportText = resumeToText(data, resume);
   const allBullets = resume.experience.flatMap((role) => role.bullets);
   const uniqueBullets = new Set(allBullets.map((bullet) => bullet.toLowerCase()));
+  const quality = analyzeResumeQuality(data, resume);
 
   assert(sentenceCount(resume.summary) <= 3 && sentenceCount(resume.summary) >= 1, `${persona.name}: summary sentence count`);
   assert(resume.summary.includes(persona.targetJobTitle), `${persona.name}: summary includes target role`);
   assert(resume.experience.length >= 1, `${persona.name}: generated experience`);
   assert(allBullets.every((bullet) => bullet.trim()), `${persona.name}: no blank bullets`);
   assert(uniqueBullets.size === allBullets.length, `${persona.name}: no duplicate bullets`);
+  assert(
+    resume.experience.every((role) => {
+      const openers = role.bullets.map((bullet) => bullet.split(" ")[0]?.toLowerCase()).filter(Boolean);
+      return openers.length === new Set(openers).size;
+    }),
+    `${persona.name}: opening verbs are diversified`
+  );
   assert(resume.experience.every((role) => role.bullets.length >= 2 && role.bullets.length <= 4), `${persona.name}: reasonable bullet count`);
   assert(!weakTerms.some((term) => exportText.toLowerCase().includes(term.toLowerCase())), `${persona.name}: weak/UI term leaked`);
   assert(!unnaturalToolPattern.test(exportText), `${persona.name}: unnatural tool phrase`);
   assert(!exportText.includes(educationPlaceholder), `${persona.name}: placeholder education omitted from export`);
   assert(exportText.includes(persona.targetJobTitle), `${persona.name}: export includes selected target`);
+  assert(["Good", "Strong", "Excellent"].includes(quality.rating), `${persona.name}: resume quality rating is usable`);
+  assert(quality.strongestSections.length > 0, `${persona.name}: resume quality strongest sections exist`);
+  assert(quality.suggestedImprovements.length > 0, `${persona.name}: resume quality coaching exists`);
+  assert(!/fake metric|invented|guaranteed/i.test(exportText), `${persona.name}: no fabricated metric language`);
+  assert(exportText.includes("SUMMARY") && exportText.includes("CORE SKILLS") && exportText.includes("EXPERIENCE"), `${persona.name}: ATS section order exists`);
 }
 
 console.log(`Generator smoke passed for ${personas.length} personas.`);

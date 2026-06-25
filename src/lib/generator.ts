@@ -1,5 +1,6 @@
 import { roleIntelligence } from "@/lib/career-data";
 import { educationPlaceholder } from "@/lib/resume-export";
+import { polishResumePackage } from "@/lib/resume-intelligence";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
 const defaultTargetByFamily: Record<RoleFamily, string> = {
@@ -409,7 +410,7 @@ function readablePhrase(value: string) {
 const scopeFields: Array<[keyof IntakeData, string, string, string[]]> = [
   ["customersServed", "customers", "customers served", ["customer", "client", "user", "visitor", "account", "prospect"]],
   ["ticketsHandled", "tickets", "tickets handled", ["ticket", "request", "case", "issue"]],
-  ["projectsSupported", "projects", "projects supported", ["project", "initiative", "workflow", "rollout", "schedule", "calendar"]],
+  ["projectsSupported", "projects", "projects supported", ["project", "initiative", "workflow", "rollout", "schedule", "calendar", "package", "order", "feature"]],
   ["teamSizeSupported", "team members", "team members supported", ["team", "person", "people", "staff", "stakeholder"]],
   ["callsHandled", "calls", "calls handled", ["call", "chat", "email", "follow-up", "meeting", "escalation"]],
   ["revenueInfluenced", "revenue", "revenue influenced", ["revenue", "budget", "pipeline", "money", "cash", "sales"]],
@@ -647,7 +648,7 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
     outcomeClause,
     processLanguage,
     responsibility: readablePhrase(secondary),
-    scope: scopeOne ? `for ${scopeOne.phrase} while supporting ` : "",
+    scope: scopeOne ? `${scopeOne.phrase} across ` : "",
     scopeTwo: scopeTwo?.phrase ?? "",
     targetFocus: selectedActions.length ? sentenceList(selectedActions.map(readablePhrase)) : responsibilityObject(tertiary) || roleFocus,
     toolPhrase: roleIndex === 0 ? chooseToolPhrase(tools, data.roleFamily, secondary) : ""
@@ -806,12 +807,12 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   const skills = buildSkillList(data);
   const experience = buildExperience(data);
 
-  return qualityCheckResume({
+  return polishResumePackage(qualityCheckResume({
     summary: buildSummary(data, target, experience),
     coreSkills: skills,
     experience,
     education: educationPlaceholder,
     linkedinHeadline: buildHeadline(data, target, skills),
     linkedinSummary: buildLinkedInSummary(data, target, experience)
-  });
+  }));
 }
