@@ -1,6 +1,7 @@
 import type { IntakeData, RoleFamily, TemplateStyle } from "@/types/career";
 export { careerTargets, type CareerTarget } from "@/lib/career-targets";
 export { companySuggestions } from "@/lib/company-bank";
+export { findJobArsenal, getExperienceArsenal, jobArsenals, type JobArsenal } from "@/lib/job-arsenal";
 export { allToolOptions, toolSuggestionsByFamily } from "@/lib/tool-bank";
 
 export const roleFamilies: RoleFamily[] = [

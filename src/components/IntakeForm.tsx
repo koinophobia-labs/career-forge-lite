@@ -5,6 +5,7 @@ import {
   actionSuggestionsByFamily,
   careerTargets,
   companySuggestions,
+  getExperienceArsenal,
   type CareerTarget,
   outcomeOptions,
   outcomeSuggestionsByFamily,
@@ -191,6 +192,12 @@ export function IntakeForm({
   const actionSuggestions = actionSuggestionsByFamily[data.roleFamily];
   const roleScopePrompts = scopePromptSets[data.roleFamily];
   const roleOutcomes = outcomeSuggestionsByFamily[data.roleFamily];
+  const experienceArsenal = getExperienceArsenal([
+    data.currentTitle,
+    data.previousTitle,
+    data.additionalTitle,
+    data.targetJobTitle
+  ]);
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
   const selectedTools = splitSelections(data.tools);
   const roleAwareToolOptions = toolSuggestionsByFamily[data.roleFamily];
@@ -289,6 +296,11 @@ export function IntakeForm({
     setToolSearch("");
   }
 
+  function addConfirmedTool(item: string) {
+    if (selectedTools.some((tool) => tool.toLowerCase() === item.toLowerCase())) return;
+    update("tools", mergeSelection(data.tools, item));
+  }
+
   function addCustomTool() {
     const normalized = normalizeSelection(customTool || toolSearch);
     if (!normalized) return;
@@ -316,6 +328,13 @@ export function IntakeForm({
       : [...data.selectedResponsibilities, item];
     update("selectedResponsibilities", selected);
     setResponsibilitySearch("");
+  }
+
+  function toggleArsenalSignal(item: string) {
+    const selected = data.selectedResponsibilities.some((value) => value.toLowerCase() === item.toLowerCase())
+      ? data.selectedResponsibilities.filter((value) => value.toLowerCase() !== item.toLowerCase())
+      : [...data.selectedResponsibilities, item];
+    update("selectedResponsibilities", selected);
   }
 
   function toggleOutcome(item: string) {
@@ -447,6 +466,58 @@ export function IntakeForm({
               Add custom
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderArsenalChips(title: string, items: string[], limit = 6) {
+    if (!items.length) return null;
+    return (
+      <div>
+        <p className="mb-2 text-sm font-bold text-ink">{title}</p>
+        <div className="flex flex-wrap gap-2">
+          {items.slice(0, limit).map((item) => {
+            const selected = data.selectedResponsibilities.some((value) => value.toLowerCase() === item.toLowerCase());
+            return (
+              <button
+                key={`${title}-${item}`}
+                type="button"
+                onClick={() => toggleArsenalSignal(item)}
+                className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                  selected ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                }`}
+              >
+                {item}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderArsenalToolChips(items: string[]) {
+    if (!items.length) return null;
+    return (
+      <div>
+        <p className="mb-2 text-sm font-bold text-ink">Common tools</p>
+        <div className="flex flex-wrap gap-2">
+          {items.slice(0, 6).map((item) => {
+            const selected = selectedTools.some((tool) => tool.toLowerCase() === item.toLowerCase());
+            return (
+              <button
+                key={`arsenal-tool-${item}`}
+                type="button"
+                onClick={() => addConfirmedTool(item)}
+                className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                  selected ? "border-gold bg-gold/25 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                }`}
+              >
+                {item}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -733,6 +804,26 @@ export function IntakeForm({
       case 9:
         return (
           <div className="space-y-5">
+            {experienceArsenal && (
+              <div className="rounded-md bg-white p-4">
+                <p className="text-sm font-bold text-ink">
+                  People in {experienceArsenal.title} commonly worked with...
+                </p>
+                <p className="mt-1 text-sm leading-6 text-ink/60">
+                  Select only what you actually did. Career Forge will use confirmed items to strengthen resume language.
+                </p>
+                <div className="mt-4 space-y-4">
+                  {renderArsenalChips("Responsibilities", experienceArsenal.responsibilities)}
+                  {renderArsenalChips("Skills", experienceArsenal.skills)}
+                  {renderArsenalChips("Workflows", experienceArsenal.workflows)}
+                  <details>
+                    <summary className="cursor-pointer text-sm font-bold text-ink">Resume keywords</summary>
+                    <div className="mt-3">{renderArsenalChips("ATS keywords", experienceArsenal.atsKeywords, 6)}</div>
+                  </details>
+                  {renderArsenalToolChips(experienceArsenal.tools)}
+                </div>
+              </div>
+            )}
             <div className="rounded-md bg-white p-4">
               <span className="mb-1 block text-sm font-bold text-ink">Did your work include any of these?</span>
               <span className="mb-3 block text-sm leading-5 text-ink/60">Choose a few. Search or add your own if needed.</span>
@@ -863,6 +954,11 @@ export function IntakeForm({
               <p className="mt-1 text-sm leading-6 text-ink/60">
                 Estimate if you are not sure. Even rough volume makes the resume stronger.
               </p>
+              {experienceArsenal?.measurableActivities.length ? (
+                <p className="mt-3 text-sm leading-6 text-ink/60">
+                  For {experienceArsenal.title}, common measures include {formatList(experienceArsenal.measurableActivities.slice(0, 4))}.
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-4">
               {visibleScopePrompts.map(renderScopeInput)}

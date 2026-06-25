@@ -42,7 +42,9 @@ const {
   allToolOptions,
   careerTargets,
   companySuggestions,
+  findJobArsenal,
   initialIntake,
+  jobArsenals,
   responsibilitySuggestions,
   toolSuggestionsByFamily
 } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
@@ -205,6 +207,7 @@ const roleMappingChecks = [
 assert(careerTargets.length >= 150 && careerTargets.length <= 250, `career target count ${careerTargets.length}`);
 assert(allToolOptions.length >= 150 && allToolOptions.length <= 300, `tool option count ${allToolOptions.length}`);
 assert(companySuggestions.length >= 300 && companySuggestions.length <= 500, `company suggestion count ${companySuggestions.length}`);
+assert(jobArsenals.length >= 75 && jobArsenals.length <= 100, `job arsenal count ${jobArsenals.length}`);
 
 for (const [title, roleFamily] of roleMappingChecks) {
   const target = findCareerTarget(title);
@@ -222,6 +225,10 @@ assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket"
 
 const supportSpecialistTarget = findCareerTarget("Support Specialist");
 assert(supportSpecialistTarget?.roleFamily === "Customer Success", "known role auto-maps to role family");
+const sportsbookArsenal = findJobArsenal("Sportsbook Ticket Writer");
+assert(sportsbookArsenal?.responsibilities.includes("Cash handling"), "sportsbook arsenal includes cash handling");
+assert(sportsbookArsenal?.workflows.includes("Shift balancing"), "sportsbook arsenal includes workflow prompts");
+assert(findJobArsenal("Security Officer")?.skills.includes("De-escalation"), "security arsenal includes de-escalation");
 
 const customRoleData = {
   ...initialIntake,
@@ -263,6 +270,25 @@ const overrideRoleResume = generateResumePackage({
 });
 assert(overrideRoleResume.coreSkills.includes("Calendar Management"), "role family override powers skills");
 assert(overrideRoleResume.linkedinHeadline.includes("Administrative Reliability"), "role family override powers LinkedIn value area");
+
+const arsenalResume = generateResumePackage({
+  ...initialIntake,
+  fullName: "Arsenal Candidate",
+  email: "arsenal@example.com",
+  targetJobTitle: "Customer Success Associate",
+  roleFamily: "Customer Success",
+  currentTitle: "Sportsbook Ticket Writer",
+  currentCompany: "DraftKings",
+  currentTime: "2024 - Present",
+  tools: "Payment Systems, ID Verification Systems",
+  selectedResponsibilities: ["Cash handling", "Transaction accuracy", "Responsible gaming compliance", "Shift balancing"],
+  selectedActions: ["documented updates", "routed escalations"],
+  customersServed: "75+ weekly customers",
+  selectedOutcomes: ["Accuracy", "Customer satisfaction"]
+});
+const arsenalText = resumeToText({ ...initialIntake, fullName: "Arsenal Candidate", email: "arsenal@example.com" }, arsenalResume);
+assert(arsenalResume.coreSkills.includes("Cash Handling"), "confirmed arsenal responsibility reaches skills");
+assert(/transaction accuracy|cash handling|responsible gaming/i.test(arsenalText), "confirmed arsenal language reaches resume text");
 
 for (const persona of personas) {
   const data = {
