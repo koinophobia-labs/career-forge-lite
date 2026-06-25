@@ -40,5 +40,5 @@ Added a build-mode choice screen after the landing CTA so users can choose how t
 
 ## Commit / Push
 
-- Commit hash: pending
-- Push result: pending
+- Implementation commit hash: `7fc07f6`
+- Push result: succeeded to `origin/main`
