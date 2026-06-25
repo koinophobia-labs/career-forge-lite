@@ -116,5 +116,5 @@ Add a Dossier Review step before generation so users can confirm the facts Caree
 
 ## Git Status
 
-- Commit hash: Pending
+- Commit hash: `9c85727`
 - Push result: Pending
