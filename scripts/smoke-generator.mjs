@@ -9,6 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const moduleCache = new Map();
+const resumePreviewSource = fs.readFileSync(path.join(root, "src/components/ResumePreview.tsx"), "utf8");
+const globalCssSource = fs.readFileSync(path.join(root, "src/app/globals.css"), "utf8");
 
 function loadTsModule(filePath) {
   const absolute = path.resolve(filePath);
@@ -255,6 +257,10 @@ assert(searchableOptions(toolSuggestionsByFamily["IT Support"], "service").inclu
 assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
 assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
+assert(resumePreviewSource.includes("ATS Resume") && resumePreviewSource.includes("Visual Portfolio Resume"), "resume view toggle includes ATS and visual modes");
+assert(resumePreviewSource.includes("Executive Dark") && resumePreviewSource.includes("Clean Modern") && resumePreviewSource.includes("Product Lab"), "visual resume styles are available");
+assert(resumePreviewSource.includes("Use ATS Resume for job applications"), "ATS safety copy is visible");
+assert(globalCssSource.includes("#print-visual-resume") && globalCssSource.includes(".visual-resume-paper"), "visual resume print target is styled");
 
 assert(polishResumeSentence("i helped customers").includes("Assisted customers"), "grammar pipeline strengthens weak customer phrasing");
 assert(polishResumeSentence("i stocked shelves").includes("Maintained organized inventory"), "grammar pipeline rewrites stock phrasing professionally");
@@ -450,7 +456,6 @@ const interviewModeSource = fs.readFileSync(path.join(root, "src/components/Inte
 const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
 const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
 const intakeSource = fs.readFileSync(path.join(root, "src/components/IntakeForm.tsx"), "utf8");
-const resumePreviewSource = fs.readFileSync(path.join(root, "src/components/ResumePreview.tsx"), "utf8");
 const pageSource = fs.readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 assert(interviewModeSource.includes("Let Career Forge interview you."), "first-screen value proposition exists");
 assert(landingSource.includes("guided questions") && landingSource.includes("conversational interview"), "two-path positioning copy exists");
@@ -600,6 +605,7 @@ for (const persona of personas) {
   assert(!unnaturalToolPattern.test(exportText), `${persona.name}: unnatural tool phrase`);
   assert(!exportText.includes(educationPlaceholder), `${persona.name}: placeholder education omitted from export`);
   assert(exportText.includes(persona.targetJobTitle), `${persona.name}: export includes selected target`);
+  assert(!/Visual Portfolio Resume|Executive Dark|Clean Modern|Product Lab|Use ATS Resume/i.test(exportText), `${persona.name}: ATS export excludes visual resume chrome`);
   assert(["Good", "Strong", "Excellent"].includes(quality.rating), `${persona.name}: resume quality rating is usable`);
   assert(quality.strongestSections.length > 0, `${persona.name}: resume quality strongest sections exist`);
   assert(quality.suggestedImprovements.length > 0, `${persona.name}: resume quality coaching exists`);

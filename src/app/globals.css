@@ -154,7 +154,7 @@ textarea {
     padding: 0 !important;
   }
 
-  #resume > div {
+  .resume-preview-chrome {
     display: none;
   }
 
@@ -163,6 +163,13 @@ textarea {
   }
 
   #print-resume {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  #print-visual-resume {
     display: block !important;
     width: 100% !important;
     max-width: none !important;
@@ -258,5 +265,49 @@ textarea {
 
   .resume-paper li {
     margin: 0 0 0.025in !important;
+  }
+
+  .visual-resume-paper {
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: #000000 !important;
+    font-size: 10pt;
+    line-height: 1.28;
+    page-break-after: avoid;
+  }
+
+  .visual-resume-paper,
+  .visual-resume-paper * {
+    color: #000000 !important;
+  }
+
+  .visual-resume-paper > div {
+    display: grid !important;
+    grid-template-columns: 2.35in 1fr !important;
+    gap: 0.24in !important;
+  }
+
+  .visual-resume-paper aside,
+  .visual-resume-paper > div > div {
+    padding: 0 !important;
+  }
+
+  .visual-resume-paper h2 {
+    font-size: 20pt;
+    line-height: 1.05;
+    margin: 0.12in 0 0 !important;
+  }
+
+  .visual-resume-paper h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .visual-resume-paper section,
+  .visual-resume-paper section > div,
+  .visual-resume-paper section article {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
