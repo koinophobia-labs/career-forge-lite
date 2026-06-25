@@ -34,6 +34,57 @@ function statusTone(status: string) {
   return "border-white/10 bg-white/5 text-paper/55";
 }
 
+function focusCopy(stage: InterviewSession["currentStage"]) {
+  const focus: Record<InterviewSession["currentStage"], { label: string; body: string }> = {
+    role_targeting: {
+      label: "Understanding your target role",
+      body: "First, I need to know where this resume should point."
+    },
+    background_overview: {
+      label: "Connecting your background",
+      body: "I am looking for the work history that best supports your next move."
+    },
+    current_or_recent_role: {
+      label: "Unpacking your recent work",
+      body: "Your most recent role usually gives the resume its strongest proof."
+    },
+    responsibilities: {
+      label: "Finding what you were trusted with",
+      body: "Plain duties become stronger bullets when we name the work clearly."
+    },
+    achievements: {
+      label: "Looking for outcomes",
+      body: "Results, improvements, and useful examples make the resume feel real."
+    },
+    metrics: {
+      label: "Finding measurable wins",
+      body: "Estimates are okay. Scale helps recruiters understand the weight of the work."
+    },
+    tools_and_skills: {
+      label: "Identifying tools and skills",
+      body: "Systems, software, workflows, and strengths help shape the keyword layer."
+    },
+    projects_or_portfolio: {
+      label: "Finding proof beyond job titles",
+      body: "A project or example can show capability even when your title does not."
+    },
+    education_and_certifications: {
+      label: "Adding training or credentials",
+      body: "Relevant education, courses, or certifications can support the story."
+    },
+    gaps_and_positioning: {
+      label: "Shaping the final resume",
+      body: "If anything needs careful positioning, we can handle it before generating."
+    },
+    final_resume_review: {
+      label: "Shaping the final resume",
+      body: "We have enough to generate, and one more detail can still make it stronger."
+    }
+  };
+
+  return focus[stage];
+}
+
 export function InterviewMode() {
   const [session, setSession] = useState<InterviewSession>(() => createInitialInterviewSession());
   const [input, setInput] = useState("");
@@ -46,14 +97,8 @@ export function InterviewMode() {
   const limitState = useMemo(() => getInterviewModeLimitState(session), [session]);
   const coachingMessages = useMemo(() => getInterviewCoachingMessages(session), [session]);
   const smartSummary = useMemo(() => getSmartInterviewSummary(session), [session]);
-  const statusCounts = useMemo(
-    () =>
-      session.fieldStatuses.reduce(
-        (counts, field) => ({ ...counts, [field.status]: counts[field.status] + 1 }),
-        { empty: 0, weak: 0, usable: 0, strong: 0 }
-      ),
-    [session.fieldStatuses]
-  );
+  const interviewFocus = useMemo(() => focusCopy(session.currentStage), [session.currentStage]);
+  const coachTip = coachingMessages[0] ?? "Short answers work, but examples make the resume stronger.";
   const draftPreview = useMemo(
     () => [
       ["Target role", session.resumeDraft.targetRole],
@@ -160,12 +205,12 @@ export function InterviewMode() {
           </div>
 
           <section className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">resume://interview-generated</p>
+            <p className="trust-kicker text-xs font-black uppercase">Premium Preview Result</p>
             <div className="mt-3 grid gap-5 lg:grid-cols-[1fr_22rem]">
               <div>
-                <h1 className="text-3xl font-bold text-paper sm:text-5xl">Review the interview-built package.</h1>
+                <h1 className="text-3xl font-bold text-paper sm:text-5xl">Your interview-built resume draft</h1>
                 <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
-                  This draft uses the same Career Forge generator as the standard builder. The panel below shows what evidence supported it and where another answer would strengthen it.
+                  This draft only uses what you told Career Forge. Missing metrics are shown as coaching notes, not invented.
                 </p>
               </div>
               <div className="rounded-md border border-white/10 bg-white/5 p-4">
@@ -176,14 +221,39 @@ export function InterviewMode() {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <CopyButton getText={() => resumeToText(generatedPackage.intake, generatedPackage.resume)} label="Copy Resume" />
-              <CopyButton getText={() => generatedPackage.resume.linkedinHeadline} label="Copy LinkedIn Headline" />
+              <CopyButton getText={() => resumeToText(generatedPackage.intake, generatedPackage.resume)} label="Copy resume draft" />
+              <CopyButton getText={() => generatedPackage.resume.linkedinHeadline} label="Copy headline" />
+              <button
+                type="button"
+                onClick={handleImproveWeakAreas}
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-cyan/30 bg-cyan/10 px-4 text-sm font-semibold text-cyan transition hover:border-cyan hover:bg-cyan hover:text-ink"
+              >
+                Continue improving
+              </button>
             </div>
+          </section>
+
+          <section className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Resume Summary", generatedPackage.resume.summary || "No summary generated yet."],
+              [
+                "Experience Bullets",
+                generatedPackage.resume.experience.flatMap((role) => role.bullets).filter(Boolean).slice(0, 2).join(" ")
+                  || "No bullets generated yet."
+              ],
+              ["Skills & Tools", generatedPackage.resume.coreSkills.slice(0, 8).join(", ") || "No skills identified yet."],
+              ["LinkedIn Headline", generatedPackage.resume.linkedinHeadline || "No headline generated yet."]
+            ].map(([title, body]) => (
+              <article key={title} className="trust-card rounded-md p-4">
+                <h2 className="text-sm font-bold text-paper">{title}</h2>
+                <p className="mt-2 text-xs leading-5 text-paper/62">{body}</p>
+              </article>
+            ))}
           </section>
 
           <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="trust-panel rounded-md p-5">
-              <h2 className="text-lg font-bold text-paper">Interview Extracted Evidence</h2>
+              <h2 className="text-lg font-bold text-paper">Evidence Career Forge Used</h2>
               <div className="mt-4 space-y-3">
                 {generatedPackage.evidence.length ? (
                   generatedPackage.evidence.slice(0, 12).map((item) => (
@@ -196,13 +266,15 @@ export function InterviewMode() {
                     </article>
                   ))
                 ) : (
-                  <p className="text-sm text-paper/60">No evidence items were captured yet.</p>
+                  <p className="text-sm leading-6 text-paper/60">
+                    No evidence captured yet. Add a role, responsibility, tool, result, or project and Career Forge will show what supported the draft.
+                  </p>
                 )}
               </div>
             </div>
 
             <div className="trust-panel rounded-md p-5">
-              <h2 className="text-lg font-bold text-paper">Next Improvement Targets</h2>
+              <h2 className="text-lg font-bold text-paper">What to Improve Next</h2>
               <div className="mt-4 space-y-3 text-sm leading-6 text-paper/68">
                 {missingMetrics && (
                   <p className="rounded-md border border-ember/20 bg-ember/10 p-3 text-ember">
@@ -256,19 +328,20 @@ export function InterviewMode() {
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">career://interview-mode</p>
-            <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">
-              Stop filling out forms. Answer like you are talking to a career coach.
-            </h1>
+            <p className="trust-kicker text-xs font-black uppercase">Premium Preview</p>
+            <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Let Career Forge interview you.</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
-              Career Forge interviews you, asks follow-ups, extracts proof, and turns your answers into a recruiter-ready
-              resume plus LinkedIn headline. Best for people who know what they did, but struggle to write it.
+              Answer naturally. Career Forge pulls out responsibilities, achievements, tools, and proof, then turns them
+              into a recruiter-ready resume.
+            </p>
+            <p className="mt-3 text-sm font-semibold text-cyan">
+              You do not need perfect resume language. Plain answers are enough.
             </p>
             <div className="mt-6 grid gap-3 md:grid-cols-3">
               {[
-                ["Smart follow-ups", "The interview asks for the next useful detail instead of dumping a long form on you."],
-                ["Proof extraction", "Responsibilities, tools, outcomes, and metrics are pulled into a structured draft."],
-                ["Resume + LinkedIn output", "Your answers flow into the existing ATS-safe resume and headline generator."]
+                ["Answer like a conversation", "Type the way you would explain your work to a coach."],
+                ["Career Forge finds the proof", "Responsibilities, tools, outcomes, and metrics are pulled into a useful draft."],
+                ["Generate when ready", "When there is enough signal, build the resume and LinkedIn headline."]
               ].map(([title, body]) => (
                 <article key={title} className="rounded-md border border-white/10 bg-white/5 p-4">
                   <h2 className="text-sm font-bold text-paper">{title}</h2>
@@ -279,21 +352,19 @@ export function InterviewMode() {
 
             <div className="mt-7 rounded-md border border-white/10 bg-obsidian/45">
               <div className="border-b border-white/10 px-4 py-3">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/50">Interview Progress</p>
-                <h2 className="mt-1 text-lg font-bold text-paper">You are talking to Career Forge.</h2>
-                <p className="mt-1 text-sm leading-6 text-paper/60">
-                  I will remember what you share, ask follow-ups, and pull out resume-ready proof as we go.
-                </p>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-paper/50">Interview Focus</p>
+                <h2 className="mt-1 text-lg font-bold text-paper">{interviewFocus.label}</h2>
+                <p className="mt-1 text-sm leading-6 text-paper/60">{interviewFocus.body}</p>
               </div>
 
               <div className="max-h-[31rem] space-y-3 overflow-y-auto px-4 py-4">
                 {session.messages.map((message) => (
                   <article
                     key={message.id}
-                    className={`max-w-[88%] rounded-md border px-4 py-3 ${
+                    className={`max-w-[92%] rounded-md border px-4 py-3 transition md:max-w-[86%] ${
                       message.role === "assistant"
-                        ? "border-cyan/20 bg-cyan/10 text-paper"
-                        : "ml-auto border-gold/20 bg-gold/10 text-paper"
+                        ? "border-cyan/18 bg-white/6 text-paper"
+                        : "ml-auto border-gold/25 bg-gold/12 text-paper"
                     }`}
                   >
                     <p className="mb-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/42">
@@ -305,14 +376,14 @@ export function InterviewMode() {
                 {isThinking && (
                   <article className="max-w-[88%] rounded-md border border-cyan/20 bg-cyan/10 px-4 py-3 text-paper">
                     <p className="mb-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/42">Career Forge</p>
-                    <p className="text-sm leading-6">Thinking... Generating next question...</p>
+                    <p className="text-sm leading-6">Thinking... shaping the next question.</p>
                   </article>
                 )}
               </div>
 
               <form onSubmit={handleSend} className="border-t border-white/10 p-4">
                 <label htmlFor="interview-answer" className="text-xs font-black uppercase tracking-[0.14em] text-paper/55">
-                  Your answer
+                  Talk it through
                 </label>
                 <textarea
                   id="interview-answer"
@@ -320,11 +391,11 @@ export function InterviewMode() {
                   onChange={(event) => setInput(event.target.value)}
                   disabled={limitState.isLocked}
                   rows={4}
-                  placeholder={limitState.isLocked ? "Premium preview limit reached." : "Plain language is fine. Career Forge will translate it."}
+                  placeholder={limitState.isLocked ? "Premium preview limit reached." : "Type naturally. I'll translate it."}
                   className="mt-2 w-full rounded-md border border-white/12 bg-white/8 px-4 py-3 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/35 focus:border-cyan disabled:cursor-not-allowed disabled:opacity-55"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-paper/55">Estimate if you are not sure. Short answers are okay for this preview.</p>
+                  <p className="text-sm text-paper/55">Short answers work, but examples make the resume stronger.</p>
                   <button
                     type="submit"
                     disabled={limitState.isLocked}
@@ -341,12 +412,30 @@ export function InterviewMode() {
             <PremiumPreviewMeter state={limitState} />
             {limitState.isLocked && (
               <div className="mt-4">
-                <PremiumLockedPanel onStartOver={handleStartOver} />
+                <PremiumLockedPanel
+                  hasGeneratedResume={Boolean(generatedPackage)}
+                  onStartOver={handleStartOver}
+                  onViewResume={generatedPackage ? () => setMode("review") : undefined}
+                />
               </div>
             )}
             <div className="mt-4">
               <UpgradeCallout />
             </div>
+            <section className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Resume Readiness</p>
+              <div className="mt-3 h-2 rounded-full bg-white/10">
+                <div
+                  className="h-2 rounded-full bg-cyan transition-all"
+                  style={{ width: `${session.resumeDraft.confidenceScore}%` }}
+                />
+              </div>
+              <p className="mt-2 text-lg font-bold text-cyan">{session.resumeDraft.confidenceScore}% ready</p>
+              <p className="mt-1 text-sm leading-6 text-paper/58">
+                I am looking for a clear target, recent work, proof, tools, and at least one result or example.
+              </p>
+            </section>
+
             <div className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
               <h2 className="text-sm font-bold text-paper">So far I&apos;ve learned</h2>
               {smartSummary.learned.length ? (
@@ -373,71 +462,50 @@ export function InterviewMode() {
               </p>
             </div>
 
-            <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-paper/52">Resume readiness</p>
-            <div className="mt-3 h-2 rounded-full bg-white/10">
-              <div
-                className="h-2 rounded-full bg-cyan transition-all"
-                style={{ width: `${session.resumeDraft.confidenceScore}%` }}
-              />
-            </div>
-            <p className="mt-2 text-sm font-bold text-cyan">{session.resumeDraft.confidenceScore}% structured signal</p>
-            <div className="mt-4 grid grid-cols-4 gap-2 text-center text-[0.65rem] font-black uppercase tracking-[0.12em]">
-              {[
-                ["Strong", statusCounts.strong, "text-cyan"],
-                ["Usable", statusCounts.usable, "text-gold"],
-                ["Weak", statusCounts.weak, "text-ember"],
-                ["Empty", statusCounts.empty, "text-paper/45"]
-              ].map(([label, count, tone]) => (
-                <div key={label} className="rounded-md border border-white/10 bg-white/5 px-2 py-2">
-                  <span className={`block text-lg ${tone}`}>{count}</span>
-                  <span className="text-paper/45">{label}</span>
-                </div>
-              ))}
-            </div>
-
-            {coachingMessages.length > 0 && (
-              <div className="mt-6 rounded-md border border-gold/20 bg-gold/10 p-4">
-                <h2 className="text-sm font-bold text-paper">Career coach notes</h2>
-                <div className="mt-3 space-y-2 text-sm leading-6 text-paper/70">
-                  {coachingMessages.map((message) => (
-                    <p key={message}>{message}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 space-y-2">
-              {session.fieldStatuses.map((field) => (
-                <div key={String(field.fieldKey)} className={`rounded-md border px-3 py-2 ${statusTone(field.status)}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-paper">{field.label}</span>
-                    <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{field.status}</span>
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-paper/58">{field.notes}</p>
-                </div>
-              ))}
+            <div className="mt-6 rounded-md border border-gold/20 bg-gold/10 p-4">
+              <h2 className="text-sm font-bold text-paper">Coach Tip</h2>
+              <p className="mt-2 text-sm leading-6 text-paper/70">{coachTip}</p>
             </div>
 
             <div className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
-              <h2 className="text-sm font-bold text-paper">Missing or weak fields</h2>
+              <h2 className="text-sm font-bold text-paper">Still need</h2>
               {missingFields.length ? (
                 <ul className="mt-3 space-y-2 text-sm text-paper/65">
-                  {missingFields.map((field) => (
+                  {missingFields.slice(0, 3).map((field) => (
                     <li key={String(field.fieldKey)}>{field.label}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-sm text-cyan">Minimum interview signal is ready.</p>
+                <p className="mt-3 text-sm leading-6 text-cyan">
+                  No weak areas yet. You can generate now, or add one more example to make the draft stronger.
+                </p>
               )}
             </div>
 
             <details className="mt-4 rounded-md border border-white/10 bg-white/5 p-4">
-              <summary className="cursor-pointer text-sm font-bold text-paper">Extracted draft preview</summary>
+              <summary className="cursor-pointer text-sm font-bold text-paper">View captured details</summary>
               <div className="mt-4 space-y-3">
                 {draftPreview.map(([label, value]) => (
                   <div key={label}>
                     <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-paper/42">{label}</p>
-                    <p className="mt-1 text-sm leading-6 text-paper/70">{value || "Not captured yet"}</p>
+                    <p className="mt-1 text-sm leading-6 text-paper/70">
+                      {value || (label === "Metrics" ? "No metrics yet. Estimate volume, speed, time saved, customer count, revenue, accuracy, or scale if you can." : "Not captured yet.")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <details className="mt-4 rounded-md border border-white/10 bg-white/5 p-4">
+              <summary className="cursor-pointer text-sm font-bold text-paper">View readiness details</summary>
+              <div className="mt-4 space-y-2">
+                {session.fieldStatuses.map((field) => (
+                  <div key={String(field.fieldKey)} className={`rounded-md border px-3 py-2 ${statusTone(field.status)}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-paper">{field.label}</span>
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{field.status}</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-paper/58">{field.notes}</p>
                   </div>
                 ))}
               </div>

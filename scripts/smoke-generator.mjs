@@ -420,10 +420,18 @@ assert(limitState.label.includes("Premium Preview"), "preview state has premium 
 const interviewModeSource = fs.readFileSync(path.join(root, "src/components/InterviewMode.tsx"), "utf8");
 const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
 const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
-assert(interviewModeSource.includes("Stop filling out forms"), "premium interview page copy exists");
+assert(interviewModeSource.includes("Let Career Forge interview you."), "first-screen value proposition exists");
+assert(interviewModeSource.includes("Build your resume") || landingSource.includes("Build your resume"), "premium entry helper copy exists");
+assert(interviewModeSource.includes("Resume Readiness"), "sidebar coach dashboard copy exists");
 assert(interviewModeSource.includes("Resume Strength"), "review screen strength label copy exists");
+assert(interviewModeSource.includes("Your interview-built resume draft"), "review screen title exists");
+assert(interviewModeSource.includes("No metrics yet. Estimate volume"), "empty state coaching copy exists");
+assert(interviewModeSource.includes("lg:grid-cols") && interviewModeSource.includes("flex flex-wrap"), "mobile-safe layout structure exists");
+assert(!interviewModeSource.includes("Current stage"), "internal stage wording is hidden from UI");
+assert(!interviewModeSource.includes("structured signal"), "debug readiness wording is hidden from UI");
 assert(premiumSource.includes("Interview Mode is planned as a premium feature"), "locked panel copy exists");
 assert(landingSource.includes("Premium Preview"), "landing page premium badge copy exists");
+assert(landingSource.includes("Start the Interview"), "static builder entry remains available");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
 
 const customRoleData = {
