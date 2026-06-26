@@ -7,6 +7,7 @@ import { LinkedInPreview } from "@/components/LinkedInPreview";
 import { ResumePreview } from "@/components/ResumePreview";
 import { initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
+import { hasEnoughResumeSignal } from "@/lib/interview-state";
 import { parseStoryToDossier, type StoryDossier } from "@/lib/story-mode";
 import type { IntakeData, ResumePackage } from "@/types/career";
 
@@ -44,7 +45,7 @@ export function TellMyStoryMode() {
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
 
   const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
-  const canGenerate = dossier ? Boolean(intake.targetJobTitle && intake.currentTitle && intake.currentCompany && intake.selectedResponsibilities.length) : false;
+  const canGenerate = dossier ? hasEnoughResumeSignal(intake) : false;
 
   function parseStory(nextStory = combinedStory) {
     const nextDossier = parseStoryToDossier(nextStory, intake);
@@ -254,6 +255,15 @@ export function TellMyStoryMode() {
                   Focused follow-up{dossier.nextMissingField ? `: ${dossier.nextMissingField}` : ""}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-paper/70">{dossier.focusedFollowUp}</p>
+              </div>
+            )}
+
+            {canGenerate && (
+              <div className="mt-5 rounded-md border border-cyan/25 bg-cyan/10 p-4">
+                <p className="text-sm font-bold text-cyan">You gave Career Forge enough signal to build your first resume package.</p>
+                <p className="mt-2 text-sm leading-6 text-paper/70">
+                  Generate now, or add more detail if you want stronger bullets.
+                </p>
               </div>
             )}
 

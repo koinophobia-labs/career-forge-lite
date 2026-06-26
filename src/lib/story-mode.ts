@@ -13,6 +13,7 @@ import {
   inferIndependentWorkCategory,
   inferIndependentWorkRoleTitle
 } from "@/lib/independent-work-intelligence";
+import { getMissingSignals, getNextUsefulPrompt, hasEnoughResumeSignal } from "@/lib/interview-state";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { parseRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, RoleFamily } from "@/types/career";
@@ -363,18 +364,13 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     customRoleNotes: unique([previousIntake.customRoleNotes, roleSummary, ...scope, ...transferableSignals]).join(", ")
   };
   const checklist = buildInfoChecklist(story, intake, role, extracted);
-  const missingCriticalDetails = [
-    targetRole ? "" : "target role",
-    checklist.stillHelpfulFields.includes("Contact") ? "contact" : "",
-    role.title && role.company ? "" : "recent role",
-    tools.length ? "" : "tools",
-    responsibilities.length ? "" : "responsibilities",
-    scope.length ? "" : "scope",
-    transferableSignals.length || intake.selectedOutcomes.length ? "" : "outcomes",
-    checklist.stillHelpfulFields.includes("Education") ? "education" : ""
-  ].filter(Boolean);
+  const nextUsefulPrompt = getNextUsefulPrompt(intake);
+  const missingSignals = hasEnoughResumeSignal(intake)
+    ? []
+    : getMissingSignals(intake).filter((signal) => signal.key !== "education");
+  const missingCriticalDetails = missingSignals.map((signal) => signal.label);
   const confidence: StoryDossier["confidence"] =
-    missingCriticalDetails.length > 1 ? "needs_follow_up" : scope.length || transferableSignals.length >= 3 ? "strong" : "usable";
+    missingCriticalDetails.length > 1 ? "needs_follow_up" : hasEnoughResumeSignal(intake) || scope.length || transferableSignals.length >= 3 ? "strong" : "usable";
 
   return {
     intake,
@@ -393,7 +389,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
       transferableSignals
     },
     missingCriticalDetails,
-    nextMissingField: missingCriticalDetails[0] ?? "",
-    focusedFollowUp: focusedFollowUp(missingCriticalDetails)
+    nextMissingField: nextUsefulPrompt.key === "ready" ? "" : nextUsefulPrompt.label,
+    focusedFollowUp: nextUsefulPrompt.prompt || focusedFollowUp(missingCriticalDetails)
   };
 }

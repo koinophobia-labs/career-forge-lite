@@ -79,6 +79,12 @@ const {
 } = loadTsModule(path.join(root, "src/lib/modern-work-intelligence.ts"));
 const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode.ts"));
 const {
+  getMissingSignals,
+  getNextUsefulPrompt,
+  hasEnoughResumeSignal,
+  mergeReactiveSignals
+} = loadTsModule(path.join(root, "src/lib/interview-state.ts"));
+const {
   canUseInterviewMode,
   getFeatureAccess,
   getInterviewModeLimitState
@@ -814,6 +820,43 @@ for (const persona of independentWorkPersonas) {
 const doorDashStory = parseStoryToDossier("I do DoorDash on the side and handle customer messages, order accuracy, route planning, and around 25 deliveries a week.");
 assert(/DoorDash Courier|Independent/.test(doorDashStory.intake.currentTitle), "story mode recognizes DoorDash independent work");
 assert(doorDashStory.intake.selectedIndependentWorkSignals.length > 0, "story mode seeds independent transferable signals");
+
+const completeStory = parseStoryToDossier("I worked at DraftKings as a sportsbook writer from 2023 to now. I handled customers, wagers, cash, and escalations.");
+assert(completeStory.extracted.company === "DraftKings", "story mode parses company");
+assert(/Sportsbook/.test(completeStory.extracted.role), "story mode parses role");
+assert(/2023/i.test(completeStory.extracted.dates), "story mode parses dates");
+assert(!/company|recent role|date/i.test([completeStory.nextMissingField, completeStory.focusedFollowUp].join(" ")), "story mode does not ask for role/company/dates again");
+
+const aiToolStory = parseStoryToDossier("I worked at Local Studio as a developer from 2024 to now and used ChatGPT, Cursor, and GitHub.");
+assert(getNextUsefulPrompt(aiToolStory.intake).key === "aiWorkflow", "AI tools trigger AI workflow follow-up");
+const noAiToolStory = parseStoryToDossier("I worked at Local Studio as a developer from 2024 to now and used GitHub and VS Code for documentation.");
+assert(getNextUsefulPrompt(noAiToolStory.intake).key !== "aiWorkflow", "no AI tools skips AI workflow follow-up");
+
+const unknownRoleStory = parseStoryToDossier("I worked at River North Brewing as a brewery cellar operator from 2021 to 2024.");
+assert(getMissingSignals(unknownRoleStory.intake).some((signal) => signal.key === "unknownRoleContext"), "unknown role triggers fallback context");
+assert(findJobArsenal("Sportsbook Ticket Writer"), "known role uses arsenal when available");
+
+const enoughSignalData = {
+  ...initialIntake,
+  fullName: "Ready Candidate",
+  email: "ready@example.com",
+  targetJobTitle: "Customer Success Associate",
+  roleFamily: "Customer Success",
+  currentTitle: "Sportsbook Ticket Writer",
+  currentCompany: "DraftKings",
+  currentTime: "2023 - Present",
+  tools: "Zendesk",
+  selectedResponsibilities: ["Client communication", "Escalation handling", "Customer communication"],
+  customersServed: "50 weekly customers",
+  selectedOutcomes: ["Customer satisfaction"]
+};
+assert(hasEnoughResumeSignal(enoughSignalData), "enough signal allows Generate now");
+assert(getNextUsefulPrompt(enoughSignalData).key === "ready", "enough signal stops required prompting");
+
+const reactiveTargetData = mergeReactiveSignals(initialIntake, "I want customer success because I handled escalations at DraftKings.");
+assert(reactiveTargetData.targetJobTitle === "Customer Success Associate", "guided free text infers target role");
+assert(reactiveTargetData.currentCompany === "DraftKings", "guided free text captures company");
+assert(reactiveTargetData.selectedResponsibilities.some((item) => /escalation/i.test(item)), "guided free text captures responsibility signal");
 
 const aiWorkflowPersonas = [
   {

@@ -29,6 +29,7 @@ import {
   independentWorkTypes,
   inferIndependentWorkCategory
 } from "@/lib/independent-work-intelligence";
+import { getNextUsefulPrompt, hasEnoughResumeSignal, mergeReactiveSignals } from "@/lib/interview-state";
 import { formatParsedRoleConfirmation, parseRoleAnswer, type ParsedRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
@@ -498,6 +499,8 @@ export function IntakeForm({
     })
     .filter(Boolean);
   const readiness = getReadiness();
+  const nextUsefulPrompt = getNextUsefulPrompt(data);
+  const hasEnoughSignal = hasEnoughResumeSignal(data);
 
   function update<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
     onChange({ ...data, [key]: value });
@@ -520,7 +523,7 @@ export function IntakeForm({
     setRoleEditMode((current) => ({ ...current, [slot]: parsed.confidence === "low" }));
 
     if (parsed.title || parsed.company || parsed.dates) {
-      onChange(applyParsedRole(slot, parsed));
+      onChange(mergeReactiveSignals(applyParsedRole(slot, parsed), value));
     }
   }
 
@@ -585,9 +588,10 @@ export function IntakeForm({
       careerTargets.find((target) => target.title.toLowerCase() === value.trim().toLowerCase() && target.roleFamily === data.roleFamily) ??
       careerTargets.find((target) => target.title.toLowerCase() === value.trim().toLowerCase());
 
+    const reactiveData = mergeReactiveSignals(data, value);
     onChange({
-      ...data,
-      targetJobTitle: value,
+      ...reactiveData,
+      targetJobTitle: exactMatch ? value : reactiveData.targetJobTitle || value,
       ...(exactMatch ? { roleFamily: exactMatch.roleFamily, selectedResponsibilities: [] } : {})
     });
   }
@@ -2032,7 +2036,9 @@ export function IntakeForm({
               {getMomentumConfirmation()}
             </p>
             <p className="mt-3 text-sm leading-6 text-paper/55">
-              {questionIndex === questions.length - 1
+              {hasEnoughSignal && questionIndex < questions.length - 1
+                ? nextUsefulPrompt.prompt
+                : questionIndex === questions.length - 1
                 ? `${selectedSignals} guided signals captured. Review before generating.`
                 : "One answer at a time. Short notes are enough."}
             </p>
@@ -2040,6 +2046,21 @@ export function IntakeForm({
 
           <div className="dark-form-card rounded-md p-4 sm:p-5">
             {renderEaseHelpers()}
+            {hasEnoughSignal && questionIndex < questions.length - 1 && (
+              <div className="mb-5 rounded-md border border-cyan/25 bg-cyan/10 p-4">
+                <p className="text-sm font-bold text-spruce">You gave Career Forge enough signal to build your first resume package.</p>
+                <p className="mt-2 text-sm leading-6 text-ink/68">
+                  Generate now, or add more detail if you want sharper bullets.
+                </p>
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan"
+                >
+                  Generate now
+                </button>
+              </div>
+            )}
             {renderQuestion()}
             {renderSkipOptions()}
             <div className="mt-8 flex flex-col-reverse gap-3 border-t border-ink/10 pt-5 sm:flex-row sm:justify-between">
