@@ -255,6 +255,22 @@ function hasKnownRole(title) {
   return careerTargets.some((target) => target.title.toLowerCase() === normalized) || Boolean(findJobArsenal(title));
 }
 
+function visualCoreText(data, resume) {
+  const contact = [data.email, data.phone, data.website].filter(Boolean).join(" | ");
+  const sections = [
+    data.fullName,
+    contact,
+    resume.linkedinHeadline,
+    resume.summary,
+    resume.coreSkills.join(", "),
+    resume.experience
+      .map((role) => `${role.title} | ${role.company} | ${role.time}\n${role.bullets.filter(Boolean).join("\n")}`)
+      .join("\n\n"),
+    resume.education && resume.education !== educationPlaceholder ? resume.education : ""
+  ];
+  return sections.filter(Boolean).join("\n\n");
+}
+
 const roleMappingChecks = [
   ["Warehouse Operations Coordinator", "Operations"],
   ["Manual QA Tester", "Tech"],
@@ -306,9 +322,11 @@ assert(
 );
 assert(["Compact", "Balanced", "Spacious"].every((option) => resumePreviewSource.includes(option)), "visual density options are available");
 assert(
-  ["Summary", "Strengths", "Experience Highlights", "Skills/Tools", "LinkedIn Headline", "Contact"].every((section) => resumePreviewSource.includes(section)),
+  ["Summary", "Strengths", "Experience Highlights", "Skills/Tools", "LinkedIn Headline", "Contact", "Education"].every((section) => resumePreviewSource.includes(section)),
   "visual section organization controls are available"
 );
+assert(!resumePreviewSource.includes(".slice(0, 5);"), "visual resume does not cap experience highlights at five bullets");
+assert(!resumePreviewSource.includes("email | phone | portfolio"), "resume previews avoid contact placeholder leakage");
 assert(resumePreviewSource.includes("moveSection") && resumePreviewSource.includes("toggleSection"), "visual sections can be toggled and reordered");
 assert(
   ["data-accent", "data-density", "data-font", "data-layout"].every((hook) => resumePreviewSource.includes(hook)),
@@ -943,6 +961,58 @@ for (const persona of aiWorkflowPersonas) {
   assert(!/Expert in ChatGPT|AI Engineer|Machine Learning Engineer|Prompt Engineer/i.test(exportText), `${persona.name}: no hallucinated AI expertise`);
   assert(!aiTools.every((tool) => firstSkillBlock.includes(tool)), `${persona.name}: no AI tool stuffing in core skills`);
   assert(exportText.includes("SUMMARY") && exportText.includes("CORE SKILLS") && exportText.includes("EXPERIENCE"), `${persona.name}: ATS-safe sections remain`);
+}
+
+const founderAiParityPersona = {
+  name: "Founder AI Workflow Parity",
+  targetJobTitle: "Product Operations Associate",
+  roleFamily: "Tech",
+  currentTitle: "Founder",
+  currentCompany: "Koinophobia Labs",
+  currentTime: "2025 - Present",
+  tools: "ChatGPT, Claude, Cursor, GitHub, Vercel",
+  selectedAiWorkflows: ["Market research", "PRD writing", "Workflow automation", "Rapid prototyping"],
+  selectedResponsibilities: ["Documentation", "Implementation support", "Testing"],
+  selectedActions: ["documented issues", "tested workflows"],
+  projectsSupported: "4 shipped product modules",
+  reportsCreated: "12 QA reports",
+  selectedOutcomes: ["Efficiency", "Reliability"],
+  website: "https://koinophobia-labs.vercel.app",
+  education: "Product Lab Projects | Koinophobia Labs | 2025"
+};
+
+const parityPersonas = [
+  ...personas,
+  independentWorkPersonas.find((persona) => persona.name === "Content Creator Independent"),
+  independentWorkPersonas.find((persona) => persona.name === "Uber Driver Independent"),
+  independentWorkPersonas.find((persona) => persona.name === "Etsy Seller Independent"),
+  founderAiParityPersona
+].filter(Boolean);
+
+for (const persona of parityPersonas) {
+  const data = {
+    ...initialIntake,
+    fullName: `${persona.name} Candidate`,
+    email: `${persona.name.toLowerCase().replaceAll(" ", ".")}@example.com`,
+    ...persona
+  };
+  const resume = generateResumePackage(data);
+  if (persona.education) resume.education = persona.education;
+  const atsText = resumeToText(data, resume);
+  const visualText = visualCoreText(data, resume);
+  const allBullets = resume.experience.flatMap((role) => role.bullets.filter(Boolean));
+
+  assert(atsText.includes(data.email) && visualText.includes(data.email), `${persona.name}: contact preserved in both modes`);
+  assert(atsText.includes(resume.summary) && visualText.includes(resume.summary), `${persona.name}: summary preserved in both modes`);
+  assert(resume.coreSkills.slice(0, 8).every((skill) => atsText.includes(skill) && visualText.includes(skill)), `${persona.name}: skills/tools preserved in both modes`);
+  assert(allBullets.every((bullet) => atsText.includes(bullet) && visualText.includes(bullet)), `${persona.name}: all experience bullets preserved in both modes`);
+  assert(visualText.includes(resume.linkedinHeadline), `${persona.name}: visual positioning headline preserved`);
+  assert(!atsText.includes(educationPlaceholder) && !visualText.includes(educationPlaceholder), `${persona.name}: education placeholder omitted in both modes`);
+  if (persona.education) {
+    assert(atsText.includes(persona.education) && visualText.includes(persona.education), `${persona.name}: provided education preserved in both modes`);
+  }
+  assert(!/Copy Summary|Copy Skills|Copy Experience|Visual Portfolio Resume|Use ATS Resume/i.test(atsText), `${persona.name}: ATS text has no UI labels or visual chrome`);
+  assert(!/email \| phone \| portfolio|Copy Summary|Copy Skills|Copy Experience/i.test(visualText), `${persona.name}: visual content has no placeholders or copy labels`);
 }
 
 for (const persona of personas) {

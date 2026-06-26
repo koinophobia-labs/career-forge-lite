@@ -11,7 +11,7 @@ type VisualFontStyle = "Professional Sans" | "Editorial Serif" | "Modern Mono" |
 type VisualAccent = "Gold" | "Cyan" | "Ember" | "Slate" | "Emerald";
 type VisualLayoutStyle = "Classic Card" | "Sidebar Profile" | "Portfolio Sheet" | "Product Lab";
 type VisualDensity = "Compact" | "Balanced" | "Spacious";
-type VisualSection = "Contact" | "LinkedIn Headline" | "Summary" | "Strengths" | "Experience Highlights" | "Skills/Tools";
+type VisualSection = "Contact" | "LinkedIn Headline" | "Summary" | "Strengths" | "Experience Highlights" | "Skills/Tools" | "Education";
 
 type ResumePreviewProps = {
   data: IntakeData;
@@ -80,7 +80,8 @@ const defaultVisualSections: VisualSection[] = [
   "Summary",
   "Strengths",
   "Experience Highlights",
-  "Skills/Tools"
+  "Skills/Tools",
+  "Education"
 ];
 
 function updateRole(role: ExperienceRole, patch: Partial<ExperienceRole>) {
@@ -116,7 +117,8 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
   const visualTools = printableSkills.slice(6, 14);
   const visualHighlights = resume.experience
     .flatMap((role) => role.bullets.filter((bullet) => bullet.trim()).map((bullet) => ({ role, bullet })))
-    .slice(0, 5);
+    .slice(0, 12);
+  const hasEducation = resume.education.trim() && !isPlaceholderEducation(resume.education);
 
   function setExperience(index: number, role: ExperienceRole) {
     const next = resume.experience.map((item, itemIndex) => (itemIndex === index ? role : item));
@@ -144,7 +146,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
           {heading}
           <h2 className="mt-3 text-3xl font-black uppercase leading-tight tracking-0">{normalizeHeaderName(data.fullName)}</h2>
           <div className={`${density.text} mt-3 opacity-80`}>
-            {contactItems.length ? contactItems.map((item) => <p key={item}>{item}</p>) : <p>email | phone | portfolio</p>}
+            {contactItems.map((item) => <p key={item}>{item}</p>)}
           </div>
           {data.website.trim() && <p className={`visual-print-accent mt-3 rounded-md border p-3 text-sm font-bold ${accent.badge}`}>Portfolio: {data.website.trim()}</p>}
         </section>
@@ -197,6 +199,16 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               </article>
             ))}
           </div>
+        </section>
+      );
+    }
+
+    if (section === "Education") {
+      if (!hasEducation) return null;
+      return (
+        <section className={density.block} key={section}>
+          {heading}
+          <p className={`${density.text} mt-3 opacity-80`}>{resume.education.trim()}</p>
         </section>
       );
     }
@@ -374,7 +386,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               readOnly
               className="w-full border-0 bg-transparent p-0 text-3xl font-bold uppercase tracking-0 text-ink outline-none"
             />
-            <p className="mt-2 text-sm text-ink/70">{contactItems.join(" | ") || "email | phone | portfolio"}</p>
+            {contactItems.length > 0 && <p className="mt-2 text-sm text-ink/70">{contactItems.join(" | ")}</p>}
           </header>
 
           <div className="mt-6 space-y-7">
