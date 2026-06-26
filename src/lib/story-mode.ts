@@ -5,6 +5,7 @@ import {
   initialIntake,
   roleIntelligence
 } from "@/lib/career-data";
+import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { parseRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, RoleFamily } from "@/types/career";
 
@@ -208,6 +209,15 @@ function extractTools(story: string) {
   return unique([...knownTools, ...splitSignals(toolClause).filter((item) => item.length <= 32).map(titleCase)]).slice(0, 12);
 }
 
+function extractAiWorkflows(story: string, tools: string[]) {
+  if (!selectedAiTools(tools.join(", ")).length) return [];
+  const lower = story.toLowerCase();
+  return aiWorkflowOptions
+    .filter((workflow) => lower.includes(workflow.toLowerCase()))
+    .map(normalizeAiWorkflow)
+    .slice(0, 8);
+}
+
 function extractResponsibilities(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
   const keywordMatches = responsibilityKeywords.filter((item) => lower.includes(item)).map(titleCase);
@@ -289,6 +299,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   const name = extractName(story);
   const responsibilities = extractResponsibilities(story, roleFamily);
   const tools = extractTools(story);
+  const aiWorkflows = extractAiWorkflows(story, tools);
   const scope = extractScope(story);
   const transferableSignals = extractTransferableSignals(story, roleFamily);
   const selectedOutcomes = transferableSignals.filter((item) =>
@@ -312,6 +323,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     currentCompany: previousIntake.currentCompany || role.company,
     currentTime: previousIntake.currentTime || role.dates,
     tools: unique([previousIntake.tools, ...tools]).join(", "),
+    selectedAiWorkflows: unique([...previousIntake.selectedAiWorkflows, ...aiWorkflows]).slice(0, 8),
     responsibilities: unique([previousIntake.responsibilities, ...responsibilities]).join(", "),
     selectedResponsibilities: unique([...previousIntake.selectedResponsibilities, ...responsibilities]).slice(0, 10),
     selectedActions: unique([...previousIntake.selectedActions, ...responsibilities.slice(0, 4).map((item) => item.toLowerCase())]).slice(0, 6),

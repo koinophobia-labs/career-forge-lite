@@ -1,5 +1,6 @@
 import { allToolOptions, initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
+import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import type { IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 import type {
   AssistantIntent,
@@ -483,6 +484,12 @@ function extractToolSignals(answer: string) {
   return unique([...matchedTools, ...clauseTools]).slice(0, 12);
 }
 
+function extractAiWorkflowSignals(answer: string, tools: string[]) {
+  if (!selectedAiTools(tools.join(", ")).length) return [];
+  const lower = answer.toLowerCase();
+  return aiWorkflowOptions.filter((workflow) => lower.includes(workflow.toLowerCase())).map(normalizeAiWorkflow);
+}
+
 function extractMetricSignals(answer: string) {
   return unique(answer.match(metricPattern) ?? [])
     .filter((metric) => {
@@ -740,7 +747,11 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
 
   if (session.currentStage === "tools_and_skills") {
     const extraSkills = splitSignals(answer).filter((item) => !nextDraft.tools.some((tool) => tool.toLowerCase() === item.toLowerCase()));
-    nextDraft.skills = unique([...nextDraft.skills, ...extraSkills.map(titleCase)]).slice(0, 12);
+    nextDraft.skills = unique([
+      ...nextDraft.skills,
+      ...extraSkills.map(titleCase),
+      ...extractAiWorkflowSignals(answer, nextDraft.tools)
+    ]).slice(0, 12);
   }
 
   if (session.currentStage === "projects_or_portfolio" && !skipPattern.test(answer)) {
@@ -1224,6 +1235,9 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
   const primaryRole = role ?? projectFallbackRole;
   const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, primaryRole?.title ?? ""].join(" "));
   const metrics = draft.metrics.join(", ");
+  const selectedAiWorkflows = unique([...draft.skills, ...draft.responsibilities, ...draft.projects].filter((item) =>
+    aiWorkflowOptions.some((workflow) => workflow.toLowerCase() === item.toLowerCase())
+  ));
 
   return {
     ...initialIntake,
@@ -1233,6 +1247,7 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     currentCompany: primaryRole?.company ?? "",
     currentTime: primaryRole?.timeInRole ?? "",
     tools: draft.tools.join(", "),
+    selectedAiWorkflows,
     responsibilities: draft.responsibilities.join(", "),
     selectedResponsibilities: unique([...draft.responsibilities, ...draft.skills]).slice(0, 10),
     customersServed: metricForPattern(metrics, /customer|client|user|people/i),

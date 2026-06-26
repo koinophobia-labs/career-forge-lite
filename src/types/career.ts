@@ -28,6 +28,7 @@ export type IntakeData = {
   additionalCompany: string;
   additionalTime: string;
   tools: string;
+  selectedAiWorkflows: string[];
   responsibilities: string;
   selectedResponsibilities: string[];
   selectedActions: string[];

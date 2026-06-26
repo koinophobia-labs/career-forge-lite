@@ -17,6 +17,12 @@ import {
   allToolOptions,
   toolSuggestionsByFamily
 } from "@/lib/career-data";
+import {
+  aiWorkflowOptions,
+  aiWorkflowSuggestionsByFamily,
+  getAiWorkflowArsenalForContext,
+  selectedAiTools
+} from "@/lib/modern-work-intelligence";
 import { formatParsedRoleConfirmation, parseRoleAnswer, type ParsedRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
@@ -406,6 +412,19 @@ export function IntakeForm({
   const needsUnknownRoleContext = Boolean(unknownRoleTitles.length);
   const visibleOutcomes = showAllOutcomes ? outcomeOptions : roleOutcomes;
   const selectedTools = splitSelections(data.tools);
+  const selectedAiToolNames = selectedAiTools(data.tools);
+  const contextualAiWorkflows = getAiWorkflowArsenalForContext([
+    data.targetJobTitle,
+    data.currentTitle,
+    data.previousTitle,
+    data.additionalTitle,
+    data.roleFamily
+  ].join(" "));
+  const aiWorkflowSuggestions = [
+    ...contextualAiWorkflows,
+    ...aiWorkflowSuggestionsByFamily[data.roleFamily],
+    ...aiWorkflowOptions.filter((workflow) => !aiWorkflowSuggestionsByFamily[data.roleFamily].includes(workflow))
+  ].slice(0, showMoreTools ? 12 : 8);
   const roleAwareToolOptions = toolSuggestionsByFamily[data.roleFamily];
   const toolMatches = filterOptions(
     toolSearch.trim() ? allToolOptions : roleAwareToolOptions,
@@ -575,6 +594,13 @@ export function IntakeForm({
   function toggleTool(item: string) {
     update("tools", mergeSelection(data.tools, item));
     setToolSearch("");
+  }
+
+  function toggleAiWorkflow(item: string) {
+    const selected = data.selectedAiWorkflows.includes(item)
+      ? data.selectedAiWorkflows.filter((value) => value !== item)
+      : [...data.selectedAiWorkflows, item];
+    update("selectedAiWorkflows", selected);
   }
 
   function addConfirmedTool(item: string) {
@@ -1497,6 +1523,33 @@ export function IntakeForm({
                 <p className="mt-3 text-sm leading-6 text-ink/72">No tools selected yet.</p>
               )}
             </div>
+            {selectedAiToolNames.length > 0 && (
+              <div className="rounded-md border border-cyan/20 bg-white p-4">
+                <p className="text-sm font-bold text-ink">How did you actually use AI?</p>
+                <p className="mt-1 text-sm leading-6 text-ink/60">
+                  Select the workflow, not just the tool. This keeps the resume honest and useful.
+                </p>
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-spruce">
+                  AI tools selected: {selectedAiToolNames.join(", ")}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {aiWorkflowSuggestions.map((workflow) => (
+                    <button
+                      key={workflow}
+                      type="button"
+                      onClick={() => toggleAiWorkflow(workflow)}
+                      className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                        data.selectedAiWorkflows.includes(workflow)
+                          ? "border-cyan bg-cyan/20 text-ink"
+                          : "border-ink/10 bg-paper text-ink/80 hover:border-cyan"
+                      }`}
+                    >
+                      {workflow}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
       case "responsibilities":
@@ -1768,6 +1821,13 @@ export function IntakeForm({
               <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestionId("target")} />
               <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestionId("current_role")} />
               <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestionId("tools")} />
+              {selectedAiToolNames.length > 0 && (
+                <ReviewItem
+                  label="AI workflow use"
+                  value={formatReviewItems(data.selectedAiWorkflows)}
+                  onEdit={() => goToQuestionId("tools")}
+                />
+              )}
               <ReviewItem
                 label="Responsibilities"
                 value={formatReviewItems([...data.selectedResponsibilities, ...data.selectedActions, data.responsibilities])}

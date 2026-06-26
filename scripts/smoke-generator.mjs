@@ -67,6 +67,11 @@ const {
   formatParsedRoleConfirmation,
   parseRoleAnswer
 } = loadTsModule(path.join(root, "src/lib/natural-role-parser.ts"));
+const {
+  aiToolOptions,
+  aiWorkflowOptions,
+  selectedAiTools
+} = loadTsModule(path.join(root, "src/lib/modern-work-intelligence.ts"));
 const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode.ts"));
 const {
   canUseInterviewMode,
@@ -265,6 +270,9 @@ assert(searchableCareerTargets("client success representative").some((target) =>
 assert(searchableCareerTargets("support specialist").some((target) => target.title === "Support Specialist"), "role search filters mapped titles");
 assert(searchableCareerTargets("warehouse ops").length <= 12, "role search caps visible results");
 assert(searchableOptions(toolSuggestionsByFamily["IT Support"], "service").includes("ServiceNow"), "tool search finds ServiceNow");
+assert(aiToolOptions.includes("ChatGPT") && aiToolOptions.includes("GitHub Copilot") && aiToolOptions.includes("n8n"), "AI tool bank includes modern productivity tools");
+assert(allToolOptions.includes("ChatGPT") && allToolOptions.includes("Cursor") && allToolOptions.includes("Perplexity"), "AI tools are searchable tool options");
+assert(aiWorkflowOptions.includes("Research") && aiWorkflowOptions.includes("Workflow automation") && aiWorkflowOptions.includes("Rapid prototyping"), "AI workflow options are available");
 assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
 assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
@@ -694,6 +702,93 @@ assert(unknownRoleResume.experience.flatMap((role) => role.bullets).every((bulle
 assert(!unknownRoleExport.includes(educationPlaceholder), "unknown role export omits placeholder education");
 assert(!weakTerms.some((term) => unknownRoleExport.toLowerCase().includes(term.toLowerCase())), "unknown role has no weak leakage");
 assert(["Good", "Strong", "Excellent"].includes(unknownRoleQuality.rating), "unknown role receives usable resume quality rating");
+
+const aiWorkflowPersonas = [
+  {
+    name: "Founder AI Workflow",
+    targetJobTitle: "Business Operations Associate",
+    roleFamily: "Business",
+    currentTitle: "Founder",
+    currentCompany: "Koinophobia Labs",
+    currentTime: "2025 - Present",
+    tools: "ChatGPT, Claude, Perplexity, Notion",
+    selectedAiWorkflows: ["Market research", "Documentation", "Workflow automation"],
+    selectedResponsibilities: ["Research", "Documentation", "Process improvement"],
+    selectedActions: ["prepared reports", "documented processes"],
+    projectsSupported: "3 product concepts",
+    selectedOutcomes: ["Efficiency"]
+  },
+  {
+    name: "Developer AI Workflow",
+    targetJobTitle: "Technical Operations Associate",
+    roleFamily: "Tech",
+    currentTitle: "Junior Developer",
+    currentCompany: "Local Studio",
+    currentTime: "2024 - Present",
+    tools: "GitHub Copilot, Cursor, VS Code, GitHub",
+    selectedAiWorkflows: ["Coding assistance", "Debugging", "Rapid prototyping", "Documentation"],
+    selectedResponsibilities: ["Testing", "Documentation", "Implementation support"],
+    selectedActions: ["tested workflows", "documented issues"],
+    projectsSupported: "2 shipped app features",
+    selectedOutcomes: ["Speed", "Reliability"]
+  },
+  {
+    name: "Customer Success AI Workflow",
+    targetJobTitle: "Customer Success Associate",
+    roleFamily: "Customer Success",
+    currentTitle: "Customer Support Specialist",
+    currentCompany: "Helpdesk Co",
+    currentTime: "2023 - Present",
+    tools: "Zendesk, ChatGPT, Grammarly AI",
+    selectedAiWorkflows: ["Customer communication", "Knowledge management", "Documentation"],
+    selectedResponsibilities: ["Support tickets", "Client communication", "CRM updates"],
+    selectedActions: ["resolved issues", "documented updates"],
+    ticketsHandled: "40 weekly tickets",
+    selectedOutcomes: ["Customer satisfaction"]
+  },
+  {
+    name: "Operations AI Workflow",
+    targetJobTitle: "Operations Associate",
+    roleFamily: "Operations",
+    currentTitle: "Operations Coordinator",
+    currentCompany: "Fulfillment Co",
+    currentTime: "2022 - Present",
+    tools: "Excel, Make, Zapier AI, Notion AI",
+    selectedAiWorkflows: ["Workflow automation", "Documentation", "Reporting"],
+    selectedResponsibilities: ["Reporting", "Task coordination", "Process improvement"],
+    selectedActions: ["tracked work", "prepared reports"],
+    reportsCreated: "5 weekly reports",
+    selectedOutcomes: ["Efficiency"]
+  },
+  {
+    name: "Creator AI Workflow",
+    targetJobTitle: "Content Coordinator",
+    roleFamily: "Project Coordination",
+    currentTitle: "Creator Assistant",
+    currentCompany: "Independent Creator",
+    currentTime: "2024 - Present",
+    tools: "Midjourney, Runway, Notion AI, Google Workspace",
+    selectedAiWorkflows: ["Content creation", "Research", "Project planning"],
+    selectedResponsibilities: ["Documentation", "Timeline tracking", "Stakeholder communication"],
+    selectedActions: ["tracked milestones", "prepared status notes"],
+    projectsSupported: "4 active content projects",
+    selectedOutcomes: ["Speed"]
+  }
+];
+
+for (const persona of aiWorkflowPersonas) {
+  const data = { ...initialIntake, fullName: `${persona.name} Candidate`, email: "ai.workflow@example.com", ...persona };
+  const resume = generateResumePackage(data);
+  const exportText = resumeToText(data, resume);
+  const aiTools = selectedAiTools(data.tools);
+  const firstSkillBlock = resume.coreSkills.slice(0, 8).join(" ");
+
+  assert(aiTools.length > 0, `${persona.name}: AI tools detected`);
+  assert(/AI-Assisted|Workflow Automation|Rapid Prototyping|Knowledge Management|AI Productivity|Research Synthesis|Documentation/i.test(exportText), `${persona.name}: AI workflow appears naturally`);
+  assert(!/Expert in ChatGPT|AI Engineer|Machine Learning Engineer|Prompt Engineer/i.test(exportText), `${persona.name}: no hallucinated AI expertise`);
+  assert(!aiTools.every((tool) => firstSkillBlock.includes(tool)), `${persona.name}: no AI tool stuffing in core skills`);
+  assert(exportText.includes("SUMMARY") && exportText.includes("CORE SKILLS") && exportText.includes("EXPERIENCE"), `${persona.name}: ATS-safe sections remain`);
+}
 
 for (const persona of personas) {
   const data = {

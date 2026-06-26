@@ -228,6 +228,7 @@ export const initialIntake: IntakeData = {
   additionalCompany: "",
   additionalTime: "",
   tools: "",
+  selectedAiWorkflows: [],
   responsibilities: "",
   selectedResponsibilities: [],
   selectedActions: [],

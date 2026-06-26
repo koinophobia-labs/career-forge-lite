@@ -1,4 +1,5 @@
 import { roleIntelligence } from "@/lib/career-data";
+import { aiToolOptions, buildAiAtsKeywords, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { educationPlaceholder } from "@/lib/resume-export";
 import { polishResumePackage } from "@/lib/resume-intelligence";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
@@ -181,6 +182,7 @@ const leadershipTerms = /\b(supervisor|lead|manager|senior|coordinator|specialis
 const supportTerms = /\b(associate|assistant|representative|clerk|cashier|writer|technician|intern)\b/i;
 
 const acronyms = new Map([
+  ["ai", "AI"],
   ["api", "API"],
   ["crm", "CRM"],
   ["css", "CSS"],
@@ -196,6 +198,28 @@ const acronyms = new Map([
   ["sql", "SQL"],
   ["ui", "UI"],
   ["ux", "UX"]
+]);
+
+const aiWorkflowSkillLabels = new Map([
+  ["Research", "AI-Assisted Research"],
+  ["Documentation", "AI-Assisted Documentation"],
+  ["Brainstorming", "AI-Assisted Ideation"],
+  ["Customer communication", "AI-Supported Customer Communication"],
+  ["Coding assistance", "AI-Assisted Development"],
+  ["Debugging", "AI-Assisted Debugging"],
+  ["Resume writing", "AI-Assisted Writing"],
+  ["Meeting summaries", "AI Meeting Summaries"],
+  ["Knowledge management", "AI-Supported Knowledge Management"],
+  ["Workflow automation", "Workflow Automation"],
+  ["Prompt engineering", "Prompt Engineering"],
+  ["Technical writing", "AI-Assisted Technical Writing"],
+  ["Data analysis", "AI-Assisted Data Analysis"],
+  ["Content creation", "AI-Assisted Content Creation"],
+  ["Project planning", "AI-Assisted Project Planning"],
+  ["Rapid prototyping", "Rapid Prototyping"],
+  ["App development", "AI-Assisted App Development"],
+  ["Quality assurance", "AI-Assisted Quality Assurance"],
+  ["Translation", "AI-Assisted Translation"]
 ]);
 
 const responsibilityAliases = new Map([
@@ -359,6 +383,8 @@ function titleCase(value: string) {
 function normalizeTool(value: string) {
   const cleaned = cleanWhitespace(value);
   const lower = cleaned.toLowerCase();
+  const knownAiTool = aiToolOptions.find((tool) => tool.toLowerCase() === lower);
+  if (knownAiTool) return knownAiTool;
   return acronyms.get(lower) ?? titleCase(cleaned);
 }
 
@@ -460,16 +486,58 @@ function buildToolList(data: IntakeData) {
   return compact(splitList(data.tools).filter((tool) => !isWeakFreeText(tool)).map(normalizeTool)).slice(0, 6);
 }
 
+function buildAiWorkflowList(data: IntakeData) {
+  if (!selectedAiTools(data.tools).length) return [];
+  return compact(data.selectedAiWorkflows.map(normalizeAiWorkflow).filter((workflow) => !isWeakFreeText(workflow))).slice(0, 6);
+}
+
+function buildAiWorkflowSkillList(data: IntakeData) {
+  const workflows = buildAiWorkflowList(data);
+  return compact([
+    ...workflows.map((workflow) => aiWorkflowSkillLabels.get(workflow) ?? `${readablePhrase(workflow)} Support`),
+    ...buildAiAtsKeywords(workflows)
+  ]).slice(0, 6);
+}
+
+function aiWorkflowPhrase(data: IntakeData) {
+  const workflows = buildAiWorkflowList(data);
+  if (!workflows.length) return "";
+  const readable = workflows.map((workflow) => workflow.toLowerCase());
+  return sentenceList(readable.slice(0, 3));
+}
+
+function aiWorkflowBullet(data: IntakeData, roleFamily: RoleFamily) {
+  const phrase = aiWorkflowPhrase(data);
+  if (!phrase) return "";
+
+  const endings: Record<RoleFamily, string> = {
+    Tech: "support technical documentation, testing, and development follow-through.",
+    Business: "support research synthesis, documentation, and business decision-making.",
+    Operations: "support workflow planning, process documentation, and operational efficiency.",
+    "Customer Success": "support customer communication, knowledge retrieval, and service follow-through.",
+    Admin: "support documentation, meeting notes, and organized administrative workflows.",
+    Sales: "support prospect research, customer communication, and follow-up preparation.",
+    Security: "support documentation, reporting, and procedure-focused communication.",
+    "Project Coordination": "support project planning, status documentation, and cross-functional follow-through.",
+    "IT Support": "support troubleshooting documentation, knowledge retrieval, and user support workflows."
+  };
+
+  return `Applied AI-assisted workflows for ${phrase} to ${endings[roleFamily]}`;
+}
+
 function buildSkillList(data: IntakeData) {
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data);
+  const aiTools = selectedAiTools(data.tools).map((tool) => tool.toLowerCase());
+  const nonAiTools = tools.filter((tool) => !aiTools.includes(tool.toLowerCase()));
 
   return compact([
     ...responsibilities.slice(0, 6),
     ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
     ...data.customRoleWorkStyles.map(normalizeResponsibility).slice(0, 3),
     ...roleIntelligence[data.roleFamily].skills.map(normalizeResponsibility),
-    ...tools.slice(0, 4),
+    ...nonAiTools.slice(0, 4),
+    ...buildAiWorkflowSkillList(data),
     ...workflowSkillsByFamily[data.roleFamily]
   ]).slice(0, 14);
 }
@@ -667,7 +735,11 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   }
 
   return qualityCheckBullets(
-    [renderPattern(patterns[0], patternContext), renderPattern(patterns[1], patternContext), renderPattern(patterns[2], patternContext)],
+    [
+      renderPattern(patterns[0], patternContext),
+      renderPattern(patterns[1], patternContext),
+      aiWorkflowBullet(data, data.roleFamily) || renderPattern(patterns[2], patternContext)
+    ],
     verbs
   );
 }
@@ -742,10 +814,11 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
     ? `${currentRole.title} with experience in ${domain?.environment ?? strategy.environment}`
     : `Early-career professional with ${roleFamily.toLowerCase()} experience`;
   const strengths = compact([...(domain?.strengths ?? []), ...responsibilities.map(readablePhrase), ...strategy.focus.map(readablePhrase)]).slice(0, 3);
+  const aiPhrase = aiWorkflowPhrase(data);
   const direction = `${target} roles`;
 
   return limitSentences(
-    `${background}. Brings ${sentenceList(strengths)} with a transition focus toward ${direction}.`,
+    `${background}. Brings ${sentenceList(strengths)}${aiPhrase ? ` while using AI-assisted workflows for ${aiPhrase}` : ""} with a transition focus toward ${direction}.`,
     3
   );
 }
@@ -758,16 +831,18 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
   const strengths = compact([...(domain?.strengths ?? []), ...responsibilities, ...strategy.focus.map(readablePhrase)]).slice(0, 3);
   const environment = domain?.environment ?? strategy.environment;
   const strengthText = sentenceList(strengths);
+  const aiPhrase = aiWorkflowPhrase(data);
+  const aiSentence = aiPhrase ? ` Uses AI-assisted workflows for ${aiPhrase} without replacing the underlying work or judgment.` : "";
   const variants: Record<RoleFamily, string> = {
-    "Customer Success": `${target} candidate with hands-on experience in ${environment}. Strongest areas include ${strengthText}, with a service style built around clear updates, organized notes, and dependable follow-through.`,
-    Operations: `${target} candidate with practical experience keeping work organized in ${environment}. Brings ${strengthText} and a steady approach to documentation, handoffs, and process consistency.`,
-    Admin: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized communication, and reliable follow-through across records, schedules, and daily office needs.`,
-    Sales: `${target} candidate with experience supporting customer-facing workflows in ${environment}. Brings ${strengthText} and a practical approach to follow-up, account notes, and pipeline support.`,
-    Business: `${target} candidate with experience supporting reporting and workflow clarity in ${environment}. Brings ${strengthText}, organized documentation, and a practical eye for operational details.`,
-    "Project Coordination": `${target} candidate with experience keeping project details moving in ${environment}. Brings ${strengthText}, clear status communication, and organized follow-through across timelines and handoffs.`,
-    "IT Support": `${target} candidate with experience in ${environment}. Brings ${strengthText}, clear troubleshooting notes, and a user-focused approach to ticket resolution and escalation.`,
-    Tech: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized documentation, and practical follow-through across technical workflows.`,
-    Security: `${target} candidate with experience in ${environment}. Brings ${strengthText}, calm communication, and procedure-focused follow-through in public-facing settings.`
+    "Customer Success": `${target} candidate with hands-on experience in ${environment}. Strongest areas include ${strengthText}, with a service style built around clear updates, organized notes, and dependable follow-through.${aiSentence}`,
+    Operations: `${target} candidate with practical experience keeping work organized in ${environment}. Brings ${strengthText} and a steady approach to documentation, handoffs, and process consistency.${aiSentence}`,
+    Admin: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized communication, and reliable follow-through across records, schedules, and daily office needs.${aiSentence}`,
+    Sales: `${target} candidate with experience supporting customer-facing workflows in ${environment}. Brings ${strengthText} and a practical approach to follow-up, account notes, and pipeline support.${aiSentence}`,
+    Business: `${target} candidate with experience supporting reporting and workflow clarity in ${environment}. Brings ${strengthText}, organized documentation, and a practical eye for operational details.${aiSentence}`,
+    "Project Coordination": `${target} candidate with experience keeping project details moving in ${environment}. Brings ${strengthText}, clear status communication, and organized follow-through across timelines and handoffs.${aiSentence}`,
+    "IT Support": `${target} candidate with experience in ${environment}. Brings ${strengthText}, clear troubleshooting notes, and a user-focused approach to ticket resolution and escalation.${aiSentence}`,
+    Tech: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized documentation, and practical follow-through across technical workflows.${aiSentence}`,
+    Security: `${target} candidate with experience in ${environment}. Brings ${strengthText}, calm communication, and procedure-focused follow-through in public-facing settings.${aiSentence}`
   };
 
   return limitSentences(variants[data.roleFamily], 3);

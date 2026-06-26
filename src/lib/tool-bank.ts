@@ -1,4 +1,5 @@
 import type { RoleFamily } from "@/types/career";
+import { aiToolOptions } from "@/lib/modern-work-intelligence";
 
 const toolCategories = {
   general: [
@@ -37,19 +38,20 @@ const toolCategories = {
     "WMS", "ShipStation", "Shippo", "FedEx Ship Manager", "UPS WorldShip", "Oracle Retail", "Retail Pro", "Kibo", "Manhattan WMS",
     "Blue Yonder", "Epicor", "Revel Systems", "DoorDash Merchant Portal", "Uber Eats Manager", "Grubhub for Restaurants", "OpenTable",
     "Resy", "SevenRooms", "Olo"
-  ]
+  ],
+  aiModernProductivity: aiToolOptions
 };
 
 const byFamily: Record<RoleFamily, string[]> = {
   Security: ["Incident Reports", "Access Control System", "Radio Systems", "Surveillance Cameras", "CCTV Systems", "Lenel", "Genetec", "Verkada", ...toolCategories.general.slice(0, 10)],
-  "Customer Success": [...toolCategories.support, ...toolCategories.general.slice(0, 16), "CRM Systems", "Knowledge Base Software"],
-  "Project Coordination": [...toolCategories.general, "Jira", "Confluence", "Smartsheet", "Microsoft Project", "Google Calendar", "Outlook Calendar", "Miro", "Lucidchart"],
-  Operations: [...toolCategories.operations, ...toolCategories.retail, ...toolCategories.general.slice(0, 16)],
-  Business: [...toolCategories.data, ...toolCategories.operations.slice(0, 12), ...toolCategories.general],
-  Sales: [...toolCategories.sales, ...toolCategories.support.slice(0, 8), ...toolCategories.general.slice(0, 12)],
-  Admin: [...toolCategories.general, ...toolCategories.operations, "Medical Records Systems", "EMR Systems", "Epic", "Cerner"],
-  Tech: [...toolCategories.tech, ...toolCategories.data, ...toolCategories.general.slice(0, 12)],
-  "IT Support": [...toolCategories.tech, ...toolCategories.support.slice(2, 10), ...toolCategories.general.slice(0, 10)]
+  "Customer Success": [...toolCategories.support, ...toolCategories.general.slice(0, 16), "CRM Systems", "Knowledge Base Software", ...toolCategories.aiModernProductivity],
+  "Project Coordination": [...toolCategories.general, "Jira", "Confluence", "Smartsheet", "Microsoft Project", "Google Calendar", "Outlook Calendar", "Miro", "Lucidchart", ...toolCategories.aiModernProductivity],
+  Operations: [...toolCategories.operations, ...toolCategories.retail, ...toolCategories.general.slice(0, 16), ...toolCategories.aiModernProductivity],
+  Business: [...toolCategories.data, ...toolCategories.operations.slice(0, 12), ...toolCategories.general, ...toolCategories.aiModernProductivity],
+  Sales: [...toolCategories.sales, ...toolCategories.support.slice(0, 8), ...toolCategories.general.slice(0, 12), ...toolCategories.aiModernProductivity],
+  Admin: [...toolCategories.general, ...toolCategories.operations, "Medical Records Systems", "EMR Systems", "Epic", "Cerner", ...toolCategories.aiModernProductivity],
+  Tech: [...toolCategories.tech, ...toolCategories.data, ...toolCategories.general.slice(0, 12), ...toolCategories.aiModernProductivity],
+  "IT Support": [...toolCategories.tech, ...toolCategories.support.slice(2, 10), ...toolCategories.general.slice(0, 10), ...toolCategories.aiModernProductivity]
 };
 
 function unique(items: string[]) {

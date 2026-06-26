@@ -68,6 +68,7 @@ const spellingFixes: Array<[RegExp, string]> = [
 ];
 
 const acronymFixes: Array<[RegExp, string]> = [
+  [/\bai\b/gi, "AI"],
   [/\bcrm\b/gi, "CRM"],
   [/\bats\b/gi, "ATS"],
   [/\bsql\b/gi, "SQL"],
