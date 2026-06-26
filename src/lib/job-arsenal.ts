@@ -1,4 +1,5 @@
 import type { RoleFamily } from "@/types/career";
+import { independentWorkArsenals, independentWorkRoles } from "@/lib/independent-work-intelligence";
 
 export type JobArsenal = {
   title: string;
@@ -126,6 +127,51 @@ const arsenalProfiles = {
     tools: ["Jira", "GitHub", "Postman", "VS Code", "SQL", "Figma"],
     measurableActivities: ["Tests completed", "Issues documented", "Implementations supported", "Records updated", "Workflows reviewed"],
     domainLanguage: ["technical workflows", "implementation support", "product operations", "quality review"]
+  },
+  independentGig: {
+    responsibilities: independentWorkArsenals["Gig / Delivery"].responsibilities,
+    skills: independentWorkArsenals["Gig / Delivery"].skills,
+    workflows: independentWorkArsenals["Gig / Delivery"].workflows,
+    atsKeywords: ["Gig Work", "Delivery Operations", "Customer Service", "Route Planning", "Time Management", "Order Accuracy"],
+    tools: ["DoorDash Dasher App", "Uber Driver App", "Lyft Driver App", "Instacart Shopper App", "Google Maps", "Payment Systems"],
+    measurableActivities: independentWorkArsenals["Gig / Delivery"].measurableActivities,
+    domainLanguage: independentWorkArsenals["Gig / Delivery"].domainLanguage
+  },
+  independentCreator: {
+    responsibilities: independentWorkArsenals["Creator / Media"].responsibilities,
+    skills: independentWorkArsenals["Creator / Media"].skills,
+    workflows: independentWorkArsenals["Creator / Media"].workflows,
+    atsKeywords: ["Content Production", "Social Media Management", "Audience Engagement", "Video Editing", "Analytics", "Campaign Planning"],
+    tools: ["Canva", "Adobe Creative Cloud", "CapCut", "YouTube Studio", "TikTok", "Instagram"],
+    measurableActivities: independentWorkArsenals["Creator / Media"].measurableActivities,
+    domainLanguage: independentWorkArsenals["Creator / Media"].domainLanguage
+  },
+  independentService: {
+    responsibilities: independentWorkArsenals["Service / Local Business"].responsibilities,
+    skills: independentWorkArsenals["Service / Local Business"].skills,
+    workflows: independentWorkArsenals["Service / Local Business"].workflows,
+    atsKeywords: ["Client Relations", "Service Delivery", "Scheduling", "Payment Processing", "Customer Consultation", "Retention"],
+    tools: ["Square", "Calendly", "Google Calendar", "Instagram", "Payment Systems", "Booking Software"],
+    measurableActivities: independentWorkArsenals["Service / Local Business"].measurableActivities,
+    domainLanguage: independentWorkArsenals["Service / Local Business"].domainLanguage
+  },
+  independentCommerce: {
+    responsibilities: independentWorkArsenals["Online Commerce"].responsibilities,
+    skills: independentWorkArsenals["Online Commerce"].skills,
+    workflows: independentWorkArsenals["Online Commerce"].workflows,
+    atsKeywords: ["E-Commerce", "Order Fulfillment", "Customer Communication", "Inventory Tracking", "Merchandising", "Shipping"],
+    tools: ["Etsy", "eBay", "Shopify", "Depop", "Poshmark", "ShipStation"],
+    measurableActivities: independentWorkArsenals["Online Commerce"].measurableActivities,
+    domainLanguage: independentWorkArsenals["Online Commerce"].domainLanguage
+  },
+  independentCommunity: {
+    responsibilities: independentWorkArsenals["Volunteer / Community"].responsibilities,
+    skills: independentWorkArsenals["Volunteer / Community"].skills,
+    workflows: independentWorkArsenals["Volunteer / Community"].workflows,
+    atsKeywords: ["Volunteer Coordination", "Community Engagement", "Event Planning", "Outreach", "Leadership", "Stakeholder Communication"],
+    tools: ["Google Workspace", "Facebook Groups", "Eventbrite", "Slack", "Microsoft Teams", "Canva"],
+    measurableActivities: independentWorkArsenals["Volunteer / Community"].measurableActivities,
+    domainLanguage: independentWorkArsenals["Volunteer / Community"].domainLanguage
   }
 };
 
@@ -158,6 +204,21 @@ function createArsenal(seed: ArsenalSeed): JobArsenal {
     domainLanguage: mergeUnique(seed.domainLanguage, profile.domainLanguage)
   };
 }
+
+const profileByIndependentCategory = {
+  "Gig / Delivery": "independentGig",
+  "Creator / Media": "independentCreator",
+  "Service / Local Business": "independentService",
+  "Online Commerce": "independentCommerce",
+  "Volunteer / Community": "independentCommunity"
+} as const;
+
+const independentSeeds: ArsenalSeed[] = independentWorkRoles.map((role) => ({
+  title: role.title,
+  family: role.roleFamily,
+  aliases: role.aliases,
+  profile: profileByIndependentCategory[role.category]
+}));
 
 const seeds: ArsenalSeed[] = [
   { title: "Sportsbook Ticket Writer", family: "Customer Success", profile: "sportsbook", aliases: ["ticket writer", "sportsbook writer"] },
@@ -255,7 +316,8 @@ const seeds: ArsenalSeed[] = [
   { title: "Data Associate", family: "Tech", profile: "tech" },
   { title: "Product Support Specialist", family: "Tech", profile: "tech" },
   { title: "Junior Product Analyst", family: "Tech", profile: "tech" },
-  { title: "Technical Support Specialist", family: "Tech", profile: "it" }
+  { title: "Technical Support Specialist", family: "Tech", profile: "it" },
+  ...independentSeeds
 ];
 
 export const jobArsenals: JobArsenal[] = seeds.map(createArsenal);

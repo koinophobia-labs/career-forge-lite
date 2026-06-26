@@ -1,4 +1,5 @@
 import type { RoleFamily } from "@/types/career";
+import { independentWorkRoles } from "@/lib/independent-work-intelligence";
 
 export type CareerTarget = {
   title: string;
@@ -227,4 +228,4 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
   ]
 };
 
-export const careerTargets: CareerTarget[] = Object.values(groupedCareerTargets).flat();
+export const careerTargets: CareerTarget[] = [...Object.values(groupedCareerTargets).flat(), ...independentWorkRoles];

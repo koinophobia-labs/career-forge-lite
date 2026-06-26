@@ -23,6 +23,12 @@ import {
   getAiWorkflowArsenalForContext,
   selectedAiTools
 } from "@/lib/modern-work-intelligence";
+import {
+  findIndependentWorkRole,
+  independentWorkArsenals,
+  independentWorkTypes,
+  inferIndependentWorkCategory
+} from "@/lib/independent-work-intelligence";
 import { formatParsedRoleConfirmation, parseRoleAnswer, type ParsedRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
 
@@ -403,6 +409,19 @@ export function IntakeForm({
     data.additionalTitle,
     data.targetJobTitle
   ]);
+  const independentCategory =
+    findIndependentWorkRole(data.currentTitle)?.category ??
+    findIndependentWorkRole(data.previousTitle)?.category ??
+    findIndependentWorkRole(data.additionalTitle)?.category ??
+    findIndependentWorkRole(data.targetJobTitle)?.category ??
+    inferIndependentWorkCategory([
+      data.currentTitle,
+      data.previousTitle,
+      data.additionalTitle,
+      data.targetJobTitle,
+      data.responsibilities
+    ].join(" "));
+  const independentArsenal = independentCategory ? independentWorkArsenals[independentCategory] : null;
   const unknownRoleTitles = [
     data.targetJobTitle,
     data.currentTitle,
@@ -601,6 +620,16 @@ export function IntakeForm({
       ? data.selectedAiWorkflows.filter((value) => value !== item)
       : [...data.selectedAiWorkflows, item];
     update("selectedAiWorkflows", selected);
+  }
+
+  function toggleIndependentSignal(item: string) {
+    const selectedIndependentWorkSignals = data.selectedIndependentWorkSignals.includes(item)
+      ? data.selectedIndependentWorkSignals.filter((value) => value !== item)
+      : [...data.selectedIndependentWorkSignals, item];
+    const selectedResponsibilities = data.selectedResponsibilities.some((value) => value.toLowerCase() === item.toLowerCase())
+      ? data.selectedResponsibilities
+      : [...data.selectedResponsibilities, item];
+    onChange({ ...data, selectedIndependentWorkSignals, selectedResponsibilities });
   }
 
   function addConfirmedTool(item: string) {
@@ -1175,6 +1204,69 @@ export function IntakeForm({
     );
   }
 
+  function renderIndependentWorkPanel() {
+    if (!independentArsenal || !independentCategory) return null;
+    const signalGroups = [
+      ["Work you did most", independentArsenal.responsibilities],
+      ["Transferable skills", independentArsenal.skills],
+      ["Workflows", independentArsenal.workflows]
+    ] as const;
+
+    return (
+      <div className="rounded-md border border-cyan/20 bg-white p-4">
+        <p className="text-sm font-bold text-ink">
+          This looks like independent or nontraditional work. We can still translate it professionally.
+        </p>
+        <p className="mt-1 text-sm leading-6 text-ink/60">
+          Pick only what is true. Career Forge will position this as legitimate experience without pretending it was a corporate role.
+        </p>
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-bold text-ink">How should we describe this work?</p>
+          <div className="flex flex-wrap gap-2">
+            {independentWorkTypes.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => update("independentWorkType", type)}
+                className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                  data.independentWorkType === type ? "border-cyan bg-cyan/20 text-ink" : "border-ink/10 bg-paper text-ink/80 hover:border-cyan"
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-5 space-y-4">
+          {signalGroups.map(([label, items]) => (
+            <div key={label}>
+              <p className="mb-2 text-sm font-bold text-ink">{label}</p>
+              <div className="flex flex-wrap gap-2">
+                {items.slice(0, 8).map((item) => (
+                  <button
+                    key={`${label}-${item}`}
+                    type="button"
+                    onClick={() => toggleIndependentSignal(item)}
+                    className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                      data.selectedIndependentWorkSignals.includes(item)
+                        ? "border-gold bg-gold/25 text-ink"
+                        : "border-ink/10 bg-paper text-ink/80 hover:border-spruce"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 rounded-md bg-cyan/10 p-3 text-sm leading-6 text-ink/70">
+          Proof can be approximate: {formatList(independentArsenal.measurableActivities.slice(0, 6))}. Skip anything you do not want to include.
+        </div>
+      </div>
+    );
+  }
+
   function continueQuestion() {
     if (!onValidate(question.validate)) return;
     if (questionIndex < questions.length - 1) {
@@ -1556,6 +1648,7 @@ export function IntakeForm({
         return (
           <div className="space-y-5">
             {renderUnknownRoleFallback()}
+            {renderIndependentWorkPanel()}
             {experienceArsenal && (
               <div className="rounded-md bg-white p-4">
                 <p className="text-sm font-bold text-ink">
@@ -1821,6 +1914,17 @@ export function IntakeForm({
               <ReviewItem label="Tailored career lane" value={data.roleFamily} onEdit={() => goToQuestionId("target")} />
               <ReviewItem label="Roles" value={formatList(roleSummary)} onEdit={() => goToQuestionId("current_role")} />
               <ReviewItem label="Tools" value={formatReviewItems(selectedTools)} onEdit={() => goToQuestionId("tools")} />
+              {independentArsenal && (
+                <ReviewItem
+                  label="Independent work context"
+                  value={formatReviewItems([
+                    data.independentWorkType ? `Work type: ${data.independentWorkType}` : "",
+                    `Category: ${independentCategory}`,
+                    ...data.selectedIndependentWorkSignals
+                  ])}
+                  onEdit={() => goToQuestionId("responsibilities")}
+                />
+              )}
               {selectedAiToolNames.length > 0 && (
                 <ReviewItem
                   label="AI workflow use"

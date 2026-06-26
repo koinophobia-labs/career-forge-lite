@@ -5,6 +5,14 @@ import {
   initialIntake,
   roleIntelligence
 } from "@/lib/career-data";
+import {
+  findIndependentWorkRole,
+  formatIndependentTitle,
+  independentWorkArsenals,
+  independentWorkRoles,
+  inferIndependentWorkCategory,
+  inferIndependentWorkRoleTitle
+} from "@/lib/independent-work-intelligence";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { parseRoleAnswer } from "@/lib/natural-role-parser";
 import type { IntakeData, RoleFamily } from "@/types/career";
@@ -194,12 +202,15 @@ function extractRole(story: string) {
     .map((sentence) => parseRoleAnswer(sentence))
     .find((role) => role.title || role.company || role.dates) ?? parseRoleAnswer(story);
   const normalized = parsed.title ? normalizeKnownRole(parsed.title) : { title: "", family: undefined };
+  const independentRole = independentWorkRoles.find((role) => new RegExp(`\\b${role.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(story));
+  const independentCategory = inferIndependentWorkCategory(story);
+  const inferredIndependentTitle = inferIndependentWorkRoleTitle(story);
 
   return {
-    title: normalized.title || parsed.title,
+    title: normalized.title || parsed.title || independentRole?.title || inferredIndependentTitle || (independentCategory ? "Independent Work" : ""),
     company: parsed.company,
     dates: parsed.dates,
-    family: normalized.family
+    family: normalized.family ?? independentRole?.roleFamily
   };
 }
 
@@ -224,7 +235,9 @@ function extractResponsibilities(story: string, roleFamily: RoleFamily) {
   const handledClause = story.match(/\b(?:handled|managed|supported|coordinated|processed|maintained|tracked|documented|resolved)\s+([^.;]+)/i)?.[1] ?? "";
   const clauseMatches = splitSignals(handledClause).map(titleCase);
   const familyMatches = roleIntelligence[roleFamily].responsibilities.filter((item) => lower.includes(item.toLowerCase()));
-  return unique([...familyMatches, ...keywordMatches, ...clauseMatches]).slice(0, 10);
+  const independentCategory = inferIndependentWorkCategory(story);
+  const independentMatches = independentCategory ? independentWorkArsenals[independentCategory].responsibilities.filter((item) => lower.includes(item.toLowerCase()) || lower.includes(item.split(" ")[0].toLowerCase())) : [];
+  return unique([...familyMatches, ...keywordMatches, ...clauseMatches, ...independentMatches]).slice(0, 10);
 }
 
 function extractScope(story: string) {
@@ -237,7 +250,11 @@ function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
   const keywordMatches = transferableKeywords.filter((item) => lower.includes(item)).map(titleCase);
   const familySkills = roleIntelligence[roleFamily].skills.filter((skill) => lower.includes(skill.toLowerCase()));
-  return unique([...familySkills, ...keywordMatches]).slice(0, 10);
+  const independentCategory = inferIndependentWorkCategory(story);
+  const independentSkills = independentCategory
+    ? independentWorkArsenals[independentCategory].skills.filter((skill) => lower.includes(skill.toLowerCase()) || lower.includes(skill.split(" ")[0].toLowerCase()))
+    : [];
+  return unique([...familySkills, ...keywordMatches, ...independentSkills]).slice(0, 10);
 }
 
 function metricForPattern(metrics: string[], pattern: RegExp) {
@@ -293,6 +310,8 @@ function buildInfoChecklist(story: string, intake: IntakeData, role: { title: st
 export function parseStoryToDossier(story: string, previousIntake: IntakeData = initialIntake): StoryDossier {
   const role = extractRole(story);
   const roleFamily = role.family ?? inferRoleFamily(story, role.title);
+  const independentCategory = inferIndependentWorkCategory([story, role.title].join(" "));
+  const independentRole = findIndependentWorkRole(role.title);
   const targetRole = inferTargetRole(story, role.title, roleFamily);
   const explicitTarget = hasExplicitTarget(story);
   const email = extractEmail(story);
@@ -319,11 +338,16 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     email: previousIntake.email || email,
     targetJobTitle: explicitTarget ? targetRole : previousIntake.targetJobTitle || targetRole,
     roleFamily,
-    currentTitle: previousIntake.currentTitle || role.title,
+    currentTitle: previousIntake.currentTitle || (independentRole || independentCategory ? formatIndependentTitle(role.title, previousIntake.independentWorkType || "Independent") : role.title),
     currentCompany: previousIntake.currentCompany || role.company,
     currentTime: previousIntake.currentTime || role.dates,
     tools: unique([previousIntake.tools, ...tools]).join(", "),
     selectedAiWorkflows: unique([...previousIntake.selectedAiWorkflows, ...aiWorkflows]).slice(0, 8),
+    independentWorkType: previousIntake.independentWorkType || (independentCategory ? "Independent" : ""),
+    selectedIndependentWorkSignals: unique([
+      ...previousIntake.selectedIndependentWorkSignals,
+      ...(independentCategory ? independentWorkArsenals[independentCategory].skills.slice(0, 4) : [])
+    ]),
     responsibilities: unique([previousIntake.responsibilities, ...responsibilities]).join(", "),
     selectedResponsibilities: unique([...previousIntake.selectedResponsibilities, ...responsibilities]).slice(0, 10),
     selectedActions: unique([...previousIntake.selectedActions, ...responsibilities.slice(0, 4).map((item) => item.toLowerCase())]).slice(0, 6),

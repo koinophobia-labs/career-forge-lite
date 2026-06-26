@@ -1,4 +1,5 @@
 import { roleIntelligence } from "@/lib/career-data";
+import { findIndependentWorkRole, formatIndependentTitle, independentWorkArsenals, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
 import { aiToolOptions, buildAiAtsKeywords, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { educationPlaceholder } from "@/lib/resume-export";
 import { polishResumePackage } from "@/lib/resume-intelligence";
@@ -78,6 +79,41 @@ const domainProfiles: DomainProfile[] = [
     environment: "technical support and user service environment",
     strengths: ["troubleshooting", "ticketing", "user support", "documentation"],
     processLanguage: "support tickets, troubleshooting notes, user requests, and escalation workflows"
+  },
+  {
+    name: "independent-gig",
+    keywords: ["uber", "lyft", "doordash", "courier", "delivery driver", "instacart", "rideshare", "amazon flex"],
+    environment: "app-based service and delivery environment",
+    strengths: ["route planning", "customer communication", "time management", "order accuracy"],
+    processLanguage: "app-based requests, route planning, customer handoffs, and issue resolution"
+  },
+  {
+    name: "independent-creator",
+    keywords: ["creator", "tiktok", "youtube", "twitch", "podcast", "video editor", "photographer", "dj", "graphic designer"],
+    environment: "digital content and audience engagement environment",
+    strengths: ["content production", "audience engagement", "publishing workflows", "creative planning"],
+    processLanguage: "content planning, editing workflows, publishing schedules, and audience engagement"
+  },
+  {
+    name: "independent-service",
+    keywords: ["barber", "hair stylist", "nail technician", "tattoo artist", "trainer", "dog walker", "cleaner", "landscaper", "tutor", "childcare"],
+    environment: "client-facing independent service environment",
+    strengths: ["client relations", "service delivery", "appointment management", "payment processing"],
+    processLanguage: "client consultations, scheduling, service delivery, payments, and follow-up communication"
+  },
+  {
+    name: "independent-commerce",
+    keywords: ["etsy", "ebay", "shopify", "depop", "poshmark", "reseller", "seller", "online store"],
+    environment: "independent e-commerce operation",
+    strengths: ["product listings", "order fulfillment", "customer messages", "inventory tracking"],
+    processLanguage: "product listings, customer messages, order fulfillment, inventory updates, and shipping workflows"
+  },
+  {
+    name: "independent-community",
+    keywords: ["volunteer", "community organizer", "church volunteer", "youth coach", "mentor", "event organizer", "club leader"],
+    environment: "community and volunteer leadership environment",
+    strengths: ["event coordination", "community engagement", "outreach", "team coordination"],
+    processLanguage: "event coordination, outreach, scheduling, stakeholder communication, and volunteer support"
   }
 ];
 
@@ -468,6 +504,7 @@ function buildScopeItems(data: IntakeData) {
 
 function buildUserResponsibilityList(data: IntakeData) {
   return compact([
+    ...data.selectedIndependentWorkSignals.map(normalizeResponsibility),
     ...data.customRoleTransferableSkills.map(normalizeResponsibility),
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
     ...data.selectedResponsibilities.map(normalizeResponsibility),
@@ -549,6 +586,25 @@ function detectDomain(role: ExperienceRole | { title: string; company: string })
 }
 
 function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
+  const independentCategory = inferIndependentWorkCategory([
+    data.currentTitle,
+    data.previousTitle,
+    data.additionalTitle,
+    data.targetJobTitle,
+    data.responsibilities,
+    ...data.selectedIndependentWorkSignals
+  ].join(" "));
+  if (independentCategory) {
+    const arsenal = independentWorkArsenals[independentCategory];
+    return {
+      name: independentCategory.toLowerCase(),
+      keywords: [independentCategory, ...arsenal.domainLanguage],
+      environment: arsenal.domainLanguage[0] ? `${arsenal.domainLanguage[0]} environment` : "independent work environment",
+      strengths: compact([...data.selectedIndependentWorkSignals, ...arsenal.skills]).slice(0, 5),
+      processLanguage: sentenceList(compact([...data.selectedIndependentWorkSignals, ...arsenal.workflows]).slice(0, 4)) || sentenceList(arsenal.workflows.slice(0, 4))
+    };
+  }
+
   const industry = cleanWhitespace(data.customRoleIndustry);
   const workStyles = compact(data.customRoleWorkStyles.map(readablePhrase));
   const transferableSkills = compact(data.customRoleTransferableSkills.map(readablePhrase));
@@ -768,8 +824,10 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
     .filter((role) => cleanWhitespace(role.title))
     .slice(0, 3)
     .map((role) => ({
-      title: titleCase(role.title),
-      company: normalizeCompany(role.company) || role.fallbackCompany,
+      title: findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title)
+        ? formatIndependentTitle(findIndependentWorkRole(role.title)?.title ?? titleCase(role.title), data.independentWorkType)
+        : titleCase(role.title),
+      company: normalizeCompany(role.company) || (findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title) ? data.independentWorkType || "Independent Work" : role.fallbackCompany),
       time: isWeakFreeText(role.time) ? "Dates" : cleanWhitespace(role.time) || "Dates",
       bullets: []
     }));

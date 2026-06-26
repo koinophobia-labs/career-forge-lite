@@ -29,6 +29,8 @@ export type IntakeData = {
   additionalTime: string;
   tools: string;
   selectedAiWorkflows: string[];
+  independentWorkType: string;
+  selectedIndependentWorkSignals: string[];
   responsibilities: string;
   selectedResponsibilities: string[];
   selectedActions: string[];

@@ -68,6 +68,11 @@ const {
   parseRoleAnswer
 } = loadTsModule(path.join(root, "src/lib/natural-role-parser.ts"));
 const {
+  findIndependentWorkRole,
+  independentWorkRoles,
+  inferIndependentWorkCategory
+} = loadTsModule(path.join(root, "src/lib/independent-work-intelligence.ts"));
+const {
   aiToolOptions,
   aiWorkflowOptions,
   selectedAiTools
@@ -255,10 +260,11 @@ const roleMappingChecks = [
   ["Reporting Analyst", "Business"]
 ];
 
-assert(careerTargets.length >= 150 && careerTargets.length <= 250, `career target count ${careerTargets.length}`);
+assert(careerTargets.length >= 200 && careerTargets.length <= 330, `career target count ${careerTargets.length}`);
 assert(allToolOptions.length >= 150 && allToolOptions.length <= 300, `tool option count ${allToolOptions.length}`);
 assert(companySuggestions.length >= 300 && companySuggestions.length <= 500, `company suggestion count ${companySuggestions.length}`);
-assert(jobArsenals.length >= 75 && jobArsenals.length <= 100, `job arsenal count ${jobArsenals.length}`);
+assert(jobArsenals.length >= 120 && jobArsenals.length <= 170, `job arsenal count ${jobArsenals.length}`);
+assert(independentWorkRoles.length >= 50, "independent work role bank includes broad nontraditional coverage");
 
 for (const [title, roleFamily] of roleMappingChecks) {
   const target = findCareerTarget(title);
@@ -276,6 +282,9 @@ assert(aiWorkflowOptions.includes("Research") && aiWorkflowOptions.includes("Wor
 assert(searchableOptions(companySuggestions, "draft").includes("DraftKings"), "company search finds DraftKings");
 assert(searchableOptions(companySuggestions, "local").includes("Local Business"), "company search finds local fallback");
 assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket").includes("Support tickets"), "responsibility search filters role-aware options");
+assert(findIndependentWorkRole("DoorDash Courier")?.category === "Gig / Delivery", "independent role maps to gig delivery");
+assert(findIndependentWorkRole("Etsy Seller")?.category === "Online Commerce", "independent role maps to online commerce");
+assert(inferIndependentWorkCategory("I make TikToks and edit videos") === "Creator / Media", "story text infers creator work");
 assert(resumePreviewSource.includes("ATS Resume") && resumePreviewSource.includes("Visual Portfolio Resume"), "resume view toggle includes ATS and visual modes");
 assert(
   ["Professional Sans", "Editorial Serif", "Modern Mono", "Clean System"].every((option) => resumePreviewSource.includes(option)),
@@ -702,6 +711,109 @@ assert(unknownRoleResume.experience.flatMap((role) => role.bullets).every((bulle
 assert(!unknownRoleExport.includes(educationPlaceholder), "unknown role export omits placeholder education");
 assert(!weakTerms.some((term) => unknownRoleExport.toLowerCase().includes(term.toLowerCase())), "unknown role has no weak leakage");
 assert(["Good", "Strong", "Excellent"].includes(unknownRoleQuality.rating), "unknown role receives usable resume quality rating");
+
+const independentWorkPersonas = [
+  {
+    name: "Uber Driver Independent",
+    targetJobTitle: "Operations Associate",
+    roleFamily: "Operations",
+    currentTitle: "Uber Driver",
+    currentCompany: "",
+    currentTime: "2023 - Present",
+    independentWorkType: "Gig Work",
+    selectedIndependentWorkSignals: ["Route planning", "Customer communication", "Time Management", "Order accuracy"],
+    selectedResponsibilities: ["Route planning", "Customer communication", "Order accuracy"],
+    selectedActions: ["tracked work", "maintained records"],
+    customersServed: "40+ weekly riders",
+    selectedOutcomes: ["Reliability"]
+  },
+  {
+    name: "Etsy Seller Independent",
+    targetJobTitle: "Customer Success Associate",
+    roleFamily: "Customer Success",
+    currentTitle: "Etsy Seller",
+    currentCompany: "",
+    currentTime: "2022 - Present",
+    independentWorkType: "Side Business",
+    selectedIndependentWorkSignals: ["Product listings", "Customer messages", "Order fulfillment", "Shipping"],
+    selectedResponsibilities: ["Customer messages", "Order fulfillment", "Product listings"],
+    selectedActions: ["followed up with customers", "documented updates"],
+    customersServed: "30+ customer messages monthly",
+    selectedOutcomes: ["Customer satisfaction"]
+  },
+  {
+    name: "Content Creator Independent",
+    targetJobTitle: "Social Media Manager",
+    roleFamily: "Project Coordination",
+    currentTitle: "Content Creator",
+    currentCompany: "",
+    currentTime: "2024 - Present",
+    independentWorkType: "Creator Work",
+    selectedIndependentWorkSignals: ["Content planning", "Audience engagement", "Video editing", "Analytics review"],
+    selectedResponsibilities: ["Content planning", "Social media publishing", "Analytics review"],
+    selectedActions: ["tracked milestones", "prepared status notes"],
+    projectsSupported: "3 weekly posts",
+    selectedOutcomes: ["Speed"]
+  },
+  {
+    name: "Personal Trainer Independent",
+    targetJobTitle: "Operations Associate",
+    roleFamily: "Operations",
+    currentTitle: "Personal Trainer",
+    currentCompany: "",
+    currentTime: "2021 - Present",
+    independentWorkType: "Self-Employed",
+    selectedIndependentWorkSignals: ["Client scheduling", "Customer consultation", "Service delivery", "Appointment management"],
+    selectedResponsibilities: ["Client scheduling", "Service delivery", "Payment processing"],
+    selectedActions: ["coordinated schedules", "maintained records"],
+    customersServed: "10 weekly clients",
+    selectedOutcomes: ["Customer satisfaction"]
+  },
+  {
+    name: "Volunteer Coordinator Independent",
+    targetJobTitle: "Project Coordinator",
+    roleFamily: "Project Coordination",
+    currentTitle: "Volunteer Coordinator",
+    currentCompany: "",
+    currentTime: "2023 - Present",
+    independentWorkType: "Volunteer",
+    selectedIndependentWorkSignals: ["Event coordination", "Stakeholder communication", "Scheduling", "Outreach"],
+    selectedResponsibilities: ["Event coordination", "Stakeholder communication", "Scheduling"],
+    selectedActions: ["tracked milestones", "updated stakeholders"],
+    projectsSupported: "4 community events",
+    selectedOutcomes: ["Reliability"]
+  },
+  {
+    name: "Tattoo Artist Independent",
+    targetJobTitle: "Client Services Coordinator",
+    roleFamily: "Customer Success",
+    currentTitle: "Tattoo Artist",
+    currentCompany: "",
+    currentTime: "2020 - Present",
+    independentWorkType: "Freelance",
+    selectedIndependentWorkSignals: ["Customer consultation", "Appointment management", "Service delivery", "Payment processing"],
+    selectedResponsibilities: ["Customer consultation", "Appointment management", "Service delivery"],
+    selectedActions: ["followed up with customers", "documented updates"],
+    customersServed: "8 weekly clients",
+    selectedOutcomes: ["Customer satisfaction"]
+  }
+];
+
+for (const persona of independentWorkPersonas) {
+  const data = { ...initialIntake, fullName: `${persona.name} Candidate`, email: "independent.work@example.com", ...persona };
+  const resume = generateResumePackage(data);
+  const exportText = resumeToText(data, resume);
+
+  assert(/Independent|Freelance|Self-Employed|Volunteer/.test(exportText), `${persona.name}: independent positioning appears`);
+  assert(!/Current Company|Previous Company|Corporate|employees managed|team led|degree/i.test(exportText), `${persona.name}: no fake corporate or degree claims`);
+  assert(!/revenue|sales volume|\$/.test(exportText) || persona.revenueInfluenced, `${persona.name}: no fake revenue claims`);
+  assert(/Customer Communication|Time Management|Client Relations|Order Fulfillment|Service Delivery|Content Production|Community Engagement|Scheduling|Documentation|Operations/i.test(exportText), `${persona.name}: transferable skills included`);
+  assert(exportText.includes("SUMMARY") && exportText.includes("CORE SKILLS") && exportText.includes("EXPERIENCE"), `${persona.name}: ATS-safe output remains clean`);
+}
+
+const doorDashStory = parseStoryToDossier("I do DoorDash on the side and handle customer messages, order accuracy, route planning, and around 25 deliveries a week.");
+assert(/DoorDash Courier|Independent/.test(doorDashStory.intake.currentTitle), "story mode recognizes DoorDash independent work");
+assert(doorDashStory.intake.selectedIndependentWorkSignals.length > 0, "story mode seeds independent transferable signals");
 
 const aiWorkflowPersonas = [
   {

@@ -1,5 +1,6 @@
 import { allToolOptions, initialIntake } from "@/lib/career-data";
 import { generateResumePackage } from "@/lib/generator";
+import { findIndependentWorkRole, independentWorkArsenals, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import type { IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 import type {
@@ -1235,6 +1236,13 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
   const primaryRole = role ?? projectFallbackRole;
   const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, primaryRole?.title ?? ""].join(" "));
   const metrics = draft.metrics.join(", ");
+  const independentCategory = inferIndependentWorkCategory([
+    draft.targetRole,
+    draft.targetIndustry,
+    primaryRole?.title ?? "",
+    ...draft.responsibilities,
+    ...draft.skills
+  ].join(" "));
   const selectedAiWorkflows = unique([...draft.skills, ...draft.responsibilities, ...draft.projects].filter((item) =>
     aiWorkflowOptions.some((workflow) => workflow.toLowerCase() === item.toLowerCase())
   ));
@@ -1248,6 +1256,8 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     currentTime: primaryRole?.timeInRole ?? "",
     tools: draft.tools.join(", "),
     selectedAiWorkflows,
+    independentWorkType: independentCategory || findIndependentWorkRole(primaryRole?.title ?? "") ? "Independent" : "",
+    selectedIndependentWorkSignals: independentCategory ? independentWorkArsenals[independentCategory].skills.slice(0, 5) : [],
     responsibilities: draft.responsibilities.join(", "),
     selectedResponsibilities: unique([...draft.responsibilities, ...draft.skills]).slice(0, 10),
     customersServed: metricForPattern(metrics, /customer|client|user|people/i),

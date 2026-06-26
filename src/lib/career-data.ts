@@ -229,6 +229,8 @@ export const initialIntake: IntakeData = {
   additionalTime: "",
   tools: "",
   selectedAiWorkflows: [],
+  independentWorkType: "",
+  selectedIndependentWorkSignals: [],
   responsibilities: "",
   selectedResponsibilities: [],
   selectedActions: [],
