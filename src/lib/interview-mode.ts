@@ -1269,6 +1269,7 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     reportsCreated: metricForPattern(metrics, /report|document|dashboard/i),
     selectedOutcomes: unique([...draft.achievements, ...draft.projects]).slice(0, 3),
     outcomes: draft.achievements.join(", "),
+    education: draft.education || draft.certifications.join(", "),
     customRoleIndustry: draft.targetIndustry,
     customRoleTransferableSkills: draft.skills,
     customRoleNotes: unique([...draft.projects, draft.education, ...draft.certifications]).join(", ")

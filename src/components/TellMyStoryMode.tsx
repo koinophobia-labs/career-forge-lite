@@ -245,8 +245,10 @@ export function TellMyStoryMode() {
               <DossierRow label="Role family" value={dossier.extracted.roleFamily} />
               <DossierRow label="Responsibilities" value={dossier.extracted.responsibilities} />
               <DossierRow label="Tools" value={dossier.extracted.tools} />
+              <DossierRow label="AI workflows" value={dossier.extracted.aiWorkflows} />
               <DossierRow label="Scope" value={dossier.extracted.scope} />
               <DossierRow label="Transferable signals" value={dossier.extracted.transferableSignals} />
+              <DossierRow label="Education" value={dossier.extracted.education} />
             </div>
 
             {dossier.stillHelpfulFields.length > 0 && (
@@ -277,7 +279,8 @@ export function TellMyStoryMode() {
                   ["currentCompany", "Company"],
                   ["currentTime", "Dates"],
                   ["tools", "Tools"],
-                  ["responsibilities", "Responsibilities"]
+                  ["responsibilities", "Responsibilities"],
+                  ["education", "Education"]
                 ].map(([key, label]) => (
                   <label key={key} className="text-xs font-bold uppercase tracking-[0.12em] text-paper/50">
                     {label}

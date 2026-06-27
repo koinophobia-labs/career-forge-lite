@@ -31,8 +31,10 @@ export type StoryDossier = {
     roleFamily: RoleFamily;
     responsibilities: string[];
     tools: string[];
+    aiWorkflows: string[];
     scope: string[];
     transferableSignals: string[];
+    education: string;
   };
   missingCriticalDetails: string[];
   nextMissingField: string;
@@ -247,6 +249,17 @@ function extractScope(story: string) {
     .slice(0, 8);
 }
 
+function extractEducation(story: string) {
+  const educationSentence = splitSentences(story).find((sentence) =>
+    /\b(education|certification|certificate|course|training|degree|school|college|university|bootcamp|diploma|license)\b/i.test(sentence)
+  );
+  const educationClause = story.match(
+    /\b(?:education is|education:|studied|completed|earned|have|hold)\s+([^.;]*(?:degree|certification|certificate|course|training|school|college|university|bootcamp|diploma|license)[^.;]*)/i
+  )?.[1];
+
+  return clean(educationClause || educationSentence || "");
+}
+
 function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
   const keywordMatches = transferableKeywords.filter((item) => lower.includes(item)).map(titleCase);
@@ -279,7 +292,11 @@ function contactCaptured(story: string, intake: IntakeData) {
 }
 
 function educationCaptured(story: string, intake: IntakeData) {
-  return Boolean(intake.customRoleNotes.match(/\b(education|certification|course|training|degree|school|college|university)\b/i) || /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(story));
+  return Boolean(
+    intake.education.trim() ||
+      intake.customRoleNotes.match(/\b(education|certification|course|training|degree|school|college|university)\b/i) ||
+      /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(story)
+  );
 }
 
 function buildInfoChecklist(story: string, intake: IntakeData, role: { title: string; company: string; dates: string }, extracted: {
@@ -321,6 +338,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   const tools = extractTools(story);
   const aiWorkflows = extractAiWorkflows(story, tools);
   const scope = extractScope(story);
+  const education = extractEducation(story);
   const transferableSignals = extractTransferableSignals(story, roleFamily);
   const selectedOutcomes = transferableSignals.filter((item) =>
     /accuracy|satisfaction|efficiency|reliability|compliance|speed|retention|revenue/i.test(item)
@@ -361,7 +379,8 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     reportsCreated: previousIntake.reportsCreated || metricForPattern(scope, /report|document|dashboard/i),
     selectedOutcomes: unique([...previousIntake.selectedOutcomes, ...selectedOutcomes]).slice(0, 4),
     outcomes: unique([previousIntake.outcomes, ...transferableSignals]).join(", "),
-    customRoleNotes: unique([previousIntake.customRoleNotes, roleSummary, ...scope, ...transferableSignals]).join(", ")
+    education: previousIntake.education || education,
+    customRoleNotes: unique([previousIntake.customRoleNotes, roleSummary, education, ...scope, ...transferableSignals]).join(", ")
   };
   const checklist = buildInfoChecklist(story, intake, role, extracted);
   const nextUsefulPrompt = getNextUsefulPrompt(intake);
@@ -385,8 +404,10 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
       roleFamily,
       responsibilities,
       tools,
+      aiWorkflows,
       scope,
-      transferableSignals
+      transferableSignals,
+      education
     },
     missingCriticalDetails,
     nextMissingField: nextUsefulPrompt.key === "ready" ? "" : nextUsefulPrompt.label,

@@ -91,6 +91,13 @@ function hasOutcomes(data: IntakeData) {
   return data.selectedOutcomes.length > 0 || data.outcomes.trim().length > 0;
 }
 
+function hasEducation(data: IntakeData) {
+  return Boolean(
+    data.education.trim() ||
+      /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(data.customRoleNotes)
+  );
+}
+
 function hasIndependentContext(data: IntakeData) {
   return Boolean(
     data.independentWorkType ||
@@ -138,10 +145,42 @@ export function getInterviewState(data: IntakeData) {
     unknownRoleNeedsContext,
     hasScope: hasScope(data),
     hasOutcomes: hasOutcomes(data),
-    hasEducation: /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(data.customRoleNotes),
+    hasEducation: hasEducation(data),
     tools,
     aiTools,
     responsibilities
+  };
+}
+
+export type ResumeSignalScore = {
+  score: number;
+  captured: string[];
+  missing: string[];
+};
+
+export function getResumeSignalScore(data: IntakeData): ResumeSignalScore {
+  const state = getInterviewState(data);
+  const signals: Array<[string, boolean, number]> = [
+    ["Role", state.hasRecentRole, 12],
+    ["Company", state.hasCompanyOrSource, 10],
+    ["Dates", state.hasDates || state.hasIndependentContext, 8],
+    ["Target role", state.hasTargetRole, 12],
+    ["Responsibilities", state.hasResponsibilities, 14],
+    ["Tools", state.hasTools, 10],
+    ["AI workflows", !state.hasAiTools || state.hasAiWorkflows, 6],
+    ["Arsenal", state.responsibilityCount >= 4 || state.hasIndependentContext, 8],
+    ["Scope", state.hasScope, 8],
+    ["Outcomes", state.hasOutcomes, 8],
+    ["Independent work", !state.independentWorkNeedsContext, 4],
+    ["Education", state.hasEducation, 4]
+  ];
+  const maxScore = signals.reduce((total, [, , weight]) => total + weight, 0);
+  const rawScore = signals.reduce((total, [, captured, weight]) => total + (captured ? weight : 0), 0);
+
+  return {
+    score: Math.round((rawScore / maxScore) * 100),
+    captured: signals.filter(([, captured]) => captured).map(([label]) => label),
+    missing: signals.filter(([, captured]) => !captured).map(([label]) => label)
   };
 }
 

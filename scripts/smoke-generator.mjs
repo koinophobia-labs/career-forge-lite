@@ -81,6 +81,7 @@ const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode
 const {
   getMissingSignals,
   getNextUsefulPrompt,
+  getResumeSignalScore,
   hasEnoughResumeSignal,
   mergeReactiveSignals
 } = loadTsModule(path.join(root, "src/lib/interview-state.ts"));
@@ -269,6 +270,25 @@ function visualCoreText(data, resume) {
     resume.education && resume.education !== educationPlaceholder ? resume.education : ""
   ];
   return sections.filter(Boolean).join("\n\n");
+}
+
+function textHasAny(text, values) {
+  const lower = text.toLowerCase();
+  return values.filter(Boolean).some((value) => lower.includes(String(value).toLowerCase()));
+}
+
+function assertProfessionalResume(data, resume, label) {
+  const exportText = resumeToText(data, resume);
+  const bullets = resume.experience.flatMap((role) => role.bullets.filter(Boolean));
+  const quality = analyzeResumeQuality(data, resume);
+
+  assert(resume.summary.trim().length > 40, `${label}: summary is substantive`);
+  assert(resume.linkedinHeadline.includes(data.targetJobTitle), `${label}: LinkedIn headline includes target role`);
+  assert(resume.coreSkills.length >= 6, `${label}: skills are populated`);
+  assert(bullets.length >= 3, `${label}: experience bullets are populated`);
+  assert(bullets.every((bullet) => bullet.trim() && !/candidate targeting|various things|stuff/i.test(bullet)), `${label}: bullets are professional`);
+  assert(!exportText.includes(educationPlaceholder), `${label}: education placeholder omitted from export`);
+  assert(["Good", "Strong", "Excellent"].includes(quality.rating), `${label}: resume quality rating is useful`);
 }
 
 const roleMappingChecks = [
@@ -650,6 +670,10 @@ assert(partialStoryDossier.focusedFollowUp.length > 10, "partial story gets one 
 const storyContactDossier = parseStoryToDossier("I worked at DraftKings as a sportsbook writer from 2023 to now. My name is Jordan Carter and my email is jordan.carter@example.com.");
 assert(storyContactDossier.intake.fullName === "Jordan Carter", "story mode extracts clean name from contact follow-up");
 assert(storyContactDossier.intake.email === "jordan.carter@example.com", "story mode extracts email from contact follow-up");
+const storyEducationDossier = parseStoryToDossier("My name is Jordan Carter and my email is jordan@example.com. I worked at DraftKings as a sportsbook writer from 2023 to now targeting Customer Success Associate. I handled customers, escalations, and account questions using Zendesk and Excel. I supported 50+ weekly customers and improved customer satisfaction. I completed a Google Career Certificate in 2024.");
+assert(storyEducationDossier.extracted.education.includes("Google Career Certificate"), "story mode extracts education signal");
+assert(storyEducationDossier.intake.education.includes("Google Career Certificate"), "story mode feeds education into intake");
+assert(resumeToText(storyEducationDossier.intake, generateResumePackage(storyEducationDossier.intake)).includes("Google Career Certificate"), "story mode education reaches resume export");
 
 const customRoleData = {
   ...initialIntake,
@@ -875,6 +899,209 @@ const reactiveTargetData = mergeReactiveSignals(initialIntake, "I want customer 
 assert(reactiveTargetData.targetJobTitle === "Customer Success Associate", "guided free text infers target role");
 assert(reactiveTargetData.currentCompany === "DraftKings", "guided free text captures company");
 assert(reactiveTargetData.selectedResponsibilities.some((item) => /escalation/i.test(item)), "guided free text captures responsibility signal");
+
+const dualModePersonaAudits = [
+  {
+    name: "Sportsbook Ticket Writer Dual",
+    guided: {
+      targetJobTitle: "Customer Success Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Sportsbook Ticket Writer",
+      currentCompany: "DraftKings",
+      currentTime: "2023 - Present",
+      tools: "Zendesk, Excel, Slack",
+      selectedResponsibilities: ["Customer communication", "Payment processing", "Escalation handling", "Wagering transactions"],
+      selectedActions: ["resolved issues", "documented updates", "followed up with customers"],
+      customersServed: "50+ weekly customers",
+      selectedOutcomes: ["Customer satisfaction", "Accuracy"],
+      education: "Google Career Certificate | Coursera | 2024"
+    },
+    story:
+      "My name is Casey Morgan and my email is casey@example.com. I worked at DraftKings as a sportsbook writer from 2023 to now and I am targeting Customer Success Associate. I handled customer communication, payment processing, wagering transactions, and escalations using Zendesk, Excel, and Slack. I supported 50+ weekly customers and improved customer satisfaction and accuracy. I completed a Google Career Certificate through Coursera in 2024.",
+    expected: ["DraftKings", "Sportsbook Ticket Writer", "Zendesk", "50+ weekly customers", "Google Career Certificate"]
+  },
+  {
+    name: "Security Officer Dual",
+    guided: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Security Officer",
+      currentCompany: "Allied Universal",
+      currentTime: "2021 - 2024",
+      tools: "Microsoft Teams, Excel",
+      selectedResponsibilities: ["Access control", "Incident reporting", "Visitor management", "Task coordination"],
+      selectedActions: ["maintained records", "tracked work", "prepared reports"],
+      reportsCreated: "6 weekly incident reports",
+      selectedOutcomes: ["Compliance", "Reliability"]
+    },
+    story:
+      "My name is Riley Brooks and my email is riley@example.com. I was a security officer at Allied Universal from 2021 to 2024 and I am targeting Operations Associate. I handled access control, incident reporting, visitor management, and task coordination using Microsoft Teams and Excel. I prepared 6 weekly incident reports and improved compliance and reliability.",
+    expected: ["Allied Universal", "Security Officer", "Incident Reporting", "Microsoft Teams", "6 weekly incident reports"]
+  },
+  {
+    name: "Retail Admin Dual",
+    guided: {
+      targetJobTitle: "Administrative Assistant",
+      roleFamily: "Admin",
+      currentTitle: "Retail Associate",
+      currentCompany: "Target",
+      currentTime: "2022 - Present",
+      tools: "Google Workspace, Excel, POS Systems",
+      selectedResponsibilities: ["Scheduling", "Records management", "Data entry", "Customer communication"],
+      selectedActions: ["coordinated schedules", "maintained records", "entered data accurately"],
+      callsHandled: "25+ weekly calls",
+      selectedOutcomes: ["Accuracy"]
+    },
+    story:
+      "My name is Taylor Green and my email is taylor@example.com. I worked at Target as a retail associate from 2022 to present and I am targeting Administrative Assistant. I handled scheduling questions, records management, data entry, customer communication, and POS systems using Google Workspace and Excel. I handled 25+ weekly calls and improved accuracy.",
+    expected: ["Target", "Retail Associate", "Google Workspace", "25+ weekly calls"]
+  },
+  {
+    name: "IT Support Dual",
+    guided: {
+      targetJobTitle: "Help Desk Technician",
+      roleFamily: "IT Support",
+      currentTitle: "Entry-Level IT Support Technician",
+      currentCompany: "Local School District",
+      currentTime: "2024 - Present",
+      tools: "ServiceNow, Active Directory, Windows, Office 365",
+      selectedResponsibilities: ["Troubleshooting", "Ticket management", "User support", "Documentation"],
+      selectedActions: ["troubleshot issues", "resolved tickets", "documented fixes"],
+      ticketsHandled: "30 weekly tickets",
+      selectedOutcomes: ["Reliability"]
+    },
+    story:
+      "My name is Morgan Lee and my email is morgan@example.com. I worked at Local School District as an entry-level IT support technician from 2024 to present and I am targeting Help Desk Technician. I handled troubleshooting, ticket management, user support, and documentation using ServiceNow, Active Directory, Windows, and Office 365. I resolved 30 weekly tickets and improved reliability.",
+    expected: ["Local School District", "Help Desk Technician", "ServiceNow", "30 weekly tickets"]
+  },
+  {
+    name: "Project Coordinator Dual",
+    guided: {
+      targetJobTitle: "Project Coordinator",
+      roleFamily: "Project Coordination",
+      currentTitle: "Project Coordinator",
+      currentCompany: "Northstar Services",
+      currentTime: "2023 - Present",
+      tools: "Asana, Google Sheets, Slack",
+      selectedResponsibilities: ["Timeline tracking", "Status reporting", "Meeting coordination", "Documentation"],
+      selectedActions: ["tracked milestones", "updated stakeholders", "coordinated meetings"],
+      projectsSupported: "4 active projects",
+      selectedOutcomes: ["Efficiency"]
+    },
+    story:
+      "My name is Avery Chen and my email is avery@example.com. I worked at Northstar Services as a project coordinator from 2023 to present targeting Project Coordinator. I handled timeline tracking, status reporting, meeting coordination, and documentation using Asana, Google Sheets, and Slack. I supported 4 active projects and improved efficiency.",
+    expected: ["Northstar Services", "Project Coordinator", "Asana", "4 active projects"]
+  },
+  {
+    name: "Creator Dual",
+    guided: {
+      targetJobTitle: "Social Media Manager",
+      roleFamily: "Project Coordination",
+      currentTitle: "Content Creator",
+      currentCompany: "",
+      currentTime: "2024 - Present",
+      independentWorkType: "Creator Work",
+      selectedIndependentWorkSignals: ["Content planning", "Audience engagement", "Video editing", "Analytics review"],
+      tools: "Canva, TikTok, Instagram, CapCut",
+      selectedResponsibilities: ["Content planning", "Social media publishing", "Analytics review"],
+      selectedActions: ["tracked milestones", "prepared status notes"],
+      projectsSupported: "3 weekly posts",
+      selectedOutcomes: ["Speed"]
+    },
+    story:
+      "My name is Jamie Rivera and my email is jamie@example.com. I worked as a content creator from 2024 to present and I am targeting Social Media Manager. This was creator work. I handled content planning, audience engagement, video editing, social media publishing, and analytics review using Canva, TikTok, Instagram, and CapCut. I published 3 weekly posts and improved speed.",
+    expected: ["Content Creator", "Canva", "3 weekly posts", "Social Media Manager"]
+  },
+  {
+    name: "Uber Driver Dual",
+    guided: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Uber Driver",
+      currentCompany: "",
+      currentTime: "2022 - Present",
+      independentWorkType: "Gig Work",
+      selectedIndependentWorkSignals: ["Route planning", "Customer communication", "Time Management", "App-based workflow"],
+      selectedResponsibilities: ["Route planning", "Customer communication", "Time management"],
+      selectedActions: ["tracked work", "maintained records"],
+      customersServed: "40+ weekly riders",
+      selectedOutcomes: ["Reliability"]
+    },
+    story:
+      "My name is Jordan Miles and my email is jordan.miles@example.com. I worked as an Uber driver from 2022 to present and I am targeting Operations Associate. This was gig work. I handled route planning, customer communication, time management, app-based workflows, and issue resolution. I supported 40+ weekly riders and improved reliability.",
+    expected: ["Uber Driver", "40+ weekly riders", "Operations Associate"]
+  },
+  {
+    name: "Etsy Seller Dual",
+    guided: {
+      targetJobTitle: "Customer Success Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Etsy Seller",
+      currentCompany: "",
+      currentTime: "2021 - Present",
+      independentWorkType: "Side Business",
+      selectedIndependentWorkSignals: ["Product listings", "Customer messages", "Order fulfillment", "Shipping"],
+      selectedResponsibilities: ["Customer messages", "Order fulfillment", "Product listings"],
+      selectedActions: ["followed up with customers", "documented updates"],
+      customersServed: "30+ customer messages monthly",
+      selectedOutcomes: ["Customer satisfaction"]
+    },
+    story:
+      "My name is Sam Patel and my email is sam@example.com. I worked as an Etsy seller from 2021 to present and I am targeting Customer Success Associate. This was a side business. I handled product listings, customer messages, order fulfillment, shipping, and follow-up communication. I managed 30+ customer messages monthly and improved customer satisfaction.",
+    expected: ["Etsy Seller", "30+ customer messages monthly", "Customer Success Associate"]
+  },
+  {
+    name: "Founder AI Dual",
+    guided: {
+      targetJobTitle: "Product Operations Associate",
+      roleFamily: "Tech",
+      currentTitle: "Founder",
+      currentCompany: "Koinophobia Labs",
+      currentTime: "2025 - Present",
+      tools: "ChatGPT, Claude, Cursor, GitHub, Vercel",
+      selectedAiWorkflows: ["Market research", "PRD writing", "Workflow automation", "Rapid prototyping"],
+      selectedResponsibilities: ["Documentation", "Testing", "Implementation support"],
+      selectedActions: ["documented issues", "tested workflows"],
+      projectsSupported: "4 shipped product modules",
+      reportsCreated: "12 QA reports",
+      selectedOutcomes: ["Efficiency", "Reliability"],
+      education: "Product Lab Projects | Koinophobia Labs | 2025"
+    },
+    story:
+      "My name is Blake Taylor and my email is blake@example.com. I founded Koinophobia Labs in 2025 and I am targeting Product Operations Associate. I built product modules and handled documentation, testing, implementation support, market research, PRD writing, workflow automation, and rapid prototyping using ChatGPT, Claude, Cursor, GitHub, and Vercel. I shipped 4 product modules, created 12 QA reports, and improved efficiency and reliability. Education is Product Lab Projects at Koinophobia Labs in 2025.",
+    expected: ["Koinophobia Labs", "Founder", "ChatGPT", "Workflow Automation", "4 product modules"]
+  }
+];
+
+for (const persona of dualModePersonaAudits) {
+  const guidedData = {
+    ...initialIntake,
+    fullName: `${persona.name} Guided Candidate`,
+    email: "guided.parity@example.com",
+    ...persona.guided
+  };
+  const storyDossierForPersona = parseStoryToDossier(persona.story);
+  const storyData = storyDossierForPersona.intake;
+  const guidedResume = generateResumePackage(guidedData);
+  const storyResume = generateResumePackage(storyData);
+  const guidedText = resumeToText(guidedData, guidedResume);
+  const storyText = resumeToText(storyData, storyResume);
+  const guidedScore = getResumeSignalScore(guidedData);
+  const storyScore = getResumeSignalScore(storyData);
+  const scoreGap = guidedScore.score - storyScore.score;
+
+  assertProfessionalResume(guidedData, guidedResume, `${persona.name}: guided`);
+  assertProfessionalResume(storyData, storyResume, `${persona.name}: story`);
+  assert(scoreGap <= 20, `${persona.name}: story signal score is close to guided (${storyScore.score} vs ${guidedScore.score})`);
+  assert(hasEnoughResumeSignal(guidedData), `${persona.name}: guided has enough signal`);
+  assert(hasEnoughResumeSignal(storyData), `${persona.name}: story has enough signal`);
+  assert(storyDossierForPersona.focusedFollowUp !== "What was your title, company, and approximate date range?", `${persona.name}: story does not re-ask captured role identity`);
+  assert(storyDossierForPersona.missingCriticalDetails.length <= 1, `${persona.name}: story missing-info logic converges`);
+  assert(textHasAny(guidedText, persona.expected) && textHasAny(storyText, persona.expected), `${persona.name}: expected facts reach both outputs`);
+  assert(guidedResume.linkedinHeadline.includes(guidedData.targetJobTitle), `${persona.name}: guided LinkedIn target preserved`);
+  assert(storyResume.linkedinHeadline.includes(storyData.targetJobTitle), `${persona.name}: story LinkedIn target preserved`);
+  assert(!/placeholder|fake metric|invented|candidate targeting/i.test(`${guidedText}\n${storyText}`), `${persona.name}: no weak placeholder or fake-output language`);
+}
 
 const aiWorkflowPersonas = [
   {

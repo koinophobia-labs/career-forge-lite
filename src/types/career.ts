@@ -47,6 +47,7 @@ export type IntakeData = {
   reportsCreated: string;
   selectedOutcomes: string[];
   outcomes: string;
+  education: string;
 };
 
 export type IntakeErrors = Partial<Record<keyof IntakeData, string>>;

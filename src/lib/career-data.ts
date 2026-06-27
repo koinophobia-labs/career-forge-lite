@@ -246,5 +246,6 @@ export const initialIntake: IntakeData = {
   revenueInfluenced: "",
   reportsCreated: "",
   selectedOutcomes: [],
-  outcomes: ""
+  outcomes: "",
+  education: ""
 };

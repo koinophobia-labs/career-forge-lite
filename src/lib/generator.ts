@@ -939,12 +939,13 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   const target = normalizeTargetRole(data);
   const skills = buildSkillList(data);
   const experience = buildExperience(data);
+  const education = data.education.trim() || educationPlaceholder;
 
   return polishResumePackage(qualityCheckResume({
     summary: buildSummary(data, target, experience),
     coreSkills: skills,
     experience,
-    education: educationPlaceholder,
+    education,
     linkedinHeadline: buildHeadline(data, target, skills),
     linkedinSummary: buildLinkedInSummary(data, target, experience)
   }));
