@@ -24,6 +24,15 @@ import {
   selectedAiTools
 } from "@/lib/modern-work-intelligence";
 import {
+  certificationBank,
+  degreeMajorBank,
+  educationPromptForSelection,
+  educationTypes,
+  findEducationSuggestions,
+  normalizeEducationEntry,
+  tradeEducationBank
+} from "@/lib/education-intelligence";
+import {
   findIndependentWorkRole,
   independentWorkArsenals,
   independentWorkTypes,
@@ -58,6 +67,7 @@ type Question = {
     | "responsibilities"
     | "scope"
     | "outcomes"
+    | "education"
     | "template"
     | "review";
   title: string;
@@ -165,6 +175,12 @@ const questions: Question[] = [
     validate: []
   },
   {
+    id: "education",
+    title: "Any education, training, or credentials to include?",
+    helper: "Degrees are not required. Certificates, trade training, bootcamps, military training, online courses, and self-directed learning can all count.",
+    validate: []
+  },
+  {
     id: "template",
     title: "Pick your resume module style.",
     helper: "All three are single-column, ATS-safe, and neutral in exported resume content.",
@@ -203,6 +219,7 @@ const questionStages: Record<Question["id"], MomentumStage> = {
   responsibilities: "Arsenal",
   scope: "Proof",
   outcomes: "Proof",
+  education: "Proof",
   template: "Review",
   review: "Review"
 };
@@ -386,6 +403,9 @@ export function IntakeForm({
   const [customIndustry, setCustomIndustry] = useState("");
   const [customWorkStyle, setCustomWorkStyle] = useState("");
   const [customTransferableSkill, setCustomTransferableSkill] = useState("");
+  const [educationSearch, setEducationSearch] = useState("");
+  const [educationSearchOpen, setEducationSearchOpen] = useState(false);
+  const [customEducation, setCustomEducation] = useState("");
   const [quickStartPath, setQuickStartPath] = useState<QuickStartPath>("first_resume");
   const [showHelpMeThink, setShowHelpMeThink] = useState(false);
   const [naturalRoleInputs, setNaturalRoleInputs] = useState<Record<RoleSlot, string>>({
@@ -465,6 +485,9 @@ export function IntakeForm({
     .slice(0, normalizedTargetQuery ? 8 : 6);
   const showTargetMatches = targetSearchOpen && (!exactTargetMatch || Boolean(normalizedTargetQuery));
   const selectedSignals = data.selectedResponsibilities.length + data.selectedOutcomes.length;
+  const educationEntries = splitSelections(data.education.replace(/\n/g, ","));
+  const educationSuggestions = findEducationSuggestions(educationSearch, educationSearch.trim() ? 8 : 6);
+  const educationHelper = educationPromptForSelection(educationSearch || educationEntries[0] || "");
   const pathGuidance = quickStartPaths.find((path) => path.id === quickStartPath)?.helper ?? quickStartPaths[0].helper;
   const currentStage = questionStages[question.id];
   const currentStageIndex = momentumStages.indexOf(currentStage);
@@ -549,7 +572,8 @@ export function IntakeForm({
       getSectionState("Experience", Boolean(data.currentTitle.trim() && data.currentCompany.trim()), Boolean(data.currentTitle.trim() || data.previousTitle.trim() || data.additionalTitle.trim()), Boolean(data.currentTitle.trim())),
       getSectionState("Skills", selectedTools.length >= 3 || data.selectedResponsibilities.length >= 4, Boolean(selectedTools.length || data.selectedResponsibilities.length), Boolean(data.responsibilities.trim())),
       getSectionState("Achievements", hasOutcome && data.selectedActions.length > 0, hasOutcome || data.selectedActions.length > 0, Boolean(data.selectedActions.length)),
-      getSectionState("Metrics", hasScope && scopeSummary.length >= 2, hasScope)
+      getSectionState("Metrics", hasScope && scopeSummary.length >= 2, hasScope),
+      getSectionState("Education", Boolean(data.education.trim()), Boolean(data.education.trim()))
     ];
     const score = Math.round(
       (sections.reduce((sum, section) => sum + (section.status === "Strong" ? 1 : section.status === "Good" ? 0.68 : 0), 0) / sections.length) * 100
@@ -560,6 +584,7 @@ export function IntakeForm({
   function getMomentumConfirmation() {
     if (question.id === "target" && data.targetJobTitle.trim()) return `Lane locked: ${data.roleFamily}`;
     if (question.id === "tools" && selectedTools.length) return "Tools added to your dossier";
+    if (question.id === "education" && data.education.trim()) return "Credential signals captured";
     if (question.id === "responsibilities" && (data.selectedResponsibilities.length || data.selectedActions.length)) {
       return "Experience signals captured";
     }
@@ -572,7 +597,8 @@ export function IntakeForm({
     if (question.id === "target") return "Lock career lane";
     if (question.id === "current_role" || question.id === "current_company") return "Add experience";
     if (question.id === "tools" || question.id === "responsibilities") return "Capture signals";
-    if (question.id === "scope" || question.id === "outcomes" || question.id === "template") return "Review dossier";
+    if (question.id === "scope" || question.id === "outcomes") return "Capture proof";
+    if (question.id === "education" || question.id === "template") return "Review dossier";
     if (question.id === "review") return "Forge resume";
     return "Continue";
   }
@@ -617,6 +643,24 @@ export function IntakeForm({
   function toggleTool(item: string) {
     update("tools", mergeSelection(data.tools, item));
     setToolSearch("");
+  }
+
+  function addEducationEntry(entry: string) {
+    const normalized = normalizeEducationEntry(entry);
+    if (!normalized) return;
+    const next = [...educationEntries.filter((item) => item.toLowerCase() !== normalized.toLowerCase()), normalized];
+    update("education", next.join("\n"));
+    setEducationSearch("");
+    setEducationSearchOpen(false);
+  }
+
+  function removeEducationEntry(entry: string) {
+    update("education", educationEntries.filter((item) => item !== entry).join("\n"));
+  }
+
+  function addCustomEducation() {
+    addEducationEntry(customEducation);
+    setCustomEducation("");
   }
 
   function toggleAiWorkflow(item: string) {
@@ -721,6 +765,7 @@ export function IntakeForm({
       responsibilities: ["Assisted customers", "Managed schedules", "Processed payments", "Created reports", "Solved technical issues", "Updated records"],
       scope: ["50+ customers per week", "25+ tickets", "3 active projects", "$10K+ handled", "5 weekly reports", "6-person team"],
       outcomes: ["Speed", "Accuracy", "Customer satisfaction", "Efficiency", "Reliability", "Compliance"],
+      education: ["Google IT Support Professional Certificate", "Bachelor's Degree", "Union Electrical Apprenticeship", "ServSafe Certification", "Self-directed learning in AI workflow automation"],
       template: templates,
       review: ["Looks good", "Need to edit responsibilities", "Add one metric"]
     };
@@ -758,6 +803,11 @@ export function IntakeForm({
       tools: [
         "Think software, equipment, spreadsheets, internal systems, phones, registers, scanners, CRMs, or ticketing tools.",
         "Internal Software is acceptable if you do not know the system name."
+      ],
+      education: [
+        "Degrees are optional. Include only credentials that help the resume.",
+        "Trade school, bootcamps, military training, certificates, online courses, and self-directed learning are legitimate if true.",
+        "If nothing applies right now, skip it. Career Forge will not penalize you for no degree."
       ]
     };
     return examples[question.id] ?? [
@@ -801,6 +851,7 @@ export function IntakeForm({
       update(metricKey, example as never);
     }
     if (question.id === "outcomes") toggleOutcome(example);
+    if (question.id === "education") addEducationEntry(example);
     if (question.id === "template" && templates.includes(example as TemplateStyle)) onTemplateSelect(example as TemplateStyle);
   }
 
@@ -1878,6 +1929,147 @@ export function IntakeForm({
             </label>
           </div>
         );
+      case "education":
+        return (
+          <div className="space-y-5">
+            <div className="rounded-md border border-cyan/20 bg-white p-4">
+              <p className="text-sm font-bold text-ink">Education can mean more than a degree.</p>
+              <p className="mt-1 text-sm leading-6 text-ink/60">
+                Add only credentials you want shown: school, major, certificate, license, apprenticeship, bootcamp,
+                military training, online course, or self-directed learning.
+              </p>
+              <p className="mt-3 rounded-md border border-gold/20 bg-gold/10 px-3 py-2 text-sm leading-6 text-ink/70">
+                {educationHelper}
+              </p>
+            </div>
+
+            <div className="rounded-md bg-white p-4">
+              <label htmlFor="education-search" className="text-sm font-bold text-ink">
+                Search common education, majors, certifications, or trades
+              </label>
+              <input
+                id="education-search"
+                type="text"
+                value={educationSearch}
+                onChange={(event) => {
+                  setEducationSearch(event.target.value);
+                  setEducationSearchOpen(true);
+                }}
+                onFocus={() => setEducationSearchOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && educationSuggestions[0]) {
+                    event.preventDefault();
+                    addEducationEntry(educationSuggestions[0]);
+                  }
+                }}
+                placeholder="Search certificates, degrees, majors, trades..."
+                className="trust-input mt-3 min-h-12 w-full rounded-md border px-4 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+              />
+              {educationSearchOpen && (
+                <div className="mt-4 rounded-md bg-paper p-2 shadow-soft">
+                  <div className="flex flex-wrap gap-2">
+                    {educationSuggestions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => addEducationEntry(item)}
+                        className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                          educationEntries.includes(item)
+                            ? "border-gold bg-gold/20 text-ink"
+                            : "border-ink/12 bg-white text-ink hover:border-spruce"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  {!educationSuggestions.length && <p className="px-2 py-3 text-sm leading-6 text-ink/65">No match. Add a custom credential below.</p>}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md bg-white p-4">
+                <p className="text-sm font-bold text-ink">Traditional</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {educationTypes.slice(0, 8).map((item) => (
+                    <button key={item} type="button" onClick={() => addEducationEntry(item)} className="rounded-full border border-ink/12 bg-paper px-3 py-2 text-sm font-semibold text-ink transition hover:border-gold">
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-md bg-white p-4">
+                <p className="text-sm font-bold text-ink">Majors & certifications</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[...degreeMajorBank.slice(0, 4), ...certificationBank.slice(0, 4).map((item) => item.label)].map((item) => (
+                    <button key={item} type="button" onClick={() => addEducationEntry(item)} className="rounded-full border border-ink/12 bg-paper px-3 py-2 text-sm font-semibold text-ink transition hover:border-cyan">
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-md bg-white p-4">
+                <p className="text-sm font-bold text-ink">Trades & modern learning</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[...tradeEducationBank.slice(0, 5).map((item) => item.trade), "Bootcamp", "Military Training", "Self-Directed Learning"].map((item) => (
+                    <button key={item} type="button" onClick={() => addEducationEntry(item)} className="rounded-full border border-ink/12 bg-paper px-3 py-2 text-sm font-semibold text-ink transition hover:border-ember">
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-md bg-paper p-4">
+              <p className="text-sm font-bold text-ink">Selected education</p>
+              {educationEntries.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {educationEntries.map((entry) => (
+                    <button
+                      key={entry}
+                      type="button"
+                      onClick={() => removeEducationEntry(entry)}
+                      className="rounded-full border border-gold/40 bg-gold/15 px-3 py-2 text-sm font-semibold text-ink"
+                    >
+                      {entry}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-ink/70">No education added yet. This is optional.</p>
+              )}
+            </div>
+
+            <div className="rounded-md bg-white p-4">
+              <label htmlFor="custom-education" className="text-sm font-bold text-ink">
+                Add a custom education line
+              </label>
+              <p className="mt-1 text-sm leading-6 text-ink/60">
+                Examples: Bachelor of Science in Computer Science | State University | 2024, Union Electrical Apprenticeship,
+                Self-directed learning in AI workflow automation.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="custom-education"
+                  type="text"
+                  value={customEducation}
+                  onChange={(event) => setCustomEducation(event.target.value)}
+                  placeholder="Custom education, certification, training, or credential"
+                  className="trust-input min-h-10 flex-1 rounded-md border px-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomEducation}
+                  className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-gold hover:text-ink"
+                >
+                  Add custom
+                </button>
+              </div>
+            </div>
+          </div>
+        );
       case "template":
         return (
           <div className="grid gap-4 md:grid-cols-3">
@@ -1959,6 +2151,7 @@ export function IntakeForm({
                 value={formatReviewItems([...data.selectedOutcomes, data.outcomes])}
                 onEdit={() => goToQuestionId("outcomes")}
               />
+              <ReviewItem label="Education & credentials" value={formatReviewItems(educationEntries)} onEdit={() => goToQuestionId("education")} />
               <ReviewItem
                 label="Adaptive signals"
                 value={`${data.roleFamily} scope prompts / ${roleOutcomes.join(", ")}`}

@@ -1,4 +1,5 @@
 import { allToolOptions, initialIntake } from "@/lib/career-data";
+import { extractEducationEntries, formatEducationEntries, hasEducationEvidence } from "@/lib/education-intelligence";
 import { generateResumePackage } from "@/lib/generator";
 import { findIndependentWorkRole, independentWorkArsenals, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
@@ -138,7 +139,7 @@ const actionVerbPattern =
 const achievementVerbPattern = /\b(improved|built|led|created|reduced|increased|launched|automated|implemented|trained|won|saved|grew|delivered)\b/i;
 const responsibilityPattern =
   /\b(responsible for|handled|managed|supported|coordinated|worked on|owned|helped with|processed|maintained|tracked|documented|resolved|prepared|scheduled|communicated|escalated)\b/i;
-const educationPattern = /\b(degree|certification|certificate|bootcamp|course|university|college|school|training|license|diploma|bachelor'?s?|master'?s?)\b/i;
+const educationPattern = /\b(degree|certification|certificate|bootcamp|course|university|college|school|training|license|diploma|bachelor'?s?|master'?s?|associate|mba|doctorate|apprenticeship|military|ged|self[- ]directed)\b/i;
 const gapPattern = /\b(i don'?t have|i lack|not much experience|still learning|gap|career change|limited direct|no direct|new to)\b/i;
 const skipPattern = /\b(skip|none|n\/a|not applicable|no projects|nothing to add|no education|no cert|no gap)\b/i;
 const weakAnswerPattern = /^(ok|yes|no|none|n\/a|test|asdf|idk|not sure|maybe|.)$/i;
@@ -514,10 +515,10 @@ function extractAchievementSignals(answer: string) {
 }
 
 function extractEducationSignals(answer: string) {
-  if (!educationPattern.test(answer)) return { education: "", certifications: [] };
-  const certifications = splitSignals(answer).filter((item) => /\b(certification|certificate|certified|license|bootcamp|course|training)\b/i.test(item));
-  const education = /\b(university|college|school|degree|bachelor'?s?|master'?s?|diploma)\b/i.test(answer) ? answer : "";
-  return { education, certifications };
+  if (!educationPattern.test(answer) && !hasEducationEvidence(answer)) return { education: "", certifications: [] };
+  const entries = extractEducationEntries(answer);
+  const certifications = entries.filter((item) => /\b(certification|certificate|certified|license|bootcamp|course|training|apprenticeship|military|ged)\b/i.test(item));
+  return { education: formatEducationEntries(entries), certifications };
 }
 
 function extractSkillSignals(answer: string) {

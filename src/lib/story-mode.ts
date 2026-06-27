@@ -5,6 +5,7 @@ import {
   initialIntake,
   roleIntelligence
 } from "@/lib/career-data";
+import { extractEducationEntries, formatEducationEntries, hasEducationEvidence } from "@/lib/education-intelligence";
 import {
   findIndependentWorkRole,
   formatIndependentTitle,
@@ -250,14 +251,7 @@ function extractScope(story: string) {
 }
 
 function extractEducation(story: string) {
-  const educationSentence = splitSentences(story).find((sentence) =>
-    /\b(education|certification|certificate|course|training|degree|school|college|university|bootcamp|diploma|license)\b/i.test(sentence)
-  );
-  const educationClause = story.match(
-    /\b(?:education is|education:|studied|completed|earned|have|hold)\s+([^.;]*(?:degree|certification|certificate|course|training|school|college|university|bootcamp|diploma|license)[^.;]*)/i
-  )?.[1];
-
-  return clean(educationClause || educationSentence || "");
+  return formatEducationEntries(extractEducationEntries(story));
 }
 
 function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
@@ -294,8 +288,8 @@ function contactCaptured(story: string, intake: IntakeData) {
 function educationCaptured(story: string, intake: IntakeData) {
   return Boolean(
     intake.education.trim() ||
-      intake.customRoleNotes.match(/\b(education|certification|course|training|degree|school|college|university)\b/i) ||
-      /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(story)
+      hasEducationEvidence(intake.customRoleNotes) ||
+      hasEducationEvidence(story)
   );
 }
 

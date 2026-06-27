@@ -5,6 +5,7 @@ import {
   findJobArsenal,
   roleIntelligence
 } from "@/lib/career-data";
+import { hasEducationEvidence } from "@/lib/education-intelligence";
 import { findIndependentWorkRole, inferIndependentWorkCategory, isIndependentWorkTitle } from "@/lib/independent-work-intelligence";
 import { aiWorkflowOptions, selectedAiTools } from "@/lib/modern-work-intelligence";
 import type { IntakeData } from "@/types/career";
@@ -94,7 +95,7 @@ function hasOutcomes(data: IntakeData) {
 function hasEducation(data: IntakeData) {
   return Boolean(
     data.education.trim() ||
-      /\b(education|certification|course|training|degree|school|college|university|bootcamp)\b/i.test(data.customRoleNotes)
+      hasEducationEvidence(data.customRoleNotes)
   );
 }
 

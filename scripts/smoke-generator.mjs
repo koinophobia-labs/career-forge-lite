@@ -73,6 +73,15 @@ const {
   inferIndependentWorkCategory
 } = loadTsModule(path.join(root, "src/lib/independent-work-intelligence.ts"));
 const {
+  certificationBank,
+  degreeMajorBank,
+  educationTypes,
+  extractEducationEntries,
+  findEducationSuggestions,
+  formatEducationEntries,
+  tradeEducationBank
+} = loadTsModule(path.join(root, "src/lib/education-intelligence.ts"));
+const {
   aiToolOptions,
   aiWorkflowOptions,
   selectedAiTools
@@ -327,6 +336,12 @@ assert(searchableOptions(responsibilitySuggestions["Customer Success"], "ticket"
 assert(findIndependentWorkRole("DoorDash Courier")?.category === "Gig / Delivery", "independent role maps to gig delivery");
 assert(findIndependentWorkRole("Etsy Seller")?.category === "Online Commerce", "independent role maps to online commerce");
 assert(inferIndependentWorkCategory("I make TikToks and edit videos") === "Creator / Media", "story text infers creator work");
+assert(educationTypes.includes("Military Training") && educationTypes.includes("Self-Directed Learning"), "education types include nontraditional learning");
+assert(degreeMajorBank.includes("Computer Science") && degreeMajorBank.includes("Construction Management"), "degree and major bank includes common academic paths");
+assert(certificationBank.some((item) => item.label.includes("CompTIA A+")) && certificationBank.some((item) => item.label.includes("ServSafe")), "certification bank includes technology and hospitality credentials");
+assert(tradeEducationBank.some((item) => item.trade === "Electrician") && tradeEducationBank.some((item) => item.trade === "CDL"), "trade bank includes skilled trade credentials");
+assert(findEducationSuggestions("cyber").includes("Cybersecurity"), "education search finds majors");
+assert(findEducationSuggestions("security+").some((item) => /Security/.test(item)), "education search finds certification aliases");
 assert(resumePreviewSource.includes("ATS Resume") && resumePreviewSource.includes("Visual Portfolio Resume"), "resume view toggle includes ATS and visual modes");
 assert(
   ["Professional Sans", "Editorial Serif", "Modern Mono", "Clean System"].every((option) => resumePreviewSource.includes(option)),
@@ -592,6 +607,7 @@ assert(intakeSource.includes("Use projects instead"), "free builder project fall
 assert(intakeSource.includes("Resume Readiness"), "free builder uses readiness progress model");
 assert(intakeSource.includes("Ready to Generate"), "free builder readiness language exists");
 assert(intakeSource.includes("Approximate numbers are okay"), "free builder metric coaching exists");
+assert(intakeSource.includes("Any education, training, or credentials to include?"), "guided builder includes education credential step");
 assert(intakeSource.includes("Needs More Detail") && intakeSource.includes("Missing"), "free builder confidence labels exist");
 assert(
   ["Dossier started", "Career lane locked", "Experience signals captured", "Resume package ready"].every((copy) => intakeSource.includes(copy)),
@@ -674,6 +690,86 @@ const storyEducationDossier = parseStoryToDossier("My name is Jordan Carter and 
 assert(storyEducationDossier.extracted.education.includes("Google Career Certificate"), "story mode extracts education signal");
 assert(storyEducationDossier.intake.education.includes("Google Career Certificate"), "story mode feeds education into intake");
 assert(resumeToText(storyEducationDossier.intake, generateResumePackage(storyEducationDossier.intake)).includes("Google Career Certificate"), "story mode education reaches resume export");
+
+const educationPersonaAudits = [
+  {
+    name: "Bachelor Education",
+    education: "Bachelor of Science in Computer Science | State University | 2024",
+    expected: /Bachelor Of Science In Computer Science|State University|2024/i
+  },
+  {
+    name: "Associate Education",
+    education: "Associate Degree in Information Technology | Community College | 2023",
+    expected: /Associate Degree In Information Technology|Community College|2023/i
+  },
+  {
+    name: "Trade Education",
+    education: "Union Electrical Apprenticeship | 2022",
+    expected: /Union Electrical Apprenticeship|2022/i
+  },
+  {
+    name: "Bootcamp Education",
+    education: "Software Engineering Bootcamp | General Assembly | 2024",
+    expected: /Software Engineering Bootcamp|General Assembly|2024/i
+  },
+  {
+    name: "Military Training Education",
+    education: "Military Training in Logistics Operations | 2021",
+    expected: /Military Training In Logistics Operations|2021/i
+  },
+  {
+    name: "Certification Only Education",
+    education: "CompTIA A+",
+    expected: /CompTIA A\+/i
+  },
+  {
+    name: "Self Taught Founder Education",
+    education: "Self-directed learning in AI workflow automation",
+    expected: /Self-directed Learning In AI Workflow Automation/i
+  }
+];
+
+for (const persona of educationPersonaAudits) {
+  const data = {
+    ...initialIntake,
+    fullName: `${persona.name} Candidate`,
+    email: "education.audit@example.com",
+    targetJobTitle: "Operations Associate",
+    roleFamily: "Operations",
+    currentTitle: "Operations Assistant",
+    currentCompany: "Local Business",
+    currentTime: "2024 - Present",
+    tools: "Excel, Google Sheets",
+    selectedResponsibilities: ["Reporting", "Task coordination", "Documentation"],
+    selectedActions: ["prepared reports", "tracked work"],
+    reportsCreated: "4 weekly reports",
+    selectedOutcomes: ["Accuracy"],
+    education: persona.education
+  };
+  const resume = generateResumePackage(data);
+  const exportText = resumeToText(data, resume);
+  assert(persona.expected.test(exportText), `${persona.name}: education appears professionally in export`);
+  assert(!exportText.includes(educationPlaceholder), `${persona.name}: education placeholder omitted`);
+}
+
+const noEducationResume = generateResumePackage({
+  ...initialIntake,
+  fullName: "No Education Candidate",
+  email: "no.education@example.com",
+  targetJobTitle: "Customer Success Associate",
+  roleFamily: "Customer Success",
+  currentTitle: "Customer Service Associate",
+  currentCompany: "Local Business",
+  currentTime: "2024 - Present",
+  tools: "Zendesk, Excel",
+  selectedResponsibilities: ["Customer communication", "Support tickets", "Documentation"],
+  selectedActions: ["resolved issues", "documented updates"],
+  customersServed: "30 weekly customers",
+  selectedOutcomes: ["Customer satisfaction"]
+});
+assert(!resumeToText(initialIntake, noEducationResume).includes(educationPlaceholder), "no education entered omits placeholder from export");
+assert(extractEducationEntries("I completed CompTIA Security+ and an HVAC Apprenticeship in 2024.").some((item) => /Security\+|HVAC/i.test(item)), "education parser extracts certification and trade training");
+assert(formatEducationEntries(["google it support", "self directed learning in ai workflow automation"]).includes("Google IT Support"), "education formatter normalizes known credentials");
 
 const customRoleData = {
   ...initialIntake,

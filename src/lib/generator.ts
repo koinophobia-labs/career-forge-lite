@@ -1,4 +1,5 @@
 import { roleIntelligence } from "@/lib/career-data";
+import { formatEducationEntries } from "@/lib/education-intelligence";
 import { findIndependentWorkRole, formatIndependentTitle, independentWorkArsenals, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
 import { aiToolOptions, buildAiAtsKeywords, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { educationPlaceholder } from "@/lib/resume-export";
@@ -939,7 +940,7 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   const target = normalizeTargetRole(data);
   const skills = buildSkillList(data);
   const experience = buildExperience(data);
-  const education = data.education.trim() || educationPlaceholder;
+  const education = formatEducationEntries(data.education.split(/\n|;/)) || educationPlaceholder;
 
   return polishResumePackage(qualityCheckResume({
     summary: buildSummary(data, target, experience),
