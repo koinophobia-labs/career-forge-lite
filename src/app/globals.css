@@ -144,7 +144,8 @@ textarea {
 
 @media print {
   @page {
-    margin: 0.42in;
+    size: Letter;
+    margin: 0.5in;
   }
 
   html,
@@ -180,7 +181,7 @@ textarea {
   }
 
   .resume-preview-chrome {
-    display: none;
+    display: none !important;
   }
 
   #resume button {
@@ -210,6 +211,7 @@ textarea {
     line-height: 1.22;
     color: #000000 !important;
     page-break-after: avoid;
+    break-after: avoid;
   }
 
   .resume-paper .screen-edit {
@@ -217,7 +219,7 @@ textarea {
   }
 
   .resume-paper .print-only {
-    display: block;
+    display: block !important;
   }
 
   .resume-paper ul.print-only {
@@ -228,6 +230,13 @@ textarea {
     break-inside: avoid;
     page-break-inside: avoid;
     margin: 0 !important;
+  }
+
+  .resume-paper div,
+  .resume-paper p,
+  .resume-paper li {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .resume-paper .resume-role-print-empty {

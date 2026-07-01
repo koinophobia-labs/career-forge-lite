@@ -58,6 +58,6 @@ export function getInterviewModeLimitState(session: InterviewSession): Interview
     remainingAnswers,
     isLimited: isPreview,
     isLocked,
-    label: isPreview ? `Premium Preview: ${Math.min(answerCount, answerLimit)} of ${answerLimit} interview answers used` : feature.label
+    label: isPreview ? `Beta Preview: ${Math.min(answerCount, answerLimit)} of ${answerLimit} interview answers used` : feature.label
   };
 }

@@ -11,6 +11,8 @@ const root = path.resolve(__dirname, "..");
 const moduleCache = new Map();
 const resumePreviewSource = fs.readFileSync(path.join(root, "src/components/ResumePreview.tsx"), "utf8");
 const globalCssSource = fs.readFileSync(path.join(root, "src/app/globals.css"), "utf8");
+const landingPageSource = fs.readFileSync(path.join(root, "src/components/LandingPage.tsx"), "utf8");
+const intakeFormSource = fs.readFileSync(path.join(root, "src/components/IntakeForm.tsx"), "utf8");
 const tellMyStorySource = fs.existsSync(path.join(root, "src/components/TellMyStoryMode.tsx"))
   ? fs.readFileSync(path.join(root, "src/components/TellMyStoryMode.tsx"), "utf8")
   : "";
@@ -46,6 +48,7 @@ function loadTsModule(filePath) {
 }
 
 const { generateResumePackage } = loadTsModule(path.join(root, "src/lib/generator.ts"));
+const { buildCareerRecommendations } = loadTsModule(path.join(root, "src/lib/career-recommendations.ts"));
 const {
   allToolOptions,
   careerTargets,
@@ -87,6 +90,7 @@ const {
   selectedAiTools
 } = loadTsModule(path.join(root, "src/lib/modern-work-intelligence.ts"));
 const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode.ts"));
+const { normalizeTransferTarget } = loadTsModule(path.join(root, "src/lib/transferable-targets.ts"));
 const {
   getMissingSignals,
   getNextUsefulPrompt,
@@ -228,7 +232,25 @@ const personas = [
   }
 ];
 
-const weakTerms = [" ee ", "test", "asdf", "candidate targeting", "customers customers", "tickets tickets", "Copy Summary", "Copy Skills", "Copy Experience"];
+const barberFixture = {
+  ...initialIntake,
+  fullName: "Barber Candidate",
+  email: "barber@example.com",
+  targetJobTitle: "Customer Success Associate",
+  roleFamily: "Customer Success",
+  currentTitle: "Barber",
+  currentCompany: "Nappy Kits",
+  currentTime: "2018-present",
+  responsibilities:
+    "Cut hair for an older client base, handled customer service, managed scheduling, communicated clearly, stayed reliable, and maintained client expectations.",
+  selectedResponsibilities: ["Customer communication", "Appointment scheduling", "Conflict resolution"],
+  selectedActions: ["managed appointments", "built repeat client relationships", "handled service expectations"],
+  customRoleNotes: "15-20 haircuts/day for an older client base with reliability, communication, customer service, and scheduling.",
+  customersServed: "15-20 haircuts/day",
+  selectedOutcomes: ["Customer satisfaction", "Reliability"]
+};
+
+const weakTerms = [" ee ", " asdf ", "candidate targeting", "customers customers", "tickets tickets", "Copy Summary", "Copy Skills", "Copy Experience"];
 const unnaturalToolPattern = /managed onboarding using python/i;
 
 function assert(condition, message) {
@@ -286,19 +308,55 @@ function textHasAny(text, values) {
   return values.filter(Boolean).some((value) => lower.includes(String(value).toLowerCase()));
 }
 
+function textHasAll(text, values) {
+  const lower = text.toLowerCase();
+  return values.filter(Boolean).every((value) => lower.includes(String(value).toLowerCase()));
+}
+
+function headlineSupportsDirection(headline, data) {
+  const lower = headline.toLowerCase();
+  return lower.includes(data.targetJobTitle.toLowerCase()) || lower.includes(data.roleFamily.toLowerCase()) || /client experience|office coordination|operations \/ coordination/i.test(headline);
+}
+
 function assertProfessionalResume(data, resume, label) {
   const exportText = resumeToText(data, resume);
   const bullets = resume.experience.flatMap((role) => role.bullets.filter(Boolean));
   const quality = analyzeResumeQuality(data, resume);
 
   assert(resume.summary.trim().length > 40, `${label}: summary is substantive`);
-  assert(resume.linkedinHeadline.includes(data.targetJobTitle), `${label}: LinkedIn headline includes target role`);
+  assert(headlineSupportsDirection(resume.linkedinHeadline, data), `${label}: LinkedIn headline includes target role or direction`);
   assert(resume.coreSkills.length >= 6, `${label}: skills are populated`);
   assert(bullets.length >= 3, `${label}: experience bullets are populated`);
   assert(bullets.every((bullet) => bullet.trim() && !/candidate targeting|various things|stuff/i.test(bullet)), `${label}: bullets are professional`);
   assert(!exportText.includes(educationPlaceholder), `${label}: education placeholder omitted from export`);
   assert(["Good", "Strong", "Excellent"].includes(quality.rating), `${label}: resume quality rating is useful`);
 }
+
+function assertBarberFixture() {
+  const resume = generateResumePackage(barberFixture);
+  const exportText = resumeToText(barberFixture, resume);
+  const allText = [exportText, resume.linkedinHeadline, resume.summary, resume.linkedinSummary, resume.coreSkills.join(" ")].join(" ");
+  const bullets = resume.experience.flatMap((role) => role.bullets.filter(Boolean));
+  const uniqueBullets = new Set(bullets.map((bullet) => bullet.toLowerCase()));
+  const recommendations = buildCareerRecommendations(barberFixture);
+  const topTitles = recommendations.slice(0, 3).map((item) => item.title);
+
+  assert(!/technical support|ticketing|ticket management|user support/i.test(allText), "barber fixture: no unsupported technical support language");
+  assert(!resume.linkedinHeadline.includes(barberFixture.responsibilities), "barber fixture: raw answer does not appear in headline");
+  assert(resume.linkedinHeadline.startsWith("Barber |"), "barber fixture: headline starts with current background");
+  assert(/Customer Success|Client Experience/i.test(resume.linkedinHeadline), "barber fixture: headline includes target direction");
+  assert(/Client Relationships|Scheduling|Service Recovery|Customer Communication/i.test(resume.linkedinHeadline), "barber fixture: headline includes grounded strengths");
+  assert(/15-20 haircuts\/day/i.test(exportText), "barber fixture: client volume preserved without mangling");
+  assert(bullets.length >= 3, "barber fixture: at least 3 experience highlights");
+  assert(uniqueBullets.size >= 3, "barber fixture: experience highlights are distinct");
+  assert(bullets.some((bullet) => /older client base/i.test(bullet)), "barber fixture: older client base evidence used");
+  assert(recommendations.length > 0, "barber fixture: recommendations generated");
+  assert(recommendations.every((item) => item.why.length >= 3), "barber fixture: every recommendation has why-this-fits evidence");
+  assert(topTitles.includes("Customer Success Associate") || topTitles.includes("Client Success Representative"), "barber fixture: customer/client success prioritized");
+  assert(topTitles[0] !== "Administrative Assistant", "barber fixture: Administrative Assistant is not the unsupported top role");
+}
+
+assertBarberFixture();
 
 const roleMappingChecks = [
   ["Warehouse Operations Coordinator", "Operations"],
@@ -368,6 +426,23 @@ assert(
   "visual resume exposes print customization hooks"
 );
 assert(resumePreviewSource.includes("Use ATS Resume for job applications"), "ATS safety copy is visible");
+assert(resumePreviewSource.includes("What to do next"), "resume output includes next-step guidance");
+assert(resumePreviewSource.includes("Copy full resume") && resumePreviewSource.includes("Print resume"), "resume output has clear copy and print actions");
+assert(resumePreviewSource.includes("Review before applying. Edit anything that does not accurately reflect your experience."), "resume output reminds users to review for accuracy");
+assert(resumePreviewSource.includes("Was this resume draft useful?"), "resume output includes lightweight feedback loop");
+assert(resumePreviewSource.includes("What was confusing or missing?"), "feedback loop asks for missing or confusing details");
+assert(resumePreviewSource.includes("Copy feedback"), "feedback loop keeps submission MVP-safe and copyable");
+assert(tellMyStorySource.includes("DoorDash to warehouse/logistics"), "Story Mode offers a DoorDash sample story");
+assert(tellMyStorySource.includes("Retail to inventory/operations"), "Story Mode offers a retail sample story");
+assert(tellMyStorySource.includes("Founder/project builder"), "Story Mode offers a founder/project sample story");
+assert(tellMyStorySource.includes("Do not paste sensitive personal information."), "Story Mode includes privacy safety copy");
+assert(!intakeFormSource.includes("Do not paste sensitive personal information."), "Guided Builder removes repeated privacy coaching copy");
+assert(
+  ["career switchers", "gig workers", "service workers", "retail workers", "warehouse/logistics workers", "recent grads", "self-taught builders"].every((copy) =>
+    landingPageSource.includes(copy)
+  ),
+  "homepage clearly names the MVP target users"
+);
 assert(globalCssSource.includes("#print-visual-resume") && globalCssSource.includes(".visual-resume-paper"), "visual resume print target is styled");
 
 assert(polishResumeSentence("i helped customers").includes("Assisted customers"), "grammar pipeline strengthens weak customer phrasing");
@@ -558,7 +633,7 @@ for (const answer of [
 const limitState = getInterviewModeLimitState(limitSession);
 assert(limitState.answerCount === 6, "preview answer count tracks user turns");
 assert(limitState.isLocked, "preview locks after answer limit");
-assert(limitState.label.includes("Premium Preview"), "preview state has premium label");
+assert(limitState.label.includes("Beta Preview"), "preview state has beta label");
 
 const interviewModeSource = fs.readFileSync(path.join(root, "src/components/InterviewMode.tsx"), "utf8");
 const premiumSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
@@ -566,7 +641,7 @@ const landingSource = fs.readFileSync(path.join(root, "src/components/LandingPag
 const intakeSource = fs.readFileSync(path.join(root, "src/components/IntakeForm.tsx"), "utf8");
 const pageSource = fs.readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 assert(interviewModeSource.includes("Let Career Forge interview you."), "first-screen value proposition exists");
-assert(landingSource.includes("guided questions") && landingSource.includes("conversational interview"), "two-path positioning copy exists");
+assert(landingSource.includes("Guided Builder") && landingSource.includes("Tell My Story"), "MVP path positioning copy exists");
 assert(interviewModeSource.includes("Resume Readiness"), "sidebar coach dashboard copy exists");
 assert(interviewModeSource.includes("Resume Strength"), "review screen strength label copy exists");
 assert(interviewModeSource.includes("Your interview-built resume draft"), "review screen title exists");
@@ -574,60 +649,73 @@ assert(interviewModeSource.includes("No metrics yet. Estimate volume"), "empty s
 assert(interviewModeSource.includes("lg:grid-cols") && interviewModeSource.includes("flex flex-wrap"), "mobile-safe layout structure exists");
 assert(!interviewModeSource.includes("Current stage"), "internal stage wording is hidden from UI");
 assert(!interviewModeSource.includes("structured signal"), "debug readiness wording is hidden from UI");
-assert(premiumSource.includes("Interview Mode is planned as a premium feature"), "locked panel copy exists");
-assert(landingSource.includes("Premium Preview"), "landing page premium badge copy exists");
+assert(premiumSource.includes("Interview Mode is still being tested"), "locked panel beta copy exists");
+assert(!landingSource.includes("Premium Preview"), "landing page avoids premium positioning");
 assert(landingSource.includes("Turn your experience into a") && landingSource.includes("recruiter-ready"), "landing page states core product promise");
 assert(landingSource.includes("Build My Resume"), "primary landing CTA exists");
-assert(landingSource.includes("Try Interview Mode"), "secondary landing CTA exists");
+assert(landingSource.includes("Tell My Story"), "secondary landing CTA exists");
 assert(landingSource.includes("Choose your path"), "landing page explains two paths");
-assert(landingSource.includes("Guided Builder") && landingSource.includes("Interview Mode"), "landing page compares builder and interview paths");
+assert(landingSource.includes("Guided Builder") && landingSource.includes("Tell My Story"), "landing page compares builder and story paths");
 assert(landingSource.includes("Doesn't invent achievements"), "landing page trust copy exists");
 assert(pageSource.includes("Choose Path") && pageSource.includes("Build Resume") && pageSource.includes("Review Resume"), "app workflow labels are launch-ready");
-assert(pageSource.includes("Choose your build mode."), "landing CTA opens build mode choice screen");
-assert(pageSource.includes("Guided Interview") && pageSource.includes("Tell My Story"), "build mode choices are visible");
-assert(pageSource.includes("Answer focused questions.") && pageSource.includes("Best if you want structure."), "guided interview choice has required copy");
-assert(pageSource.includes("Describe your work naturally.") && pageSource.includes("Career Forge organizes the details."), "tell-my-story choice has required copy");
-assert(pageSource.includes('onClick={() => jump("intake")}'), "guided interview path still opens the existing builder flow");
+assert(pageSource.includes("Choose how you want to start."), "landing CTA opens mode choice screen");
+assert(pageSource.includes("Guided Builder") && pageSource.includes("Tell My Story"), "build mode choices are visible");
+assert(pageSource.includes("Answer focused questions.") && pageSource.includes("step-by-step structure"), "guided builder choice has required copy");
+assert(pageSource.includes("Describe your work naturally.") && pageSource.includes("project-heavy backgrounds"), "tell-my-story choice has required copy");
+assert(pageSource.includes('jump("intake")'), "guided builder path still opens the existing builder flow");
 assert(pageSource.includes('href="/story"'), "tell-my-story path opens story intake mode");
 assert(tellMyStorySource.includes("Tell Career Forge about your work history."), "story mode has required story input screen");
 assert(tellMyStorySource.includes("I read this as..."), "story mode shows extracted dossier");
 assert(tellMyStorySource.includes("Captured") && tellMyStorySource.includes("Still helpful"), "story mode shows missing-info checklist");
 assert(tellMyStorySource.includes("Focused follow-up") && tellMyStorySource.includes("You will not need to restart"), "story mode asks focused follow-ups without restart");
-assert(tellMyStorySource.includes("Looks right") && tellMyStorySource.includes("Edit details") && tellMyStorySource.includes("Add more context"), "story mode supports dossier actions");
+assert(tellMyStorySource.includes("Generate resume draft") && tellMyStorySource.includes("Edit details") && tellMyStorySource.includes("Add more context"), "story mode supports dossier actions");
 assert(storyModeSource.includes("parseRoleAnswer") && storyModeSource.includes("parseStoryToDossier"), "story mode uses deterministic natural role parser");
 assert(resumePreviewSource.includes("Before you apply"), "resume review includes before-apply checklist");
 assert(resumePreviewSource.includes("Tailor for each job"), "resume review includes practical next steps");
 assert(!/stripe|paymentintent|price_id|publishable_key/i.test(`${interviewModeSource}\n${premiumSource}`), "no real payment integration required");
-assert(intakeSource.includes("I'm building my first resume"), "free builder quick start path exists");
-assert(intakeSource.includes("Help Me Think"), "free builder help-me-think support exists");
-assert(intakeSource.includes("You do not need resume language"), "free builder accepts messy answers");
-assert(intakeSource.includes("Skip for now"), "free builder skip path exists");
-assert(intakeSource.includes("Not sure"), "free builder not-sure path exists");
-assert(intakeSource.includes("Use projects instead"), "free builder project fallback path exists");
-assert(intakeSource.includes("Resume Readiness"), "free builder uses readiness progress model");
-assert(intakeSource.includes("Ready to Generate"), "free builder readiness language exists");
-assert(intakeSource.includes("Approximate numbers are okay"), "free builder metric coaching exists");
-assert(intakeSource.includes("Any education, training, or credentials to include?"), "guided builder includes education credential step");
-assert(intakeSource.includes("Needs More Detail") && intakeSource.includes("Missing"), "free builder confidence labels exist");
+assert(["Get a new job", "Change careers", "Update my resume", "First resume", "Other"].every((copy) => intakeSource.includes(copy)), "free builder starts with quick goal choices");
+assert(intakeSource.includes("What did you actually do in this role?"), "free builder asks for experience before showing chips");
+assert(!intakeSource.includes("No chips yet."), "free builder removes empty-state coaching copy");
+assert(!intakeSource.includes("Skip for now"), "free builder removes forced skip screens");
+assert(!intakeSource.includes('skipCurrentQuestion("not_sure")'), "free builder removes forced not-sure screens");
+assert(intakeSource.includes("Skip / I&apos;m not sure"), "free builder has optional-step skip control");
+assert(intakeSource.includes("+ Add projects"), "free builder exposes project add-on from review");
+assert(!intakeSource.includes("Resume Readiness"), "free builder removes heavy readiness dashboard");
+assert(intakeSource.includes("Ready to generate."), "free builder keeps a concise ready state");
+assert(intakeSource.includes("Any number or proof detail you honestly remember?"), "free builder metric coaching is input-first");
+assert(intakeSource.includes("Add certifications or education"), "guided builder keeps education as an optional add-on");
+assert(!intakeSource.includes("Needs More Detail") && !intakeSource.includes("Ready to Generate"), "free builder removes noisy confidence labels");
 assert(
   ["Dossier started", "Career lane locked", "Experience signals captured", "Resume package ready"].every((copy) => intakeSource.includes(copy)),
   "free builder includes professional momentum confirmations"
 );
 assert(
-  ["Identity", "Target", "Experience", "Arsenal", "Proof", "Review"].every((label) => intakeSource.includes(label)),
-  "free builder includes mission stage labels"
+  ["Start", "Next", "See recommendations", "Generate draft", "Save and review"].every((copy) => intakeSource.includes(copy)),
+  "free builder uses concise continue labels"
 );
-assert(
-  ["Lock career lane", "Add experience", "Capture signals", "Review dossier", "Forge resume"].every((copy) => intakeSource.includes(copy)),
-  "free builder uses outcome-based continue labels"
-);
-assert(intakeSource.includes("You gave Career Forge enough signal to build your first resume package."), "free builder completion summary exists");
+assert(intakeSource.includes("Add one more detail if you want a stronger draft."), "free builder completion summary is concise");
 assert(intakeSource.includes("I read that as:") && intakeSource.includes("Looks right") && intakeSource.includes("Edit details"), "free builder confirms parsed natural role answers");
 assert(intakeSource.includes("What was your title?") && intakeSource.includes("What company was that with?"), "free builder has focused low-confidence parsing fallbacks");
+assert(
+  ["+ Add another experience", "+ Add tools used", "+ Add certifications", "+ Add projects", "+ Add more details"].every((copy) => intakeSource.includes(copy)),
+  "free builder moves extra sections behind optional add-ons"
+);
 assert(!intakeSource.includes("Question {String(questionIndex"), "free builder does not show question count progress");
 
 const foundedParse = parseRoleAnswer("I founded Koinophobia Labs in 2025");
 assert(foundedParse.title === "Founder", "natural parser extracts founder title");
+const quickRoleParses = [
+  ["DoorDash driver", "DoorDash Driver"],
+  ["Retail cashier", "Retail Cashier"],
+  ["Warehouse associate", "Warehouse Associate"],
+  ["Food service worker", "Food Service Worker"],
+  ["Software engineer", "Software Engineer"],
+  ["I drive for DoorDash and handle orders, routes, and customer messages.", "Delivery Driver"]
+];
+for (const [input, expectedTitle] of quickRoleParses) {
+  const parsed = parseRoleAnswer(input);
+  assert(parsed.title === expectedTitle, `natural parser supports quick input: ${input}`);
+}
 assert(foundedParse.company === "Koinophobia Labs", "natural parser extracts founded company");
 assert(foundedParse.dates === "2025-Present", "natural parser converts founded year to present");
 assert(formatParsedRoleConfirmation(foundedParse).includes("Founder at Koinophobia Labs"), "natural parser formats confirmation");
@@ -810,7 +898,7 @@ const overrideRoleResume = generateResumePackage({
   selectedOutcomes: ["Accuracy"]
 });
 assert(overrideRoleResume.coreSkills.includes("Calendar Management"), "role family override powers skills");
-assert(overrideRoleResume.linkedinHeadline.includes("Administrative Reliability"), "role family override powers LinkedIn value area");
+assert(/Office Coordination|Scheduling|Records/i.test(overrideRoleResume.linkedinHeadline), "role family override powers clean LinkedIn direction");
 
 const arsenalResume = generateResumePackage({
   ...initialIntake,
@@ -1194,9 +1282,513 @@ for (const persona of dualModePersonaAudits) {
   assert(storyDossierForPersona.focusedFollowUp !== "What was your title, company, and approximate date range?", `${persona.name}: story does not re-ask captured role identity`);
   assert(storyDossierForPersona.missingCriticalDetails.length <= 1, `${persona.name}: story missing-info logic converges`);
   assert(textHasAny(guidedText, persona.expected) && textHasAny(storyText, persona.expected), `${persona.name}: expected facts reach both outputs`);
-  assert(guidedResume.linkedinHeadline.includes(guidedData.targetJobTitle), `${persona.name}: guided LinkedIn target preserved`);
-  assert(storyResume.linkedinHeadline.includes(storyData.targetJobTitle), `${persona.name}: story LinkedIn target preserved`);
+  assert(headlineSupportsDirection(guidedResume.linkedinHeadline, guidedData), `${persona.name}: guided LinkedIn target direction preserved`);
+  assert(headlineSupportsDirection(storyResume.linkedinHeadline, storyData), `${persona.name}: story LinkedIn target direction preserved`);
   assert(!/placeholder|fake metric|invented|candidate targeting/i.test(`${guidedText}\n${storyText}`), `${persona.name}: no weak placeholder or fake-output language`);
+}
+
+const storyOutputQualitySamples = [
+  {
+    name: "Recent Graduate Campus Admin",
+    story:
+      "My name is Jordan Lee and my email is jordan@example.com. I recently graduated with a business administration degree. I worked at the campus business office as an office assistant from 2022 to 2024 where I answered student questions, updated spreadsheets, scheduled appointments, helped organize events, and tracked forms. I also led a class project where we researched a local business process and presented recommendations to reduce delays. I am applying for entry-level business operations coordinator roles. I used Excel, Google Sheets, email, calendars, and basic reporting.",
+    shouldGenerate: true,
+    expected: ["Office Assistant", "The Campus Business Office", "Google Sheets", "Excel", "Business Administration"],
+    rejected: ["Current Company", "fake metric", "dynamic", "proven track record"]
+  },
+  {
+    name: "Security To Operations",
+    story:
+      "My name is Marcus Reed and my email is marcus@example.com. I worked at Allied Universal as a security officer from 2021 to 2024. I monitored access points, wrote incident reports, de-escalated issues, coordinated with supervisors, and helped visitors follow site procedures. I am looking for operations support or tech support roles. I used radios, access control systems, incident logs, Excel, and ticket notes.",
+    shouldGenerate: true,
+    expected: ["Security Officer", "Allied Universal", "access control", "incident", "de-escalation"],
+    rejected: ["Supervisors through", "Sales Development", "fake metric", "invented"]
+  },
+  {
+    name: "Customer Service To Client Success",
+    story:
+      "My name is Tiana Brooks and my email is tiana@example.com. I worked at Brightline Wireless as a customer service representative from 2020 to 2024. I answered customer questions, updated account notes, resolved billing issues, escalated complex problems, followed up on open cases, and used Salesforce, Zendesk, and Excel. I want to move into client success or operations coordinator roles.",
+    shouldGenerate: true,
+    expected: ["Customer Service Representative", "Brightline Wireless", "Client Success", "Salesforce", "Zendesk"],
+    rejected: ["Sales Development Representative", "app-based service environment", "pipeline support", "proven track record"]
+  },
+  {
+    name: "Founder Product Builder",
+    story:
+      "My name is Blake Taylor and my email is blake@example.com. I founded a small product lab in 2025 and built several websites and apps, including a resume builder MVP, local business landing pages, and automation workflows. I planned features, wrote copy, tested mobile layouts, fixed broken states, documented issues, and shipped demos using Next.js, GitHub, Vercel, Cursor, and ChatGPT. I am looking for product operations or software roles.",
+    shouldGenerate: true,
+    expected: ["Founder", "Small Product Lab", "hands-on product and web project environment", "mobile layouts", "GitHub"],
+    rejected: ["venture-backed", "independent e-commerce", "Tracked copywriting", "Order Fulfillment"]
+  },
+  {
+    name: "Weak Metrics Retail",
+    story:
+      "My name is Casey Nguyen and my email is casey@example.com. I worked at a small store as a team member from 2022 to 2024. I helped customers, stocked shelves, cleaned the front area, answered basic questions, used the register, and helped coworkers when it got busy. I do not know exact numbers yet. I am applying for operations associate roles.",
+    shouldGenerate: false,
+    expected: ["Scope or proof", "Outcomes"],
+    rejected: ["Associate Degree", "fake metric", "invented number"]
+  }
+];
+
+for (const sample of storyOutputQualitySamples) {
+  const dossier = parseStoryToDossier(sample.story);
+  const canGenerate = hasEnoughResumeSignal(dossier.intake);
+  const resume = generateResumePackage(dossier.intake);
+  const output = resumeToText(dossier.intake, resume);
+  const diagnosticText = `${output}\n${dossier.missingCriticalDetails.join(" ")}\n${dossier.focusedFollowUp}`;
+
+  assert(canGenerate === sample.shouldGenerate, `${sample.name}: generation readiness matches expected scope`);
+  assert(textHasAny(diagnosticText, sample.expected), `${sample.name}: expected snapshot facts present`);
+  for (const rejected of sample.rejected) {
+    assert(!diagnosticText.toLowerCase().includes(rejected.toLowerCase()), `${sample.name}: rejected phrase absent (${rejected})`);
+  }
+  if (sample.shouldGenerate) {
+    assertProfessionalResume(dossier.intake, resume, `${sample.name}: story output`);
+    assert(!/dynamic|results-driven|proven track record/i.test(output), `${sample.name}: avoids generic corporate filler`);
+  } else {
+    assert(dossier.missingCriticalDetails.length > 0, `${sample.name}: weak input asks for more detail`);
+  }
+}
+
+const guidedOutputQualitySamples = [
+  {
+    name: "Guided Recent Graduate Campus Admin",
+    data: {
+      fullName: "Jordan Lee",
+      email: "jordan@example.com",
+      targetJobTitle: "Entry-Level Business Operations Coordinator",
+      roleFamily: "Operations",
+      currentTitle: "Office Assistant",
+      currentCompany: "Campus Business Office",
+      currentTime: "2022 to 2024",
+      tools: "Excel, Google Sheets, Email, Calendars",
+      selectedResponsibilities: ["Scheduling", "Records management", "Data entry", "Customer communication"],
+      selectedActions: ["updated spreadsheets", "scheduled appointments", "tracked forms"],
+      responsibilities: "answered student questions, helped organize events, tracked forms",
+      education: "Business Administration coursework",
+      selectedOutcomes: ["Accuracy"]
+    },
+    shouldGenerate: true,
+    expected: ["Office Assistant", "Campus Business Office", "Excel", "Google Sheets", "Business Administration"],
+    rejected: ["Current Company", "fake metric", "dynamic", "proven track record"]
+  },
+  {
+    name: "Guided Security To Operations",
+    data: {
+      fullName: "Marcus Reed",
+      email: "marcus@example.com",
+      targetJobTitle: "Operations Support Specialist",
+      roleFamily: "Operations",
+      currentTitle: "Security Officer",
+      currentCompany: "Allied Universal",
+      currentTime: "2021 to 2024",
+      tools: "Radios, Access Control Systems, Incident Logs, Excel, Ticket Notes",
+      selectedResponsibilities: ["Access control", "Incident reporting", "Visitor support", "Issue escalation"],
+      selectedActions: ["monitored access", "documented incidents", "de-escalated issues"],
+      responsibilities: "helped visitors follow site procedures, coordinated with supervisors",
+      selectedOutcomes: ["Reliability"]
+    },
+    shouldGenerate: true,
+    expected: ["Security Officer", "Allied Universal", "access control", "incident", "reliability"],
+    rejected: ["Supervisors through", "already worked in operations", "fake metric", "invented"]
+  },
+  {
+    name: "Guided Customer Service To Client Success",
+    data: {
+      fullName: "Tiana Brooks",
+      email: "tiana@example.com",
+      targetJobTitle: "Client Success Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Customer Service Representative",
+      currentCompany: "Brightline Wireless",
+      currentTime: "2020 to 2024",
+      tools: "Salesforce, Zendesk, Excel",
+      selectedResponsibilities: ["Customer communication", "CRM updates", "Issue escalation", "Support tickets"],
+      selectedActions: ["answered questions", "updated account notes", "followed up on open cases"],
+      responsibilities: "resolved billing issues, escalated complex problems",
+      selectedOutcomes: ["Customer satisfaction"]
+    },
+    shouldGenerate: true,
+    expected: ["Customer Service Representative", "Brightline Wireless", "Client Success Associate", "Salesforce", "Zendesk"],
+    rejected: ["Sales Development Representative", "pipeline support", "app-based service environment", "proven track record"]
+  },
+  {
+    name: "Guided Founder Product Builder",
+    data: {
+      fullName: "Blake Taylor",
+      email: "blake@example.com",
+      targetJobTitle: "Product Operations Associate",
+      roleFamily: "Tech",
+      currentTitle: "Founder",
+      currentCompany: "Small Product Lab",
+      currentTime: "2025-Present",
+      tools: "Next.js, GitHub, Vercel, Cursor, ChatGPT",
+      selectedResponsibilities: ["Feature planning", "Copywriting", "Mobile QA", "Issue resolution", "Demo delivery"],
+      selectedActions: ["planned features", "tested mobile layouts", "documented issues"],
+      responsibilities: "built websites and apps, local business landing pages, automation workflows, fixed broken states, shipped demos",
+      projectsSupported: "several websites and apps",
+      selectedOutcomes: ["Reliability"]
+    },
+    shouldGenerate: true,
+    expected: ["Founder", "Small Product Lab", "hands-on product and web project environment", "mobile layouts", "GitHub"],
+    rejected: ["venture-backed", "independent e-commerce", "Tracked copywriting", "Order Fulfillment"]
+  },
+  {
+    name: "Guided Weak Metrics Retail",
+    data: {
+      fullName: "Casey Nguyen",
+      email: "casey@example.com",
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Team Member",
+      currentCompany: "Small Store",
+      currentTime: "2022 to 2024",
+      tools: "Register",
+      selectedResponsibilities: ["Customer requests", "Inventory support"],
+      selectedActions: ["helped customers", "stocked shelves"],
+      responsibilities: "cleaned the front area, answered basic questions, helped coworkers when it got busy"
+    },
+    shouldGenerate: false,
+    expected: ["Scope or proof", "Outcomes"],
+    rejected: ["Associate Degree", "fake metric", "invented number"]
+  }
+];
+
+for (const sample of guidedOutputQualitySamples) {
+  const data = { ...initialIntake, ...sample.data };
+  const canGenerate = hasEnoughResumeSignal(data);
+  const missing = getMissingSignals(data).map((signal) => signal.label).join(" ");
+  const resume = generateResumePackage(data);
+  const output = resumeToText(data, resume);
+  const diagnosticText = `${output}\n${missing}`;
+
+  assert(canGenerate === sample.shouldGenerate, `${sample.name}: guided readiness matches expected scope`);
+  assert(textHasAny(diagnosticText, sample.expected), `${sample.name}: expected guided snapshot facts present`);
+  for (const rejected of sample.rejected) {
+    assert(!diagnosticText.toLowerCase().includes(rejected.toLowerCase()), `${sample.name}: rejected phrase absent (${rejected})`);
+  }
+  if (sample.shouldGenerate) {
+    assertProfessionalResume(data, resume, `${sample.name}: guided output`);
+    assert(!/dynamic|results-driven|proven track record/i.test(output), `${sample.name}: avoids generic corporate filler`);
+  } else {
+    assert(missing.includes("Scope or proof") || missing.includes("Outcomes"), `${sample.name}: weak guided input asks for proof`);
+  }
+}
+
+const nonCorporateWorkerProfiles = [
+  {
+    name: "Warehouse Associate",
+    story:
+      "My name is Andre Lewis and my email is andre@example.com. I worked at Amazon as a warehouse associate from 2021 to 2024. I picked orders, packed boxes, scanned packages, loaded trucks, used a barcode scanner, pallet jack, box cutter, and kept my area clean. I followed safety rules and helped new people understand the line when it got busy. I want operations associate roles.",
+    guided: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Warehouse Associate",
+      currentCompany: "Amazon",
+      currentTime: "2021 to 2024",
+      tools: "Barcode Scanner, Pallet Jack, Box Cutter",
+      selectedResponsibilities: ["Order Picking", "Order Packing", "Package Scanning", "Load Handling", "Safe Work Areas"],
+      selectedActions: ["picked orders", "packed orders", "scanned packages"],
+      responsibilities: "loaded trucks, kept my area clean, followed safety rules",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Warehouse Associate", "Amazon", "barcode scanner", "pallet jack", "order", "safety"],
+    proof: ["Reliability", "Safety Awareness"]
+  },
+  {
+    name: "Retail Cashier",
+    story:
+      "My name is Mia Carter and my email is mia@example.com. I was a cashier at Target from 2022 to 2024. I rang up customers, handled returns, answered questions, stocked shelves near the front, kept the register area clean, used the POS system and handheld scanner, and called a lead when customers had bigger issues. I am applying for customer service associate roles.",
+    guided: {
+      targetJobTitle: "Customer Service Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Cashier",
+      currentCompany: "Target",
+      currentTime: "2022 to 2024",
+      tools: "POS System, Handheld Scanner, Register",
+      selectedResponsibilities: ["Customer Questions", "Payment Processing", "Inventory Support", "Issue Escalation"],
+      selectedActions: ["handled customer questions", "processed returns", "stocked shelves"],
+      responsibilities: "kept the register area clean, called a lead for bigger issues",
+      selectedOutcomes: ["Customer satisfaction"]
+    },
+    expected: ["Cashier", "Target", "POS", "customer", "returns", "stock"],
+    proof: ["Customer Or Client Service", "Customer satisfaction"]
+  },
+  {
+    name: "Food Service Worker",
+    story:
+      "My name is Luis Moreno and my email is luis@example.com. I worked at Chipotle as a crew member from 2020 to 2023. I prepared orders, worked the line, cleaned tables, restocked food containers, helped customers, used kitchen equipment and the register, and followed sanitation steps every shift. I want operations or customer service roles.",
+    guided: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Crew Member",
+      currentCompany: "Chipotle",
+      currentTime: "2020 to 2023",
+      tools: "Kitchen Equipment, Register, Sanitation Supplies",
+      selectedResponsibilities: ["Order Preparation", "Food Preparation", "Sanitation", "Customer Requests", "Shift Procedures"],
+      selectedActions: ["prepared orders", "restocked food containers", "helped customers"],
+      responsibilities: "worked the line, cleaned tables, followed sanitation steps",
+      selectedOutcomes: ["Order accuracy"]
+    },
+    expected: ["Crew Member", "Chipotle", "sanitation", "orders", "customer", "register"],
+    proof: ["Order Accuracy", "Sanitation"]
+  },
+  {
+    name: "Delivery Driver",
+    story:
+      "My name is Dana Smith and my email is dana@example.com. I worked as a delivery driver for DoorDash from 2021 to present. I accepted orders in the app, checked order names, planned routes, messaged customers when restaurants were delayed, handled deliveries, kept my car clean, and managed time-sensitive tasks. I am looking for operations support roles.",
+    guided: {
+      targetJobTitle: "Operations Support Specialist",
+      roleFamily: "Operations",
+      currentTitle: "Delivery Driver",
+      currentCompany: "DoorDash",
+      currentTime: "2021 to Present",
+      independentWorkType: "Gig Work",
+      selectedIndependentWorkSignals: ["Route planning", "Customer communication", "Time Management", "Order accuracy"],
+      tools: "Delivery App, Route App, Vehicle",
+      selectedResponsibilities: ["Route Planning", "Customer Communication", "Order Accuracy", "Delivery Coordination"],
+      selectedActions: ["planned routes", "messaged customers", "handled deliveries"],
+      responsibilities: "checked order names, managed time-sensitive tasks",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Delivery Driver", "DoorDash", "route", "customer", "order", "time"],
+    proof: ["Time Management", "Reliability"]
+  },
+  {
+    name: "Construction Labor Worker",
+    story:
+      "My name is Trevor Hall and my email is trevor@example.com. I worked at Northside Builders as a general labor worker from 2019 to 2023. I moved materials, cleaned job sites, used hand tools, power tools, ladders, and PPE, helped crews set up, followed safety rules, and reported issues to the foreman. I want operations or facilities roles.",
+    guided: {
+      targetJobTitle: "Facilities Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "General Labor Worker",
+      currentCompany: "Northside Builders",
+      currentTime: "2019 to 2023",
+      tools: "Hand Tools, Power Tools, Ladders, PPE",
+      selectedResponsibilities: ["Material Handling", "Site Preparation", "Safe Work Areas", "Equipment Operation", "Issue Reporting"],
+      selectedActions: ["moved materials", "cleaned job sites", "reported issues"],
+      responsibilities: "helped crews set up, followed safety rules",
+      selectedOutcomes: ["Safety awareness"]
+    },
+    expected: ["General Labor Worker", "Northside Builders", "hand tools", "PPE", "safety", "materials"],
+    proof: ["Safety Awareness", "Issue Reporting"]
+  },
+  {
+    name: "Janitor Maintenance Worker",
+    story:
+      "My name is Renee Wilson and my email is renee@example.com. I worked at Lincoln High School as a janitor and maintenance helper from 2020 to 2024. I cleaned classrooms, mopped floors, restocked supplies, reported broken fixtures, used cleaning supplies, a mop, ladder, and basic hand tools, and followed safety and sanitation procedures. I want facilities assistant roles.",
+    guided: {
+      targetJobTitle: "Facilities Assistant",
+      roleFamily: "Operations",
+      currentTitle: "Janitor And Maintenance Helper",
+      currentCompany: "Lincoln High School",
+      currentTime: "2020 to 2024",
+      tools: "Cleaning Supplies, Mop, Ladder, Hand Tools",
+      selectedResponsibilities: ["Sanitation", "Work Area Upkeep", "Supply Tracking", "Issue Reporting", "Safety Procedures"],
+      selectedActions: ["cleaned classrooms", "mopped floors", "reported broken fixtures"],
+      responsibilities: "restocked supplies, followed safety and sanitation procedures",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Janitor", "Lincoln High School", "sanitation", "cleaning", "supplies", "safety"],
+    proof: ["Reliability", "Safety Awareness"]
+  },
+  {
+    name: "Caregiver Home Health Aide",
+    story:
+      "My name is Aaliyah Grant and my email is aaliyah@example.com. I worked at Comfort Care as a home health aide from 2021 to 2024. I helped clients with meals, mobility, reminders, light cleaning, appointment notes, family updates, and safe daily routines. I used a scheduling app, care notes, and basic medical reminders. I am applying for patient support or care coordinator roles.",
+    guided: {
+      targetJobTitle: "Patient Support Coordinator",
+      roleFamily: "Customer Success",
+      currentTitle: "Home Health Aide",
+      currentCompany: "Comfort Care",
+      currentTime: "2021 to 2024",
+      tools: "Scheduling App, Care Notes",
+      selectedResponsibilities: ["Patient Care", "Client Communication", "Documentation", "Safety Procedures", "Appointment Management"],
+      selectedActions: ["helped clients", "took notes", "updated families"],
+      responsibilities: "helped with meals, mobility, reminders, light cleaning, safe daily routines",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Home Health Aide", "Comfort Care", "client", "care", "notes", "safety"],
+    proof: ["Patient Care", "Customer Or Client Service"]
+  },
+  {
+    name: "Barber Beauty Worker",
+    story:
+      "My name is Chris Johnson and my email is chris@example.com. I worked as a barber at Fresh Cuts from 2018 to 2024. I cut hair, talked with clients about what they wanted, booked appointments, cleaned my station, sanitized tools, handled payments, and kept regular customers coming back. I want client service or operations roles.",
+    guided: {
+      targetJobTitle: "Client Service Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Barber",
+      currentCompany: "Fresh Cuts",
+      currentTime: "2018 to 2024",
+      tools: "Scheduling App, Payment System, Sanitation Supplies",
+      selectedResponsibilities: ["Client Consultation", "Appointment Management", "Service Delivery", "Payment Processing", "Sanitation"],
+      selectedActions: ["cut hair", "booked appointments", "handled payments"],
+      responsibilities: "talked with clients, cleaned my station, sanitized tools",
+      selectedOutcomes: ["Customer satisfaction"]
+    },
+    expected: ["Barber", "Fresh Cuts", "client", "appointments", "sanitation", "payments"],
+    proof: ["Customer Or Client Service", "Customer satisfaction"]
+  },
+  {
+    name: "Coach Trainer",
+    story:
+      "My name is Simone Davis and my email is simone@example.com. I worked at Southside Fitness as a trainer and youth coach from 2020 to 2024. I coached kids, trained clients, planned workouts, checked form, kept sessions safe, tracked attendance, used scheduling software, and talked with parents about progress. I am applying for program coordinator roles.",
+    guided: {
+      targetJobTitle: "Program Coordinator",
+      roleFamily: "Project Coordination",
+      currentTitle: "Trainer And Youth Coach",
+      currentCompany: "Southside Fitness",
+      currentTime: "2020 to 2024",
+      tools: "Scheduling Software, Attendance Tracker",
+      selectedResponsibilities: ["Instruction", "Session Planning", "Safety Procedures", "Client Communication", "Attendance Tracking"],
+      selectedActions: ["coached kids", "trained clients", "planned workouts"],
+      responsibilities: "checked form, talked with parents about progress",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Youth Coach", "Southside Fitness", "coaching", "safety", "attendance", "parents"],
+    proof: ["Safety Awareness", "Reliability"]
+  },
+  {
+    name: "Gig Worker Side Hustler",
+    story:
+      "My name is Omar Price and my email is omar@example.com. I did Instacart and small moving jobs on the side from 2022 to now. I accepted orders, shopped carefully, messaged customers, handled substitutions, loaded and unloaded items, planned routes, tracked payments, and kept customers updated. I am looking for operations associate roles.",
+    guided: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Instacart Shopper And Moving Helper",
+      currentCompany: "Independent Work",
+      currentTime: "2022 to Present",
+      independentWorkType: "Side Hustle",
+      selectedIndependentWorkSignals: ["Customer communication", "Route planning", "Order accuracy", "Payment processing"],
+      tools: "Instacart App, Route App, Vehicle",
+      selectedResponsibilities: ["Order Accuracy", "Customer Communication", "Load Handling", "Route Planning", "Payment Processing"],
+      selectedActions: ["accepted orders", "messaged customers", "loaded items"],
+      responsibilities: "handled substitutions, unloaded items, tracked payments, kept customers updated",
+      selectedOutcomes: ["Reliability"]
+    },
+    expected: ["Instacart", "Independent", "customer", "route", "payments", "orders"],
+    proof: ["Reliability", "Time Management"]
+  }
+];
+
+for (const profile of nonCorporateWorkerProfiles) {
+  const storyDossier = parseStoryToDossier(profile.story);
+  const storyResume = generateResumePackage(storyDossier.intake);
+  const storyOutput = resumeToText(storyDossier.intake, storyResume);
+  const storyDiagnostic = `${storyOutput}\n${storyDossier.extracted.responsibilities.join(" ")}\n${storyDossier.extracted.tools.join(" ")}\n${storyDossier.extracted.transferableSignals.join(" ")}`;
+  const guidedData = { ...initialIntake, fullName: `${profile.name} Guided`, email: "worker.guided@example.com", ...profile.guided };
+  const guidedResume = generateResumePackage(guidedData);
+  const guidedOutput = resumeToText(guidedData, guidedResume);
+
+  assert(hasEnoughResumeSignal(storyDossier.intake), `${profile.name}: Story Mode has enough signal`);
+  assert(hasEnoughResumeSignal(guidedData), `${profile.name}: Guided Builder has enough signal`);
+  assertProfessionalResume(storyDossier.intake, storyResume, `${profile.name}: story output`);
+  assertProfessionalResume(guidedData, guidedResume, `${profile.name}: guided output`);
+  assert(textHasAll(storyDiagnostic, profile.expected.slice(0, 4)), `${profile.name}: story captures role/environment/responsibilities/tools`);
+  assert(textHasAny(storyDiagnostic, profile.proof), `${profile.name}: story captures reliability, safety, customer, or compliance proof`);
+  assert(textHasAny(guidedOutput, profile.expected) && textHasAny(guidedOutput, profile.proof), `${profile.name}: guided output preserves grounded worker signals`);
+  assert(!/dynamic|results-driven|proven track record|stakeholder alignment|executive/i.test(`${storyOutput}\n${guidedOutput}`), `${profile.name}: avoids corporate filler`);
+  assert(!/fake metric|invented|50\+|100\+|million|revenue growth/i.test(`${storyOutput}\n${guidedOutput}`), `${profile.name}: does not invent flashy metrics`);
+}
+
+const messyConversationStory =
+  "My name is Jay Parker and my email is jay@example.com. This is messy but I worked as a warehouse associate from 2021 to 2022 at UPS loading trucks and scanning packages. Before that I was a cashier at Family Dollar and handled customers, returns, and stocking. I also do DoorDash sometimes and message customers when orders are delayed. I took some community college classes for business but did not finish. I helped my cousin set up a simple website too. I am not sure if I should focus on warehouse, customer service, or operations yet.";
+const messyDossier = parseStoryToDossier(messyConversationStory);
+assert(messyDossier.detectedRoles.length >= 3, "messy conversation detects several possible roles");
+assert(messyDossier.needsRolePriority, "messy conversation asks for role priority before generating");
+assert(messyDossier.focusedFollowUp.includes("Which one should this resume prioritize?"), "messy conversation gives a focused priority question");
+assert(textHasAny(messyDossier.detectedRoles.join(" "), ["Warehouse Associate", "Cashier", "DoorDash"]), "messy conversation summarizes detected roles");
+assert(tellMyStorySource.includes("!dossier.needsRolePriority"), "Story Mode blocks generation for mixed-role priority conflicts");
+assert(normalizeTransferTarget("stock manager / warehouse / logistics") === "Warehouse Associate", "delivery-to-warehouse target stays first-step");
+assert(normalizeTransferTarget("inventory or operations") === "Inventory Associate", "retail-to-inventory target stays first-step");
+assert(normalizeTransferTarget("shift lead or operations") === "Operations Associate", "food-service target avoids unsupported leadership");
+assert(normalizeTransferTarget("janitor maintenance") === "Maintenance Assistant", "janitorial maintenance target maps conservatively");
+assert(normalizeTransferTarget("healthcare admin or patient services") === "Healthcare Admin Assistant", "caregiving target maps to healthcare admin assistant");
+assert(normalizeTransferTarget("client success or appointment coordinator") === "Appointment Coordinator", "barber booking target maps to appointment coordination");
+
+const nextStepWorkerMappings = [
+  {
+    name: "DoorDash to warehouse logistics",
+    story:
+      "My name is Dana Smith and my email is dana.mapping@example.com. I worked as a delivery driver for DoorDash from 2021 to present. I checked order names, planned routes, messaged customers about delays, used the delivery app, and handled time-sensitive deliveries. I want stock manager / warehouse / logistics roles.",
+    guidedTarget: "stock manager / warehouse / logistics",
+    expectedTarget: "Warehouse Associate",
+    expectedSkills: ["Route Planning", "Order Accuracy", "Customer Communication", "Time Management"]
+  },
+  {
+    name: "Retail cashier to inventory operations",
+    story:
+      "My name is Mia Carter and my email is mia.mapping@example.com. I was a cashier at Target from 2022 to 2024. I handled customers, returns, cash, POS transactions, stocking, inventory checks, and register area cleanup. I am moving into inventory or operations roles.",
+    guidedTarget: "inventory or operations",
+    expectedTarget: "Inventory Associate",
+    expectedSkills: ["Payment Processing", "Inventory Support", "Customer Questions", "Cash Handling"]
+  },
+  {
+    name: "Food service to shift operations",
+    story:
+      "My name is Luis Moreno and my email is luis.mapping@example.com. I worked at Chipotle as a crew member from 2020 to 2023. I prepared orders, worked the line, restocked food containers, cleaned tables, followed sanitation steps, used the register, and helped coworkers during rushes. I want shift lead or operations roles.",
+    guidedTarget: "shift lead or operations",
+    expectedTarget: "Operations Associate",
+    expectedSkills: ["Order Preparation", "Sanitation", "Shift Procedures", "Order Accuracy"]
+  },
+  {
+    name: "Janitor to facilities assistant",
+    story:
+      "My name is Renee Wilson and my email is renee.mapping@example.com. I worked at Lincoln High School as a janitor from 2020 to 2024. I cleaned classrooms, mopped floors, restocked supplies, reported broken fixtures, used cleaning supplies and basic hand tools, and followed safety and sanitation procedures. I am applying for facilities assistant roles.",
+    guidedTarget: "facilities assistant",
+    expectedTarget: "Facilities Assistant",
+    expectedSkills: ["Sanitation", "Work Area Upkeep", "Issue Reporting", "Safety Procedures"]
+  },
+  {
+    name: "Caregiver to patient services",
+    story:
+      "My name is Aaliyah Grant and my email is aaliyah.mapping@example.com. I worked at Comfort Care as a home health aide from 2021 to 2024. I helped clients with meals, mobility, reminders, appointment notes, family updates, care notes, and safe daily routines. I am applying for healthcare admin or patient services roles.",
+    guidedTarget: "healthcare admin or patient services",
+    expectedTarget: "Healthcare Admin Assistant",
+    expectedSkills: ["Patient Care", "Client Communication", "Documentation", "Safety Procedures"]
+  },
+  {
+    name: "Barber to appointment coordination",
+    story:
+      "My name is Chris Johnson and my email is chris.mapping@example.com. I worked as a barber at Fresh Cuts from 2018 to 2024. I cut hair, talked with clients, booked appointments, cleaned my station, sanitized tools, handled payments, and kept regular customers coming back. I want client success or appointment coordinator roles.",
+    guidedTarget: "client success or appointment coordinator",
+    expectedTarget: "Appointment Coordinator",
+    expectedSkills: ["Appointment Management", "Service Delivery", "Payment Processing", "Sanitation"]
+  }
+];
+
+for (const mapping of nextStepWorkerMappings) {
+  const dossier = parseStoryToDossier(mapping.story);
+  const storyResume = generateResumePackage(dossier.intake);
+  const storyText = resumeToText(dossier.intake, storyResume);
+  const guidedData = {
+    ...initialIntake,
+    fullName: `${mapping.name} Guided`,
+    email: "next.step.guided@example.com",
+    targetJobTitle: mapping.guidedTarget,
+    roleFamily: dossier.intake.roleFamily,
+    currentTitle: dossier.intake.currentTitle,
+    currentCompany: dossier.intake.currentCompany,
+    currentTime: dossier.intake.currentTime,
+    tools: dossier.intake.tools,
+    responsibilities: dossier.intake.responsibilities,
+    selectedResponsibilities: dossier.intake.selectedResponsibilities,
+    selectedActions: dossier.intake.selectedActions,
+    selectedIndependentWorkSignals: dossier.intake.selectedIndependentWorkSignals,
+    independentWorkType: dossier.intake.independentWorkType,
+    selectedOutcomes: dossier.intake.selectedOutcomes
+  };
+  const guidedResume = generateResumePackage(guidedData);
+  const guidedText = resumeToText(guidedData, guidedResume);
+  const diagnostic = `${storyText}\n${guidedText}\n${dossier.extracted.responsibilities.join(" ")}\n${dossier.extracted.transferableSignals.join(" ")}`;
+
+  assert(dossier.intake.targetJobTitle === mapping.expectedTarget, `${mapping.name}: Story Mode maps to realistic next-step target`);
+  assert(storyResume.summary.includes(mapping.expectedTarget), `${mapping.name}: story resume uses mapped target`);
+  assert(guidedResume.summary.includes(mapping.expectedTarget), `${mapping.name}: guided resume normalizes fuzzy target`);
+  assert(textHasAny(diagnostic, mapping.expectedSkills), `${mapping.name}: transferable skills are detected`);
+  assert(!new RegExp(`${dossier.intake.currentTitle} Manager`, "i").test(`${storyText}\n${guidedText}`), `${mapping.name}: does not invent manager title from held role`);
+  assert(!/fake metric|invented|proven track record|executive/i.test(`${storyText}\n${guidedText}`), `${mapping.name}: output stays honest and grounded`);
 }
 
 const aiWorkflowPersonas = [

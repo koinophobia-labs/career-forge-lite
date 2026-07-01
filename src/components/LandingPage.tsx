@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { trackCtaClick } from "@/lib/analytics";
 
 type LandingPageProps = {
   onStart: () => void;
@@ -10,16 +11,16 @@ const pathCards = [
   {
     eyebrow: "Free",
     title: "Guided Builder",
-    body: "Answer simple prompts. Career Forge organizes your experience into a professional resume draft.",
-    bestFor: ["quick resumes", "first-time users", "people who know their work history"],
+    body: "Answer focused prompts for your target role, work history, projects, skills, and proof. Best first stop for most visitors.",
+    bestFor: ["retail and service workers", "warehouse or logistics workers", "recent graduates"],
     cta: "Build Resume"
   },
   {
-    eyebrow: "Premium Preview",
-    title: "Interview Mode",
-    body: "Talk through your experience. Career Forge extracts proof while you answer naturally.",
-    bestFor: ["resume-writing blockers", "career changers", "project-heavy backgrounds"],
-    cta: "Try Interview Mode"
+    eyebrow: "Beta",
+    title: "Tell My Story",
+    body: "Paste or write your work story in plain language. Career Forge extracts a structured dossier before generating resume content.",
+    bestFor: ["gig workers and career switchers", "messy work history", "self-taught builders or founders"],
+    cta: "Tell My Story"
   }
 ];
 
@@ -28,7 +29,7 @@ const trustItems = [
   "Uses your real experience",
   "Doesn't invent achievements",
   "Built around recruiter-ready structure",
-  "Supports projects and nontraditional careers",
+  "Supports gig, service, retail, warehouse, and project-based paths",
   "Exports clean, single-column resume content"
 ];
 
@@ -56,30 +57,42 @@ export function LandingPage({ onStart }: LandingPageProps) {
         <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="max-w-2xl">
             <p className="trust-kicker mb-4 text-sm font-bold uppercase">
-              Free builder + premium interview preview
+              Free resume builder for real experience
             </p>
             <h1 className="text-4xl font-bold leading-[1.02] text-paper sm:text-6xl">
               Turn your experience into a <span className="text-cyan">recruiter-ready</span> resume.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-paper/75">
-              Whether you prefer guided questions or a conversational interview, Career Forge helps you uncover your
-              experience and transform it into professional resume content.
+              Career Forge helps career switchers, gig workers, service workers, retail workers, warehouse/logistics workers,
+              recent grads, and self-taught builders turn plain work history into editable resume bullets, a LinkedIn headline,
+              and an ATS-safe draft without inventing achievements.
             </p>
+            <div className="mt-5 flex flex-wrap gap-2" aria-label="Career Forge is built for">
+              {["Gig workers", "Retail & service", "Warehouse/logistics", "Recent grads", "Self-taught builders"].map((item) => (
+                <span key={item} className="rounded-full border border-white/12 bg-white/5 px-3 py-2 text-xs font-bold text-paper/68">
+                  {item}
+                </span>
+              ))}
+            </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={onStart}
+                onClick={() => {
+                  trackCtaClick("hero_build_resume", "#demo");
+                  onStart();
+                }}
                 className="min-h-12 rounded-md bg-gold px-6 text-base font-bold text-ink shadow-soft transition hover:bg-cyan"
               >
                 Build My Resume
               </button>
               <a
-                href="/interview"
+                href="/story"
+                onClick={() => trackCtaClick("hero_tell_my_story", "/story")}
                 className="inline-flex min-h-12 items-center rounded-md border border-cyan/25 bg-cyan/10 px-6 text-base font-bold text-cyan transition hover:border-gold hover:text-gold"
               >
-                Try Interview Mode
+                Tell My Story
                 <span className="ml-3 rounded-sm border border-cyan/30 px-2 py-1 text-[0.65rem] uppercase tracking-[0.12em]">
-                  Premium Preview
+                  Beta
                 </span>
               </a>
             </div>
@@ -117,7 +130,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
           <p className="trust-kicker text-sm font-bold uppercase">Choose your path</p>
           <h2 className="mt-3 text-3xl font-bold text-paper">Two ways to build the same recruiter-ready package.</h2>
           <p className="mt-3 text-paper/68">
-            Start with the free guided builder, or preview the conversational interview if writing from scratch feels hard.
+            Start with the guided builder if you want structure. Use Tell My Story if you already have a rough work history to paste in.
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -139,14 +152,18 @@ export function LandingPage({ onStart }: LandingPageProps) {
               {path.title === "Guided Builder" ? (
                 <button
                   type="button"
-                  onClick={onStart}
+                  onClick={() => {
+                    trackCtaClick("path_build_resume", "#demo");
+                    onStart();
+                  }}
                   className="mt-6 min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan"
                 >
                   {path.cta}
                 </button>
               ) : (
                 <a
-                  href="/interview"
+                  href="/story"
+                  onClick={() => trackCtaClick("path_tell_my_story", "/story")}
                   className="mt-6 inline-flex min-h-11 items-center rounded-md border border-cyan/30 bg-cyan/10 px-5 text-sm font-black text-cyan transition hover:border-gold hover:text-gold"
                 >
                   {path.cta}

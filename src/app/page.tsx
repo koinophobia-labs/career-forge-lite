@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ATSValidationPanel } from "@/components/ATSValidationPanel";
 import { IntakeForm } from "@/components/IntakeForm";
 import { LandingPage } from "@/components/LandingPage";
@@ -9,6 +9,7 @@ import { ResumePreview } from "@/components/ResumePreview";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { initialIntake } from "@/lib/career-data";
+import { trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
 import { generateResumePackage } from "@/lib/generator";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 
@@ -26,13 +27,15 @@ export default function Home() {
   const [errors, setErrors] = useState<IntakeErrors>({});
   const [template, setTemplate] = useState<TemplateStyle>("Modern ATS");
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
+  const hasTrackedGuidedStart = useRef(false);
+  const hasTrackedGuidedCompletion = useRef(false);
 
   const workflowStep = useMemo(() => {
     const order: Step[] = ["mode", "intake", "preview"];
     return order.indexOf(step) + 1;
   }, [step]);
 
-  function validateIntake(keys: Array<keyof IntakeData> = ["fullName", "email", "targetJobTitle", "currentTitle"]) {
+  function validateIntake(keys: Array<keyof IntakeData> = ["targetJobTitle", "currentTitle"]) {
     const nextErrors: IntakeErrors = {};
 
     if (keys.includes("fullName") && !intake.fullName.trim()) nextErrors.fullName = "Name is required.";
@@ -62,6 +65,11 @@ export default function Home() {
       return;
     }
 
+    if (nextStep === "intake" && !hasTrackedGuidedStart.current) {
+      trackCareerForgeStart("guided");
+      hasTrackedGuidedStart.current = true;
+    }
+
     setStep(nextStep);
     window.setTimeout(() => document.getElementById(nextStep)?.scrollIntoView(), 0);
   }
@@ -74,6 +82,11 @@ export default function Home() {
     }
 
     setResume(generateResumePackage(intake));
+    trackResumeGeneration("guided");
+    if (!hasTrackedGuidedCompletion.current) {
+      trackCareerForgeCompletion("guided");
+      hasTrackedGuidedCompletion.current = true;
+    }
     setStep("preview");
     window.setTimeout(() => document.getElementById("resume")?.scrollIntoView(), 0);
   }
@@ -89,7 +102,10 @@ export default function Home() {
             <button
               key={label}
               type="button"
-              onClick={() => jump(targetStep)}
+              onClick={() => {
+                trackCtaClick(`workflow_${targetStep}`, `#${targetStep}`);
+                jump(targetStep);
+              }}
               className={`min-h-14 rounded-md border px-4 text-left text-sm font-bold transition ${
                 workflowStep === index + 1
                   ? "border-gold bg-gold text-ink"
@@ -122,10 +138,10 @@ export default function Home() {
               <p className="trust-kicker text-sm font-bold uppercase">Product Lab Module 05</p>
               <div className="mt-4 grid gap-4 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
                 <div>
-                  <h2 className="text-3xl font-bold text-paper sm:text-4xl">Choose your build mode.</h2>
+                  <h2 className="text-3xl font-bold text-paper sm:text-4xl">Choose how you want to start.</h2>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-paper/68">
-                    Pick the path that matches how you think. Both modes feed the same resume engine, LinkedIn preview,
-                    and ATS-safe review.
+                    Most people should start with the guided builder. If you already have notes, job history, or a project story,
+                    Tell My Story can organize it first.
                   </p>
                 </div>
                 <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4 text-sm leading-6 text-paper/72">
@@ -138,19 +154,25 @@ export default function Home() {
             <div className="grid gap-4 p-5 sm:p-7 lg:grid-cols-2">
               <button
                 type="button"
-                onClick={() => jump("intake")}
+                onClick={() => {
+                  trackCtaClick("start_guided_build", "#intake");
+                  jump("intake");
+                }}
                 className="group rounded-md border border-gold/35 bg-gold/10 p-5 text-left transition hover:-translate-y-0.5 hover:border-gold hover:bg-gold/15 focus:outline-none focus:ring-2 focus:ring-gold/70"
               >
                 <span className="rounded-sm border border-gold/40 bg-gold px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-ink">
-                  Guided Interview
+                  Guided Builder
                 </span>
                 <h3 className="mt-5 text-2xl font-bold text-paper">Answer focused questions.</h3>
-                <p className="mt-3 text-sm leading-6 text-paper/70">Best if you want structure.</p>
+                <p className="mt-3 text-sm leading-6 text-paper/70">
+                  Best for recent graduates, career switchers, and anyone who wants step-by-step structure.
+                </p>
                 <p className="mt-5 text-sm font-bold text-gold transition group-hover:text-cyan">Start guided build</p>
               </button>
 
               <a
                 href="/story"
+                onClick={() => trackCtaClick("open_story_mode", "/story")}
                 className="group rounded-md border border-cyan/35 bg-cyan/10 p-5 transition hover:-translate-y-0.5 hover:border-cyan hover:bg-cyan/15 focus:outline-none focus:ring-2 focus:ring-cyan/70"
               >
                 <span className="rounded-sm border border-cyan/40 bg-cyan/10 px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-cyan">
@@ -158,9 +180,9 @@ export default function Home() {
                 </span>
                 <h3 className="mt-5 text-2xl font-bold text-paper">Describe your work naturally.</h3>
                 <p className="mt-3 text-sm leading-6 text-paper/70">
-                  Career Forge organizes the details.
+                  Best for project-heavy backgrounds, founders, and people who already have a rough story.
                 </p>
-                <p className="mt-5 text-sm font-bold text-cyan transition group-hover:text-gold">Open conversational mode</p>
+                <p className="mt-5 text-sm font-bold text-cyan transition group-hover:text-gold">Open story mode</p>
               </a>
             </div>
           </div>

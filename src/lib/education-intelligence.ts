@@ -1,8 +1,10 @@
 export const educationTypes = [
   "High School Diploma",
   "GED",
+  "High School",
   "Associate Degree",
   "Bachelor's Degree",
+  "College Coursework",
   "Master's Degree",
   "MBA",
   "Doctorate",
@@ -78,20 +80,21 @@ export const degreeMajorBank = [
 export type CertificationCategory = "Technology" | "Business" | "Marketing" | "Healthcare" | "Fitness" | "Creative" | "Food/Hospitality";
 
 export const certificationBank: Array<{ label: string; category: CertificationCategory; aliases?: string[] }> = [
-  { label: "CompTIA A+", category: "Technology", aliases: ["A+", "Comptia A Plus"] },
-  { label: "CompTIA Network+", category: "Technology", aliases: ["Network+", "Network Plus"] },
-  { label: "CompTIA Security+", category: "Technology", aliases: ["Security+", "Security Plus"] },
+  { label: "CompTIA A+", category: "Technology", aliases: ["A+", "Comptia A Plus", "CompTIA"] },
+  { label: "CompTIA Network+", category: "Technology", aliases: ["Network+", "Network Plus", "CompTIA"] },
+  { label: "CompTIA Security+", category: "Technology", aliases: ["Security+", "Security Plus", "CompTIA"] },
   { label: "AWS Certified Cloud Practitioner", category: "Technology", aliases: ["AWS CCP", "Cloud Practitioner"] },
   { label: "AWS Certified Solutions Architect - Associate", category: "Technology", aliases: ["AWS SAA", "Solutions Architect Associate"] },
   { label: "Microsoft Azure Fundamentals", category: "Technology", aliases: ["Azure Fundamentals", "AZ-900"] },
-  { label: "Google IT Support Professional Certificate", category: "Technology", aliases: ["Google IT Support"] },
+  { label: "Google Career Certificate", category: "Technology", aliases: ["Google Career Certificates"] },
+  { label: "Google IT Support Professional Certificate", category: "Technology", aliases: ["Google IT Support", "Google Career Certificate", "Google Career Certificates"] },
   { label: "Cisco CCNA", category: "Technology", aliases: ["CCNA"] },
   { label: "ITIL Foundation", category: "Technology", aliases: ["ITIL"] },
   { label: "Certified ScrumMaster", category: "Business", aliases: ["Scrum Master", "CSM"] },
   { label: "Project Management Professional (PMP)", category: "Business", aliases: ["PMP"] },
   { label: "Lean Six Sigma", category: "Business", aliases: ["Six Sigma"] },
   { label: "Certified Associate in Project Management (CAPM)", category: "Business", aliases: ["CAPM"] },
-  { label: "Google Project Management Certificate", category: "Business", aliases: ["Google Project Management"] },
+  { label: "Google Project Management Certificate", category: "Business", aliases: ["Google Project Management", "Google Career Certificate", "Google Career Certificates"] },
   { label: "Salesforce Administrator", category: "Business", aliases: ["Salesforce Admin"] },
   { label: "HubSpot Certifications", category: "Business", aliases: ["HubSpot Academy"] },
   { label: "Google Analytics Certification", category: "Marketing", aliases: ["Google Analytics"] },
@@ -99,6 +102,7 @@ export const certificationBank: Array<{ label: string; category: CertificationCa
   { label: "Meta Blueprint Certification", category: "Marketing", aliases: ["Meta Blueprint"] },
   { label: "Hootsuite Social Marketing Certification", category: "Marketing", aliases: ["Hootsuite"] },
   { label: "CPR Certification", category: "Healthcare", aliases: ["CPR"] },
+  { label: "First Aid Certification", category: "Healthcare", aliases: ["First Aid"] },
   { label: "Certified Nursing Assistant (CNA)", category: "Healthcare", aliases: ["CNA"] },
   { label: "Emergency Medical Technician (EMT)", category: "Healthcare", aliases: ["EMT"] },
   { label: "Basic Life Support (BLS)", category: "Healthcare", aliases: ["BLS"] },
@@ -109,7 +113,10 @@ export const certificationBank: Array<{ label: string; category: CertificationCa
   { label: "Adobe Certified Professional", category: "Creative", aliases: ["Adobe Certified"] },
   { label: "Autodesk Certified User", category: "Creative", aliases: ["Autodesk"] },
   { label: "ServSafe Certification", category: "Food/Hospitality", aliases: ["ServSafe"] },
-  { label: "Food Handler Certification", category: "Food/Hospitality", aliases: ["Food Handler"] }
+  { label: "Food Handler Certification", category: "Food/Hospitality", aliases: ["Food Handler"] },
+  { label: "OSHA Safety Training", category: "Business", aliases: ["OSHA", "OSHA 10", "OSHA 30"] },
+  { label: "Coursera Course Certificate", category: "Business", aliases: ["Coursera"] },
+  { label: "Udemy Course Certificate", category: "Business", aliases: ["Udemy"] }
 ];
 
 export const tradeEducationBank = [
@@ -200,10 +207,10 @@ export const tradeEducationBank = [
 ];
 
 const educationTypePattern =
-  /high school diploma|ged|associate|bachelor|master|mba|doctorate|professional degree|community college|trade school|apprenticeship|bootcamp|military training|professional certificate|industry certification|continuing education|online course|self[- ]directed learning/i;
+  /high school(?: diploma)?|\bged\b|college|associate degree|associate'?s degree|bachelor|master|\bmba\b|doctorate|professional degree|community college|trade school|apprenticeship|bootcamp|military training|professional certificate|industry certification|continuing education|online course|coursera|udemy|google career certificate|self[- ]directed learning/i;
 
 const educationEvidencePattern =
-  /education|certification|certificate|certified|course|training|degree|school|college|university|bootcamp|diploma|license|apprenticeship|military|ged|mba|doctorate|self[- ]directed/i;
+  /education|certification|certificate|certified|course|training|degree|school|college|university|bootcamp|diploma|license|apprenticeship|military|\bged\b|\bmba\b|doctorate|servsafe|osha|cpr|first aid|comptia|coursera|udemy|google career certificate|self[- ]directed/i;
 
 function clean(value = "") {
   return value.replace(/[.!,]+$/g, "").replace(/\s+/g, " ").trim();
@@ -329,7 +336,7 @@ export function extractEducationEntries(text: string) {
     .filter(Boolean);
   const sentenceMatches = sentences.filter((sentence) => educationEvidencePattern.test(sentence));
   const explicitClauses = [
-    ...text.matchAll(/\b(?:education is|education:|studied|completed|earned|hold|have|certified in|trained in)\s+([^.;]+)/gi)
+    ...text.matchAll(/\b(?:education is|education:|studied|completed|earned|hold|have completed|have earned|have an?|certified in|trained in)\s+([^.;]+)/gi)
   ].map((match) => match[1]);
   const certifications = certificationBank
     .filter((certification) => {

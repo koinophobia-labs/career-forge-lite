@@ -9,6 +9,8 @@ export type CareerTarget = {
 
 const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
   "Customer Success": [
+    { title: "Customer Support", roleFamily: "Customer Success", aliases: ["customer support associate", "customer support representative"] },
+    { title: "Client Support", roleFamily: "Customer Success", aliases: ["client support associate", "client support representative"] },
     { title: "Customer Success Associate", roleFamily: "Customer Success", aliases: ["customer success specialist", "client success representative"] },
     { title: "Customer Success Specialist", roleFamily: "Customer Success" },
     { title: "Customer Support Specialist", roleFamily: "Customer Success" },
@@ -38,6 +40,16 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
     { title: "Operations Associate", roleFamily: "Operations" },
     { title: "Operations Coordinator", roleFamily: "Operations" },
     { title: "Business Operations Associate", roleFamily: "Operations" },
+    { title: "Warehouse Associate", roleFamily: "Operations", aliases: ["warehouse worker", "stock associate"] },
+    { title: "Inventory Associate", roleFamily: "Operations", aliases: ["inventory support", "stock support"] },
+    { title: "Fulfillment Associate", roleFamily: "Operations", aliases: ["order fulfillment", "fulfillment support"] },
+    { title: "Logistics Support", roleFamily: "Operations", aliases: ["logistics assistant", "logistics support associate"] },
+    { title: "Dispatch Assistant", roleFamily: "Operations", aliases: ["dispatch support", "route support"] },
+    { title: "Facilities Assistant", roleFamily: "Operations", aliases: ["facilities support", "building support"] },
+    { title: "Maintenance Assistant", roleFamily: "Operations", aliases: ["maintenance support", "repair support"] },
+    { title: "Building Operations Support", roleFamily: "Operations", aliases: ["building operations assistant", "facilities operations support"] },
+    { title: "Appointment Coordinator", roleFamily: "Operations", aliases: ["appointment scheduler", "booking coordinator"] },
+    { title: "Field Associate", roleFamily: "Operations", aliases: ["field support", "field operations support"] },
     { title: "Logistics Coordinator", roleFamily: "Operations" },
     { title: "Fulfillment Coordinator", roleFamily: "Operations" },
     { title: "Warehouse Operations Coordinator", roleFamily: "Operations" },
@@ -82,6 +94,8 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
     { title: "Department Assistant", roleFamily: "Admin" },
     { title: "Team Assistant", roleFamily: "Admin" },
     { title: "Patient Access Representative", roleFamily: "Admin" },
+    { title: "Patient Services Representative", roleFamily: "Admin", aliases: ["patient support representative", "patient services associate"] },
+    { title: "Healthcare Admin Assistant", roleFamily: "Admin", aliases: ["healthcare administrative assistant", "medical office assistant"] },
     { title: "Unit Secretary", roleFamily: "Admin" },
     { title: "Mailroom Coordinator", roleFamily: "Admin" },
     { title: "Virtual Assistant", roleFamily: "Admin" }
@@ -130,6 +144,7 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
     { title: "Business Intelligence Associate", roleFamily: "Business" },
     { title: "Market Research Associate", roleFamily: "Business" },
     { title: "Compliance Analyst Associate", roleFamily: "Business" },
+    { title: "Compliance Assistant", roleFamily: "Business", aliases: ["compliance support", "compliance support assistant"] },
     { title: "Risk Operations Associate", roleFamily: "Business" },
     { title: "Vendor Management Associate", roleFamily: "Business" },
     { title: "Procurement Associate", roleFamily: "Business" },
@@ -167,6 +182,7 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
   "IT Support": [
     { title: "Help Desk Technician", roleFamily: "IT Support" },
     { title: "IT Support Specialist", roleFamily: "IT Support" },
+    { title: "IT Support Trainee", roleFamily: "IT Support", aliases: ["tech support trainee", "technical support trainee"] },
     { title: "Technical Support Representative", roleFamily: "IT Support" },
     { title: "Desktop Support Technician", roleFamily: "IT Support" },
     { title: "Service Desk Analyst", roleFamily: "IT Support" },

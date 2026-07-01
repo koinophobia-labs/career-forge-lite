@@ -82,8 +82,8 @@ export function inferIndependentWorkCategory(value: string): IndependentWorkCate
   const text = value.toLowerCase();
   if (/uber|lyft|doordash|door dash|ubereats|uber eats|instacart|courier|delivery|rideshare|driver|amazon flex|shopper/.test(text)) return "Gig / Delivery";
   if (/creator|tiktok|youtube|twitch|podcast|video|photo|media|content|stream|dj|music|graphic|design/.test(text)) return "Creator / Media";
-  if (/barber|hair|nail|tattoo|trainer|fitness|dog|pet|clean|landscap|handyman|bartender|chef|tutor|childcare|client|appointment/.test(text)) return "Service / Local Business";
-  if (/etsy|ebay|shopify|depop|poshmark|reseller|commerce|store|seller|product|copywriter|consultant|virtual assistant/.test(text)) return "Online Commerce";
+  if (/barber|hair|nail|tattoo|trainer|fitness|dog|pet|house cleaner|cleaning business|landscap|handyman|bartender|chef|tutor|childcare|client|appointment/.test(text)) return "Service / Local Business";
+  if (/etsy|ebay|shopify|depop|poshmark|reseller|e-?commerce|online store|digital product seller|copywriter|consultant|virtual assistant/.test(text)) return "Online Commerce";
   if (/volunteer|community|church|coach|mentor|event organizer|club|nonprofit/.test(text)) return "Volunteer / Community";
   return null;
 }

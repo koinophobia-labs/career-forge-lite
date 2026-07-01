@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CopyButton } from "@/components/CopyButton";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
@@ -20,6 +20,7 @@ import {
   markInterviewReadyForGeneration,
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
+import { trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
 import { getInterviewModeLimitState } from "@/lib/feature-access";
 import { resumeToText } from "@/lib/resume-export";
 import type { ResumePackage } from "@/types/career";
@@ -129,6 +130,10 @@ export function InterviewMode() {
     [session.resumeDraft]
   );
 
+  useEffect(() => {
+    trackCareerForgeStart("interview");
+  }, []);
+
   function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
@@ -152,6 +157,8 @@ export function InterviewMode() {
     setMode("generating");
     window.setTimeout(() => {
       setGeneratedPackage(generateResumePackageFromInterview(readySession));
+      trackResumeGeneration("interview");
+      trackCareerForgeCompletion("interview");
       setMode("review");
     }, 220);
   }
@@ -222,7 +229,7 @@ export function InterviewMode() {
           </div>
 
           <section className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">Premium Preview Result</p>
+            <p className="trust-kicker text-xs font-black uppercase">Beta Preview Result</p>
             <div className="mt-3 grid gap-5 lg:grid-cols-[1fr_22rem]">
               <div>
                 <h1 className="text-3xl font-bold text-paper sm:text-5xl">Your interview-built resume draft</h1>
@@ -345,7 +352,7 @@ export function InterviewMode() {
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">Premium Preview</p>
+            <p className="trust-kicker text-xs font-black uppercase">Beta Preview</p>
             <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Let Career Forge interview you.</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
               Answer naturally. Career Forge pulls out responsibilities, achievements, tools, and proof, then turns them
@@ -408,7 +415,7 @@ export function InterviewMode() {
                   onChange={(event) => setInput(event.target.value)}
                   disabled={limitState.isLocked}
                   rows={4}
-                  placeholder={limitState.isLocked ? "Premium preview limit reached." : "Type naturally. I'll translate it."}
+                  placeholder={limitState.isLocked ? "Beta preview limit reached." : "Type naturally. I'll translate it."}
                   className="mt-2 w-full rounded-md border border-white/12 bg-white/8 px-4 py-3 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/35 focus:border-cyan disabled:cursor-not-allowed disabled:opacity-55"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

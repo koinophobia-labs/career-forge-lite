@@ -12,6 +12,7 @@ type VisualAccent = "Gold" | "Cyan" | "Ember" | "Slate" | "Emerald";
 type VisualLayoutStyle = "Classic Card" | "Sidebar Profile" | "Portfolio Sheet" | "Product Lab";
 type VisualDensity = "Compact" | "Balanced" | "Spacious";
 type VisualSection = "Contact" | "LinkedIn Headline" | "Summary" | "Strengths" | "Experience Highlights" | "Skills/Tools" | "Education";
+type FeedbackRating = "Yes" | "Kind of" | "Not yet";
 
 type ResumePreviewProps = {
   data: IntakeData;
@@ -97,6 +98,70 @@ function moveSection(sections: VisualSection[], section: VisualSection, directio
   return next;
 }
 
+function ResumeFeedback({ data, resume }: { data: IntakeData; resume: ResumePackage }) {
+  const [rating, setRating] = useState<FeedbackRating | "">("");
+  const [note, setNote] = useState("");
+  const feedbackText = [
+    "Career Forge resume feedback",
+    `Useful: ${rating || "Not selected"}`,
+    `Target role: ${data.targetJobTitle || "Not added"}`,
+    `Current role: ${data.currentTitle || "Not added"}`,
+    `Draft summary: ${resume.summary || "No summary generated"}`,
+    `Confusing or missing: ${note || "No note added"}`
+  ].join("\n");
+
+  return (
+    <article className="resume-preview-chrome mt-6 rounded-md border border-white/10 bg-white/5 p-5">
+      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Beta feedback</p>
+          <h3 className="mt-2 text-xl font-bold text-paper">Was this resume draft useful?</h3>
+          <p className="mt-3 text-sm leading-6 text-paper/68">
+            Quick feedback helps shape the next version. Nothing is submitted unless you copy it.
+          </p>
+        </div>
+        <div>
+          <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Was this resume draft useful?">
+            {(["Yes", "Kind of", "Not yet"] as FeedbackRating[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setRating(option)}
+                className={`min-h-11 rounded-md border px-4 text-sm font-bold transition ${
+                  rating === option
+                    ? "border-gold bg-gold text-ink"
+                    : "border-white/12 bg-obsidian/45 text-paper/70 hover:border-cyan hover:text-cyan"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <label htmlFor="resume-feedback-note" className="mt-4 block text-sm font-bold text-paper">
+            What was confusing or missing?
+          </label>
+          <textarea
+            id="resume-feedback-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={3}
+            placeholder="Example: I wanted stronger warehouse bullets, or I was not sure which role to target."
+            className="mt-2 w-full rounded-md border border-white/10 bg-obsidian/60 p-3 text-sm leading-6 text-paper outline-none placeholder:text-paper/35 focus:border-cyan/70"
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <CopyButton getText={() => feedbackText} label="Copy feedback" />
+            {rating && (
+              <p className="text-sm font-semibold text-cyan" aria-live="polite">
+                Thanks. This feedback stays on this page unless you copy it.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function ResumePreview({ data, resume, template, onChange }: ResumePreviewProps) {
   const [viewMode, setViewMode] = useState<ResumeViewMode>("ats");
   const [visualFont, setVisualFont] = useState<VisualFontStyle>("Professional Sans");
@@ -158,7 +223,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
         <section className={density.block} key={section}>
           <div className={`visual-print-fill mb-4 h-1 w-16 rounded-full ${accent.fill}`} />
           {heading}
-          <p className="mt-3 text-2xl font-black leading-tight sm:text-4xl">{resume.linkedinHeadline}</p>
+          <p className="mt-3 max-w-4xl text-xl font-black leading-tight sm:text-3xl">{resume.linkedinHeadline}</p>
         </section>
       );
     }
@@ -231,14 +296,14 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
             Check the language, confirm every detail is true, and add missing numbers if you have them.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <CopyButton getText={() => resumeToText(data, resume)} label="Copy Resume" />
+        <div className="grid gap-3 sm:flex sm:flex-wrap sm:justify-end">
+          <CopyButton getText={() => resumeToText(data, resume)} label="Copy full resume" />
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex min-h-10 items-center justify-center rounded-md border border-cyan/30 bg-cyan/10 px-4 text-sm font-semibold text-cyan transition hover:border-cyan hover:bg-cyan hover:text-ink"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-cyan/30 bg-cyan/10 px-4 text-sm font-semibold text-cyan transition hover:border-cyan hover:bg-cyan hover:text-ink"
           >
-            Print / Save PDF
+            Print resume
           </button>
         </div>
       </div>
@@ -273,6 +338,32 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
             </div>
           </div>
         </article>
+      </div>
+
+      <div className="resume-preview-chrome mb-6 grid gap-4 rounded-md border border-cyan/20 bg-cyan/10 p-5 lg:grid-cols-[0.85fr_1.15fr]">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">What to do next</p>
+          <h3 className="mt-2 text-xl font-bold text-paper">Turn this draft into an application-ready resume.</h3>
+          <p className="mt-3 text-sm leading-6 text-paper/70">
+            Copy the full resume into your document editor or use browser print. If your browser supports it, choose Save as PDF from
+            the print dialog.
+          </p>
+          <p className="mt-3 rounded-md border border-gold/25 bg-gold/10 px-3 py-2 text-sm font-semibold leading-6 text-gold">
+            Review before applying. Edit anything that does not accurately reflect your experience.
+          </p>
+        </div>
+        <ol className="grid gap-2 text-sm leading-6 text-paper/76 sm:grid-cols-2">
+          {[
+            "Read every line for accuracy.",
+            "Add one missing number or example if you have it.",
+            "Tailor the summary to the job posting.",
+            "Save a clean version before applying."
+          ].map((item, index) => (
+            <li key={item} className="rounded-md border border-white/10 bg-white/5 px-3 py-2 font-semibold">
+              {index + 1}. {item}
+            </li>
+          ))}
+        </ol>
       </div>
 
       <div className="resume-preview-chrome mb-6 grid gap-4 rounded-md border border-white/10 bg-white/5 p-4 lg:grid-cols-[1fr_auto]">
@@ -400,6 +491,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               {resume.summary.trim() && <p className="print-only leading-6 text-ink">{resume.summary.trim()}</p>}
               <textarea
                 value={resume.summary}
+                aria-label="Resume summary"
                 onChange={(event) => onChange({ ...resume, summary: event.target.value })}
                 rows={4}
                 className="screen-edit w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-7 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
@@ -416,6 +508,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               {printableSkills.length > 0 && <p className="print-only leading-6 text-ink">{printableSkills.join(", ")}</p>}
               <textarea
                 value={resume.coreSkills.join(", ")}
+                aria-label="Core skills"
                 onChange={(event) =>
                   onChange({
                     ...resume,
@@ -452,16 +545,19 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                         )}
                         <input
                           value={role.title}
+                          aria-label={`Role ${roleIndex + 1} title`}
                           onChange={(event) => setExperience(roleIndex, updateRole(role, { title: event.target.value }))}
                           className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 font-bold text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                         />
                         <input
                           value={role.company}
+                          aria-label={`Role ${roleIndex + 1} company`}
                           onChange={(event) => setExperience(roleIndex, updateRole(role, { company: event.target.value }))}
                           className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                         />
                         <input
                           value={role.time}
+                          aria-label={`Role ${roleIndex + 1} dates`}
                           onChange={(event) => setExperience(roleIndex, updateRole(role, { time: event.target.value }))}
                           className="screen-edit rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
                         />
@@ -477,6 +573,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
                             <span className="pt-3 text-ink">-</span>
                             <textarea
                               value={bullet}
+                              aria-label={`Role ${roleIndex + 1} bullet ${bulletIndex + 1}`}
                               onChange={(event) => setBullet(roleIndex, bulletIndex, event.target.value)}
                               rows={2}
                               className="w-full rounded-md border border-ink/12 bg-paper/60 p-3 leading-6 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
@@ -502,6 +599,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
               )}
               <input
                 value={resume.education}
+                aria-label="Education"
                 onChange={(event) => onChange({ ...resume, education: event.target.value })}
                 className="screen-edit w-full rounded-md border border-ink/12 bg-paper/60 px-3 py-2 text-ink outline-none focus:border-gold focus:ring-4 focus:ring-gold/15"
               />
@@ -551,6 +649,7 @@ export function ResumePreview({ data, resume, template, onChange }: ResumePrevie
           </div>
         </article>
       </div>
+      <ResumeFeedback data={data} resume={resume} />
     </section>
   );
 }

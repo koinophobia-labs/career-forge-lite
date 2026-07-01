@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ATSValidationPanel } from "@/components/ATSValidationPanel";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
 import { ResumePreview } from "@/components/ResumePreview";
 import { initialIntake } from "@/lib/career-data";
+import { trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
 import { generateResumePackage } from "@/lib/generator";
 import { hasEnoughResumeSignal } from "@/lib/interview-state";
 import { parseStoryToDossier, type StoryDossier } from "@/lib/story-mode";
@@ -13,8 +14,25 @@ import type { IntakeData, ResumePackage } from "@/types/career";
 
 type StoryModeState = "story" | "dossier" | "edit" | "review";
 
-const sampleStory =
-  "I worked at DraftKings as a sportsbook writer from 2023 to now. I handled customers, cash, wagers, and escalations.";
+const sampleStories = [
+  {
+    title: "DoorDash to warehouse/logistics",
+    story:
+      "My name is Dana Smith and my email is dana@example.com. I worked as a DoorDash driver from 2021 to now. I checked order names, planned routes, used the delivery app, messaged customers about delays, handled time-sensitive deliveries, and made sure orders went to the right person. I want warehouse, stock, or logistics support work."
+  },
+  {
+    title: "Retail to inventory/operations",
+    story:
+      "My name is Mia Carter and my email is mia@example.com. I was a cashier at Target from 2022 to 2024. I helped customers, handled returns, used the POS system, stocked shelves, checked inventory, kept the register area clean, and helped the team during busy shifts. I am trying to move into inventory or operations work."
+  },
+  {
+    title: "Founder/project builder",
+    story:
+      "My name is Jordan Lee and my email is jordan@example.com. I built a few small websites and apps for local projects from 2023 to now. I planned features, wrote copy, built pages, tested forms, fixed bugs, used AI tools to speed up research and drafts, and shipped projects people could actually use. I want to explain this as product or operations experience."
+  }
+];
+
+const sampleStory = sampleStories[0].story;
 
 function DossierRow({ label, value }: { label: string; value: string | string[] }) {
   const values = Array.isArray(value) ? value : value ? [value] : [];
@@ -45,7 +63,18 @@ export function TellMyStoryMode() {
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
 
   const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
-  const canGenerate = dossier ? hasEnoughResumeSignal(intake) : false;
+  const canGenerate = dossier ? hasEnoughResumeSignal(intake) && !dossier.needsRolePriority : false;
+  const shouldShowFocusedFollowUp = dossier
+    ? dossier.stillHelpfulFields.length > 0 && (!canGenerate || !dossier.focusedFollowUp.includes("enough signal"))
+    : false;
+  const contextPrompt =
+    shouldShowFocusedFollowUp && dossier
+      ? dossier.focusedFollowUp
+      : "Optional: add one missing detail, example, tool, number, or outcome before generating.";
+
+  useEffect(() => {
+    trackCareerForgeStart("story");
+  }, []);
 
   function parseStory(nextStory = combinedStory) {
     const nextDossier = parseStoryToDossier(nextStory, intake);
@@ -72,6 +101,8 @@ export function TellMyStoryMode() {
   function handleGenerate() {
     const nextResume = generateResumePackage(intake);
     setResume(nextResume);
+    trackResumeGeneration("story");
+    trackCareerForgeCompletion("story");
     setMode("review");
     window.setTimeout(() => document.getElementById("resume")?.scrollIntoView(), 0);
   }
@@ -145,10 +176,10 @@ export function TellMyStoryMode() {
             </span>
           </Link>
           <Link
-            href="/"
+            href="/#demo"
             className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
           >
-            Use Guided Interview
+            Use Guided Builder
           </Link>
         </header>
 
@@ -167,6 +198,25 @@ export function TellMyStoryMode() {
               <label htmlFor="story" className="text-sm font-bold text-paper">
                 Describe the work in plain language
               </label>
+              <p className="mt-2 rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-xs font-semibold leading-5 text-cyan">
+                Do not paste sensitive personal information. Career Forge is a drafting tool, not a final application review.
+              </p>
+              <div className="mt-4">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/50">Load a sample story</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {sampleStories.map((sample) => (
+                    <button
+                      key={sample.title}
+                      type="button"
+                      onClick={() => setStory(sample.story)}
+                      aria-label={`Load sample story: ${sample.title}`}
+                      className="min-h-11 rounded-md border border-white/10 bg-obsidian/45 px-3 py-2 text-left text-xs font-bold leading-5 text-paper/72 transition hover:border-cyan hover:text-cyan"
+                    >
+                      {sample.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <textarea
                 id="story"
                 value={story}
@@ -251,7 +301,23 @@ export function TellMyStoryMode() {
               <DossierRow label="Education" value={dossier.extracted.education} />
             </div>
 
-            {dossier.stillHelpfulFields.length > 0 && (
+            {dossier.needsRolePriority && (
+              <div className="mt-5 rounded-md border border-gold/30 bg-gold/10 p-4">
+                <p className="text-sm font-bold text-gold">Multiple roles detected</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {dossier.detectedRoles.map((role) => (
+                    <span key={role} className="rounded-full border border-gold/25 bg-obsidian/55 px-3 py-1.5 text-sm font-semibold text-paper/80">
+                      {role}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-sm leading-6 text-paper/70">
+                  Add one sentence telling Career Forge which role or target job should lead this resume.
+                </p>
+              </div>
+            )}
+
+            {shouldShowFocusedFollowUp && (
               <div className="mt-5 rounded-md border border-ember/25 bg-ember/10 p-4">
                 <p className="text-sm font-bold text-ember">
                   Focused follow-up{dossier.nextMissingField ? `: ${dossier.nextMissingField}` : ""}
@@ -264,7 +330,7 @@ export function TellMyStoryMode() {
               <div className="mt-5 rounded-md border border-cyan/25 bg-cyan/10 p-4">
                 <p className="text-sm font-bold text-cyan">You gave Career Forge enough signal to build your first resume package.</p>
                 <p className="mt-2 text-sm leading-6 text-paper/70">
-                  Generate now, or add more detail if you want stronger bullets.
+                  Generate now, or use Edit details to add contact info, dates, or sharper proof before creating the draft.
                 </p>
               </div>
             )}
@@ -296,7 +362,7 @@ export function TellMyStoryMode() {
 
             <form onSubmit={handleAddContext} className="mt-5 rounded-md border border-white/10 bg-white/5 p-4">
               <label htmlFor="context" className="text-sm font-bold text-paper">
-                {dossier.focusedFollowUp || "Add more context"}
+                {contextPrompt}
               </label>
               <textarea
                 id="context"
@@ -321,7 +387,7 @@ export function TellMyStoryMode() {
                 disabled={!canGenerate}
                 className="min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-45"
               >
-                Looks right
+                Generate resume draft
               </button>
               <button
                 type="button"

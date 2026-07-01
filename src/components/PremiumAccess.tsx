@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { InterviewModeLimitState } from "@/lib/feature-access";
 
-export function PremiumBadge({ label = "Premium Preview" }: { label?: string }) {
+export function PremiumBadge({ label = "Beta Preview" }: { label?: string }) {
   return (
     <span className="inline-flex items-center rounded-md border border-cyan/25 bg-cyan/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-cyan">
       {label}
@@ -30,9 +30,9 @@ export function PremiumPreviewMeter({ state }: { state: InterviewModeLimitState 
 export function UpgradeCallout() {
   return (
     <div className="rounded-md border border-gold/25 bg-gold/10 p-4">
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Premium Preview</p>
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Beta Preview</p>
       <p className="mt-2 text-sm leading-6 text-paper/70">
-        You can test the guided interview before the paid version is connected. No payment is required in this preview.
+        This conversational path is still being tested. Use it for a quick preview, or use the guided builder for the clearest MVP flow.
       </p>
     </div>
   );
@@ -41,10 +41,10 @@ export function UpgradeCallout() {
 export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResume }: { hasGeneratedResume?: boolean; onStartOver: () => void; onViewResume?: () => void }) {
   return (
     <div className="rounded-md border border-gold/30 bg-gold/10 p-5">
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Premium Preview Limit Reached</p>
-      <h2 className="mt-3 text-2xl font-bold text-paper">You have seen the guided interview preview.</h2>
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Beta Preview Limit Reached</p>
+      <h2 className="mt-3 text-2xl font-bold text-paper">You have seen the interview preview.</h2>
       <p className="mt-3 text-sm leading-6 text-paper/70">
-        Interview Mode is planned as a premium feature. For now, this preview shows how it works. No payment is required.
+        Interview Mode is still being tested, so the preview is intentionally limited. The guided builder remains the recommended MVP path.
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         {hasGeneratedResume && onViewResume && (
@@ -77,7 +77,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
         </Link>
       </div>
       <p className="mt-4 text-xs leading-5 text-paper/45">
-        This preview does not include checkout or billing. The free guided builder remains available anytime.
+        This preview does not include accounts, checkout, or billing.
       </p>
     </div>
   );
