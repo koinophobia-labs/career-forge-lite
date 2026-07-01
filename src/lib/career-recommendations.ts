@@ -140,7 +140,7 @@ const evidenceRules: EvidenceRule[] = [
     label: "Product documentation",
     chainLabel: "Documented product decisions and issues",
     why: "Documented product work, issues, or implementation notes.",
-    patterns: [/\bdocument(?:ed|ation)\b/i, /\bnotes?\b/i, /\bprd\b/i, /\bissue(?:s)?\b/i, /\brequirements?\b/i],
+    patterns: [/\bproduct (?:notes?|documentation|decisions?)\b/i, /\bimplementation notes?\b/i, /\bprd\b/i, /\bbug reports?\b/i, /\brequirements?\b/i],
     profileDefaults: ["product_builder"]
   },
   {
