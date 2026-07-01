@@ -52,9 +52,10 @@ const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
   ["Project Coordination", /project|program|timeline|milestone|implementation|pmo|status update/i],
   ["Admin", /admin|assistant|office|front desk|reception|calendar|scheduling|records/i],
   ["Sales", /\bsales\b|business development|lead|prospect|pipeline|outreach|account representative/i],
+  ["Healthcare", /healthcare|medical|patient|caregiver|home health|home health aide|care aide|cna|nursing assistant|resident care/i],
   ["Operations", /operations|logistics|warehouse|inventory|fulfillment|process|workflow|scheduling|supervisor/i],
   ["Operations", /delivery|driver|courier|construction|labor|janitor|maintenance|cleaning|stock|cashier|restaurant|food service|barista|kitchen|trainer|coach/i],
-  ["Customer Success", /caregiver|home health|care aide|barber|stylist|beauty|client|appointment/i],
+  ["Customer Success", /barber|stylist|beauty|client|appointment/i],
   ["Business", /business analyst|reporting|analysis|data|stakeholder|research|process analyst/i],
   ["Security", /security|safety|access control|incident|surveillance|patrol/i]
 ];
@@ -263,6 +264,7 @@ function inferTargetRole(story: string, roleTitle: string, roleFamily: RoleFamil
     Admin: "Administrative Assistant",
     Business: "Business Operations Associate",
     "Customer Success": "Customer Success Associate",
+    Healthcare: "Patient Services Representative",
     "IT Support": "IT Support Specialist",
     Operations: "Operations Associate",
     "Project Coordination": "Project Coordinator",

@@ -10,6 +10,7 @@ export const roleFamilies: RoleFamily[] = [
   "Operations",
   "Customer Success",
   "Admin",
+  "Healthcare",
   "Sales",
   "Security",
   "Project Coordination",
@@ -88,6 +89,11 @@ export const roleIntelligence: Record<RoleFamily, { responsibilities: string[]; 
     skills: ["Calendar Management", "Scheduling", "Records Management", "Data Entry"],
     valueArea: "Administrative Reliability"
   },
+  Healthcare: {
+    responsibilities: ["Patient support", "Care notes", "Appointment coordination", "Family updates", "Safety routines"],
+    skills: ["Patient Support", "Care Documentation", "Reliability", "Appointment Coordination"],
+    valueArea: "Patient Support"
+  },
   Tech: {
     responsibilities: [
       "Troubleshooting",
@@ -162,6 +168,12 @@ export const scopePromptSets: Record<RoleFamily, Array<{ key: keyof IntakeData; 
     { key: "teamSizeSupported", label: "Team or office supported", placeholder: "Example: 12-person office", hint: "Shows who relied on your work." },
     { key: "projectsSupported", label: "Schedules or projects coordinated", placeholder: "Example: 4 recurring calendars", hint: "Use for calendar and scheduling work." }
   ],
+  Healthcare: [
+    { key: "customersServed", label: "Patients, residents, or clients supported", placeholder: "Example: 8 clients per shift", hint: "Use a safe estimate for care or service volume." },
+    { key: "reportsCreated", label: "Care notes or records maintained", placeholder: "Example: Daily care notes", hint: "Documentation makes care experience easier to translate." },
+    { key: "callsHandled", label: "Family updates or appointment calls", placeholder: "Example: 10 weekly updates", hint: "Captures communication and coordination." },
+    { key: "teamSizeSupported", label: "Care team or site supported", placeholder: "Example: 6-person care team", hint: "Shows the support environment." }
+  ],
   Tech: [
     { key: "ticketsHandled", label: "Tickets or issues handled", placeholder: "Example: 70 monthly tickets", hint: "Ticket volume is strong ATS context." },
     { key: "customersServed", label: "Users supported", placeholder: "Example: 45 weekly users", hint: "Use for user support or troubleshooting." },
@@ -184,6 +196,7 @@ export const outcomeSuggestionsByFamily: Record<RoleFamily, string[]> = {
   Business: ["Accuracy", "Efficiency", "Revenue", "Reliability"],
   Sales: ["Revenue", "Speed", "Retention", "Customer satisfaction"],
   Admin: ["Accuracy", "Efficiency", "Reliability", "Compliance"],
+  Healthcare: ["Reliability", "Patient satisfaction", "Accuracy", "Compliance"],
   Tech: ["Reliability", "Speed", "Accuracy", "Efficiency"],
   "IT Support": ["Speed", "Reliability", "Customer satisfaction", "Efficiency"]
 };
@@ -207,6 +220,7 @@ export const actionSuggestionsByFamily: Record<RoleFamily, string[]> = {
   Business: ["prepared reports", "analyzed information", "documented processes", "updated stakeholders", "tracked metrics"],
   Sales: ["followed up with leads", "updated CRM records", "supported outreach", "tracked pipeline activity", "researched prospects"],
   Admin: ["coordinated schedules", "maintained records", "handled correspondence", "supported office workflows", "entered data accurately"],
+  Healthcare: ["supported patients", "maintained care notes", "coordinated appointments", "updated families", "followed safety routines"],
   Tech: ["tested workflows", "documented issues", "supported implementation", "tracked technical tasks", "handled data updates"],
   "IT Support": ["troubleshot issues", "resolved tickets", "escalated complex cases", "documented fixes", "supported users"]
 };

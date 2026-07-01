@@ -100,6 +100,18 @@ const groupedCareerTargets: Record<RoleFamily, CareerTarget[]> = {
     { title: "Mailroom Coordinator", roleFamily: "Admin" },
     { title: "Virtual Assistant", roleFamily: "Admin" }
   ],
+  Healthcare: [
+    { title: "Patient Services Representative", roleFamily: "Healthcare", aliases: ["patient support representative", "patient services associate"] },
+    { title: "Healthcare Admin Assistant", roleFamily: "Healthcare", aliases: ["healthcare administrative assistant", "medical office assistant"] },
+    { title: "Medical Office Assistant", roleFamily: "Healthcare", aliases: ["medical administrative assistant"] },
+    { title: "Patient Access Representative", roleFamily: "Healthcare", aliases: ["patient access associate"] },
+    { title: "Care Coordinator Assistant", roleFamily: "Healthcare", aliases: ["care coordination assistant"] },
+    { title: "Unit Secretary", roleFamily: "Healthcare" },
+    { title: "Home Care Coordinator", roleFamily: "Healthcare" },
+    { title: "Medical Receptionist", roleFamily: "Healthcare" },
+    { title: "Health Services Coordinator", roleFamily: "Healthcare" },
+    { title: "Patient Care Coordinator", roleFamily: "Healthcare" }
+  ],
   Sales: [
     { title: "Sales Development Representative", roleFamily: "Sales" },
     { title: "Business Development Representative", roleFamily: "Sales" },

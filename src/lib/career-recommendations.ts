@@ -29,6 +29,12 @@ type WorkerProfile =
   | "caregiver"
   | "receptionist"
   | "construction"
+  | "student"
+  | "military"
+  | "volunteer"
+  | "tattoo_artist"
+  | "career_changer"
+  | "product_builder"
   | "general";
 
 type EvidenceRule = CareerEvidence & {
@@ -55,7 +61,13 @@ const profilePatterns: Array<{ profile: WorkerProfile; patterns: RegExp[] }> = [
   { profile: "janitor", patterns: [/\bjanitor\b/i, /\bcustodian\b/i, /\bcleaner\b/i, /\bmaintenance helper\b/i, /\bfacilities\b/i] },
   { profile: "caregiver", patterns: [/\bcaregiver\b/i, /\bhome health\b/i, /\bhome health aide\b/i, /\bcna\b/i, /\bnursing assistant\b/i, /\bpatient care\b/i, /\bresident care\b/i] },
   { profile: "receptionist", patterns: [/\breceptionist\b/i, /\bfront desk\b/i, /\boffice assistant\b/i, /\badministrative assistant\b/i] },
-  { profile: "construction", patterns: [/\bconstruction\b/i, /\bgeneral labor\b/i, /\blaborer\b/i, /\bjob site\b/i] }
+  { profile: "construction", patterns: [/\bconstruction\b/i, /\bgeneral labor\b/i, /\blaborer\b/i, /\bjob site\b/i] },
+  { profile: "student", patterns: [/\bstudent\b/i, /\bclass projects?\b/i, /\bclassmates?\b/i, /\bschool\b/i, /\bno experience\b/i] },
+  { profile: "military", patterns: [/\bmilitary\b/i, /\bservice member\b/i, /\bveteran\b/i, /\bmission\b/i, /\bunit\b/i] },
+  { profile: "volunteer", patterns: [/\bvolunteer\b/i, /\bcommunity\b/i, /\bevent check-?in\b/i, /\bnonprofit\b/i] },
+  { profile: "tattoo_artist", patterns: [/\btattoo\b/i, /\btattoo artist\b/i, /\bink\b/i, /\bclient designs?\b/i] },
+  { profile: "career_changer", patterns: [/\bcareer changer\b/i, /\bchange careers?\b/i, /\bnew career\b/i, /\bwithout much formal experience\b/i] },
+  { profile: "product_builder", patterns: [/\bfounder\b/i, /\bproduct builder\b/i, /\bai builder\b/i, /\bai product\b/i, /\bproduct lab\b/i, /\bweb designer\b/i, /\bwebsites?\b/i, /\blanding pages?\b/i, /\bweb apps?\b/i, /\bai apps?\b/i, /\bwebflow\b/i, /\bfigma\b/i, /\bgithub\b/i, /\bvercel\b/i] }
 ];
 
 const evidenceRules: EvidenceRule[] = [
@@ -65,7 +77,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Built long-term client relationships",
     why: "Built repeat client relationships.",
     patterns: [/\brepeat\b/i, /\bregulars?\b/i, /\bclientele\b/i, /\bretention\b/i, /\breferrals?\b/i],
-    profileDefaults: ["barber"]
+    profileDefaults: ["barber", "tattoo_artist"]
   },
   {
     id: "customer_communication",
@@ -73,7 +85,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Communicated directly with customers",
     why: "Communicated directly with customers every day.",
     patterns: [/\bcustomers?\b/i, /\bclients?\b/i, /\bguests?\b/i, /\bpatients?\b/i, /\bmembers?\b/i, /\banswered questions\b/i, /\bservice\b/i],
-    profileDefaults: ["barber", "bartender", "food_service", "retail", "security", "delivery", "caregiver", "receptionist"]
+    profileDefaults: ["barber", "bartender", "food_service", "retail", "security", "delivery", "caregiver", "receptionist", "tattoo_artist", "volunteer", "career_changer"]
   },
   {
     id: "scheduling",
@@ -81,7 +93,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Managed scheduling and expectations",
     why: "Managed scheduling, appointments, or expectations.",
     patterns: [/\bschedul/i, /\bappointments?\b/i, /\bbook(?:ed|ing|s)?\b/i, /\bcalendar\b/i, /\bshift coverage\b/i],
-    profileDefaults: ["barber", "caregiver", "receptionist"]
+    profileDefaults: ["barber", "caregiver", "receptionist", "tattoo_artist"]
   },
   {
     id: "issue_resolution",
@@ -89,7 +101,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Resolved customer concerns",
     why: "Solved customer issues in real time.",
     patterns: [/\bissues?\b/i, /\bcomplaints?\b/i, /\bconcerns?\b/i, /\bupset\b/i, /\bde-?escalat/i, /\bresolved?\b/i],
-    profileDefaults: ["barber", "bartender", "security", "food_service", "retail"]
+    profileDefaults: ["barber", "bartender", "security", "food_service", "retail", "tattoo_artist"]
   },
   {
     id: "retention",
@@ -97,7 +109,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Maintained high repeat business",
     why: "Relied on referrals, repeat business, or customer retention.",
     patterns: [/\bretention\b/i, /\breferrals?\b/i, /\brepeat business\b/i, /\bbook of business\b/i, /\bclient book\b/i],
-    profileDefaults: ["barber"]
+    profileDefaults: ["barber", "tattoo_artist"]
   },
   {
     id: "upselling",
@@ -105,7 +117,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Recommended services or products",
     why: "Recommended services, products, or next steps to customers.",
     patterns: [/\bupsell/i, /\brecommended\b/i, /\bproducts?\b/i, /\bservices?\b/i, /\bsales?\b/i],
-    profileDefaults: ["barber", "retail"]
+    profileDefaults: ["barber", "retail", "tattoo_artist"]
   },
   {
     id: "time_management",
@@ -113,7 +125,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Kept work moving on time",
     why: "Kept appointments, orders, or shift work moving on time.",
     patterns: [/\btime\b/i, /\bdeadline\b/i, /\bfast-paced\b/i, /\bbusy\b/i, /\borders?\b/i, /\broutes?\b/i],
-    profileDefaults: ["barber", "bartender", "warehouse", "food_service", "retail", "delivery", "janitor", "construction"]
+    profileDefaults: ["barber", "bartender", "warehouse", "food_service", "retail", "delivery", "janitor", "construction", "military"]
   },
   {
     id: "independent_work",
@@ -121,7 +133,47 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Handled work independently",
     why: "Worked independently while staying accountable for results.",
     patterns: [/\bindependent\b/i, /\bself-employed\b/i, /\bfreelance\b/i, /\bbooth\b/i, /\bown clients?\b/i],
-    profileDefaults: ["barber", "delivery"]
+    profileDefaults: ["barber", "delivery", "tattoo_artist"]
+  },
+  {
+    id: "product_documentation",
+    label: "Product documentation",
+    chainLabel: "Documented product decisions and issues",
+    why: "Documented product work, issues, or implementation notes.",
+    patterns: [/\bdocument(?:ed|ation)\b/i, /\bnotes?\b/i, /\bprd\b/i, /\bissue(?:s)?\b/i, /\brequirements?\b/i],
+    profileDefaults: ["product_builder"]
+  },
+  {
+    id: "website_delivery",
+    label: "Website build work",
+    chainLabel: "Built websites or web updates",
+    why: "Built, updated, or launched websites or landing pages.",
+    patterns: [/\bwebsites?\b/i, /\blanding pages?\b/i, /\bwebflow\b/i, /\bfigma\b/i, /\bweb designer\b/i, /\bwebsite updates?\b/i],
+    profileDefaults: ["product_builder"]
+  },
+  {
+    id: "mobile_qa",
+    label: "Mobile QA",
+    chainLabel: "Tested mobile layouts and user flows",
+    why: "Tested layouts, flows, outputs, or broken states before release.",
+    patterns: [/\bmobile\b/i, /\bqa\b/i, /\btest(?:ed|ing)?\b/i, /\bdebug/i, /\bbroken states?\b/i],
+    profileDefaults: ["product_builder"]
+  },
+  {
+    id: "launch_followthrough",
+    label: "Launch follow-through",
+    chainLabel: "Shipped demos, launches, or usable updates",
+    why: "Shipped demos, launches, product modules, or usable client updates.",
+    patterns: [/\bshipped\b/i, /\blaunched?\b/i, /\bdemos?\b/i, /\bdeployment\b/i, /\bdelivered client updates?\b/i],
+    profileDefaults: ["product_builder"]
+  },
+  {
+    id: "workflow_automation",
+    label: "Workflow automation",
+    chainLabel: "Built or improved AI-assisted workflows",
+    why: "Built or improved workflows, automation, prompts, or small tools.",
+    patterns: [/\bworkflow\b/i, /\bautomation\b/i, /\bprompts?\b/i, /\bai-assisted\b/i, /\bsmall tools?\b/i],
+    profileDefaults: ["product_builder"]
   },
   {
     id: "inventory_accuracy",
@@ -145,7 +197,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Followed safety and procedure standards",
     why: "Followed safety, quality, or policy procedures.",
     patterns: [/\bsafety\b/i, /\bpolicy\b/i, /\bprocedures?\b/i, /\bcompliance\b/i, /\bsanit/i, /\bclean\b/i],
-    profileDefaults: ["warehouse", "security", "food_service", "janitor", "construction", "caregiver"]
+    profileDefaults: ["warehouse", "security", "food_service", "janitor", "construction", "caregiver", "military", "tattoo_artist"]
   },
   {
     id: "documentation",
@@ -153,7 +205,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Documented issues and records",
     why: "Documented notes, reports, logs, or records.",
     patterns: [/\bdocument/i, /\breports?\b/i, /\brecords?\b/i, /\blogs?\b/i, /\bpaperwork\b/i, /\bnotes?\b/i],
-    profileDefaults: ["warehouse", "security", "janitor", "caregiver", "receptionist"]
+    profileDefaults: ["warehouse", "security", "janitor", "caregiver", "receptionist", "military"]
   },
   {
     id: "access_control",
@@ -177,7 +229,47 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Coordinated with teammates during service",
     why: "Coordinated with teammates during busy service or operations work.",
     patterns: [/\bteam\b/i, /\bstaff\b/i, /\bcoworkers?\b/i, /\bshift\b/i, /\bcrew\b/i, /\bmanager\b/i],
-    profileDefaults: ["bartender", "food_service", "retail", "construction"]
+    profileDefaults: ["bartender", "food_service", "retail", "construction", "military", "volunteer", "student"]
+  },
+  {
+    id: "class_projects",
+    label: "Class or project work",
+    chainLabel: "Completed class projects or assignments",
+    why: "Completed class projects, assignments, or structured learning tasks.",
+    patterns: [/\bclass projects?\b/i, /\bassignments?\b/i, /\bcoursework\b/i, /\bschool projects?\b/i],
+    profileDefaults: ["student"]
+  },
+  {
+    id: "learning_adaptability",
+    label: "Learning quickly",
+    chainLabel: "Learned new tasks and tools quickly",
+    why: "Learned new tasks, tools, or expectations quickly.",
+    patterns: [/\blearn(?:ed|ing)? quickly\b/i, /\bnew tools?\b/i, /\badapt/i, /\btrained\b/i],
+    profileDefaults: ["student", "career_changer"]
+  },
+  {
+    id: "reliability",
+    label: "Reliability",
+    chainLabel: "Showed reliable follow-through",
+    why: "Showed reliability and follow-through on daily work.",
+    patterns: [/\breliable\b/i, /\breliability\b/i, /\bfollow(?:ed)? through\b/i, /\bshowed up\b/i, /\bconsistent\b/i],
+    profileDefaults: ["career_changer"]
+  },
+  {
+    id: "organization",
+    label: "Organization",
+    chainLabel: "Kept tasks and materials organized",
+    why: "Kept assignments, tasks, supplies, or records organized.",
+    patterns: [/\borganized?\b/i, /\borganized assignments?\b/i, /\bmaterials?\b/i, /\bsupplies\b/i, /\bcheck-?in\b/i],
+    profileDefaults: ["student", "volunteer"]
+  },
+  {
+    id: "event_coordination",
+    label: "Event coordination",
+    chainLabel: "Coordinated event check-in or support",
+    why: "Helped coordinate events, check-in, supplies, or team follow-up.",
+    patterns: [/\bevents?\b/i, /\bcheck-?in\b/i, /\borganized supplies\b/i, /\bfollowed up\b/i, /\bteam leads?\b/i],
+    profileDefaults: ["volunteer"]
   },
   {
     id: "merchandising",
@@ -233,8 +325,8 @@ const recommendationRules: RecommendationRule[] = [
   { profile: "janitor", title: "Maintenance Assistant", roleFamily: "Operations", level: "realistic", evidence: ["safety_procedures", "documentation", "time_management"] },
   { profile: "janitor", title: "Building Operations Support", roleFamily: "Operations", level: "realistic", evidence: ["safety_procedures", "documentation", "time_management"] },
 
-  { profile: "caregiver", title: "Patient Services Representative", roleFamily: "Customer Success", level: "strong", evidence: ["customer_communication", "documentation", "safety_procedures", "scheduling"] },
-  { profile: "caregiver", title: "Healthcare Admin Assistant", roleFamily: "Admin", level: "realistic", evidence: ["customer_communication", "documentation", "scheduling"] },
+  { profile: "caregiver", title: "Patient Services Representative", roleFamily: "Healthcare", level: "strong", evidence: ["customer_communication", "documentation", "safety_procedures", "scheduling"] },
+  { profile: "caregiver", title: "Healthcare Admin Assistant", roleFamily: "Healthcare", level: "realistic", evidence: ["customer_communication", "documentation", "scheduling"] },
   { profile: "caregiver", title: "Client Support Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "issue_resolution", "documentation"] },
 
   { profile: "receptionist", title: "Administrative Assistant", roleFamily: "Admin", level: "strong", evidence: ["customer_communication", "scheduling", "documentation", "time_management"] },
@@ -244,6 +336,31 @@ const recommendationRules: RecommendationRule[] = [
   { profile: "construction", title: "Facilities Assistant", roleFamily: "Operations", level: "strong", evidence: ["safety_procedures", "team_coordination", "time_management"] },
   { profile: "construction", title: "Maintenance Assistant", roleFamily: "Operations", level: "realistic", evidence: ["safety_procedures", "documentation", "team_coordination"] },
   { profile: "construction", title: "Building Operations Support", roleFamily: "Operations", level: "realistic", evidence: ["safety_procedures", "time_management", "team_coordination"] },
+
+  { profile: "student", title: "Office Assistant", roleFamily: "Admin", level: "realistic", evidence: ["class_projects", "organization", "learning_adaptability", "team_coordination"] },
+  { profile: "student", title: "Customer Service Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "learning_adaptability", "team_coordination"] },
+  { profile: "student", title: "Program Assistant", roleFamily: "Admin", level: "stretch", evidence: ["class_projects", "organization", "team_coordination"] },
+
+  { profile: "military", title: "Operations Assistant", roleFamily: "Operations", level: "strong", evidence: ["safety_procedures", "documentation", "team_coordination", "time_management"] },
+  { profile: "military", title: "Facilities Coordinator Assistant", roleFamily: "Operations", level: "realistic", evidence: ["safety_procedures", "documentation", "time_management"] },
+  { profile: "military", title: "Compliance Support", roleFamily: "Business", level: "realistic", evidence: ["safety_procedures", "documentation", "team_coordination"] },
+
+  { profile: "volunteer", title: "Community Outreach Assistant", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "event_coordination", "team_coordination", "organization"] },
+  { profile: "volunteer", title: "Event Assistant", roleFamily: "Operations", level: "realistic", evidence: ["event_coordination", "organization", "team_coordination"] },
+  { profile: "volunteer", title: "Front Desk Assistant", roleFamily: "Admin", level: "stretch", evidence: ["customer_communication", "organization", "event_coordination"] },
+
+  { profile: "tattoo_artist", title: "Customer Experience Associate", roleFamily: "Customer Success", level: "strong", evidence: ["repeat_clients", "customer_communication", "scheduling", "issue_resolution"] },
+  { profile: "tattoo_artist", title: "Appointment Coordinator", roleFamily: "Operations", level: "realistic", evidence: ["scheduling", "customer_communication", "time_management"] },
+  { profile: "tattoo_artist", title: "Studio Operations Assistant", roleFamily: "Operations", level: "realistic", evidence: ["scheduling", "safety_procedures", "customer_communication", "time_management"] },
+
+  { profile: "career_changer", title: "Customer Service Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "learning_adaptability", "reliability"] },
+  { profile: "career_changer", title: "Office Assistant", roleFamily: "Admin", level: "realistic", evidence: ["customer_communication", "learning_adaptability", "reliability"] },
+
+  { profile: "product_builder", title: "Product Operations Associate", roleFamily: "Tech", level: "strong", evidence: ["product_documentation", "website_delivery", "mobile_qa", "launch_followthrough"] },
+  { profile: "product_builder", title: "Implementation Associate", roleFamily: "Tech", level: "realistic", evidence: ["product_documentation", "website_delivery", "launch_followthrough"] },
+  { profile: "product_builder", title: "QA Coordinator", roleFamily: "Tech", level: "realistic", evidence: ["mobile_qa", "product_documentation", "launch_followthrough"] },
+  { profile: "product_builder", title: "Web Support Specialist", roleFamily: "Tech", level: "realistic", evidence: ["website_delivery", "product_documentation", "customer_communication"] },
+  { profile: "product_builder", title: "Workflow Coordinator", roleFamily: "Project Coordination", level: "stretch", evidence: ["workflow_automation", "product_documentation", "launch_followthrough"] },
 
   { profile: "general", title: "Customer Experience Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "issue_resolution", "time_management"] },
   { profile: "general", title: "Operations Assistant", roleFamily: "Operations", level: "realistic", evidence: ["time_management", "documentation", "team_coordination"] },

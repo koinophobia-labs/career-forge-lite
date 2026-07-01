@@ -58,6 +58,7 @@ export const aiWorkflowSuggestionsByFamily: Record<RoleFamily, string[]> = {
   Operations: ["Workflow automation", "Documentation", "Reporting", "Template creation", "Process planning", "Meeting summaries"],
   "Customer Success": ["Customer communication", "Knowledge management", "Documentation", "Research", "Meeting summaries", "Response drafting"],
   Admin: ["Documentation", "Meeting summaries", "Knowledge management", "Workflow automation", "Technical writing", "Translation"],
+  Healthcare: ["Documentation", "Meeting summaries", "Knowledge management", "Response drafting", "Reporting", "Translation"],
   Sales: ["Research", "Customer communication", "Content creation", "Documentation", "Meeting summaries", "Workflow automation"],
   Security: ["Documentation", "Technical writing", "Knowledge management", "Reporting", "Translation", "Research"],
   "Project Coordination": ["Project planning", "Meeting summaries", "Documentation", "Workflow automation", "Knowledge management", "Reporting"],

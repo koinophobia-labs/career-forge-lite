@@ -4,6 +4,7 @@ export type RoleFamily =
   | "Operations"
   | "Customer Success"
   | "Admin"
+  | "Healthcare"
   | "Sales"
   | "Security"
   | "Project Coordination"

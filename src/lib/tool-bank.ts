@@ -50,6 +50,7 @@ const byFamily: Record<RoleFamily, string[]> = {
   Business: [...toolCategories.data, ...toolCategories.operations.slice(0, 12), ...toolCategories.general, ...toolCategories.aiModernProductivity],
   Sales: [...toolCategories.sales, ...toolCategories.support.slice(0, 8), ...toolCategories.general.slice(0, 12), ...toolCategories.aiModernProductivity],
   Admin: [...toolCategories.general, ...toolCategories.operations, "Medical Records Systems", "EMR Systems", "Epic", "Cerner", ...toolCategories.aiModernProductivity],
+  Healthcare: ["Care Notes", "Scheduling App", "Medical Records Systems", "EMR Systems", "EHR Systems", "Epic", "Cerner", "PointClickCare", "Home Care App", ...toolCategories.general.slice(0, 12), ...toolCategories.aiModernProductivity],
   Tech: [...toolCategories.tech, ...toolCategories.data, ...toolCategories.general.slice(0, 12), ...toolCategories.aiModernProductivity],
   "IT Support": [...toolCategories.tech, ...toolCategories.support.slice(2, 10), ...toolCategories.general.slice(0, 10), ...toolCategories.aiModernProductivity]
 };

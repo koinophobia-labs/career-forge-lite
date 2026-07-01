@@ -14,6 +14,7 @@ const defaultTargetByFamily: Record<RoleFamily, string> = {
   Operations: "Operations Associate",
   "Customer Success": "Customer Success Associate",
   Admin: "Administrative Assistant",
+  Healthcare: "Patient Services Representative",
   Sales: "Sales Development Representative",
   Security: "Security Officer",
   "Project Coordination": "Project Coordinator",
@@ -26,6 +27,7 @@ const workflowSkillsByFamily: Record<RoleFamily, string[]> = {
   Operations: ["Task Coordination", "Process Improvement", "Operational Reporting", "Reliable Follow-Through"],
   "Customer Success": ["Client Communication", "Issue Escalation", "Service Follow-Through", "Account Support"],
   Admin: ["Office Support", "Records Accuracy", "Calendar Support", "Professional Communication"],
+  Healthcare: ["Patient Support", "Care Documentation", "Appointment Coordination", "Reliable Follow-Through"],
   Sales: ["Pipeline Support", "Follow-Up Communication", "Lead Research", "Prospect Coordination"],
   Security: ["Safety Awareness", "Incident Documentation", "Visitor Support", "Policy Compliance"],
   "Project Coordination": ["Cross-Functional Communication", "Meeting Coordination", "Project Documentation", "Status Tracking"],
@@ -235,7 +237,7 @@ const domainProfiles: DomainProfile[] = [
   },
   {
     name: "caregiving",
-    keywords: ["caregiver", "home health", "home health aide", "care aide", "resident", "patient care", "personal care"],
+    keywords: ["caregiver", "home health", "home health aide", "care aide", "resident", "patient care", "personal care", "cna", "nursing assistant"],
     environment: "client care and home support environment",
     strengths: ["patient care", "client communication", "documentation", "safety awareness"],
     processLanguage: "personal care routines, family communication, safety checks, notes, and daily support tasks"
@@ -307,9 +309,9 @@ const domainProfiles: DomainProfile[] = [
 
 const productBuilderProfile: DomainProfile = {
   name: "product-builder",
-  keywords: ["product lab", "mvp", "websites", "apps", "automation", "launched demos", "shipped demos"],
+  keywords: ["founder", "product lab", "product builder", "ai product builder", "mvp", "website", "websites", "web designer", "landing page", "webflow", "figma", "web app", "ai app", "automation", "launched demos", "shipped demos", "website updates"],
   environment: "hands-on product and web project environment",
-  strengths: ["Product Documentation", "Mobile QA", "Website Delivery", "Workflow Automation"],
+  strengths: ["Product Documentation", "Mobile QA", "Website Build Work", "Workflow Automation"],
   processLanguage: "feature planning, copywriting, mobile testing, issue documentation, and launch follow-through"
 };
 
@@ -350,6 +352,15 @@ const roleStrategies: Record<RoleFamily, RoleStrategy> = {
     supportContext: "administrative requests and office workflows",
     seniorContext: "administrative workflows and cross-team support",
     valueArea: "Administrative Reliability"
+  },
+  Healthcare: {
+    focus: ["patient support", "care documentation", "appointment coordination", "family communication", "safety routines"],
+    safeDefaults: ["Patient Support", "Care Documentation", "Appointment Coordination", "Safety Routines"],
+    verbs: ["Supported", "Documented", "Coordinated", "Communicated", "Maintained"],
+    environment: "healthcare support and patient service environment",
+    supportContext: "patient support, care notes, and appointment coordination",
+    seniorContext: "healthcare support workflows and patient communication",
+    valueArea: "Patient Support"
   },
   Sales: {
     focus: ["outreach", "lead generation", "CRM updates", "pipeline support", "follow-up communication"],
@@ -547,6 +558,16 @@ const bulletPatternLibrary: Record<RoleFamily, string[]> = {
     "{action} recurring administrative tasks while protecting accuracy and response consistency.",
     "{bridgeAction} reliable office operations through documentation, scheduling support, and organized handoffs."
   ],
+  Healthcare: [
+    "{action} {scope}patient or client support needs in a {environment}{outcomeClause}.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping care details and next steps clear.",
+    "{bridgeAction} patient services by maintaining care notes, coordinating appointments, and communicating updates.",
+    "{action} care routines and safety reminders with reliability, patience, and accurate documentation.",
+    "{action} patient, family, or team updates so support needs stayed visible and organized.",
+    "{bridgeAction} healthcare administration by translating care experience into records, scheduling, and service follow-through.",
+    "{action} daily support tasks while protecting accuracy, confidentiality, and response consistency.",
+    "{bridgeAction} reliable care operations through documentation, appointment support, and calm communication."
+  ],
   Sales: [
     "{action} {scope}prospect or customer follow-ups in a {environment}{outcomeClause}.",
     "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping account notes and handoffs current.",
@@ -683,6 +704,7 @@ function isWeakFreeText(value: string) {
 }
 
 function normalizeTargetRole(data: IntakeData) {
+  if (isWeakTarget(data.targetJobTitle) && isProductBuilderData(data)) return "Product Operations Associate";
   if (isWeakTarget(data.targetJobTitle)) return defaultTargetByFamily[data.roleFamily];
   return normalizeTransferTarget(data.targetJobTitle) || titleCase(data.targetJobTitle);
 }
@@ -795,6 +817,7 @@ function aiWorkflowBullet(data: IntakeData, roleFamily: RoleFamily) {
     Operations: "support workflow planning, process documentation, and operational efficiency.",
     "Customer Success": "support customer communication, knowledge retrieval, and service follow-through.",
     Admin: "support documentation, meeting notes, and organized administrative workflows.",
+    Healthcare: "support care documentation, appointment coordination, and patient communication.",
     Sales: "support prospect research, customer communication, and follow-up preparation.",
     Security: "support documentation, reporting, and procedure-focused communication.",
     "Project Coordination": "support project planning, status documentation, and cross-functional follow-through.",
@@ -844,10 +867,22 @@ function buildSkillList(data: IntakeData) {
   return filterUngroundedOfficeSkills(compact(skillPool), data, occupation).slice(0, 14);
 }
 
+function matchesDomainKeyword(haystack: string, keyword: string) {
+  const normalized = keyword.toLowerCase();
+  if (normalized.length <= 3) {
+    return new RegExp(`\\b${normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(haystack);
+  }
+  return haystack.includes(normalized);
+}
+
 function detectDomain(role: ExperienceRole | { title: string; company: string }) {
   const roleHaystack = [role.title, role.company].join(" ").toLowerCase();
 
-  return domainProfiles.find((profile) => profile.keywords.some((keyword) => roleHaystack.includes(keyword))) ?? null;
+  if (productBuilderProfile.keywords.some((keyword) => matchesDomainKeyword(roleHaystack, keyword))) {
+    return productBuilderProfile;
+  }
+
+  return domainProfiles.find((profile) => profile.keywords.some((keyword) => matchesDomainKeyword(roleHaystack, keyword))) ?? null;
 }
 
 function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
@@ -861,7 +896,8 @@ function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
     ...data.selectedResponsibilities,
     ...data.selectedActions
   ].join(" ");
-  if (productBuilderProfile.keywords.some((keyword) => combined.toLowerCase().includes(keyword))) {
+  const lowerCombined = combined.toLowerCase();
+  if (productBuilderProfile.keywords.some((keyword) => matchesDomainKeyword(lowerCombined, keyword))) {
     return productBuilderProfile;
   }
 
@@ -981,7 +1017,8 @@ function isProductBuilderData(data: IntakeData) {
     ...data.selectedActions
   ].join(" ");
 
-  return productBuilderProfile.keywords.some((keyword) => combined.toLowerCase().includes(keyword));
+  const lowerCombined = combined.toLowerCase();
+  return productBuilderProfile.keywords.some((keyword) => matchesDomainKeyword(lowerCombined, keyword));
 }
 
 function detectOccupationProfile(data: IntakeData, role?: ExperienceRole | { title: string; company: string }) {
@@ -1567,6 +1604,7 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
     "Customer Success": `${target} candidate with hands-on experience in ${environment}. Strongest areas include ${strengthText}, with a service style built around clear updates, organized notes, and dependable follow-through.${aiSentence}`,
     Operations: `${target} candidate with practical experience keeping work organized in ${environment}. Brings ${strengthText} and a steady approach to documentation, handoffs, and process consistency.${aiSentence}`,
     Admin: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, organized communication, and reliable follow-through across records, schedules, and daily office needs.${aiSentence}`,
+    Healthcare: `${target} candidate with experience supporting ${environment}. Brings ${strengthText}, care documentation, and reliable follow-through across patient, family, and team communication.${aiSentence}`,
     Sales: `${target} candidate with experience supporting customer-facing workflows in ${environment}. Brings ${strengthText} and a practical approach to follow-up, account notes, and pipeline support.${aiSentence}`,
     Business: `${target} candidate with experience supporting reporting and workflow clarity in ${environment}. Brings ${strengthText}, organized documentation, and a practical eye for operational details.${aiSentence}`,
     "Project Coordination": `${target} candidate with experience keeping project details moving in ${environment}. Brings ${strengthText}, clear status communication, and organized follow-through across timelines and handoffs.${aiSentence}`,
