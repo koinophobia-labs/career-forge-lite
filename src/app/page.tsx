@@ -97,7 +97,7 @@ export default function Home() {
       <LandingPage onStart={() => jump("mode")} />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
-        <div className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 md:grid-cols-3">
+        <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-3 md:grid-cols-3">
           {workflowSteps.map(({ label, step: targetStep }, index) => (
             <button
               key={label}
@@ -106,7 +106,7 @@ export default function Home() {
                 trackCtaClick(`workflow_${targetStep}`, `#${targetStep}`);
                 jump(targetStep);
               }}
-              className={`min-h-14 rounded-md border px-4 text-left text-sm font-bold transition ${
+              className={`min-h-14 rounded-lg border px-4 text-left text-sm font-bold transition ${
                 workflowStep === index + 1
                   ? "border-gold bg-gold text-ink"
                   : "border-white/12 bg-obsidian/40 text-paper/70 hover:border-cyan hover:text-cyan"
@@ -116,14 +116,14 @@ export default function Home() {
             </button>
           ))}
         </div>
-        <div className="mt-4 grid gap-3 rounded-md border border-white/10 bg-white/5 p-3 text-xs font-bold uppercase tracking-[0.12em] text-paper/64 md:grid-cols-4">
+        <div className="lab-mono mt-4 grid gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs font-bold text-paper/64 md:grid-cols-4">
           {[
             ["No Login", "No saved account"],
             ["ATS-Safe", "Single-column output"],
             ["Editable", "Copy, revise, export"],
             ["No Fluff", "Real language only"]
           ].map(([label, detail]) => (
-            <div key={label} className="rounded-md border border-white/10 bg-obsidian/35 p-3">
+            <div key={label} className="rounded-lg border border-white/10 bg-obsidian/35 p-3">
               <span className="block text-gold">{label}</span>
               <span className="mt-1 block text-[0.68rem] text-paper/50">{detail}</span>
             </div>
@@ -133,7 +133,7 @@ export default function Home() {
 
       {step === "mode" && (
         <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8" id="mode">
-          <div className="trust-panel overflow-hidden rounded-md">
+          <div className="trust-panel overflow-hidden">
             <div className="border-b border-white/10 p-5 sm:p-7">
               <p className="trust-kicker text-sm font-bold uppercase">Product Lab Module 05</p>
               <div className="mt-4 grid gap-4 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
@@ -144,7 +144,7 @@ export default function Home() {
                     Tell My Story can organize it first.
                   </p>
                 </div>
-                <div className="rounded-md border border-cyan/20 bg-cyan/10 p-4 text-sm leading-6 text-paper/72">
+                <div className="rounded-xl border border-cyan/20 bg-cyan/10 p-4 text-sm leading-6 text-paper/72">
                   <strong className="block text-cyan">Resume package mission</strong>
                   Career Forge turns real work into recruiter-ready language without inventing achievements or metrics.
                 </div>
@@ -158,7 +158,7 @@ export default function Home() {
                   trackCtaClick("start_guided_build", "#intake");
                   jump("intake");
                 }}
-                className="group rounded-md border border-gold/35 bg-gold/10 p-5 text-left transition hover:-translate-y-0.5 hover:border-gold hover:bg-gold/15 focus:outline-none focus:ring-2 focus:ring-gold/70"
+                className="group rounded-xl border border-gold/35 bg-gold/10 p-5 text-left transition hover:-translate-y-0.5 hover:border-gold hover:bg-gold/15 focus:outline-none focus:ring-2 focus:ring-gold/70"
               >
                 <span className="rounded-sm border border-gold/40 bg-gold px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-ink">
                   Guided Builder
@@ -173,7 +173,7 @@ export default function Home() {
               <a
                 href="/story"
                 onClick={() => trackCtaClick("open_story_mode", "/story")}
-                className="group rounded-md border border-cyan/35 bg-cyan/10 p-5 transition hover:-translate-y-0.5 hover:border-cyan hover:bg-cyan/15 focus:outline-none focus:ring-2 focus:ring-cyan/70"
+                className="group rounded-xl border border-cyan/35 bg-cyan/10 p-5 transition hover:-translate-y-0.5 hover:border-cyan hover:bg-cyan/15 focus:outline-none focus:ring-2 focus:ring-cyan/70"
               >
                 <span className="rounded-sm border border-cyan/40 bg-cyan/10 px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-cyan">
                   Tell My Story

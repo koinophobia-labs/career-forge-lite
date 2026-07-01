@@ -1822,7 +1822,7 @@ export function IntakeForm({
   return (
     <section className="mx-auto max-w-5xl scroll-mt-28 px-5 py-12 sm:px-8" id="intake">
       <form
-        className="trust-panel rounded-md p-4 shadow-glow sm:p-5"
+        className="trust-panel p-4 shadow-glow sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           continueQuestion();
@@ -1835,20 +1835,20 @@ export function IntakeForm({
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[0.58fr_1.42fr]">
-          <aside className="rounded-md border border-white/10 bg-white/5 p-4">
+          <aside className="rounded-xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-gold">Module 05 intake</p>
             <h2 className="mt-3 text-3xl font-bold leading-tight text-paper">{question.title}</h2>
             {renderLeftPanelSignalStatus()}
           </aside>
 
-          <div className="dark-form-card rounded-md p-4">
+          <div className="dark-form-card p-4">
             {hasEnoughSignal && questionIndex < questions.length - 1 && (
               <div className="mb-4 rounded-md border border-cyan/25 bg-cyan/10 p-3">
                 <p className="text-sm font-bold text-spruce">Ready to generate.</p>
                 <button
                   type="button"
                   onClick={onGenerate}
-                  className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan"
+                  className="lab-pill-button mt-3 px-4 py-2 text-sm font-black transition"
                 >
                   Generate now
                 </button>
@@ -1860,7 +1860,7 @@ export function IntakeForm({
                 type="button"
                 onClick={backQuestion}
                 disabled={questionIndex === 0}
-                className="min-h-12 rounded-md border border-ink/15 bg-white px-6 font-bold text-ink transition hover:border-gold disabled:cursor-not-allowed disabled:opacity-45"
+                className="min-h-12 rounded-full border border-ink/15 bg-white px-6 font-bold text-ink transition hover:border-gold disabled:cursor-not-allowed disabled:opacity-45"
               >
                 Back
               </button>
@@ -1869,14 +1869,14 @@ export function IntakeForm({
                   <button
                     type="button"
                     onClick={() => goToQuestionId("review")}
-                    className="min-h-12 rounded-md border border-ink/15 bg-white px-6 font-bold text-ink transition hover:border-gold"
+                    className="min-h-12 rounded-full border border-ink/15 bg-white px-6 font-bold text-ink transition hover:border-gold"
                   >
                     Skip / I&apos;m not sure
                   </button>
                 )}
                 <button
                   type="submit"
-                  className="min-h-12 rounded-md bg-ink px-6 font-bold text-paper transition hover:bg-gold hover:text-ink"
+                  className="min-h-12 rounded-full bg-ink px-6 font-bold text-paper transition hover:bg-gold hover:text-ink"
                 >
                   {getContinueLabel()}
                 </button>

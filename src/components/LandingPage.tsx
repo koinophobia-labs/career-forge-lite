@@ -46,7 +46,8 @@ export function LandingPage({ onStart }: LandingPageProps) {
           className="h-full w-full object-cover"
         />
       </div>
-      <div className="absolute inset-0 bg-gradient-to-r from-obsidian via-obsidian/94 to-obsidian/60" />
+      <div className="absolute inset-0 bg-gradient-to-r from-obsidian via-obsidian/94 to-obsidian/66" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:56px_56px] opacity-35" />
 
       <div className="relative mx-auto flex min-h-[78vh] max-w-6xl flex-col justify-center px-5 py-14 sm:px-8">
         <div className="mb-10 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4 text-xs font-bold uppercase tracking-[0.16em] text-paper/60">
@@ -81,14 +82,14 @@ export function LandingPage({ onStart }: LandingPageProps) {
                   trackCtaClick("hero_build_resume", "#demo");
                   onStart();
                 }}
-                className="min-h-12 rounded-md bg-gold px-6 text-base font-bold text-ink shadow-soft transition hover:bg-cyan"
+                className="lab-pill-button min-h-12 px-6 text-base font-bold shadow-soft transition"
               >
                 Build My Resume
               </button>
               <a
                 href="/story"
                 onClick={() => trackCtaClick("hero_tell_my_story", "/story")}
-                className="inline-flex min-h-12 items-center rounded-md border border-cyan/25 bg-cyan/10 px-6 text-base font-bold text-cyan transition hover:border-gold hover:text-gold"
+                className="lab-secondary-button inline-flex min-h-12 items-center px-6 text-base font-bold transition"
               >
                 Tell My Story
                 <span className="ml-3 rounded-sm border border-cyan/30 px-2 py-1 text-[0.65rem] uppercase tracking-[0.12em]">
@@ -101,17 +102,17 @@ export function LandingPage({ onStart }: LandingPageProps) {
             </p>
           </div>
 
-          <div className="trust-panel rounded-md p-5">
+          <div className="trust-panel p-5">
             <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
               <strong className="text-sm uppercase tracking-[0.16em] text-paper">sample://translation</strong>
-              <span className="rounded-md bg-cyan/10 px-2 py-1 text-xs font-bold text-cyan">LIVE MVP</span>
+              <span className="rounded-full bg-cyan/10 px-2 py-1 text-xs font-bold text-cyan">LIVE MVP</span>
             </div>
             <div className="space-y-4">
-              <div className="trust-card rounded-md p-4">
+              <div className="trust-card p-4">
                 <span className="text-xs font-bold uppercase tracking-[0.14em] text-paper/50">Raw experience</span>
                 <p className="mt-2 text-lg font-bold text-paper">helped customers</p>
               </div>
-              <div className="trust-card rounded-md border-gold/30 bg-gold/10 p-4">
+              <div className="trust-card border-gold/30 bg-gold/10 p-4">
                 <span className="text-xs font-bold uppercase tracking-[0.14em] text-gold">Resume language</span>
                 <p className="mt-2 leading-7 text-paper">
                   Supported customer requests, documented issue status, and escalated complex cases to improve response consistency.
@@ -135,7 +136,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {pathCards.map((path) => (
-            <article key={path.title} className="trust-card rounded-md p-5">
+            <article key={path.title} className="trust-card p-5">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">{path.eyebrow}</p>
               <h3 className="mt-3 text-2xl font-bold text-paper">{path.title}</h3>
               <p className="mt-3 text-sm leading-6 text-paper/70">{path.body}</p>
@@ -156,7 +157,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
                     trackCtaClick("path_build_resume", "#demo");
                     onStart();
                   }}
-                  className="mt-6 min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan"
+                  className="lab-pill-button mt-6 min-h-11 px-5 text-sm font-black transition"
                 >
                   {path.cta}
                 </button>
@@ -164,7 +165,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
                 <a
                   href="/story"
                   onClick={() => trackCtaClick("path_tell_my_story", "/story")}
-                  className="mt-6 inline-flex min-h-11 items-center rounded-md border border-cyan/30 bg-cyan/10 px-5 text-sm font-black text-cyan transition hover:border-gold hover:text-gold"
+                  className="lab-secondary-button mt-6 inline-flex min-h-11 items-center px-5 text-sm font-black transition"
                 >
                   {path.cta}
                 </a>

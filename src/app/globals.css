@@ -6,6 +6,19 @@
   color-scheme: dark;
   background: #07090d;
   color: #f2f5fa;
+  --bg: #0d0f14;
+  --bg2: #0a0c10;
+  --panel: #12151c;
+  --panel2: #171a21;
+  --line: rgba(255, 255, 255, 0.07);
+  --line2: rgba(255, 255, 255, 0.13);
+  --gold: #d4af37;
+  --cyan: #00e5ff;
+  --orange: #ff6a2b;
+  --text: #f2f5fa;
+  --dim: #99a2b2;
+  --faint: #5c6675;
+  --glow: #00e5ff;
 }
 
 * {
@@ -20,10 +33,14 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 18% 0%, rgba(212, 175, 55, 0.16), transparent 34rem),
-    radial-gradient(circle at 88% 10%, rgba(0, 229, 255, 0.13), transparent 32rem),
-    linear-gradient(180deg, #07090d 0%, #0c1118 36rem, #101318 100%);
-  font-family: Arial, Helvetica, sans-serif;
+    radial-gradient(circle at 82% 8%, rgba(0, 229, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 6% 72%, rgba(212, 175, 55, 0.14), transparent 28%),
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    var(--bg);
+  background-size: auto, auto, 56px 56px, 56px 56px, auto;
+  color: var(--text);
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
 }
 
 button,
@@ -35,6 +52,20 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-sora), Arial, Helvetica, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+.lab-mono,
+.trust-kicker,
+.logo-mark {
+  font-family: var(--font-mono), monospace;
+  text-transform: uppercase;
 }
 
 .resume-paper {
@@ -51,28 +82,32 @@ textarea {
 }
 
 .trust-panel {
-  border: 1px solid rgba(242, 245, 250, 0.12);
-  background: linear-gradient(180deg, rgba(22, 27, 34, 0.92), rgba(12, 17, 24, 0.94));
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #171a21, #12151c);
+  box-shadow: 0 40px 80px -40px color-mix(in srgb, var(--glow) 40%, transparent);
 }
 
 .trust-card {
-  border: 1px solid rgba(242, 245, 250, 0.12);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
   background: rgba(242, 245, 250, 0.055);
 }
 
 .trust-kicker {
-  color: #d4af37;
-  letter-spacing: 0.16em;
+  color: var(--gold);
+  letter-spacing: 0.13em;
 }
 
 .trust-input {
-  border-color: rgba(17, 19, 24, 0.14);
+  border-color: rgba(17, 19, 24, 0.16);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
 }
 
 .dark-form-card {
   border: 1px solid rgba(242, 245, 250, 0.14);
+  border-radius: 12px;
   background: rgba(242, 245, 250, 0.96);
   color: #111318;
 }
@@ -93,6 +128,30 @@ textarea {
   font-weight: 900;
   letter-spacing: 0.08em;
   box-shadow: 0 0 22px rgba(212, 175, 55, 0.12);
+}
+
+.lab-pill-button {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gold) 60%, transparent);
+  background: linear-gradient(90deg, var(--gold), #f3d56d);
+  color: #17110a;
+}
+
+.lab-pill-button:hover {
+  background: linear-gradient(90deg, var(--cyan), #8ef4ff);
+  color: #061014;
+}
+
+.lab-secondary-button {
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  background: rgba(0, 229, 255, 0.07);
+  color: var(--cyan);
+}
+
+.lab-secondary-button:hover {
+  border-color: rgba(212, 175, 55, 0.46);
+  color: var(--gold);
 }
 
 .ecosystem-dot {
