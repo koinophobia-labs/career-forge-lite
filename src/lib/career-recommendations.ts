@@ -17,7 +17,7 @@ export type CareerRecommendation = {
   evidenceChain: string[];
 };
 
-type WorkerProfile = "barber" | "warehouse" | "security" | "food_service" | "retail" | "general";
+type WorkerProfile = "barber" | "warehouse" | "security" | "food_service" | "retail" | "delivery" | "general";
 
 type EvidenceRule = CareerEvidence & {
   patterns: RegExp[];
@@ -37,7 +37,8 @@ const profilePatterns: Array<{ profile: WorkerProfile; patterns: RegExp[] }> = [
   { profile: "warehouse", patterns: [/\bwarehouse\b/i, /\bfulfillment\b/i, /\binventory\b/i, /\bstocker\b/i, /\bforklift\b/i, /\bpick(?:er|ing)\b/i, /\bpack(?:er|ing)\b/i] },
   { profile: "security", patterns: [/\bsecurity\b/i, /\bguard\b/i, /\baccess control\b/i, /\bsurveillance\b/i, /\bloss prevention\b/i, /\basset protection\b/i] },
   { profile: "food_service", patterns: [/\bfood service\b/i, /\bserver\b/i, /\brestaurant\b/i, /\bbarista\b/i, /\bcook\b/i, /\bkitchen\b/i, /\bhospitality\b/i] },
-  { profile: "retail", patterns: [/\bretail\b/i, /\bcashier\b/i, /\bsales associate\b/i, /\bstore\b/i, /\bmerchandis/i, /\bpos\b/i] }
+  { profile: "retail", patterns: [/\bretail\b/i, /\bcashier\b/i, /\bsales associate\b/i, /\bstore\b/i, /\bmerchandis/i, /\bpos\b/i] },
+  { profile: "delivery", patterns: [/\bdoordash\b/i, /\bdoor dash\b/i, /\bdasher\b/i, /\bdelivery\b/i, /\bcourier\b/i, /\bdriver\b/i, /\broutes?\b/i] }
 ];
 
 const evidenceRules: EvidenceRule[] = [
@@ -55,7 +56,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Communicated directly with customers",
     why: "Communicated directly with customers every day.",
     patterns: [/\bcustomers?\b/i, /\bclients?\b/i, /\bguests?\b/i, /\bpatients?\b/i, /\bmembers?\b/i, /\banswered questions\b/i, /\bservice\b/i],
-    profileDefaults: ["barber", "food_service", "retail", "security"]
+    profileDefaults: ["barber", "food_service", "retail", "security", "delivery"]
   },
   {
     id: "scheduling",
@@ -95,7 +96,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Kept work moving on time",
     why: "Kept appointments, orders, or shift work moving on time.",
     patterns: [/\btime\b/i, /\bdeadline\b/i, /\bfast-paced\b/i, /\bbusy\b/i, /\borders?\b/i, /\broutes?\b/i],
-    profileDefaults: ["barber", "warehouse", "food_service", "retail"]
+    profileDefaults: ["barber", "warehouse", "food_service", "retail", "delivery"]
   },
   {
     id: "independent_work",
@@ -119,7 +120,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Moved orders through a workflow",
     why: "Moved orders, shipments, or handoffs through a clear workflow.",
     patterns: [/\blogistics\b/i, /\bfulfillment\b/i, /\bshipping\b/i, /\breceiving\b/i, /\bpicking\b/i, /\bpacking\b/i, /\bhandoffs?\b/i],
-    profileDefaults: ["warehouse"]
+    profileDefaults: ["warehouse", "delivery"]
   },
   {
     id: "safety_procedures",
@@ -151,7 +152,7 @@ const evidenceRules: EvidenceRule[] = [
     chainLabel: "Kept orders accurate under pressure",
     why: "Kept orders, requests, or transactions accurate under pressure.",
     patterns: [/\border\b/i, /\baccur/i, /\bpayments?\b/i, /\btransactions?\b/i, /\bregister\b/i, /\bpos\b/i],
-    profileDefaults: ["food_service", "retail"]
+    profileDefaults: ["food_service", "retail", "delivery"]
   },
   {
     id: "team_coordination",
@@ -199,6 +200,10 @@ const recommendationRules: RecommendationRule[] = [
   { profile: "retail", title: "Store Operations", roleFamily: "Operations", level: "strong", evidence: ["customer_communication", "inventory_accuracy", "merchandising", "team_coordination"] },
   { profile: "retail", title: "Merchandising Coordinator", roleFamily: "Operations", level: "strong", evidence: ["merchandising", "inventory_accuracy", "time_management"] },
   { profile: "retail", title: "Customer Success", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "issue_resolution", "order_accuracy", "team_coordination"] },
+
+  { profile: "delivery", title: "Logistics Coordinator", roleFamily: "Operations", level: "strong", evidence: ["logistics_flow", "order_accuracy", "time_management", "customer_communication"] },
+  { profile: "delivery", title: "Delivery Operations Coordinator", roleFamily: "Operations", level: "strong", evidence: ["logistics_flow", "time_management", "order_accuracy", "issue_resolution"] },
+  { profile: "delivery", title: "Customer Experience Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "issue_resolution", "order_accuracy", "time_management"] },
 
   { profile: "general", title: "Customer Experience Associate", roleFamily: "Customer Success", level: "realistic", evidence: ["customer_communication", "issue_resolution", "time_management"] },
   { profile: "general", title: "Operations Coordinator", roleFamily: "Operations", level: "realistic", evidence: ["time_management", "documentation", "team_coordination"] },

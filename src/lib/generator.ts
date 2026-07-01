@@ -40,6 +40,142 @@ type DomainProfile = {
   processLanguage: string;
 };
 
+type OccupationProfile = {
+  id: string;
+  patterns: RegExp[];
+  headline: string;
+  environment: string;
+  dailyTasks: string[];
+  universalTools: string[];
+  communication: string[];
+  challenges: string[];
+  achievements: string[];
+  transferables: string[];
+};
+
+const occupationProfiles: OccupationProfile[] = [
+  {
+    id: "bartender",
+    patterns: [/\bbartender\b/i, /\bbar back\b/i, /\bbarback\b/i],
+    headline: "Bartender | Customer Service | Hospitality",
+    environment: "fast-paced hospitality environment",
+    dailyTasks: ["Customer Service", "Payment Processing", "Order Accuracy", "Cash Handling", "Service Recovery"],
+    universalTools: ["POS Systems", "Cash Drawer"],
+    communication: ["Customer Communication", "Conflict Resolution", "Team Coordination"],
+    challenges: ["High-Volume Service", "Time Management", "Policy Follow-Through"],
+    achievements: ["Balanced speed and accuracy during peak service", "Kept guest experience consistent under pressure"],
+    transferables: ["Customer Service", "Cash Handling", "Conflict Resolution", "Time Management", "Team Coordination"]
+  },
+  {
+    id: "retail",
+    patterns: [/\bretail\b/i, /\bcashier\b/i, /\bsales associate\b/i, /\bstore associate\b/i],
+    headline: "Retail Associate | Customer Service | Store Operations",
+    environment: "retail service environment",
+    dailyTasks: ["Customer Service", "Checkout Support", "Returns Processing", "Inventory Support", "Store Presentation"],
+    universalTools: ["POS Systems", "Cash Register", "Handheld Scanner"],
+    communication: ["Customer Questions", "Issue Escalation", "Team Handoffs"],
+    challenges: ["High-Volume Service", "Transaction Accuracy", "Merchandising Standards"],
+    achievements: ["Maintained customer service and register accuracy during busy shifts"],
+    transferables: ["Customer Service", "Cash Handling", "Inventory", "Attention to Detail", "Team Coordination"]
+  },
+  {
+    id: "warehouse",
+    patterns: [/\bwarehouse\b/i, /\bfulfillment\b/i, /\bstocker\b/i, /\border picker\b/i, /\bpacker\b/i],
+    headline: "Warehouse Operations | Inventory | Fulfillment",
+    environment: "warehouse and fulfillment environment",
+    dailyTasks: ["Order Picking", "Order Packing", "Inventory Movement", "Package Scanning", "Safe Work Areas"],
+    universalTools: ["Barcode Scanner", "Pallet Jack", "RF Scanner"],
+    communication: ["Shift Handoffs", "Team Coordination"],
+    challenges: ["Order Accuracy", "Safety Procedures", "Pace Of Work"],
+    achievements: ["Kept fulfillment work moving while protecting accuracy and safety"],
+    transferables: ["Inventory", "Equipment Operation", "Attention to Detail", "Safety Procedures", "Time Management"]
+  },
+  {
+    id: "security",
+    patterns: [/\bsecurity\b/i, /\bguard\b/i, /\baccess control\b/i, /\bpatrol\b/i],
+    headline: "Security Professional | Safety | Incident Reporting",
+    environment: "safety-focused public-facing environment",
+    dailyTasks: ["Access Control", "Incident Reporting", "Visitor Support", "Safety Monitoring", "Policy Follow-Through"],
+    universalTools: ["Radio Communication", "Incident Reports", "Access Control"],
+    communication: ["De-Escalation", "Visitor Communication", "Shift Handoffs"],
+    challenges: ["Conflict Resolution", "Safety Procedures", "Judgment Under Pressure"],
+    achievements: ["Maintained calm communication while following site procedures"],
+    transferables: ["Conflict Resolution", "Documentation", "Safety Procedures", "Reliability", "Attention to Detail"]
+  },
+  {
+    id: "delivery",
+    patterns: [/\bdoordash\b/i, /\bdoor dash\b/i, /\bdasher\b/i, /\bdelivery\b/i, /\bcourier\b/i, /\bdriver\b/i],
+    headline: "Delivery Operations | Route Planning | Customer Service",
+    environment: "app-based delivery and customer handoff environment",
+    dailyTasks: ["Route Planning", "Order Verification", "Customer Communication", "Delivery Coordination", "Time-Sensitive Tasks"],
+    universalTools: ["Delivery App", "Navigation App", "Vehicle"],
+    communication: ["Customer Updates", "Restaurant Handoffs", "Issue Resolution"],
+    challenges: ["Time Management", "Order Accuracy", "Independent Work"],
+    achievements: ["Completed time-sensitive deliveries while managing customer updates and order accuracy"],
+    transferables: ["Route Planning", "Time Management", "Customer Service", "Independent Work", "Problem Solving"]
+  },
+  {
+    id: "janitor",
+    patterns: [/\bjanitor\b/i, /\bcustodian\b/i, /\bcleaner\b/i, /\bmaintenance helper\b/i, /\bfacilities\b/i],
+    headline: "Facilities Support | Cleaning Standards | Maintenance",
+    environment: "facilities cleaning and maintenance environment",
+    dailyTasks: ["Sanitation", "Work Area Upkeep", "Supply Restocking", "Issue Reporting", "Safety Procedures"],
+    universalTools: ["Cleaning Supplies", "Mop", "Basic Hand Tools"],
+    communication: ["Issue Reporting", "Team Handoffs"],
+    challenges: ["Cleaning Standards", "Reliability", "Safety Awareness"],
+    achievements: ["Maintained clean, stocked, and safe spaces for daily operations"],
+    transferables: ["Cleaning Standards", "Reliability", "Attention to Detail", "Safety Procedures", "Equipment Operation"]
+  },
+  {
+    id: "food-service",
+    patterns: [/\bfood service\b/i, /\bcrew member\b/i, /\bserver\b/i, /\bbarista\b/i, /\bcook\b/i, /\bkitchen\b/i],
+    headline: "Food Service | Customer Service | Operations",
+    environment: "fast-paced food service environment",
+    dailyTasks: ["Order Preparation", "Customer Service", "Sanitation", "Restocking", "Shift Procedures"],
+    universalTools: ["POS Systems", "Kitchen Equipment", "Sanitation Supplies"],
+    communication: ["Guest Communication", "Team Coordination", "Issue Escalation"],
+    challenges: ["Order Accuracy", "Speed And Accuracy", "Clean Work Areas"],
+    achievements: ["Balanced order accuracy, sanitation, and customer service during busy shifts"],
+    transferables: ["Customer Service", "Order Accuracy", "Team Coordination", "Sanitation", "Adaptability"]
+  },
+  {
+    id: "caregiver",
+    patterns: [/\bcaregiver\b/i, /\bhome health\b/i, /\bhome health aide\b/i, /\bpatient care\b/i, /\bresident care\b/i],
+    headline: "Care Support | Patient Service | Documentation",
+    environment: "client care and home support environment",
+    dailyTasks: ["Client Care", "Daily Routine Support", "Safety Checks", "Care Notes", "Appointment Support"],
+    universalTools: ["Care Notes", "Scheduling App"],
+    communication: ["Family Updates", "Patient Communication", "Team Handoffs"],
+    challenges: ["Reliability", "Safety Awareness", "Patience"],
+    achievements: ["Supported safe daily routines while keeping care notes and family updates clear"],
+    transferables: ["Patient Support", "Documentation", "Relationship Building", "Reliability", "Attention to Detail"]
+  },
+  {
+    id: "receptionist",
+    patterns: [/\breceptionist\b/i, /\bfront desk\b/i, /\badministrative assistant\b/i, /\boffice assistant\b/i],
+    headline: "Administrative Support | Reception | Scheduling",
+    environment: "front desk and administrative support environment",
+    dailyTasks: ["Call Routing", "Visitor Support", "Scheduling", "Records Management", "Office Support"],
+    universalTools: ["Phone System", "Calendar"],
+    communication: ["Professional Communication", "Customer Questions", "Team Handoffs"],
+    challenges: ["Attention to Detail", "Prioritization", "Confidentiality"],
+    achievements: ["Kept front desk communication, schedules, and records organized"],
+    transferables: ["Scheduling", "Customer Service", "Records Management", "Communication", "Organization"]
+  },
+  {
+    id: "construction",
+    patterns: [/\bconstruction\b/i, /\bgeneral labor\b/i, /\blaborer\b/i, /\bjob site\b/i],
+    headline: "General Labor | Safety | Job Site Support",
+    environment: "hands-on construction and job site environment",
+    dailyTasks: ["Material Handling", "Site Preparation", "Equipment Operation", "Cleanup", "Safety Procedures"],
+    universalTools: ["Hand Tools", "Power Tools", "PPE"],
+    communication: ["Crew Coordination", "Issue Reporting", "Foreman Updates"],
+    challenges: ["Physical Work", "Safety Awareness", "Pace Of Work"],
+    achievements: ["Supported job site progress by keeping materials, tools, and work areas ready"],
+    transferables: ["Equipment Operation", "Safety Procedures", "Team Coordination", "Reliability", "Problem Solving"]
+  }
+];
+
 const domainProfiles: DomainProfile[] = [
   {
     name: "sportsbook",
@@ -383,7 +519,7 @@ type BulletContext = {
 const bulletPatternLibrary: Record<RoleFamily, string[]> = {
   "Customer Success": [
     "{action} {scope}customer requests in a {environment}{outcomeClause}.",
-    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping client records and next steps clear.",
+    "{action} {responsibility} through {processLanguage}{toolPhrase}, keeping service details and next steps clear.",
     "{bridgeAction} account support by following up with customers, documenting updates, and escalating complex needs.",
     "{action} onboarding and service follow-through with clear communication across customer touchpoints.",
     "{action} customer issues with organized notes, timely handoffs, and reliable follow-through.",
@@ -946,20 +1082,26 @@ function cleanSentence(sentence: string) {
   return cleaned;
 }
 
-function specificEvidenceBullets(data: IntakeData, context: BulletContext) {
+function specificEvidenceBullets(data: IntakeData) {
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data).map(readablePhrase);
-  const notes = data.customRoleNotes.toLowerCase();
+  const evidence = evidenceText(data).toLowerCase();
   const bullets: string[] = [];
 
-  if (/mobile|layout|broken|qa|tested|fixed|shipped|demo|website|app/.test(notes) || responsibilities.some((item) => /testing|documentation|implementation|mobile|qa|website/i.test(item))) {
-    bullets.push(`Tested layouts, documented issues, and followed through on fixes across ${context.environment}.`);
+  if (/doordash|door dash|delivery|driver|courier|route|dasher|pickup/.test(evidence)) {
+    bullets.push("Managed delivery flow by verifying orders, planning routes, communicating delays, and completing time-sensitive customer handoffs.");
+  } else if (/restaurant|food service|server|barista|kitchen|guest|kitchen staff/.test(evidence)) {
+    bullets.push("Supported guest service by handling orders, restocking supplies, coordinating with kitchen staff, and resolving concerns during busy periods.");
+  } else if (/warehouse|fulfillment|pick|pack|scanner|inventory|stock|label|pallet/.test(evidence)) {
+    bullets.push("Maintained fulfillment flow by scanning items, moving stock, checking labels, and keeping inventory handoffs organized.");
+  } else if (/security|guard|access control|patrol|incident|visitor|de-?escalat/.test(evidence)) {
+    bullets.push("Maintained safety coverage by monitoring access points, documenting incidents, following site procedures, and escalating concerns when needed.");
+  } else if (/retail|cashier|register|returns?|checkout|shelves|store/.test(evidence)) {
+    bullets.push("Supported store flow by handling customer questions, register tasks, inventory upkeep, and team handoffs.");
   }
+
   if (tools.length && responsibilities.some((item) => /account|case|ticket|customer|client|documentation|records?|notes?/i.test(item))) {
     bullets.push(`Maintained clear records and follow-up notes using ${sentenceList(tools.slice(0, 2))}.`);
-  }
-  if (responsibilities.some((item) => /stock|inventory|register|customer|service|shelf/i.test(item))) {
-    bullets.push("Supported daily service flow by handling customer questions, register tasks, inventory upkeep, and team handoffs.");
   }
 
   return bullets;
@@ -1053,7 +1195,7 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
     [
       renderPattern(patterns[0], patternContext),
       renderPattern(patterns[1], patternContext),
-      ...specificEvidenceBullets(data, patternContext),
+      ...specificEvidenceBullets(data),
       aiWorkflowBullet(data, data.roleFamily) || renderPattern(patterns[2], patternContext)
     ],
     verbs
