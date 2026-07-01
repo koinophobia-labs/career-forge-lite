@@ -47,6 +47,7 @@ export type StoryDossier = {
 
 const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
   ["IT Support", /help desk|it support|desktop|service desk|technical support|troubleshoot|password|active directory/i],
+  ["Tech", /founder|product|technical operations|implementation|data associate|software|web|developer|qa|tester/i],
   ["Customer Success", /customer success|client success|customer support|customer service|client support|account support|support specialist|onboarding|retention|member service|experience|sportsbook|ticket writer/i],
   ["Project Coordination", /project|program|timeline|milestone|implementation|pmo|status update/i],
   ["Admin", /admin|assistant|office|front desk|reception|calendar|scheduling|records/i],
@@ -55,8 +56,7 @@ const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
   ["Operations", /delivery|driver|courier|construction|labor|janitor|maintenance|cleaning|stock|cashier|restaurant|food service|barista|kitchen|trainer|coach/i],
   ["Customer Success", /caregiver|home health|care aide|barber|stylist|beauty|client|appointment/i],
   ["Business", /business analyst|reporting|analysis|data|stakeholder|research|process analyst/i],
-  ["Security", /security|safety|access control|incident|surveillance|patrol/i],
-  ["Tech", /qa|tester|product|technical operations|implementation|data associate|software|web|developer|founder/i]
+  ["Security", /security|safety|access control|incident|surveillance|patrol/i]
 ];
 
 const responsibilityKeywords = [
@@ -435,8 +435,11 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   const explicitTarget = hasExplicitTarget(story);
   const rawTarget = targetClause(story);
   const transferTarget = rawTarget ? inferTransferTarget(rawTarget) : null;
-  const targetRole = inferTargetRole(story, role.title, initialRoleFamily);
-  const roleFamily = transferTarget?.roleFamily ?? (explicitTarget ? inferRoleFamily(targetRole, targetRole) : initialRoleFamily);
+  const founderProductStory =
+    /\b(founder|founded|product studio|product lab|websites?|apps?|deployment|github|vercel)\b/i.test(story) &&
+    /\b(product operations|product|technical)\b/i.test(rawTarget);
+  const targetRole = founderProductStory ? "Product Operations Associate" : inferTargetRole(story, role.title, initialRoleFamily);
+  const roleFamily: RoleFamily = founderProductStory ? "Tech" : transferTarget?.roleFamily ?? (explicitTarget ? inferRoleFamily(targetRole, targetRole) : initialRoleFamily);
   const email = extractEmail(story);
   const name = extractName(story);
   const responsibilities = extractResponsibilities(story, roleFamily);

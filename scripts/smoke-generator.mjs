@@ -315,7 +315,14 @@ function textHasAll(text, values) {
 
 function headlineSupportsDirection(headline, data) {
   const lower = headline.toLowerCase();
-  return lower.includes(data.targetJobTitle.toLowerCase()) || lower.includes(data.roleFamily.toLowerCase()) || /client experience|office coordination|operations \/ coordination/i.test(headline);
+  return (
+    lower.includes(data.targetJobTitle.toLowerCase()) ||
+    lower.includes(data.roleFamily.toLowerCase()) ||
+    (data.roleFamily === "Customer Success" && /customer service|customer experience|client support|client experience|hospitality/i.test(headline)) ||
+    (data.roleFamily === "Admin" && /administrative support|admin|office|reception|scheduling/i.test(headline)) ||
+    (data.roleFamily === "Operations" && /operations|inventory|logistics|fulfillment|facilities/i.test(headline)) ||
+    /office coordination|operations \/ coordination/i.test(headline)
+  );
 }
 
 function assertProfessionalResume(data, resume, label) {
@@ -352,7 +359,7 @@ function assertBarberFixture() {
   assert(bullets.some((bullet) => /older client base/i.test(bullet)), "barber fixture: older client base evidence used");
   assert(recommendations.length > 0, "barber fixture: recommendations generated");
   assert(recommendations.every((item) => item.why.length >= 3), "barber fixture: every recommendation has why-this-fits evidence");
-  assert(topTitles.includes("Customer Success Associate") || topTitles.includes("Client Success Representative"), "barber fixture: customer/client success prioritized");
+  assert(topTitles.includes("Customer Experience Associate") || topTitles.includes("Client Support Associate"), "barber fixture: customer/client support prioritized");
   assert(topTitles[0] !== "Administrative Assistant", "barber fixture: Administrative Assistant is not the unsupported top role");
 }
 
@@ -1692,6 +1699,120 @@ for (const profile of nonCorporateWorkerProfiles) {
   assert(!/fake metric|invented|50\+|100\+|million|revenue growth/i.test(`${storyOutput}\n${guidedOutput}`), `${profile.name}: does not invent flashy metrics`);
 }
 
+const rc2WorkerProfiles = [
+  {
+    name: "Bartender",
+    data: {
+      targetJobTitle: "Customer Success Associate",
+      roleFamily: "Customer Success",
+      currentTitle: "Bartender",
+      currentCompany: "Neighborhood Bar",
+      currentTime: "2021 to 2024",
+      responsibilities: "handled guests, payments, tabs, busy nights, and upset customers",
+      selectedResponsibilities: ["Customer service", "Payment processing", "Conflict resolution"],
+      selectedActions: ["served guests", "processed payments", "resolved issues"]
+    },
+    expectedSkills: ["Customer Service", "Cash Handling", "Conflict Resolution"],
+    expectedRoles: ["Customer Service Professional", "Hospitality Operations Assistant"]
+  },
+  {
+    name: "Retail Cashier",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Retail Cashier").guided,
+    expectedSkills: ["Customer Service", "Cash Handling", "Inventory"],
+    expectedRoles: ["Inventory Associate", "Operations Assistant"]
+  },
+  {
+    name: "Warehouse Associate",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Warehouse Associate").guided,
+    expectedSkills: ["Inventory", "Equipment Operation", "Safety Procedures"],
+    expectedRoles: ["Warehouse Associate", "Fulfillment Associate"]
+  },
+  {
+    name: "Security Officer",
+    data: {
+      targetJobTitle: "Operations Associate",
+      roleFamily: "Operations",
+      currentTitle: "Security Officer",
+      currentCompany: "Allied Universal",
+      currentTime: "2021 to 2024",
+      responsibilities: "checked IDs, handled access control, wrote incident reports, used radio communication, and de-escalated upset guests",
+      selectedResponsibilities: ["Access control", "Incident reporting", "Visitor support", "Safety procedures"],
+      selectedActions: ["checked IDs", "documented incidents", "de-escalated issues"],
+      reportsCreated: "6 weekly incident reports"
+    },
+    expectedSkills: ["Conflict Resolution", "Documentation", "Safety Procedures"],
+    expectedRoles: ["Operations Assistant", "Facilities Assistant"]
+  },
+  {
+    name: "DoorDash Driver",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Delivery Driver").guided,
+    expectedSkills: ["Route Planning", "Time Management", "Customer Service"],
+    expectedRoles: ["Warehouse Associate", "Logistics Support"]
+  },
+  {
+    name: "Janitor",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Janitor Maintenance Worker").guided,
+    expectedSkills: ["Cleaning Standards", "Reliability", "Safety Procedures"],
+    expectedRoles: ["Facilities Assistant", "Maintenance Assistant"]
+  },
+  {
+    name: "Food Service",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Food Service Worker").guided,
+    expectedSkills: ["Customer Service", "Order Accuracy", "Sanitation"],
+    expectedRoles: ["Operations Associate", "Customer Experience Associate"]
+  },
+  {
+    name: "Caregiver",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Caregiver Home Health Aide").guided,
+    expectedSkills: ["Patient Support", "Documentation", "Reliability"],
+    expectedRoles: ["Patient Services Representative", "Healthcare Admin Assistant"]
+  },
+  {
+    name: "Receptionist",
+    data: {
+      targetJobTitle: "Administrative Assistant",
+      roleFamily: "Admin",
+      currentTitle: "Receptionist",
+      currentCompany: "Local Clinic",
+      currentTime: "2022 to 2024",
+      responsibilities: "answered phones, greeted visitors, scheduled appointments, updated records, and routed questions",
+      selectedResponsibilities: ["Scheduling", "Records management", "Customer questions"],
+      selectedActions: ["answered phones", "scheduled appointments", "updated records"],
+      callsHandled: "30+ calls daily"
+    },
+    expectedSkills: ["Scheduling", "Calendar Management", "Records Management"],
+    expectedRoles: ["Administrative Assistant", "Office Assistant"]
+  },
+  {
+    name: "Construction Laborer",
+    data: nonCorporateWorkerProfiles.find((profile) => profile.name === "Construction Labor Worker").guided,
+    expectedSkills: ["Equipment Operation", "Safety Procedures", "Team Coordination"],
+    expectedRoles: ["Facilities Assistant", "Maintenance Assistant"]
+  }
+];
+
+const unsupportedOfficeSoftware = /\b(Salesforce|HubSpot|Jira|Zendesk|Intercom|ServiceNow|CRM|support tickets|ticketing system|account management)\b/i;
+const genericAiResumeLanguage = /\b(dynamic|results-driven|proven track record|supported customer requests in a client-facing environment|maintained service quality|worked with team)\b/i;
+const inflatedNextRoles = /\b(Marketing Director|Operations Executive|Customer Success Manager|Software Engineer|Loss Prevention Analyst)\b/i;
+
+for (const profile of rc2WorkerProfiles) {
+  const data = { ...initialIntake, fullName: `${profile.name} Candidate`, email: "rc2.worker@example.com", ...profile.data };
+  const resume = generateResumePackage(data);
+  const output = resumeToText(data, resume);
+  const bullets = resume.experience[0]?.bullets ?? [];
+  const recommendations = buildCareerRecommendations(data);
+  const recommendedTitles = recommendations.map((item) => item.title).join(" ");
+
+  assertProfessionalResume(data, resume, `${profile.name}: RC2 output`);
+  assert(bullets.length >= 5, `${profile.name}: five distinct competency bullets generated`);
+  assert(new Set(bullets.map((bullet) => bullet.toLowerCase())).size === bullets.length, `${profile.name}: bullets are not repetitive`);
+  assert(!unsupportedOfficeSoftware.test(output), `${profile.name}: no unsupported office software hallucinated`);
+  assert(!genericAiResumeLanguage.test(output), `${profile.name}: avoids generic AI resume language`);
+  assert(textHasAny(resume.coreSkills.join(" "), profile.expectedSkills), `${profile.name}: grounded strength tags present`);
+  assert(textHasAny(recommendedTitles, profile.expectedRoles), `${profile.name}: realistic next-step roles mapped`);
+  assert(!inflatedNextRoles.test(recommendedTitles), `${profile.name}: recommendations avoid inflated roles`);
+}
+
 const messyConversationStory =
   "My name is Jay Parker and my email is jay@example.com. This is messy but I worked as a warehouse associate from 2021 to 2022 at UPS loading trucks and scanning packages. Before that I was a cashier at Family Dollar and handled customers, returns, and stocking. I also do DoorDash sometimes and message customers when orders are delayed. I took some community college classes for business but did not finish. I helped my cousin set up a simple website too. I am not sure if I should focus on warehouse, customer service, or operations yet.";
 const messyDossier = parseStoryToDossier(messyConversationStory);
@@ -1955,7 +2076,7 @@ for (const persona of personas) {
     }),
     `${persona.name}: opening verbs are diversified`
   );
-  assert(resume.experience.every((role) => role.bullets.length >= 2 && role.bullets.length <= 4), `${persona.name}: reasonable bullet count`);
+  assert(resume.experience.every((role) => role.bullets.length >= 2 && role.bullets.length <= 5), `${persona.name}: reasonable bullet count`);
   assert(!weakTerms.some((term) => exportText.toLowerCase().includes(term.toLowerCase())), `${persona.name}: weak/UI term leaked`);
   assert(!unnaturalToolPattern.test(exportText), `${persona.name}: unnatural tool phrase`);
   assert(!exportText.includes(educationPlaceholder), `${persona.name}: placeholder education omitted from export`);

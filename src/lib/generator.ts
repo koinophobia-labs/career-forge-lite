@@ -104,7 +104,7 @@ const occupationProfiles: OccupationProfile[] = [
   },
   {
     id: "delivery",
-    patterns: [/\bdoordash\b/i, /\bdoor dash\b/i, /\bdasher\b/i, /\bdelivery\b/i, /\bcourier\b/i, /\bdriver\b/i],
+    patterns: [/\bdoordash\b/i, /\bdoor dash\b/i, /\bdasher\b/i, /\bdelivery driver\b/i, /\bdeliver(?:ed|ies|ing)\s+(orders?|food|packages?)\b/i, /\bcourier\b/i, /\bdriver\b/i],
     headline: "Delivery Operations | Route Planning | Customer Service",
     environment: "app-based delivery and customer handoff environment",
     dailyTasks: ["Route Planning", "Order Verification", "Customer Communication", "Delivery Coordination", "Time-Sensitive Tasks"],
@@ -140,7 +140,7 @@ const occupationProfiles: OccupationProfile[] = [
   },
   {
     id: "caregiver",
-    patterns: [/\bcaregiver\b/i, /\bhome health\b/i, /\bhome health aide\b/i, /\bpatient care\b/i, /\bresident care\b/i],
+    patterns: [/\bcaregiver\b/i, /\bhome health\b/i, /\bhome health aide\b/i, /\bcna\b/i, /\bnursing assistant\b/i, /\bpatient care\b/i, /\bresident care\b/i],
     headline: "Care Support | Patient Service | Documentation",
     environment: "client care and home support environment",
     dailyTasks: ["Client Care", "Daily Routine Support", "Safety Checks", "Care Notes", "Appointment Support"],
@@ -160,7 +160,7 @@ const occupationProfiles: OccupationProfile[] = [
     communication: ["Professional Communication", "Customer Questions", "Team Handoffs"],
     challenges: ["Attention to Detail", "Prioritization", "Confidentiality"],
     achievements: ["Kept front desk communication, schedules, and records organized"],
-    transferables: ["Scheduling", "Customer Service", "Records Management", "Communication", "Organization"]
+    transferables: ["Scheduling", "Calendar Management", "Customer Service", "Records Management", "Communication", "Organization"]
   },
   {
     id: "construction",
@@ -307,7 +307,7 @@ const domainProfiles: DomainProfile[] = [
 
 const productBuilderProfile: DomainProfile = {
   name: "product-builder",
-  keywords: ["product lab", "mvp", "websites", "apps", "automation", "github", "vercel", "next.js"],
+  keywords: ["product lab", "mvp", "websites", "apps", "automation", "launched demos", "shipped demos"],
   environment: "hands-on product and web project environment",
   strengths: ["Product Documentation", "Mobile QA", "Website Delivery", "Workflow Automation"],
   processLanguage: "feature planning, copywriting, mobile testing, issue documentation, and launch follow-through"
@@ -748,6 +748,15 @@ function buildUserResponsibilityList(data: IntakeData) {
 
 function buildResponsibilityList(data: IntakeData) {
   const userResponsibilities = buildUserResponsibilityList(data);
+  const occupation = detectOccupationProfile(data);
+  if (occupation) {
+    return compact([
+      ...userResponsibilities,
+      ...occupation.dailyTasks,
+      ...occupation.communication,
+      ...occupation.challenges
+    ]).slice(0, 10);
+  }
   if (userResponsibilities.length) return userResponsibilities;
   return roleStrategies[data.roleFamily].safeDefaults;
 }
@@ -798,18 +807,41 @@ function aiWorkflowBullet(data: IntakeData, roleFamily: RoleFamily) {
 function buildSkillList(data: IntakeData) {
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data);
+  const occupation = detectOccupationProfile(data);
+  const productBuilder = isProductBuilderData(data);
   const aiTools = selectedAiTools(data.tools).map((tool) => tool.toLowerCase());
   const nonAiTools = tools.filter((tool) => !aiTools.includes(tool.toLowerCase()));
+  const skillPool = productBuilder
+    ? [
+        ...productBuilderProfile.strengths,
+        ...data.selectedResponsibilities.map(normalizeResponsibility).slice(0, 5),
+        ...data.selectedActions.map(normalizeResponsibility).slice(0, 3),
+        ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
+        ...data.selectedOutcomes.map(normalizeResponsibility).slice(0, 3),
+        ...nonAiTools.slice(0, 5),
+        ...buildAiWorkflowSkillList(data)
+      ]
+    : occupation
+      ? [
+          ...occupation.transferables,
+          ...responsibilities.slice(0, 5),
+        ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
+        ...data.customRoleWorkStyles.map(normalizeResponsibility).slice(0, 3),
+        ...data.selectedOutcomes.map(normalizeResponsibility).slice(0, 3),
+        ...nonAiTools.slice(0, 4),
+        ...buildAiWorkflowSkillList(data)
+      ]
+    : [
+        ...responsibilities.slice(0, 6),
+        ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
+        ...data.customRoleWorkStyles.map(normalizeResponsibility).slice(0, 3),
+        ...roleIntelligence[data.roleFamily].skills.map(normalizeResponsibility),
+        ...nonAiTools.slice(0, 4),
+        ...buildAiWorkflowSkillList(data),
+        ...workflowSkillsByFamily[data.roleFamily]
+      ];
 
-  return compact([
-    ...responsibilities.slice(0, 6),
-    ...data.customRoleTransferableSkills.map(normalizeResponsibility).slice(0, 5),
-    ...data.customRoleWorkStyles.map(normalizeResponsibility).slice(0, 3),
-    ...roleIntelligence[data.roleFamily].skills.map(normalizeResponsibility),
-    ...nonAiTools.slice(0, 4),
-    ...buildAiWorkflowSkillList(data),
-    ...workflowSkillsByFamily[data.roleFamily]
-  ]).slice(0, 14);
+  return filterUngroundedOfficeSkills(compact(skillPool), data, occupation).slice(0, 14);
 }
 
 function detectDomain(role: ExperienceRole | { title: string; company: string }) {
@@ -935,6 +967,203 @@ function evidenceText(data: IntakeData) {
     ...data.customRoleTransferableSkills,
     ...data.selectedOutcomes
   ].join(" ");
+}
+
+function isProductBuilderData(data: IntakeData) {
+  const combined = [
+    data.currentTitle,
+    data.currentCompany,
+    data.targetJobTitle,
+    data.tools,
+    data.responsibilities,
+    data.customRoleNotes,
+    ...data.selectedResponsibilities,
+    ...data.selectedActions
+  ].join(" ");
+
+  return productBuilderProfile.keywords.some((keyword) => combined.toLowerCase().includes(keyword));
+}
+
+function detectOccupationProfile(data: IntakeData, role?: ExperienceRole | { title: string; company: string }) {
+  const haystack = [evidenceText(data), role?.title, role?.company].join(" ");
+  return occupationProfiles.find((profile) => profile.patterns.some((pattern) => pattern.test(haystack))) ?? null;
+}
+
+function filterUngroundedOfficeSkills(skills: string[], data: IntakeData, occupation: OccupationProfile | null) {
+  if (!occupation) return skills;
+
+  const explicitText = [
+    data.tools,
+    data.responsibilities,
+    ...data.selectedResponsibilities,
+    ...data.selectedActions,
+    ...data.customRoleTransferableSkills
+  ].join(" ");
+  const ungroundedOfficeTerms =
+    /\b(CRM|Salesforce|HubSpot|Jira|Zendesk|Intercom|ServiceNow|Ticket Triage|Support Tickets|Support Workflows|Account Support|Pipeline Support|Stakeholder Support|Technical Documentation)\b/i;
+
+  return skills.filter((skill) => {
+    if (!ungroundedOfficeTerms.test(skill)) return true;
+    return new RegExp(skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(explicitText);
+  });
+}
+
+function occupationToolPhrase(data: IntakeData, occupation: OccupationProfile, max = 2) {
+  const explicitTools = buildToolList(data);
+  const tools = explicitTools.length ? explicitTools : occupation.universalTools;
+  if (!tools.length) return "";
+  return ` using ${sentenceList(tools.slice(0, max))}`;
+}
+
+function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupation: OccupationProfile) {
+  const toolPhrase = occupationToolPhrase(data, occupation);
+  const title = role.title.toLowerCase();
+  const customerWord = /caregiver|home health|patient|care/i.test(title) ? "clients" : /security/i.test(title) ? "visitors and staff" : "customers";
+  const scopes = buildScopeItems(data);
+  const customerScope = scopeForBullet(scopes, ["customersServed", "callsHandled", "ticketsHandled"]);
+  const operationsScope = scopeForBullet(scopes, ["reportsCreated", "projectsSupported", "teamSizeSupported"]);
+  const teamScope = scopeForBullet(scopes, ["teamSizeSupported"]);
+  const bulletsByOccupation: Record<string, string[]> = {
+    bartender: [
+      customerScope
+        ? `Assisted ${customerScope.phrase} while maintaining accuracy during high-volume service periods.`
+        : "Assisted guests throughout service while maintaining accuracy during high-volume periods.",
+      `Processed payments, managed tabs or orders, and followed cash handling procedures${toolPhrase}.`,
+      "Resolved guest concerns with calm communication and policy-aware judgment.",
+      "Coordinated with coworkers to keep service flow moving efficiently during busy shifts.",
+      "Maintained clean, stocked, and organized work areas to support reliable service."
+    ],
+    retail: [
+      customerScope
+        ? `Assisted ${customerScope.phrase} with purchases, returns, and questions while keeping transactions accurate.`
+        : "Assisted customers with purchases, returns, and questions while keeping transactions accurate.",
+      `Processed checkout activity and supported front-end store operations${toolPhrase}.`,
+      "Restocked merchandise, maintained store presentation, and helped keep inventory areas organized.",
+      "Escalated larger customer issues to leads or managers with clear context.",
+      "Balanced register accuracy, customer service, and shift responsibilities during busy periods."
+    ],
+    warehouse: [
+      operationsScope
+        ? `Picked, packed, scanned, or moved ${operationsScope.phrase} while protecting accuracy in a fast-paced fulfillment setting.`
+        : "Picked, packed, scanned, or moved orders while protecting accuracy in a fast-paced fulfillment setting.",
+      `Used warehouse tools and equipment to support inventory movement and order flow${toolPhrase}.`,
+      "Followed safety procedures while keeping work areas clean, organized, and ready for the next task.",
+      "Coordinated with coworkers during handoffs to keep packages, materials, or stock moving efficiently.",
+      "Maintained attention to detail across repetitive, time-sensitive work."
+    ],
+    security: [
+      "Monitored site activity, access points, or visitor flow while following safety procedures.",
+      "Communicated calmly with visitors, staff, and supervisors during routine questions or tense situations.",
+      operationsScope
+        ? `Documented ${operationsScope.phrase} so handoffs stayed clear and accurate.`
+        : "Documented incidents, observations, or shift notes so handoffs stayed clear and accurate.",
+      "Used judgment to escalate concerns while staying aligned with site policies.",
+      "Maintained reliable coverage and attention to detail across public-facing security responsibilities."
+    ],
+    delivery: [
+      "Managed time-sensitive deliveries by checking orders, planning routes, and completing customer handoffs.",
+      `Used delivery and navigation tools to coordinate pickups, drop-offs, and route decisions${toolPhrase}.`,
+      "Communicated delays, substitutions, or order issues so customers had clear updates.",
+      "Balanced independent work, order accuracy, and customer service across changing daily routes.",
+      "Maintained reliable follow-through while handling traffic, restaurant delays, and delivery timing."
+    ],
+    janitor: [
+      "Maintained clean, stocked, and safe spaces by completing routine cleaning and upkeep tasks.",
+      `Used cleaning supplies, equipment, or basic tools to support daily facility standards${toolPhrase}.`,
+      "Reported broken fixtures, supply needs, or safety concerns so issues could be addressed.",
+      "Followed sanitation and safety procedures while moving through assigned areas consistently.",
+      "Supported daily operations by keeping shared spaces ready for staff, customers, students, or visitors."
+    ],
+    "food-service": [
+      customerScope
+        ? `Prepared orders and assisted ${customerScope.phrase} while balancing speed, accuracy, and service quality.`
+        : "Prepared orders and assisted guests while balancing speed, accuracy, and service quality.",
+      `Followed shift procedures for register use, restocking, cleaning, and food service flow${toolPhrase}.`,
+      "Kept work areas clean and organized while following sanitation expectations.",
+      "Coordinated with coworkers during rushes to keep orders moving and reduce service delays.",
+      "Handled customer questions or order issues with clear communication and steady follow-through."
+    ],
+    caregiver: [
+      "Supported clients with daily routines while maintaining patience, safety awareness, and respect.",
+      `Kept care notes, reminders, or schedule details organized${toolPhrase}.`,
+      "Communicated updates to families, supervisors, or care teams when routines or needs changed.",
+      "Followed safety and care procedures while helping with meals, mobility, reminders, or light household tasks.",
+      "Built trust through consistent attendance, calm communication, and dependable follow-through."
+    ],
+    receptionist: [
+      customerScope
+        ? `Managed ${customerScope.phrase} while welcoming visitors, answering questions, and routing requests.`
+        : "Welcomed visitors or callers, answered questions, and routed requests to the right person or next step.",
+      `Supported scheduling, records, and front desk communication${toolPhrase}.`,
+      "Kept office details organized so appointments, messages, and handoffs stayed accurate.",
+      "Handled interruptions and competing requests while maintaining a professional front desk experience.",
+      "Protected reliability and attention to detail across daily administrative support tasks."
+    ],
+    construction: [
+      "Moved materials, prepared work areas, and supported crews with hands-on job site tasks.",
+      `Used tools, equipment, or PPE to complete assigned work safely and consistently${toolPhrase}.`,
+      "Followed safety procedures while keeping work areas clean, organized, and ready for crews.",
+      teamScope
+        ? `Communicated issues, material needs, or next steps across a ${teamScope.phrase}.`
+        : "Communicated issues, material needs, or next steps to coworkers, leads, or foremen.",
+      "Supported steady job site progress through reliability, physical effort, and attention to task details."
+    ]
+  };
+
+  const fallback = [
+    `Assisted ${customerWord} and coworkers while keeping daily responsibilities accurate and organized.`,
+    `Handled ${sentenceList(occupation.dailyTasks.slice(0, 3)).toLowerCase()} in a ${occupation.environment}.`,
+    `Communicated clearly around ${sentenceList(occupation.communication.slice(0, 2)).toLowerCase()} and follow-up needs.`,
+    `Solved routine problems related to ${sentenceList(occupation.challenges.slice(0, 2)).toLowerCase()}.`,
+    "Maintained reliability, attention to detail, and steady follow-through across daily work."
+  ];
+
+  return qualityCheckBullets(bulletsByOccupation[occupation.id] ?? fallback, ["Assisted", "Handled", "Resolved", "Coordinated", "Maintained"]);
+}
+
+function buildOccupationSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
+  const currentRole = experience[0];
+  const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
+  const strengths = compact([
+    ...occupation.transferables,
+    ...data.customRoleTransferableSkills.map(normalizeResponsibility),
+    ...data.customRoleWorkStyles.map(normalizeResponsibility)
+  ]).slice(0, 5);
+  const responsibilities = occupation.dailyTasks.map(readablePhrase).slice(0, 4);
+  const aiPhrase = aiWorkflowPhrase(data);
+
+  return limitSentences(
+    `${title} with experience in a ${occupation.environment}, handling ${sentenceList(responsibilities).toLowerCase()}. Strengths include ${sentenceList(strengths).toLowerCase()}, with a working style built around accuracy, calm communication, and dependable follow-through. Now targeting ${target} roles where practical service experience and steady execution can transfer into the next step.${aiPhrase ? ` Uses AI-assisted workflows for ${aiPhrase} when they support the work directly.` : ""}`,
+    4
+  );
+}
+
+function buildOccupationLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
+  const currentRole = experience[0];
+  const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
+  const strengths = occupation.transferables.slice(0, 4);
+
+  return limitSentences(
+    `${title} with hands-on experience in a ${occupation.environment}. Brings ${sentenceList(strengths.map((item) => item.toLowerCase()))} into ${targetRoleFamilyText(data, target)}. Looking for roles where practical work experience, clear communication, and reliable follow-through can support better daily operations.`,
+    3
+  );
+}
+
+function buildOccupationHeadline(data: IntakeData, occupation: OccupationProfile) {
+  const parts = occupation.headline.split("|").map(cleanWhitespace).filter(Boolean);
+  const background = parts[0] ?? occupation.headline;
+  const strength = parts[1] ?? roleStrategies[data.roleFamily].valueArea;
+
+  if (data.roleFamily === "Customer Success" && !/customer|client/i.test(occupation.headline)) {
+    return `${background} | Customer Service | ${strength}`;
+  }
+  if (data.roleFamily === "Admin" && !/admin|reception|scheduling/i.test(occupation.headline)) {
+    return `${background} | Administrative Support | ${strength}`;
+  }
+  if (data.roleFamily === "Operations" && !/operations|inventory|logistics|facilities/i.test(occupation.headline)) {
+    return `${background} | Operations | ${strength}`;
+  }
+  return occupation.headline;
 }
 
 function isBeautyServiceProfile(data: IntakeData, role?: ExperienceRole | { title: string; company: string }) {
@@ -1163,9 +1392,12 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   };
 
   if (roleIndex === 0 && domain?.name === "product-builder") {
+    const projectScope = scopeForBullet(scopes, ["projectsSupported", "reportsCreated"]);
     return qualityCheckBullets(
       [
-        `Planned features, wrote product copy, and documented issues across ${environment}.`,
+        projectScope
+          ? `Planned features, wrote product copy, and documented issues across ${projectScope.phrase}.`
+          : `Planned features, wrote product copy, and documented issues across ${environment}.`,
         "Tested mobile layouts and broken states before shipping usable demos and website updates.",
         tools.length
           ? `Used ${sentenceList(tools.slice(0, 3))} to support product documentation, implementation, and launch follow-through.`
@@ -1173,6 +1405,11 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
       ],
       verbs
     );
+  }
+
+  const occupation = roleIndex === 0 ? detectOccupationProfile(data, role) : null;
+  if (occupation) {
+    return buildOccupationBullets(data, role, occupation);
   }
 
   if (roleIndex === 0 && isBeautyServiceProfile(data, role)) {
@@ -1256,7 +1493,7 @@ function qualityCheckBullets(bullets: string[], fallbackVerbs: string[]) {
       return bullet.replace(/^\w+/, replacement);
     })
     .filter((bullet) => bullet.length > 30)
-    .slice(0, 3);
+    .slice(0, 5);
 }
 
 function limitSentences(value: string, maxSentences: number) {
@@ -1268,8 +1505,12 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   const roleFamily = data.roleFamily;
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
+  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
   const strategy = roleStrategies[roleFamily];
   const responsibilities = buildResponsibilityList(data);
+  if (occupation) {
+    return buildOccupationSummary(data, target, experience, occupation);
+  }
   if (currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` serving ${volume}` : "";
@@ -1303,10 +1544,14 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
 function buildLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
+  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
   const strategy = roleStrategies[data.roleFamily];
   const responsibilities = buildResponsibilityList(data).slice(0, 2).map(readablePhrase);
   const strengths = compact([...(domain?.strengths ?? []), ...responsibilities, ...strategy.focus.map(readablePhrase)]).slice(0, 3);
   const environment = domain?.environment ?? strategy.environment;
+  if (occupation) {
+    return buildOccupationLinkedInSummary(data, target, experience, occupation);
+  }
   if (currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` ${volume},` : "";
@@ -1335,6 +1580,10 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
 
 function buildHeadline(data: IntakeData, target: string, skills: string[], experience: ExperienceRole[]) {
   const background = cleanWhitespace(experience[0]?.title ?? "") || cleanWhitespace(data.currentTitle) || "Career Switcher";
+  const occupation = experience[0] ? detectOccupationProfile(data, experience[0]) : detectOccupationProfile(data);
+  if (occupation) {
+    return buildOccupationHeadline(data, occupation);
+  }
   const strengths = headlineStrengths(data, skills);
   const headline = `${background} | ${directionLabel(data, target)} | ${strengths.join(", ") || roleStrategies[data.roleFamily].valueArea}`;
   return headline.length > 115 ? `${background} | ${directionLabel(data, target)} | ${strengths.slice(0, 2).join(", ")}` : headline;

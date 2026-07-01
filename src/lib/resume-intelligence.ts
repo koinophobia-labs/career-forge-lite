@@ -177,7 +177,7 @@ function diversifyOpeningVerbs(bullets: string[]) {
 export function polishBullets(bullets: string[]) {
   return unique(diversifyOpeningVerbs(bullets.map(polishResumeSentence)))
     .filter((bullet) => bullet.length > 24)
-    .slice(0, 4);
+    .slice(0, 5);
 }
 
 function polishRole(role: ExperienceRole): ExperienceRole {

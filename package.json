@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node scripts/input-stability-regression.mjs",
+    "test": "node scripts/input-stability-regression.mjs && node scripts/quality-regression-suite.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke:generator": "node scripts/smoke-generator.mjs",

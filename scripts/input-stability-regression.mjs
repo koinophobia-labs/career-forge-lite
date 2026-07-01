@@ -98,7 +98,7 @@ const sampleUsers = [
     role: "Barber with regular clients, appointments, customer concerns, referrals, and service recommendations.",
     expected: "Barber",
     expectedEvidence: ["Built repeat clientele", "Appointment scheduling", "Retention and referrals"],
-    expectedRecommendation: "Client Success Representative"
+    expectedRecommendation: "Customer Experience Associate"
   },
   {
     label: "Software engineer",
