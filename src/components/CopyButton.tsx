@@ -67,7 +67,7 @@ export function CopyButton({ getText, label = "Copy" }: CopyButtonProps) {
   }
 
   const visibleLabel =
-    status === "copied" ? "Copied" : status === "empty" ? "Nothing to copy" : status === "failed" ? "Copy failed" : label;
+    status === "copied" ? "Copied" : status === "empty" ? "Nothing to copy" : status === "failed" ? "Manual copy ready" : label;
 
   return (
     <span className="inline-flex max-w-full flex-col gap-2">
