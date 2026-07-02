@@ -329,9 +329,14 @@ function extractAiWorkflows(story: string, tools: string[]) {
     .slice(0, 8);
 }
 
+function isNegatedSignal(story: string, value: string) {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b(?:not|no|without|never)\\s+(?:a\\s+|any\\s+)?${escaped}\\b`, "i").test(story);
+}
+
 function extractResponsibilities(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
-  const keywordMatches = responsibilityKeywords.filter((item) => lower.includes(item)).map(titleCase);
+  const keywordMatches = responsibilityKeywords.filter((item) => lower.includes(item) && !isNegatedSignal(story, item)).map(titleCase);
   const handledClause = story.match(/\b(?:assisted|answered|cared for|checked|cleaned|coached|cut|delivered|documented|drove|fixed|followed|handled|loaded|maintained|managed|mopped|operated|organized|packed|picked|planned|prepared|processed|repaired|resolved|sanitized|scheduled|shipped|stocked|styled|supported|swept|tested|tracked|trained|unloaded|updated|wrote)\s+([^.;]+)/i)?.[1] ?? "";
   const clauseMatches = splitSignals(handledClause).map(titleCase);
   const actionMatches = Array.from(
@@ -355,7 +360,7 @@ function extractEducation(story: string) {
 
 function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
-  const keywordMatches = transferableKeywords.filter((item) => lower.includes(item)).map(titleCase);
+  const keywordMatches = transferableKeywords.filter((item) => lower.includes(item) && !isNegatedSignal(story, item)).map(titleCase);
   const inferredProof = [
     /de-?escalat/i.test(story) ? "De-Escalation" : "",
     /\b(?:resolved|solved|troubleshot)\b/i.test(story) ? "Problem Solving" : "",
@@ -363,8 +368,8 @@ function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
     /\b(?:on time|showed up|reliable|covered shifts?|never missed|opened|closed)\b/i.test(story) ? "Reliability" : "",
     /\b(?:safe|safety|ppe|osha|sanitation|clean|compliance|procedures?)\b/i.test(story) ? "Safety Awareness" : "",
     /\b(?:customer|client|patient|resident|visitor|guest)\b/i.test(story) ? "Customer Or Client Service" : "",
-    /\b(?:fast-paced|rush|time-sensitive|route|deadline|deliver(?:y|ies))\b/i.test(story) ? "Time Management" : "",
-    /\b(?:order accuracy|checked order|checked names|checked items|prepared orders?)\b/i.test(story) ? "Order Accuracy" : ""
+    /\b(?:fast-paced|rush|time-sensitive|route|deadline|deliver(?:y|ies))\b/i.test(story) && !isNegatedSignal(story, "delivery") ? "Time Management" : "",
+    /\b(?:order accuracy|checked order|checked names|checked items|prepared orders?)\b/i.test(story) && !isNegatedSignal(story, "order accuracy") ? "Order Accuracy" : ""
   ];
   const familySkills = roleIntelligence[roleFamily].skills.filter((skill) => lower.includes(skill.toLowerCase()));
   const independentCategory = inferIndependentWorkCategory(story);
