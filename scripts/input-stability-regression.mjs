@@ -109,7 +109,7 @@ const sampleUsers = [
 ];
 
 async function startGuidedFlow(page) {
-  await page.goto(baseUrl, { waitUntil: "load" });
+  await page.goto(`${baseUrl}/resume-builder`, { waitUntil: "load" });
   await assertNoHorizontalOverflow(page, "landing");
   await page.getByRole("button", { name: "Build My Resume" }).click();
   await page.getByText("Choose how you want to start.").waitFor();

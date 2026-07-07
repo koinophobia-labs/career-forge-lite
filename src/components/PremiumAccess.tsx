@@ -64,7 +64,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
           Start Over
         </button>
         <Link
-          href="/#demo"
+          href="/resume-builder#demo"
           className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
         >
           Use Free Builder

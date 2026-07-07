@@ -1,0 +1,275 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { CommandNav } from "@/components/CommandNav";
+import { SiteFooter } from "@/components/SiteFooter";
+import { createId } from "@/lib/command-center-store";
+import { laneLibrary } from "@/lib/lane-library";
+import { useCommandCenter } from "@/lib/use-command-center";
+import type { LaneStatus, TargetLane } from "@/types/command-center";
+
+const statusOrder: LaneStatus[] = ["active", "exploring", "paused"];
+
+function LaneDetail({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <p className="lab-mono text-[0.68rem] font-bold uppercase text-gold">{title}</p>
+      <ul className="mt-1.5 grid gap-1">
+        {items.map((item) => (
+          <li key={item} className="text-[0.8rem] leading-5 text-paper/68">
+            · {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function TargetsPage() {
+  const { state, update, hydrated } = useCommandCenter();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [customTitle, setCustomTitle] = useState("");
+
+  const adoptedKeys = new Set(
+    state.lanes.map((lane) => laneLibrary.find((blueprint) => blueprint.title === lane.title)?.key).filter(Boolean)
+  );
+
+  function adoptLane(key: string) {
+    const blueprint = laneLibrary.find((item) => item.key === key);
+    if (!blueprint) return;
+    update((current) => {
+      if (current.lanes.some((lane) => lane.title === blueprint.title)) return current;
+      const lane: TargetLane = {
+        id: createId("lane"),
+        title: blueprint.title,
+        status: current.lanes.filter((item) => item.status === "active").length < 3 ? "active" : "exploring",
+        whyFit: blueprint.whyFit,
+        resumeAngle: blueprint.resumeAngle,
+        proof: blueprint.proof,
+        gaps: blueprint.gaps,
+        keywords: blueprint.keywords,
+        source: "library",
+        createdAt: new Date().toISOString()
+      };
+      return { ...current, lanes: [...current.lanes, lane] };
+    });
+  }
+
+  function addCustomLane() {
+    const title = customTitle.trim();
+    if (!title) return;
+    update((current) => {
+      if (current.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase())) return current;
+      const lane: TargetLane = {
+        id: createId("lane"),
+        title,
+        status: "exploring",
+        whyFit: "",
+        resumeAngle: "",
+        proof: [],
+        gaps: [],
+        keywords: [],
+        source: "custom",
+        createdAt: new Date().toISOString()
+      };
+      return { ...current, lanes: [...current.lanes, lane] };
+    });
+    setCustomTitle("");
+  }
+
+  function cycleStatus(id: string) {
+    update((current) => ({
+      ...current,
+      lanes: current.lanes.map((lane) =>
+        lane.id === id
+          ? { ...lane, status: statusOrder[(statusOrder.indexOf(lane.status) + 1) % statusOrder.length] }
+          : lane
+      )
+    }));
+  }
+
+  function removeLane(id: string) {
+    update((current) => ({ ...current, lanes: current.lanes.filter((lane) => lane.id !== id) }));
+  }
+
+  function editLaneField(id: string, field: "whyFit" | "resumeAngle", value: string) {
+    update((current) => ({
+      ...current,
+      lanes: current.lanes.map((lane) => (lane.id === id ? { ...lane, [field]: value } : lane))
+    }));
+  }
+
+  return (
+    <main>
+      <CommandNav active="/targets" />
+
+      <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
+        <p className="trust-kicker text-sm font-bold uppercase">Step 02 · Target lanes</p>
+        <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Pick the lanes you’re running in.</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
+          A lane is a role family with a defined angle: why you fit, how the resume should read, what proof to lead
+          with, and what gaps to close. Two or three active lanes beats ten vague ones — every application and message
+          gets sharper when it belongs to a lane.
+        </p>
+
+        {hydrated && state.lanes.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-paper">Your lanes ({state.lanes.length})</h2>
+            <div className="mt-4 grid gap-4">
+              {state.lanes.map((lane) => (
+                <article key={lane.id} className="trust-panel p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-lg font-bold text-paper">{lane.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => cycleStatus(lane.id)}
+                        className={`lab-mono rounded-full border px-3 py-1 text-[0.65rem] font-bold uppercase transition ${
+                          lane.status === "active"
+                            ? "border-gold/50 bg-gold/10 text-gold"
+                            : lane.status === "exploring"
+                              ? "border-cyan/50 bg-cyan/10 text-cyan"
+                              : "border-white/20 text-paper/50"
+                        }`}
+                        title="Click to change status"
+                      >
+                        {lane.status}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(expandedId === lane.id ? null : lane.id)}
+                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-bold text-paper/60 transition hover:border-cyan hover:text-cyan"
+                      >
+                        {expandedId === lane.id ? "Collapse" : "Details"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeLane(lane.id)}
+                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-bold text-paper/60 transition hover:border-coral hover:text-coral"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  {expandedId === lane.id && (
+                    <div className="mt-4 grid gap-5 border-t border-white/10 pt-4 lg:grid-cols-2">
+                      <div className="grid gap-4">
+                        <label className="block">
+                          <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Why this fits</span>
+                          <textarea
+                            value={lane.whyFit}
+                            rows={3}
+                            placeholder="Why your background maps to this lane — in your own words."
+                            onChange={(event) => editLaneField(lane.id, "whyFit", event.target.value)}
+                            className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Resume angle</span>
+                          <textarea
+                            value={lane.resumeAngle}
+                            rows={3}
+                            placeholder="How the resume should be framed for this lane."
+                            onChange={(event) => editLaneField(lane.id, "resumeAngle", event.target.value)}
+                            className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink"
+                          />
+                        </label>
+                      </div>
+                      <div className="grid content-start gap-4">
+                        <LaneDetail title="Proof to emphasize" items={lane.proof} />
+                        <LaneDetail title="Gaps to close" items={lane.gaps} />
+                      </div>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hydrated && !state.lanes.length && (
+          <div className="mt-8 rounded-xl border border-cyan/25 bg-cyan/10 p-5 text-sm leading-6 text-paper/72">
+            No lanes yet. Adopt from the library below — each comes pre-loaded with a fit rationale, resume angle,
+            proof list, and gap plan built for transitions from operations and customer-facing work.
+          </div>
+        )}
+
+        <div className="mt-10">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-paper">Lane library</h2>
+              <p className="mt-1 text-sm text-paper/60">
+                Nine proven entry lanes for the operations-to-tech transition. Adopt what fits; edit everything after.
+              </p>
+            </div>
+            <div>
+              <div className="flex gap-2">
+                <input
+                  value={customTitle}
+                  placeholder="Or add a custom lane, e.g. Payments Operations"
+                  onChange={(event) => setCustomTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addCustomLane();
+                  }}
+                  className="trust-input border px-3 py-2 text-sm text-ink"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomLane}
+                  className="rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan"
+                >
+                  Add
+                </button>
+              </div>
+              <p className="mt-1.5 max-w-xs text-xs leading-4 text-paper/45">
+                Custom lanes start empty — open Details after adding to write why you fit and the resume angle.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {laneLibrary.map((blueprint) => {
+              const adopted = adoptedKeys.has(blueprint.key);
+              return (
+                <article key={blueprint.key} className="trust-card flex flex-col p-4">
+                  <h3 className="text-base font-bold text-paper">{blueprint.title}</h3>
+                  <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{blueprint.summary}</p>
+                  <p className="mt-3 text-[0.78rem] leading-5 text-paper/68">
+                    <span className="font-bold text-cyan">Why it fits: </span>
+                    {blueprint.whyFit}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={adopted}
+                    onClick={() => adoptLane(blueprint.key)}
+                    className={`mt-4 rounded-md px-4 py-2 text-sm font-black transition ${
+                      adopted
+                        ? "cursor-default border border-white/15 bg-white/5 text-paper/40"
+                        : "bg-gold text-ink hover:bg-cyan"
+                    }`}
+                  >
+                    {adopted ? "In your lanes" : "Adopt this lane"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
+          <p className="text-sm text-paper/68">
+            Lanes feed the tailoring engine: keywords, angles, and proof are matched against every job post you analyze.
+          </p>
+          <Link href="/tailor" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">
+            Next: tailor to a job post →
+          </Link>
+        </div>
+      </section>
+
+      <SiteFooter />
+    </main>
+  );
+}

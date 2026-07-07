@@ -7,6 +7,7 @@ type SiteHeaderProps = {
 };
 
 const navItems = [
+  ["Dashboard", "/"],
   ["Overview", "#landing"],
   ["Choose Path", "#paths"],
   ["Why Trust It", "#trust"],

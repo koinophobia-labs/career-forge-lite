@@ -1,8 +1,23 @@
-# Career Forge Lite
+# Career Forge
 
-Career Forge Lite is a lightweight AI career tool that turns a guided career interview into an editable, ATS-friendly resume package for early-career candidates.
+Career Forge is a career transition command center. It turns a job search into a working system: a durable career profile, target role lanes with explicit positioning, application tailoring against real job posts, outreach with follow-up scheduling, an applications pipeline, and a dashboard that always surfaces the next best action. The original guided resume builder remains a core station inside the loop.
 
-**Positioning:** Turn real work into recruiter-ready resume language.
+**Positioning:** Run your job search like an operation, not a lottery.
+
+All command-center data persists in browser localStorage — no accounts, no backend, nothing uploaded.
+
+## Command center stations
+
+| Route | Station | What it does |
+| --- | --- | --- |
+| `/` | Dashboard | The loop, live stats, follow-ups due, and the single next best action |
+| `/profile` | Career profile | Situation, target roles, transferable skills, strengths, constraints, proof points |
+| `/targets` | Target lanes | 9-lane library (AI Support, Trust & Safety, Fraud/Risk Ops, Community, Product Support, QA, Product Ops, Customer Success, Technical Support) with fit rationale, resume angle, proof, and gaps — plus custom lanes |
+| `/tailor` | Application tailoring | Deterministic job-post analysis: keywords, requirements vs. profile, weak spots, honest bullet rewrite suggestions |
+| `/applications` | Pipeline | Status tracking with automatic follow-up scheduling |
+| `/outreach` | Outreach | Contact tracking, message templates, and a two-follow-up cadence |
+| `/resume-builder` | Resume builder | The original guided intake → ATS-safe resume package flow |
+| `/story`, `/interview` | Story + interview modes | Free-text intake parsing and interview practice |
 
 The interface uses a Koinophobia Labs-inspired trust design: dark, premium framing for the product experience with clean white work surfaces for resume editing and review.
 

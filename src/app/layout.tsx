@@ -22,8 +22,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Career Forge Lite",
-  description: "Turn everyday experience into a polished resume and LinkedIn headline in minutes."
+  title: "Career Forge",
+  description:
+    "A career transition command center: positioning, target role lanes, tailored applications, outreach, and interview prep — tracked in one place."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
