@@ -20,5 +20,6 @@ export const secondaryStations: readonly NavStation[] = [
   ["Versions", "/versions"],
   ["Resume Builder", "/resume-builder"],
   ["Weekly", "/weekly"],
-  ["Data", "/settings"]
+  ["Data", "/settings"],
+  ["Beta", "/beta"]
 ];

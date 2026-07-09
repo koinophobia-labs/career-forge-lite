@@ -70,7 +70,7 @@ check(
 // --- Secondary nav: support routes present, none promoted -------------------
 
 const secondaryHrefs = secondaryStations.map(([, href]) => href);
-for (const href of ["/profile", "/targets", "/versions", "/resume-builder", "/weekly", "/settings"]) {
+for (const href of ["/profile", "/targets", "/versions", "/resume-builder", "/weekly", "/settings", "/beta"]) {
   check(`secondary nav contains ${href}`, secondaryHrefs.includes(href));
 }
 check("Resume Builder remains accessible from nav", secondaryHrefs.includes("/resume-builder"));
@@ -107,7 +107,8 @@ const allRoutes = [
   "/versions/view",
   "/interview",
   "/story",
-  "/settings"
+  "/settings",
+  "/beta"
 ];
 for (const route of allRoutes) {
   check(`route ${route} still exists`, fs.existsSync(routeFileFor(route)));

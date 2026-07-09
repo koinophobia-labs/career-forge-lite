@@ -49,3 +49,19 @@ export function trackResumeGeneration(mode: "guided" | "interview" | "story") {
     mode,
   });
 }
+
+export function trackBetaOfferVisit() {
+  trackProductEvent("beta_offer_visit", { product: "career_forge_lite" });
+}
+
+export function trackBetaCtaClick(mode: string) {
+  trackProductEvent("beta_cta_click", { product: "career_forge_lite", mode });
+}
+
+export function trackDemoCampaign(action: "loaded" | "cleared") {
+  trackProductEvent("demo_campaign", { product: "career_forge_lite", action });
+}
+
+export function trackFeedbackSubmitted(area: string, length: number) {
+  trackProductEvent("beta_feedback", { product: "career_forge_lite", area, length });
+}

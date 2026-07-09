@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
+import { trackDemoCampaign } from "@/lib/analytics";
 import { getLastBackupAt, shouldNudgeBackup } from "@/lib/backup";
+import { buildDemoState, isDemoState } from "@/lib/demo-data";
+import { emptyState } from "@/lib/command-center-store";
+import { buildWeeklyPlan } from "@/lib/weekly-plan";
 import { isMomentumLow } from "@/lib/weekly-review";
 import {
   applicationFollowUpsDue,
@@ -27,8 +31,10 @@ const loop = [
 ] as const;
 
 export default function Dashboard() {
-  const { state, hydrated } = useCommandCenter();
+  const { state, update, hydrated } = useCommandCenter();
   const nowIso = useMemo(() => new Date().toISOString(), []);
+  const weeklyPlan = useMemo(() => buildWeeklyPlan(state, nowIso), [state, nowIso]);
+  const demoActive = hydrated && isDemoState(state);
 
   const stats = useMemo(() => computeDashboardStats(state, nowIso), [state, nowIso]);
   const nextAction = useMemo(() => getNextBestAction(state, nowIso), [state, nowIso]);
@@ -120,6 +126,29 @@ export default function Dashboard() {
         </div>
       </section>
 
+      {demoActive && (
+        <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan/35 bg-cyan/10 px-5 py-4">
+            <span>
+              <span className="block text-sm font-bold text-paper">You&rsquo;re viewing a sample campaign (demo data).</span>
+              <span className="mt-0.5 block text-[0.78rem] leading-5 text-paper/60">
+                Everything here is a fictional job seeker — click around, then clear it to start your own search.
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                trackDemoCampaign("cleared");
+                update(() => emptyState());
+              }}
+              className="rounded-md border border-cyan/50 bg-obsidian/40 px-4 py-2 text-sm font-bold text-cyan transition hover:border-coral hover:text-coral"
+            >
+              Clear demo data
+            </button>
+          </div>
+        </section>
+      )}
+
       {isFirstRun && (
         <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
           <div className="rounded-xl border border-cyan/25 bg-cyan/10 p-5 sm:p-6">
@@ -132,9 +161,53 @@ export default function Dashboard() {
               tailored against the real job post, every message gets a follow-up date, and this dashboard always tells you
               the single next thing worth doing.
             </p>
-            <Link href="/profile" className="lab-pill-button mt-4 inline-block px-5 py-2.5 text-sm font-black transition">
-              Start with your profile
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href="/profile" className="lab-pill-button inline-block px-5 py-2.5 text-sm font-black transition">
+                Start with your profile
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  trackDemoCampaign("loaded");
+                  update(() => buildDemoState(new Date().toISOString()));
+                }}
+                className="rounded-md border border-cyan/40 bg-obsidian/40 px-5 py-2.5 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
+              >
+                Or explore a sample campaign first
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {hydrated && (
+        <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
+          <div className="trust-panel p-5 sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="trust-kicker text-xs font-bold uppercase">This week&rsquo;s plan</p>
+                <h2 className="mt-2 text-xl font-bold text-paper">The moves that matter this week</h2>
+              </div>
+              <Link href="/beta" className="text-sm font-bold text-gold transition hover:text-cyan">
+                About the paid beta →
+              </Link>
+            </div>
+            <ol className="mt-4 grid gap-2">
+              {weeklyPlan.map((item, index) => (
+                <li key={item.title}>
+                  <Link
+                    href={item.href}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-white/12 bg-obsidian/40 px-4 py-3 transition hover:border-gold/50"
+                  >
+                    <span className="lab-mono text-xs font-bold text-gold">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="text-sm font-bold text-paper">{item.title}</span>
+                    <span className="basis-full text-[0.78rem] leading-5 text-paper/55 sm:basis-auto sm:flex-1">
+                      {item.detail}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
       )}

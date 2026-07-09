@@ -175,6 +175,31 @@ export function LandingPage({ onStart }: LandingPageProps) {
         </div>
       </div>
 
+      <div className="relative mx-auto max-w-6xl px-5 pb-14 sm:px-8" id="system">
+        <div className="rounded-md border border-gold/25 bg-gold/10 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">The bigger system</p>
+              <h2 className="mt-2 text-2xl font-bold text-paper">
+                The builder is one station. Career Forge is a job-search campaign system.
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-paper/70">
+                Paste any job post and get the resume angle that fits it, a Match Brief, a ready outreach message,
+                tracked follow-ups, and interview prep built from the same analysis — all local, no login. The full
+                command center is in paid beta.
+              </p>
+            </div>
+            <a
+              href="/beta"
+              onClick={() => trackCtaClick("landing_beta_offer", "/beta")}
+              className="lab-pill-button inline-flex min-h-11 items-center px-5 text-sm font-black transition"
+            >
+              See the paid beta
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div className="relative mx-auto max-w-6xl px-5 pb-14 sm:px-8" id="trust">
         <div className="rounded-md border border-white/10 bg-white/5 p-5">
           <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
