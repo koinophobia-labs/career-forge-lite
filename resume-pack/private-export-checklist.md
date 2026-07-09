@@ -1,37 +1,36 @@
-# Private Export Checklist
+# Private Export Checklist — Final
 
-The committed markdown files in this folder are **public drafts** — they deliberately contain `[PRIVATE_*]` placeholders instead of real contact details, because this repository is public. Export-ready copies with real contact info must never be committed here.
+The committed markdown files are **public drafts** with privacy placeholders. Export-ready copies with real contact details are never committed — put them in the git-ignored `resume-pack/private/` folder or outside the repo.
 
-## How to produce an export safely
+## Remaining blockers (the ONLY open items)
 
-1. Copy the four resume `.md` files into `resume-pack/private/` (git-ignored — see `.gitignore`) or anywhere outside this repo.
-2. In the copies only, replace:
-   - `[PRIVATE_EMAIL]` → the real application email. Decide which one: the personal address or the Koinophobia Labs business address. Pick one and use it consistently across all four resumes and LinkedIn.
-   - `[PRIVATE_PHONE]` → real phone number.
-   - `[LINKEDIN_URL]` → real LinkedIn profile URL (the short custom one, e.g. `linkedin.com/in/...`).
-3. Resolve every remaining `[VERIFY]` in the copies: fill with the confirmed fact, or **delete the claim entirely**. A resume must leave this checklist with zero brackets.
-4. `[VERIFY_CONFLICT]` (education) is a hard gate: do not export any version until the degree wording is resolved. If unresolved on a deadline, export with the EDUCATION section removed rather than guessing.
-5. Export per `design-brief.md` (Version A ATS + Version B designed) using the file names listed there.
-6. Confirm no export file (PDF/DOCX) gets committed to this repo. Keep them in `resume-pack/private/`, local disk, or private storage.
+| # | Blocker | Where it lands |
+|---|---|---|
+| 1 | DraftKings exact end date (or confirm still employed → keep "2023 – Present") | Dates line, all four resumes. Until answered, do not claim "former" and do not guess a year |
+| 2 | Which private email to use (personal vs. lab address) | `[PRIVATE_EMAIL]`, all four headers |
+| 3 | Phone on resume: yes/no (if yes, the number) | `[PRIVATE_PHONE]` — delete the field entirely if no |
+| 4 | LinkedIn URL | `[LINKEDIN_URL]`, all four headers |
+| 5 | Trendi one-line current status | AI/QA resume, Selected Projects |
+| 6 | Koi Cave one-line current status | AI/QA resume, Selected Projects |
+| 7 | You Know Ball one-line current status (may upgrade "web app MVP" to "live web MVP" only if actually live) | AI/QA resume, experience bullet + Selected Projects |
+| 8 | Social metrics: include current, defensible numbers — or confirm omit (resumes currently omit them) | Community/T&S resume, if included |
 
-## Export gate — must be answered before any PDF/DOCX goes out
+## Export procedure
 
-**Blocking:**
+1. Copy the four resume `.md` files into `resume-pack/private/` (git-ignored) or outside the repo.
+2. Resolve blockers 1–8 in the copies. A resume leaves this checklist with **zero brackets** — every remaining `[...]` is either filled with a confirmed fact or the line is deleted.
+3. Export per `design-brief.md`: Version A (conservative ATS, PDF + DOCX) and Version B (designed PDF), using the file names listed there.
+4. Never commit any export file or any file containing real contact details to this public repo.
 
-1. Education: "B.A. Global Management" or "B.A. Social Entrepreneurship & Social Change"? Plus institution and year.
-2. DraftKings: exact internal job title, start date, end date (or keep `[VERIFY END DATE]` → then the dates line must be resolved to at least "20XX – 20XX" honestly).
+## Already resolved — do not reopen
 
-**Required per resume (fill or delete the line):**
-
-3. Fraud/Risk: daily transaction volume / cash handled; RG program specifics; escalation example.
-4. AI/QA: You Know Ball live URL + one-liner; Trendi one-liner + TestFlight truth; Koi Cave one-liner.
-5. Community/T&S: real Discord servers + roles; social platforms; audience numbers only if current and defensible.
-6. Customer Success: any delivered client projects/conversions worth naming (with client permission).
-
-**Contact:**
-
-7. Which email goes on resumes; phone; LinkedIn URL; confirm "Chicago, IL" is the wording you want (sources say "Chicago area").
+- Education: **Earlham College — B.A. Global Management, May 2024 · Track: Social Entrepreneurship · Minors: Political Science, Leadership, Philosophy** (Blake-confirmed; override only on his explicit instruction)
+- DraftKings title: **Associate Sportsbook Writer**, start **2023**
+- Location: **Chicago, IL**
+- Career Forge Lite: deterministic/rule-based wording
+- Responsible Gaming Community Framework: elevated as a major project on the fraud/RG, AI-support, and community/T&S resumes
+- Transaction numbers / RG program specifics: intentionally absent — do not add without Blake providing them
 
 ## Git history note
 
-An earlier commit on this branch (before this hardening pass) contained a real email address in these files. The branch history was rewritten to remove it; if you ever see a real address in any committed file here, treat it as a bug and scrub it.
+An early commit on this branch contained a real email address; the branch history was rewritten to remove it. If you ever see a real address in any committed file here, treat it as a bug and scrub it.

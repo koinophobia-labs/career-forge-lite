@@ -13,32 +13,32 @@ Customer-facing operator with real policy-enforcement experience from a regulate
 
 ### CORE SKILLS
 
-Community Management · Trust & Safety · Content Moderation Judgment · Policy Enforcement · Escalation Procedures · Conflict De-escalation · Responsible Gaming Awareness · User Support · Community Guidelines · Discord Operations ([VERIFY: servers/roles]) · Creator & Social Media Experience ([VERIFY: platforms/handles]) · Documentation · Consistent Rule Application
+Community Management · Trust & Safety · Content Moderation Judgment · Policy Enforcement · Escalation Procedures · Conflict De-escalation · Responsible Gaming Awareness · User Support · Community Guidelines · Discord & Community Platforms · Public-Facing Writing · Documentation · Consistent Rule Application
 
 ### EXPERIENCE
 
-**Sportsbook Ticket Writer — DraftKings** ([VERIFY: exact internal job title])
-*[VERIFY START DATE] – [VERIFY END DATE]*
+**Associate Sportsbook Writer — DraftKings**
+*2023 – [VERIFY END DATE]*
 
-- Enforced house rules and gaming policy face-to-face with customers, including denying transactions — held the line consistently while keeping interactions civil
-- De-escalated payout disputes and heated moments in a crowded, high-stakes environment where other customers were always watching — public conflict handling under pressure
-- Applied responsible gaming awareness with live customers: recognized concerning patterns of play and followed program procedures instead of looking away ([VERIFY: DraftKings RG program specifics])
-- Escalated gray-area situations to supervisors with clear, factual accounts rather than improvising policy on the spot
-- Served a high volume of regulars — built the repeat-relationship trust that community work runs on
+- Enforce house rules and gaming policy face-to-face with customers, including denying transactions — holding the line consistently while keeping interactions civil
+- De-escalate payout disputes and heated moments in a crowded, high-stakes environment where other customers are always watching — public conflict handling under pressure
+- Apply responsible gaming awareness with live customers: recognize concerning patterns of play and follow program procedures instead of looking away
+- Escalate gray-area situations to supervisors with clear, factual accounts rather than improvising policy on the spot
+- Serve a high volume of regulars — building the repeat-relationship trust that community work runs on
 
 **Founder — Koinophobia Labs (independent product lab), Chicago, IL**
 *2025 – Present*
 
-- Authored and published an open responsible-gaming community framework — written guidelines for running gambling-adjacent communities with member safety as a first-class rule ([VERIFY: exact scope])
+- Authored and published an open Responsible Gaming Community Framework — written, public guidelines for running gambling-adjacent communities with member safety as a first-class rule
 - Built Career Forge Lite with explicit safety guardrails: the rule-based product refuses to fabricate credentials for users — policy thinking applied to product design
-- Created public-facing product content, launch posts, and documentation; manage the lab's public presence across GitHub and the web ([VERIFY: social platforms — include audience numbers ONLY if current and defensible; otherwise omit them entirely])
-- [VERIFY: any Discord servers founded, moderated, or actively contributed to — name them here with member counts only if true and current; delete this line otherwise]
+- Create public-facing product content, launch posts, and documentation; manage the lab's public presence across GitHub, LinkedIn, and the web
 
 ### SELECTED PROJECTS
 
-- **Responsible Gaming Community Framework** — open, documented framework for safety-first community operations in gaming spaces (github.com/koinophobia-labs/responsible-gaming-community-framework)
+- **Responsible Gaming Community Framework** — open, published framework pairing floor-level responsible-gaming experience with written policy design for gaming-adjacent communities; the core artifact for this lane (github.com/koinophobia-labs/responsible-gaming-community-framework)
 - **Career Forge Lite** — live free tool with anti-fabrication policy built into the product (career-forge-lite.vercel.app)
 
 ### EDUCATION
 
-**B.A. — [VERIFY_CONFLICT: prior sources disagree between "B.A. Global Management" and "B.A. Social Entrepreneurship & Social Change". Confirm exact degree name, institution, and graduation year before any export. Do not send either wording until resolved.]**
+**Earlham College — B.A. Global Management, May 2024**
+Track: Social Entrepreneurship · Minors: Political Science, Leadership, Philosophy

@@ -16,19 +16,18 @@ Four lane-targeted, one-page, ATS-readable resumes plus a design brief, source-r
 | `source-reconciliation-notes.md` | What changed in the hardening pass, which source supports each fact, what's still open. |
 | `private-export-checklist.md` | The gate between these public drafts and a sendable PDF/DOCX. |
 
-## Status: drafts, not final
+## Status: final drafts — export-ready once 8 blockers are answered
 
-The named prior-resume sources (`Blake_Taylor_Resume_v2.docx`, latest `Resume.pdf`, `koinophobia_evidence_audit.docx`) have **not been received yet** — see `source-reconciliation-notes.md`. When they arrive, run a second reconcile pass before trusting any remaining detail.
+Source reconciliation is complete (two passes; see `source-reconciliation-notes.md`). Education, DraftKings title/start year, location, and positioning rules are locked. The only remaining brackets are the 8 export blockers in `private-export-checklist.md`:
 
-## Must-answer list before export (short form — full gate in `private-export-checklist.md`)
-
-1. **Education conflict (blocking):** "B.A. Global Management" vs "B.A. Social Entrepreneurship & Social Change" + institution + year
-2. **DraftKings (blocking):** exact internal title, start date, end date
-3. Contact: which email, phone, LinkedIn URL
-4. You Know Ball live status + one-liner; Trendi one-liner + TestFlight truth; Koi Cave one-liner
-5. RG framework scope wording; DraftKings RG program specifics; transaction-volume numbers
-6. Discord servers/roles; social platforms (audience numbers only if current and defensible)
-7. Client conversions / delivered projects (with permission to name)
+1. DraftKings exact end date
+2. Which private email to use
+3. Phone on resume: yes/no
+4. LinkedIn URL
+5. Trendi one-line current status
+6. Koi Cave one-line current status
+7. You Know Ball one-line current status
+8. Social metrics: include or omit (currently omitted)
 
 ## Positioning rule
 

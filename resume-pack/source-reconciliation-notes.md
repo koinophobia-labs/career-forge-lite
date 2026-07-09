@@ -1,53 +1,38 @@
-# Source Reconciliation Notes — 2026-07-09
+# Source Reconciliation Notes
 
-What changed in this hardening pass, which sources support each change, and what remains open.
+Two passes so far. Newest first.
 
-## Source artifacts status
+## Pass 2 — Final reconciliation with Blake-confirmed source details (2026-07-09)
 
-| Named source | Status |
-|---|---|
-| `Blake_Taylor_Resume_v2.docx` | **NOT RECEIVED** — not found in this environment or in the connected Gmail account (searched `filename:(resume)`, `"Blake_Taylor"`, attachment queries). Full reconcile pending upload. |
-| Most recent `Resume.pdf` | **NOT RECEIVED** — same searches, no hit. |
-| `koinophobia_evidence_audit.docx` | **NOT RECEIVED** — searched `koinophobia OR "evidence audit"`; no such attachment. |
+Blake confirmed details from his prior resume/audit material. Applied:
 
-Sources actually used for this pass:
-
-1. **Blake's instructions** (this task): DraftKings as the sportsbook employer; the education conflict wording; honesty constraints on Career Forge / You Know Ball / Trendi / Koi Cave.
-2. **Connected Gmail (the Koinophobia Labs business account), read-only**: sent outreach emails, Vercel deployment notifications.
-3. **This repository + `list_repos`**: live product links, public repos, test-suite counts.
-
-## Changes made (fact → source)
-
-| Change | Source | Confidence |
+| Fact | Final wording | Source |
 |---|---|---|
-| Sportsbook employer named **DraftKings** | Blake's instruction | Stated by Blake; exact internal title + dates still `[VERIFY]` |
-| DraftKings end date → `[VERIFY END DATE]` | No email/document evidence found (zero DraftKings emails in the connected Gmail — it's the business account) | Open |
-| Location → **Chicago, IL** | Blake's own sent emails, repeatedly: "I run a small studio in the Chicago area called Koinophobia Labs", "Chicago-based founder" (Jul 7–8, 2026) | Strong |
-| Contact details → `[PRIVATE_EMAIL]`, `[PRIVATE_PHONE]`, `[LINKEDIN_URL]` | Privacy rule for public repo | n/a |
-| Education → `[VERIFY_CONFLICT]` block listing both B.A. wordings | Blake's instruction that prior sources disagree ("B.A. Global Management" vs "B.A. Social Entrepreneurship & Social Change"); no email/document evidence found to resolve it | **Blocking conflict — do not export until resolved** |
-| Career Forge described as **deterministic / rule-based** in all technical mentions | Blake's instruction + the actual codebase (regex/knowledge-bank generator, no LLM at runtime) | Strong |
-| **You Know Ball → "web app MVP deployed via Vercel"**; removed any implication it might be iOS | Vercel deployment-notification emails for project `you-know-ball` (June 2, 2026). Those notifications were deployment *failures*, so "live" is NOT claimed — current status `[VERIFY]` | Strong on "web MVP exists"; open on live status |
-| **Trendi → "iOS app built with SwiftUI, in private development"**; explicit note not to claim TestFlight/App Store unless true | Blake's prior instruction (SwiftUI/iOS); no status evidence anywhere | Claim kept minimal per "specific but not over-verifiable" |
-| **Koi Cave → private repository, description `[VERIFY]`** | `list_repos` confirms the private repo exists; nothing else | Minimal claim |
-| Client work bullet upgraded to a **concrete, evidenced claim**: structured website-audit outreach to Chicago-area local businesses, "12+ businesses contacted in a single outreach wave, July 2026" | 13 personalized audit-outreach emails observed in Gmail Sent (Jul 7–8, 2026): tattoo studios, barbershops, med spas, fitness studios, a salon/spa, landscaping, pet grooming. Each contains a specific site finding (booking button routing off-site, missing contact info, external sign-up links) | Strong — directly observed |
-| Client *conversions/delivered projects* remain `[VERIFY]` | Outreach is evidenced; closed clients and outcomes are not | Open |
-| Follower/engagement metrics: none included; placeholders now instruct to include numbers **only if current and defensible, otherwise omit** | Blake's instruction | n/a |
-| Koinophobia Labs title/date kept: **Founder, 2025 – Present** | Consistent across repo history, Blake's sent emails ("I'm Blake, I run a small studio... called Koinophobia Labs"), and prior instructions. `[VERIFY]` removed from title/start year; cross-check against `Blake_Taylor_Resume_v2.docx` when it arrives | Strong |
+| Education | **Earlham College — B.A. Global Management, May 2024 · Track: Social Entrepreneurship · Minors: Political Science, Leadership, Philosophy** — `[VERIFY_CONFLICT]` removed on all four resumes | Blake-confirmed from prior resume sources (the "Global Management" vs "Social Entrepreneurship" conflict resolved: Global Management is the degree, Social Entrepreneurship is the track) |
+| DraftKings | **Associate Sportsbook Writer — DraftKings, 2023 – [VERIFY END DATE]** | Blake-confirmed title and start year; end date still unprovided, so bullets stay in present tense and no "former" claim is made |
+| DraftKings metrics/specifics | Transaction-volume and RG-program-specifics brackets **removed entirely** (not filled) — bullets now claim only duty-level facts | Blake's instruction: do not invent numbers or program specifics |
+| Career Forge Lite | Described everywhere as **deterministic / rule-based**, never a live AI generator | Blake-confirmed + codebase |
+| You Know Ball | **"web app MVP"** — NOT described as live. The audit/source notes available to this session (Vercel deployment-failure emails, June 2026) do not support "live", so per Blake's own conditional ("live web MVP **if supported** by the audit/source notes") the claim stays at MVP with status = export blocker #7 | Gmail evidence + Blake's conditional rule |
+| Responsible Gaming Community Framework | **Elevated to a major selected project** on the fraud/RG, AI-support (CX AI), and community/T&S resumes; added as an experience bullet where relevant | Blake's instruction; repo verified public |
+| Trendi / Koi Cave | Minimal, **"in private development"**, one-line status = export blockers #5–6; no TestFlight/App Store claims | Blake's instruction; no public evidence |
+| Social metrics | **Omitted entirely** from resume text; inclusion decision = export blocker #8. The unverified Discord-servers placeholder line was deleted; core skills now say "Discord & Community Platforms" (platform familiarity) rather than claiming moderation roles | Blake's instruction |
+| Contact | `[PRIVATE_EMAIL]` / `[PRIVATE_PHONE]` / `[LINKEDIN_URL]` placeholders kept in all committed files | Privacy rule (public repo) |
 
-## Still [VERIFY] — unchanged because no source supports them
+Remaining brackets are exactly the 8 export blockers — see `private-export-checklist.md`.
 
-- DraftKings exact internal job title, start date, end date, location/property
-- Daily transaction volume / cash handled at DraftKings
-- DraftKings responsible-gaming program specifics and real escalation examples
-- Responsible Gaming Community Framework exact scope wording
-- You Know Ball live URL / current status + one-line description
-- Trendi one-line description and TestFlight status
-- Koi Cave one-line description
-- Discord servers founded/moderated (resume 3)
-- Creator/social platforms and any audience numbers (resume 3)
-- Client conversions and delivered client projects (resume 4)
-- Education: degree name conflict (`[VERIFY_CONFLICT]`), institution, graduation year
+## Pass 1 — Hardening against available sources (2026-07-09, earlier)
 
-## Open questions Blake must answer before PDF/DOCX export
+The named source artifacts (`Blake_Taylor_Resume_v2.docx`, latest `Resume.pdf`, `koinophobia_evidence_audit.docx`) were **not received** — not in the environment, not in the connected Gmail. That pass used: Blake's task instructions, the connected Gmail (read-only), and this repository + the GitHub org's repo list.
 
-See the numbered list in `README.md` and the export gate in `private-export-checklist.md`. The two **blocking** items are: (1) the education degree-name conflict, and (2) DraftKings exact title + dates. Everything else can ship with the bracket removed and the claim deleted if unconfirmed.
+Key evidence established then (still standing):
+
+- **Chicago, IL** — Blake's own sent outreach emails ("Chicago-based founder", "small studio in the Chicago area"), Jul 7–8 2026
+- **Client audit outreach is real**: 13 personalized website-audit emails observed in Gmail Sent (Jul 7–8, 2026) to Chicago-area tattoo studios, barbershops, med spas, fitness studios, a salon/spa, landscaping, and pet grooming businesses — each with a specific site finding. Basis for the "12+ businesses contacted in a single outreach wave" claim
+- **You Know Ball is a web project** — Vercel deployment notifications for project `you-know-ball` (June 2, 2026); those were failures, so live status was never claimed
+- **DraftKings has no trace in the business Gmail** — title/dates could not be evidenced from email
+- **Founder, Koinophobia Labs, 2025–Present** — consistent across repo history, sent emails, and instructions
+- Branch history was rewritten in Pass 1 to remove a real email address committed in the first draft
+
+## If the original source files ever arrive
+
+Cross-check: DraftKings end date, the Earlham wording as printed on the actual resume, and any client-work numbers. Anything that disagrees with the current files gets flagged, not silently changed.
