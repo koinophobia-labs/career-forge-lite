@@ -31,3 +31,6 @@ pnpm-debug.log*
 # testing and typescript
 coverage
 tsconfig.tsbuildinfo
+
+# resume pack: export-ready copies with real contact info are never committed
+resume-pack/private/
