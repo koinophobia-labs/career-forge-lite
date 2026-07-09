@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
+import { CopyButton } from "@/components/CopyButton";
 import { SiteFooter } from "@/components/SiteFooter";
 import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
 import { createId, isProfileComplete } from "@/lib/command-center-store";
 import { assessJobPost } from "@/lib/input-guidance";
 import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
+import { buildMatchBrief, renderMatchBrief } from "@/lib/match-brief";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
 import { useCommandCenter } from "@/lib/use-command-center";
 
@@ -19,6 +21,9 @@ export default function TailorPage() {
   const [roleTitle, setRoleTitle] = useState("");
   const [laneId, setLaneId] = useState<string>("");
   const [analysis, setAnalysis] = useState<JobPostAnalysis | null>(null);
+  // Lane snapshotted when the analysis ran, so the brief stays coherent with
+  // the analysis even if the lane selector changes afterwards.
+  const [analysisLaneId, setAnalysisLaneId] = useState<string | null>(null);
   const [savedApplication, setSavedApplication] = useState(false);
   const [savedApplicationId, setSavedApplicationId] = useState<string | null>(null);
   const router = useRouter();
@@ -29,8 +34,15 @@ export default function TailorPage() {
   function runAnalysis() {
     if (!jobPost.trim()) return;
     setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane));
+    setAnalysisLaneId(selectedLane?.id ?? null);
     setSavedApplication(false);
   }
+
+  const brief = useMemo(() => {
+    if (!analysis) return null;
+    const analysisLane = state.lanes.find((lane) => lane.id === analysisLaneId) ?? null;
+    return buildMatchBrief({ analysis, profile: state.profile, lane: analysisLane, company, roleTitle });
+  }, [analysis, analysisLaneId, state.lanes, state.profile, company, roleTitle]);
 
   function saveAsApplication(status: "drafting" | "applied") {
     const nowIso = new Date().toISOString();
@@ -278,6 +290,108 @@ export default function TailorPage() {
                 </ul>
               </div>
             </div>
+
+            {brief && (
+              <div className="trust-panel p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-paper">Match brief</h2>
+                    <p className="mt-1 max-w-2xl text-sm text-paper/60">
+                      The whole application angle in one copyable block: fit, proof, weak spots, keywords, talking
+                      points, and a ready-to-send message. Built only from what you&rsquo;ve claimed.
+                    </p>
+                  </div>
+                  <CopyButton getText={() => renderMatchBrief(brief)} label="Copy full brief" />
+                </div>
+
+                <div className="mt-4 rounded-lg border border-white/12 bg-obsidian/40 p-3.5">
+                  <span
+                    className={`lab-mono rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${
+                      brief.strength === "strong"
+                        ? "border-spruce/60 bg-mint/10 text-mint"
+                        : brief.strength === "moderate"
+                          ? "border-gold/50 bg-gold/10 text-gold"
+                          : brief.strength === "stretch"
+                            ? "border-coral/50 bg-coral/10 text-coral"
+                            : "border-white/20 bg-white/5 text-paper/60"
+                    }`}
+                  >
+                    {brief.strength} match
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-paper/72">{brief.strengthDetail}</p>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-paper/80">Why you fit</h3>
+                    <ul className="mt-2 grid gap-2">
+                      {brief.fitSummary.map((item) => (
+                        <li key={item} className="text-sm leading-6 text-paper/72">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                    <h3 className="mt-4 text-sm font-bold uppercase tracking-wide text-paper/80">
+                      Proof points to lead with
+                    </h3>
+                    <ul className="mt-2 grid gap-2">
+                      {brief.proofPoints.length ? (
+                        brief.proofPoints.map((item) => (
+                          <li key={item} className="text-sm leading-6 text-paper/72">
+                            {item}
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm leading-6 text-paper/60">
+                          No proof points on file — add projects, metrics, or artifacts to{" "}
+                          <Link href="/profile" className="font-bold text-gold underline-offset-2 hover:underline">
+                            your profile
+                          </Link>
+                          . Specifics are what get replies.
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-paper/80">
+                      Interview talking points
+                    </h3>
+                    <ul className="mt-2 grid gap-2">
+                      {brief.talkingPoints.map((item) => (
+                        <li key={item} className="text-sm leading-6 text-paper/72">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-3 text-xs leading-5 text-paper/55">
+                      Save this as an application below, then rehearse the full pack on the{" "}
+                      <Link href="/interview" className="font-bold text-cyan underline-offset-2 hover:underline">
+                        Interview page
+                      </Link>{" "}
+                      — it builds gap-defense questions from this exact analysis.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-cyan/25 bg-cyan/5 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-paper/80">
+                      Outreach message draft
+                    </h3>
+                    <CopyButton getText={() => brief.outreachMessage} label="Copy message" />
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-paper/55">
+                    Works as a LinkedIn DM to the recruiter or hiring manager right after you apply. Replace [Name],
+                    and double-check the claim is exactly true before sending.
+                  </p>
+                  <pre className="mt-3 whitespace-pre-wrap rounded-md border border-white/12 bg-obsidian/50 p-3.5 font-sans text-sm leading-6 text-paper/80">
+                    {brief.outreachMessage}
+                  </pre>
+                </div>
+
+                <p className="mt-4 text-xs leading-5 text-paper/50">{brief.honestyNote}</p>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
               <p className="mr-auto text-sm text-paper/68">
