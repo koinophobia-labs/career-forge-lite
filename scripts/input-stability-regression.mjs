@@ -19,7 +19,11 @@ function startServer() {
     ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
     {
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
+      // Own process group so shutdown can kill npm AND the next dev server it
+      // wraps -- killing only the wrapper leaves the server alive holding this
+      // script's stdio pipes, which keeps the process from ever exiting.
+      detached: true
     }
   );
 
@@ -247,5 +251,9 @@ try {
   }
   console.log("Career Forge usability regression passed on desktop and mobile.");
 } finally {
-  server.child.kill("SIGTERM");
+  try {
+    process.kill(-server.child.pid, "SIGTERM");
+  } catch {
+    server.child.kill("SIGTERM");
+  }
 }
