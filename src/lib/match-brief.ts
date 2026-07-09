@@ -1,4 +1,5 @@
 import type { JobPostAnalysis } from "@/lib/job-post-analyzer";
+import { recommendResume, type ResumeRecommendation } from "@/lib/resume-pack";
 import type { CareerProfile, TargetLane } from "@/types/command-center";
 
 // The Match Brief is the deliverable the tailoring flow was missing: one
@@ -22,8 +23,20 @@ export type MatchBrief = {
   keywordsMissing: string[];
   talkingPoints: string[];
   outreachMessage: string;
+  // Keyword-backed suggestion of which finalized pack resume to send; null
+  // when the brief was built without the job post text.
+  resumeRecommendation: ResumeRecommendation | null;
+  checklist: string[];
   honestyNote: string;
 };
+
+export const PRE_APPLY_CHECKLIST = [
+  "Right resume attached — the recommended lane, or a conscious override",
+  "Missing keywords mirrored into your materials only where they're actually true",
+  "You can answer every weak spot above out loud without bluffing",
+  "Outreach message personalized ([Name] replaced, claim double-checked) and ready to send",
+  "Application tracked so the follow-up date gets set automatically"
+];
 
 export const MATCH_BRIEF_HONESTY_NOTE =
   "Everything above is assembled from your own profile, lane, and this job post — verify each claim is true as written before you send or say it. Replace anything in [brackets] yourself. Never invent credentials, employers, or metrics.";
@@ -226,8 +239,11 @@ export function buildMatchBrief(options: {
   lane: TargetLane | null;
   company: string;
   roleTitle: string;
+  // Raw job post text; when provided, the brief includes a pack-resume
+  // recommendation scored against it.
+  jobPost?: string;
 }): MatchBrief {
-  const { analysis, profile, lane, company, roleTitle } = options;
+  const { analysis, profile, lane, company, roleTitle, jobPost } = options;
 
   const covered = analysis.requirements.filter((req) => req.status === "covered");
   const partial = analysis.requirements.filter((req) => req.status === "partial").length;
@@ -248,8 +264,34 @@ export function buildMatchBrief(options: {
     keywordsMissing: analysis.keywords.filter((hit) => !hit.inProfile).map((hit) => hit.term),
     talkingPoints: buildTalkingPoints(analysis, profile, lane, roleTitle, proofPoints),
     outreachMessage: buildOutreachMessage(analysis, profile, lane, company, roleTitle),
+    resumeRecommendation: jobPost?.trim() ? recommendResume(jobPost) : null,
+    checklist: [...PRE_APPLY_CHECKLIST],
     honestyNote: MATCH_BRIEF_HONESTY_NOTE
   };
+}
+
+function renderResumeRecommendation(recommendation: ResumeRecommendation): string {
+  if (!recommendation.best) {
+    return "RECOMMENDED RESUME\nNo lane matched this post's vocabulary — it's likely outside your four resume lanes. If you still want it, pick the closest resume manually.";
+  }
+  const lines = [
+    "RECOMMENDED RESUME",
+    `${recommendation.best.resume.fileName} (${recommendation.best.resume.laneTitle})`,
+    `Why: the post uses ${recommendation.best.matchedTerms.slice(0, 8).join(", ")}.`,
+    `Usage: ${recommendation.best.resume.usageNote}`
+  ];
+  if (recommendation.runnerUp && recommendation.runnerUp.resume.id !== recommendation.best.resume.id) {
+    lines.push(
+      `Runner-up: ${recommendation.runnerUp.resume.fileName} (matched ${recommendation.runnerUp.matchedTerms.slice(0, 5).join(", ")})`
+    );
+  }
+  if (recommendation.weakFit) {
+    lines.push(
+      "Weak fit: even the best lane barely matches this post. Probably not worth a deep tailor — apply fast with the closest resume or skip it."
+    );
+  }
+  lines.push(`Note: ${recommendation.note}`);
+  return lines.join("\n");
 }
 
 function section(title: string, lines: string[]): string {
@@ -261,6 +303,7 @@ export function renderMatchBrief(brief: MatchBrief): string {
   const parts: string[] = [
     `MATCH BRIEF — ${target}${brief.laneTitle ? ` (${brief.laneTitle} lane)` : ""}`,
     `Match strength: ${brief.strength.toUpperCase()} — ${brief.strengthDetail}`,
+    ...(brief.resumeRecommendation ? [renderResumeRecommendation(brief.resumeRecommendation)] : []),
     section("WHY YOU FIT", brief.fitSummary),
     brief.proofPoints.length
       ? section("PROOF POINTS TO LEAD WITH", brief.proofPoints)
@@ -273,6 +316,7 @@ export function renderMatchBrief(brief: MatchBrief): string {
     ].join("\n"),
     section("INTERVIEW TALKING POINTS", brief.talkingPoints),
     `OUTREACH MESSAGE DRAFT (LinkedIn DM or application follow-up)\n${brief.outreachMessage}`,
+    `PRE-APPLY CHECKLIST\n${brief.checklist.map((item) => `[ ] ${item}`).join("\n")}`,
     `Honesty note: ${brief.honestyNote}`
   ];
 

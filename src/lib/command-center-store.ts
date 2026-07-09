@@ -130,6 +130,9 @@ function reviveApplication(raw: Record<string, unknown>): ApplicationRecord | nu
     analysisKeywords: asStringArray(raw.analysisKeywords),
     analysisGaps: asStringArray(raw.analysisGaps),
     analysisWeakSpots: asStringArray(raw.analysisWeakSpots),
+    packResumeId: asStringOrNull(raw.packResumeId),
+    briefText: asString(raw.briefText),
+    outreachMessage: asString(raw.outreachMessage),
     createdAt: asString(raw.createdAt, new Date(0).toISOString())
   };
 }

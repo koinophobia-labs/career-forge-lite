@@ -21,9 +21,11 @@ export default function TailorPage() {
   const [roleTitle, setRoleTitle] = useState("");
   const [laneId, setLaneId] = useState<string>("");
   const [analysis, setAnalysis] = useState<JobPostAnalysis | null>(null);
-  // Lane snapshotted when the analysis ran, so the brief stays coherent with
-  // the analysis even if the lane selector changes afterwards.
+  // Lane and post text snapshotted when the analysis ran, so the brief and
+  // resume recommendation stay coherent even if the inputs change afterwards.
   const [analysisLaneId, setAnalysisLaneId] = useState<string | null>(null);
+  const [analyzedPost, setAnalyzedPost] = useState("");
+  const [jobPostUrl, setJobPostUrl] = useState("");
   const [savedApplication, setSavedApplication] = useState(false);
   const [savedApplicationId, setSavedApplicationId] = useState<string | null>(null);
   const router = useRouter();
@@ -35,14 +37,24 @@ export default function TailorPage() {
     if (!jobPost.trim()) return;
     setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane));
     setAnalysisLaneId(selectedLane?.id ?? null);
+    setAnalyzedPost(jobPost);
     setSavedApplication(false);
   }
 
   const brief = useMemo(() => {
     if (!analysis) return null;
     const analysisLane = state.lanes.find((lane) => lane.id === analysisLaneId) ?? null;
-    return buildMatchBrief({ analysis, profile: state.profile, lane: analysisLane, company, roleTitle });
-  }, [analysis, analysisLaneId, state.lanes, state.profile, company, roleTitle]);
+    return buildMatchBrief({
+      analysis,
+      profile: state.profile,
+      lane: analysisLane,
+      company,
+      roleTitle,
+      jobPost: analyzedPost
+    });
+  }, [analysis, analysisLaneId, analyzedPost, state.lanes, state.profile, company, roleTitle]);
+
+  const recommendation = brief?.resumeRecommendation ?? null;
 
   function saveAsApplication(status: "drafting" | "applied") {
     const nowIso = new Date().toISOString();
@@ -57,7 +69,7 @@ export default function TailorPage() {
           roleTitle: roleTitle.trim() || selectedLane?.title || "Untitled role",
           laneId: selectedLane?.id ?? null,
           status,
-          jobPostUrl: "",
+          jobPostUrl: jobPostUrl.trim(),
           resumeVersionId: null,
           appliedAt: status === "applied" ? nowIso : null,
           nextFollowUpAt: status === "applied" ? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS) : null,
@@ -77,6 +89,9 @@ export default function TailorPage() {
                 .slice(0, 6)
             : [],
           analysisWeakSpots: analysis ? analysis.weakSpots.slice(0, 4) : [],
+          packResumeId: recommendation?.best?.resume.id ?? null,
+          briefText: brief ? renderMatchBrief(brief) : "",
+          outreachMessage: brief?.outreachMessage ?? "",
           createdAt: nowIso
         }
       ]
@@ -165,6 +180,16 @@ export default function TailorPage() {
             </label>
           </div>
 
+          <label className="block">
+            <span className="text-sm font-bold text-paper">Job post URL (optional)</span>
+            <input
+              value={jobPostUrl}
+              placeholder="https://… — saved onto the application so you can find the posting again"
+              onChange={(event) => setJobPostUrl(event.target.value)}
+              className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
+            />
+          </label>
+
           <div>
             <label className="block">
               <span className="text-sm font-bold text-paper">Paste the full job post here</span>
@@ -213,6 +238,48 @@ export default function TailorPage() {
             <div className="rounded-xl border border-cyan/25 bg-cyan/10 p-4 text-sm leading-6 text-paper/75">
               {analysis.honestyNote}
             </div>
+
+            {recommendation && (
+              <div className="trust-panel p-5 sm:p-6">
+                <h2 className="text-xl font-bold text-paper">Recommended resume</h2>
+                <p className="mt-1 max-w-2xl text-sm text-paper/60">{recommendation.note}</p>
+
+                {recommendation.weakFit && (
+                  <div className="mt-4 rounded-lg border border-coral/40 bg-coral/10 p-3.5 text-sm leading-6 text-paper/80">
+                    <span className="lab-mono mr-1.5 font-bold uppercase text-coral">Weak fit</span>
+                    {recommendation.best
+                      ? "Even the best lane barely matches this post's vocabulary. Probably not worth a deep tailor — apply fast with the closest resume, or spend the time on a stronger-match posting."
+                      : "This post doesn't match any of your four resume lanes. It's likely outside your targets — pick a resume manually only if you have a specific reason to pursue it."}
+                  </div>
+                )}
+
+                {recommendation.best && (
+                  <div className="mt-4 rounded-lg border border-spruce/40 bg-mint/5 p-4">
+                    <p className="text-sm font-bold text-mint">{recommendation.best.resume.fileName}</p>
+                    <p className="mt-0.5 text-[0.78rem] text-paper/60">{recommendation.best.resume.laneTitle}</p>
+                    <p className="mt-2 text-sm leading-6 text-paper/72">{recommendation.best.resume.usageNote}</p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {recommendation.best.matchedTerms.slice(0, 10).map((term) => (
+                        <span
+                          key={term}
+                          className="rounded-full border border-spruce/50 bg-mint/10 px-2.5 py-0.5 text-xs font-bold text-mint"
+                        >
+                          {term}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recommendation.runnerUp && recommendation.best && (
+                  <p className="mt-3 text-[0.78rem] leading-5 text-paper/55">
+                    Runner-up: <span className="font-bold text-paper/75">{recommendation.runnerUp.resume.fileName}</span>{" "}
+                    (matched {recommendation.runnerUp.matchedTerms.slice(0, 5).join(", ")}) — consider it if you read the
+                    role differently than the posting is written.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="trust-panel p-5 sm:p-6">
               <h2 className="text-xl font-bold text-paper">Keywords the post cares about</h2>
@@ -387,6 +454,18 @@ export default function TailorPage() {
                   <pre className="mt-3 whitespace-pre-wrap rounded-md border border-white/12 bg-obsidian/50 p-3.5 font-sans text-sm leading-6 text-paper/80">
                     {brief.outreachMessage}
                   </pre>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-white/12 bg-obsidian/40 p-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-paper/80">Pre-apply checklist</h3>
+                  <ul className="mt-2 grid gap-1.5">
+                    {brief.checklist.map((item) => (
+                      <li key={item} className="text-sm leading-6 text-paper/72">
+                        <span className="lab-mono mr-2 text-paper/40">[ ]</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 <p className="mt-4 text-xs leading-5 text-paper/50">{brief.honestyNote}</p>

@@ -93,6 +93,13 @@ export type ApplicationRecord = {
   analysisKeywords: string[];
   analysisGaps: string[];
   analysisWeakSpots: string[];
+  // Which finalized pack resume was recommended/sent (resume-pack.ts id),
+  // plus the exact brief and outreach message at apply time — the durable
+  // answer to "what did I send to this company?". Legacy records revive
+  // with null/"".
+  packResumeId: string | null;
+  briefText: string;
+  outreachMessage: string;
   createdAt: string;
 };
 

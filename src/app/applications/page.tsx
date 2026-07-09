@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { APPLICATION_FOLLOW_UP_DAYS, addDays, isDue, logApplicationFollowUp } from "@/lib/command-center-insights";
 import { createId } from "@/lib/command-center-store";
 import { assessApplication, validateApplicationInput } from "@/lib/input-guidance";
+import { getPackResume } from "@/lib/resume-pack";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { ApplicationRecord, ApplicationStatus } from "@/types/command-center";
 
@@ -74,6 +75,9 @@ export default function ApplicationsPage() {
           analysisKeywords: [],
           analysisGaps: [],
           analysisWeakSpots: [],
+          packResumeId: null,
+          briefText: "",
+          outreachMessage: "",
           createdAt: new Date().toISOString()
         }
       ]
@@ -233,6 +237,23 @@ export default function ApplicationsPage() {
                           </Link>
                         </p>
                       )}
+                      {getPackResume(app.packResumeId) && (
+                        <p className="mt-1 text-[0.72rem] leading-4 text-paper/60">
+                          Pack resume: <span className="font-bold text-paper/80">{getPackResume(app.packResumeId)?.fileName}</span>
+                        </p>
+                      )}
+                      {app.jobPostUrl && (
+                        <p className="mt-1 text-[0.72rem] leading-4">
+                          <a
+                            href={app.jobPostUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-cyan/85 underline-offset-2 transition hover:text-gold hover:underline"
+                          >
+                            Job posting ↗
+                          </a>
+                        </p>
+                      )}
                     </div>
 
                     <select
@@ -287,6 +308,30 @@ export default function ApplicationsPage() {
                     onChange={(event) => patchApplication(app.id, { notes: event.target.value })}
                     className="mt-3 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80 placeholder:text-paper/35"
                   />
+
+                  {(app.briefText || app.outreachMessage) && (
+                    <details className="mt-3 rounded-md border border-white/10 bg-obsidian/40 px-3 py-2">
+                      <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-paper/55 transition hover:text-cyan">
+                        What I sent — match brief &amp; outreach message
+                      </summary>
+                      {app.outreachMessage && (
+                        <div className="mt-3">
+                          <p className="lab-mono text-[0.62rem] font-bold uppercase text-paper/45">Outreach message</p>
+                          <pre className="mt-1 whitespace-pre-wrap font-sans text-[0.78rem] leading-5 text-paper/75">
+                            {app.outreachMessage}
+                          </pre>
+                        </div>
+                      )}
+                      {app.briefText && (
+                        <div className="mt-3">
+                          <p className="lab-mono text-[0.62rem] font-bold uppercase text-paper/45">Match brief at apply time</p>
+                          <pre className="mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap font-sans text-[0.78rem] leading-5 text-paper/70">
+                            {app.briefText}
+                          </pre>
+                        </div>
+                      )}
+                    </details>
+                  )}
                 </article>
               );
             })}
