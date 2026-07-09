@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
+import fs from "node:fs";
 import { chromium } from "playwright";
+
+// Some environments (e.g. remote containers) preinstall Chromium at a fixed
+// path instead of Playwright's per-version browser cache; fall back to it so
+// the suite runs there without downloading browsers.
+const chromiumOptions =
+  fs.existsSync("/opt/pw-browsers/chromium") ? { headless: true, executablePath: "/opt/pw-browsers/chromium" } : { headless: true };
 
 const port = 3210;
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -118,7 +125,7 @@ async function startGuidedFlow(page) {
 }
 
 async function runFastRecommendationFlow(viewport, sample, verifyActions = false) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(chromiumOptions);
   const context = await browser.newContext({
     viewport,
     permissions: ["clipboard-read", "clipboard-write"]
@@ -204,7 +211,7 @@ async function runFastRecommendationFlow(viewport, sample, verifyActions = false
 }
 
 async function runKnownCareerFlow(viewport) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(chromiumOptions);
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
 

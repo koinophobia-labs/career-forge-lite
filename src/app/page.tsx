@@ -18,12 +18,12 @@ import { isProfileStarted } from "@/lib/command-center-store";
 import { useCommandCenter } from "@/lib/use-command-center";
 
 const loop = [
-  ["01", "Profile", "Who you are, what transfers, what you want", "/profile"],
-  ["02", "Targets", "The 2–3 role lanes you're actually pursuing", "/targets"],
-  ["03", "Resume", "Positioning built for each lane, not one-size-fits-all", "/resume-builder"],
-  ["04", "Applications", "Tailored, tracked, and followed up on time", "/applications"],
-  ["05", "Outreach", "Messages that get you out of the resume pile", "/outreach"],
-  ["06", "Interviews", "Prep against the questions your lane actually gets", "/interview"]
+  ["01", "Paste the post", "Drop the job post into Tailor for analysis", "/tailor"],
+  ["02", "Resume + brief", "Get the recommended resume lane and Match Brief", "/tailor"],
+  ["03", "Apply", "Attach the matching private resume from your pack and submit", "/applications"],
+  ["04", "Save & track", "Track the application — the follow-up date sets itself", "/applications"],
+  ["05", "Outreach", "Send the outreach message; follow up on schedule", "/outreach"],
+  ["06", "Interview", "Prep against the questions this exact posting raises", "/interview"]
 ] as const;
 
 export default function Dashboard() {
@@ -96,7 +96,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 p-5 sm:p-7 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-3 p-5 pb-3 sm:p-7 sm:pb-3 md:grid-cols-3 lg:grid-cols-6">
             {loop.map(([num, label, detail, href]) => (
               <Link
                 key={num}
@@ -109,6 +109,14 @@ export default function Dashboard() {
               </Link>
             ))}
           </div>
+          <p className="px-5 pb-5 text-[0.72rem] leading-5 text-paper/45 sm:px-7">
+            Need a resume from scratch? The{" "}
+            <Link href="/resume-builder" className="font-bold text-paper/60 underline-offset-2 hover:text-cyan hover:underline">
+              Resume Builder
+            </Link>{" "}
+            is Career Forge&rsquo;s free public tool — optional here, since your finalized resume pack is the one you
+            actually send.
+          </p>
         </div>
       </section>
 
