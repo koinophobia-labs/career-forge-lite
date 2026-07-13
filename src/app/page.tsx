@@ -79,6 +79,9 @@ export default function Dashboard() {
                   lanes, tailor every application against the actual job post, keep outreach and follow-ups on schedule,
                   and walk into interviews prepared. No login. Everything stays on this device.
                 </p>
+                <p className="mt-3 max-w-2xl text-sm font-semibold text-paper/78">
+                  A <span className="text-coral">Koinophobia Labs</span> system for turning job-search chaos into repeatable action.
+                </p>
               </div>
               <div className="rounded-xl border border-gold/25 bg-gold/10 p-4">
                 <p className="trust-kicker text-xs font-bold uppercase">Next best action</p>
