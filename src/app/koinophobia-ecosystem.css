@@ -1,0 +1,147 @@
+:root {
+  --coral: #ff9a77;
+  --pink: #ff6f9f;
+  --magenta: #d94fe0;
+  --violet: #8a5cff;
+  --gold: #ff9a77;
+  --cyan: #ff6f9f;
+  --orange: #d94fe0;
+  --glow: #d94fe0;
+  --bg: #100812;
+  --bg2: #0f0917;
+  --panel: #190c19;
+  --panel2: #21101f;
+  --text: #fff7fb;
+  --dim: #cbbbc8;
+  --faint: #8f7e8c;
+  --line: rgba(255,255,255,.07);
+  --line2: rgba(255,255,255,.14);
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 12%, rgba(255,95,158,.22), transparent 30%),
+    radial-gradient(circle at 88% 18%, rgba(138,92,255,.2), transparent 32%),
+    radial-gradient(circle at 74% 82%, rgba(217,79,224,.14), transparent 34%),
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(145deg, #120812 0%, #21101f 46%, #0f0917 100%);
+  background-size: auto, auto, auto, 72px 72px, 72px 72px, auto;
+  color: var(--text);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -.045em;
+}
+
+.trust-panel,
+.trust-card,
+.dark-form-card {
+  border-color: rgba(255,255,255,.14);
+  border-radius: 24px;
+  background:
+    linear-gradient(155deg, rgba(255,255,255,.055), transparent 38%),
+    linear-gradient(180deg, rgba(30,14,29,.95), rgba(15,8,20,.96));
+  box-shadow: 0 36px 100px rgba(0,0,0,.38), 0 0 70px rgba(217,79,224,.07);
+  backdrop-filter: blur(18px);
+}
+
+.trust-card {
+  background: rgba(255,255,255,.045);
+}
+
+.trust-kicker,
+.lab-mono {
+  color: var(--pink);
+  letter-spacing: .14em;
+}
+
+.logo-mark {
+  border-color: rgba(255,137,187,.42);
+  background: rgba(255,255,255,.055);
+  color: var(--pink);
+  box-shadow: 0 0 28px rgba(255,95,158,.14);
+}
+
+.lab-pill-button {
+  border: 0;
+  background: linear-gradient(100deg, #ff7db4, #ff9b78);
+  color: #250b1c;
+  box-shadow: 0 14px 42px rgba(255,80,147,.22);
+}
+
+.lab-pill-button:hover {
+  background: linear-gradient(100deg, #ff8abd, #ffa17d);
+  color: #250b1c;
+}
+
+.lab-secondary-button {
+  border-color: rgba(255,137,187,.3);
+  background: rgba(255,255,255,.045);
+  color: #ff9bc5;
+}
+
+.lab-secondary-button:hover {
+  border-color: rgba(255,137,187,.5);
+  color: #fff7fb;
+}
+
+.border-gold\/25,
+.border-gold\/30,
+.border-gold\/50,
+.border-cyan\/25,
+.border-cyan\/30,
+.border-cyan\/40,
+.border-cyan\/50,
+.border-coral\/30 {
+  border-color: rgba(255,137,187,.28) !important;
+}
+
+.bg-gold\/10,
+.bg-cyan\/10,
+.bg-coral\/10 {
+  background-color: rgba(255,95,158,.08) !important;
+}
+
+.text-gold,
+.text-cyan,
+.text-coral {
+  color: #ff9bc5 !important;
+}
+
+.hover\:text-gold:hover,
+.hover\:text-cyan:hover,
+.group:hover .group-hover\:text-cyan {
+  color: #fff7fb !important;
+}
+
+.bg-obsidian\/40 {
+  background-color: rgba(255,255,255,.035) !important;
+}
+
+.rounded-xl,
+.rounded-lg {
+  border-radius: 16px;
+}
+
+input,
+textarea,
+select {
+  border-radius: 14px !important;
+}
+
+@media (max-width: 640px) {
+  .trust-panel,
+  .trust-card,
+  .dark-form-card {
+    border-radius: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
