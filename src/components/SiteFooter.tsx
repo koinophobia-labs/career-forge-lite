@@ -26,6 +26,24 @@ export function SiteFooter() {
             Created to translate real work into recruiter-ready language.
             Career Forge stays local, editable, ATS-safe, and unbranded in exported resume content.
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
+            <a
+              href="https://koinophobialabs.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-coral transition hover:text-coral/80"
+            >
+              Built by Koinophobia Labs ↗
+            </a>
+            <a
+              href="https://koinophobia.dev/connect"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-paper/70 transition hover:text-cyan"
+            >
+              Meet the founder ↗
+            </a>
+          </div>
         </div>
 
         <div>
