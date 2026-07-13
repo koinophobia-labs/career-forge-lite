@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { AnalyticsProvider } from "@/components/AnalyticsProvider";
 import "./globals.css";
+import "./koinophobia-ecosystem.css";
 
 const sora = Sora({
   variable: "--font-sora",
