@@ -86,9 +86,171 @@ check("policy enforcement alone marks fraud investigation partial", riskTransfer
 const saasTransfer = analyzeJobPost("Requirements:\n- Experience with SaaS support required", profile, lanes[0], dossier);
 check("customer service marks SaaS support partial not covered", saasTransfer.requirements[0]?.status === "partial" && saasTransfer.requirements[0]?.supportType === "transferred");
 
+const namedEvidence = (id, kind, detail) => ({ ...add(kind, detail), id });
+function durationDossier(roleSpecs = [], extraEvidence = []) {
+  const roleEvidence = roleSpecs.map((role, index) => namedEvidence(
+    role.evidenceId ?? `duration-role-${index}`,
+    "role",
+    role.evidenceDetail ?? `${role.title} — ${role.startDate} to ${role.current ? "Present" : role.endDate}. ${role.responsibilities.join(" ")}`
+  ));
+  return {
+    ...emptyDossier(NOW),
+    evidence: [...roleEvidence, ...extraEvidence],
+    roles: roleSpecs.map((role, index) => ({
+      id: `role-${index}`,
+      title: role.title,
+      employer: role.employer ?? `Employer ${index + 1}`,
+      startDate: role.startDate,
+      endDate: role.endDate,
+      current: Boolean(role.current),
+      responsibilities: role.responsibilities,
+      tools: role.tools ?? [],
+      outcomes: role.outcomes ?? [],
+      evidenceIds: [role.evidenceId ?? `duration-role-${index}`]
+    })),
+    approvedClaims: [...roleEvidence, ...extraEvidence].map((item) => item.detail),
+    updatedAt: NOW
+  };
+}
+const durationMatch = (requirement, candidateDossier, now = NOW, lane = lanes[0]) =>
+  analyzeJobPost(`Requirements:\n- ${requirement}`, profile, lane, candidateDossier, now).requirements[0];
+
+const undatedSaas = namedEvidence("undated-saas", "responsibility", "Provided SaaS support and resolved product escalations");
+const undatedSaasMatch = durationMatch("5+ years of SaaS support experience required", durationDossier([], [undatedSaas]));
+check("skill evidence without dates does not cover five years", undatedSaasMatch?.status === "partial" && /duration is not verified/i.test(undatedSaasMatch.evidence));
+
+const twoYearFraud = durationDossier([{ title: "Fraud Investigator", startDate: "January 2024", endDate: "January 2026", responsibilities: ["Conducted fraud investigation casework"] }]);
+const twoYearFraudMatch = durationMatch("5+ years of fraud investigation experience required", twoYearFraud);
+check("two verified years do not cover five years", twoYearFraudMatch?.status === "partial" && /below the 5-year requirement/i.test(twoYearFraudMatch.evidence));
+
+const fiveYearSupport = durationDossier([{ title: "Customer Support Specialist", startDate: "January 2021", endDate: "January 2026", responsibilities: ["Provided customer support and resolved escalations"] }]);
+const fiveYearSupportMatch = durationMatch("3+ years of customer support experience required", fiveYearSupport);
+check("five verified years cover a three-year requirement", fiveYearSupportMatch?.status === "covered" && fiveYearSupportMatch.supportType === "direct" && fiveYearSupportMatch.evidenceIds.length === 1);
+const undatedCustomerSupport = namedEvidence("undated-customer-support", "responsibility", "Provided customer support and resolved escalations");
+const mixedDurationSupport = { ...fiveYearSupport, evidence: [...fiveYearSupport.evidence, undatedCustomerSupport] };
+check("covered duration cites only dated qualifying evidence", !durationMatch("3+ years of customer support experience required", mixedDurationSupport)?.evidenceIds.includes("undated-customer-support"));
+
+const salesforceTool = namedEvidence("salesforce-tool", "tool", "Salesforce");
+const salesforceAdminDuration = durationMatch("4+ years of Salesforce administration experience required", durationDossier([], [salesforceTool]));
+check("tool familiarity does not cover years of administration", salesforceAdminDuration?.status !== "covered" && salesforceAdminDuration?.evidenceIds.includes("salesforce-tool"));
+
+const vagueDuration = namedEvidence("vague-saas", "role", "SaaS support specialist with several years of experience");
+const vagueDurationMatch = durationMatch("3+ years of SaaS support experience required", durationDossier([], [vagueDuration]));
+check("vague several-years language does not satisfy numeric duration", vagueDurationMatch?.status === "partial" && /not verified/i.test(vagueDurationMatch.evidence));
+
+const currentSupport = durationDossier([{ title: "Customer Support Specialist", startDate: "January 2023", endDate: "", current: true, responsibilities: ["Provided customer support"] }]);
+const currentAtThreeYears = durationMatch("3+ years of customer support experience required", currentSupport, "2026-01-01T00:00:00.000Z");
+const currentBeforeThreeYears = durationMatch("3+ years of customer support experience required", currentSupport, "2025-12-01T00:00:00.000Z");
+check("present-role duration uses the passed deterministic date", currentAtThreeYears?.status === "covered" && currentBeforeThreeYears?.status === "partial");
+
+const laneOnlyDuration = durationMatch("4+ years of Salesforce administration experience required", emptyDossier(NOW), NOW, lanes[0]);
+check("lane keywords never count toward duration", laneOnlyDuration?.status === "gap" && laneOnlyDuration.evidenceIds.length === 0);
+
+const combinedSupport = durationDossier([
+  { title: "Customer Support Specialist", startDate: "January 2020", endDate: "January 2022", responsibilities: ["Provided customer support"] },
+  { title: "Customer Support Lead", startDate: "January 2022", endDate: "January 2024", responsibilities: ["Led customer support escalations"] }
+]);
+check("relevant non-overlapping roles combine duration", durationMatch("3+ years of customer support experience required", combinedSupport)?.status === "covered");
+
+const overlappingSupport = durationDossier([
+  { title: "Customer Support Specialist", startDate: "January 2020", endDate: "January 2023", responsibilities: ["Provided customer support"] },
+  { title: "Customer Support Contractor", startDate: "January 2021", endDate: "January 2024", responsibilities: ["Provided customer support"] }
+]);
+check("overlapping date ranges are not double-counted", durationMatch("5+ years of customer support experience required", overlappingSupport)?.status === "partial");
+
+const ambiguousSupport = durationDossier([{ title: "SaaS Support Specialist", startDate: "Spring 2021", endDate: "Late 2024", responsibilities: ["Provided SaaS support"] }]);
+check("ambiguous relevant date ranges remain partial", durationMatch("3+ years of SaaS support experience required", ambiguousSupport)?.status === "partial");
+
+const compactYearRange = durationDossier([{ title: "Customer Support Specialist", startDate: "2021–2024", endDate: "", responsibilities: ["Provided customer support"] }]);
+check("compact year ranges are parsed conservatively", durationMatch("3+ years of customer support experience required", compactYearRange)?.status === "covered");
+
+const unrelatedLongRole = durationDossier(
+  [{ title: "Warehouse Associate", startDate: "January 2010", endDate: "January 2020", responsibilities: ["Managed warehouse inventory"] }],
+  [undatedSaas]
+);
+check("years from unrelated work never satisfy duration", durationMatch("5+ years of SaaS support experience required", unrelatedLongRole)?.status === "partial");
+
 const question = draftApplicationQuestion("Describe a time you solved a difficult customer problem.", dossier, "question-1");
 check("application answer is evidence backed", question.evidenceIds.length > 0 && question.evidenceIds.every((id) => approvedIds.has(id)));
 check("application answer refuses when evidence is absent", draftApplicationQuestion("Why this role?", emptyDossier(NOW)).evidenceIds.length === 0);
+
+const customerEvidence = namedEvidence("customer-resolution", "responsibility", "Resolved a difficult customer problem by de-escalating a dispute and documenting the outcome");
+const customerDossier = durationDossier([], [customerEvidence]);
+const customerConflict = draftApplicationQuestion("Describe a time you solved a difficult customer problem.", customerDossier, "customer-conflict");
+check("customer-conflict evidence supports a behavioral question", customerConflict.evidenceIds.includes("customer-resolution") && /situation/i.test(customerConflict.draftAnswer));
+
+const unsupportedSalesforce = draftApplicationQuestion("Describe your Salesforce administration experience.", customerDossier, "unsupported-salesforce");
+check("customer evidence does not support Salesforce administration", unsupportedSalesforce.evidenceIds.length === 0 && /approved dossier evidence/i.test(unsupportedSalesforce.draftAnswer));
+
+const salesforceAdminEvidence = namedEvidence("salesforce-admin", "responsibility", "Administered Salesforce workflows, permissions, and support queues");
+const supportedSalesforce = draftApplicationQuestion("Describe your Salesforce administration experience.", durationDossier([], [salesforceAdminEvidence]), "supported-salesforce");
+check("exact Salesforce administration evidence supports the technical question", supportedSalesforce.evidenceIds.includes("salesforce-admin"));
+
+const securityWork = namedEvidence("security-work", "role", "Security officer responsible for facility access and incident documentation");
+const clearanceQuestion = draftApplicationQuestion("Do you currently hold an active security clearance?", durationDossier([], [securityWork]), "clearance");
+check("security employment does not imply security clearance", clearanceQuestion.evidenceIds.length === 0);
+
+const employmentEvidence = namedEvidence("employment", "role", "Customer Support Specialist at Example Co");
+const authorizationQuestion = draftApplicationQuestion("Are you legally authorized to work in the United States?", durationDossier([], [employmentEvidence]), "authorization");
+check("employment evidence does not imply work authorization", authorizationQuestion.evidenceIds.length === 0);
+
+const degreeEvidence = namedEvidence("degree-evidence", "education", "Bachelor's degree in Sociology from Earlham College");
+const degreeQuestion = draftApplicationQuestion("Do you have a bachelor's degree?", durationDossier([], [degreeEvidence]), "degree");
+check("approved degree evidence answers a degree question", degreeQuestion.evidenceIds.includes("degree-evidence"));
+check("missing degree evidence refuses the degree question", draftApplicationQuestion("Do you have a bachelor's degree?", customerDossier, "degree-missing").evidenceIds.length === 0);
+
+const compensationQuestion = draftApplicationQuestion("What are your salary expectations?", customerDossier, "compensation");
+check("compensation requires explicit user input", compensationQuestion.evidenceIds.length === 0 && compensationQuestion.draftAnswer === "Add your preferred compensation range before submitting this answer.");
+
+const weekendQuestion = draftApplicationQuestion("Can you work every weekend?", customerDossier, "weekends");
+check("weekend availability requires explicit evidence", weekendQuestion.evidenceIds.length === 0);
+
+const sponsorshipQuestion = draftApplicationQuestion("Will you require visa sponsorship?", customerDossier, "sponsorship");
+check("sponsorship requires explicit work-authorization evidence", sponsorshipQuestion.evidenceIds.length === 0);
+
+const unsupportedDurationQuestion = draftApplicationQuestion("Do you have 5+ years of SaaS support experience?", customerDossier, "duration-question", NOW);
+check("application questions do not infer required duration from related work", unsupportedDurationQuestion.evidenceIds.length === 0);
+
+const supportedDurationQuestion = draftApplicationQuestion("Do you have 3+ years of customer support experience?", fiveYearSupport, "duration-question-supported", NOW);
+check("application questions can use exact verified duration evidence", supportedDurationQuestion.evidenceIds.length === 1 && supportedDurationQuestion.evidenceIds[0] === "duration-role-0");
+
+const zeroScoreQuestion = draftApplicationQuestion("Do you manage 20 direct reports?", customerDossier, "zero-score");
+check("zero-score evidence is never selected", zeroScoreQuestion.evidenceIds.length === 0);
+
+const firstUnrelatedStory = namedEvidence("story-unrelated", "story", "Organized inventory during a seasonal reset");
+const firstRankedResponsibility = namedEvidence("responsibility-ranked-first", "responsibility", "Resolved a difficult customer problem and documented the result");
+const secondRankedStory = namedEvidence("story-ranked-second", "story", "Customer dispute resolution story with a verified outcome");
+const rankedSelection = draftApplicationQuestion(
+  "Describe a time you solved a difficult customer problem.",
+  durationDossier([], [firstUnrelatedStory, firstRankedResponsibility, secondRankedStory]),
+  "ranked-selection"
+);
+check("second evidence kind compares with the first ranked result", rankedSelection.evidenceIds.join(",") === "responsibility-ranked-first,story-ranked-second", rankedSelection.evidenceIds.join(","));
+
+const unknownQuestion = draftApplicationQuestion("What is your favorite constellation?", customerDossier, "unknown");
+check("unknown unrelated prompts select no evidence", unknownQuestion.evidenceIds.length === 0);
+
+const motivationQuestion = draftApplicationQuestion("Why are you interested in this customer support role?", customerDossier, "motivation");
+check("motivation answers use candidate evidence without inventing company facts", motivationQuestion.evidenceIds.includes("customer-resolution") && /researched reasons/i.test(motivationQuestion.draftAnswer) && !/innovative culture/i.test(motivationQuestion.draftAnswer));
+check("generic company motivation questions require user-specific support", draftApplicationQuestion("Why do you want to work at this company?", customerDossier, "generic-motivation").evidenceIds.length === 0);
+
+const explicitAuthorization = namedEvidence("explicit-authorization", "constraint", "Legally authorized to work in the United States and do not require visa sponsorship");
+check("exact work-authorization evidence can answer authorization", draftApplicationQuestion("Are you legally authorized to work in the United States?", durationDossier([], [explicitAuthorization]), "authorization-supported").evidenceIds.includes("explicit-authorization"));
+
+const explicitWeekend = namedEvidence("explicit-weekend", "constraint", "Available to work every weekend");
+check("exact availability evidence can answer a weekend question", draftApplicationQuestion("Can you work every weekend?", durationDossier([], [explicitWeekend]), "weekend-supported").evidenceIds.includes("explicit-weekend"));
+
+const explicitClearance = namedEvidence("explicit-clearance", "constraint", "Currently hold an active security clearance");
+check("exact clearance evidence can answer a clearance question", draftApplicationQuestion("Do you currently hold an active security clearance?", durationDossier([], [explicitClearance]), "clearance-supported").evidenceIds.includes("explicit-clearance"));
+
+const explicitCompensation = namedEvidence("explicit-compensation", "constraint", "Preferred compensation range is $90,000 to $105,000");
+check("explicit compensation evidence can support a compensation answer", draftApplicationQuestion("What are your salary expectations?", durationDossier([], [explicitCompensation]), "compensation-supported").evidenceIds.includes("explicit-compensation"));
+
+const editedQuestion = { ...customerConflict, draftAnswer: "User-edited truthful answer", userEdited: true };
+const revivedQuestion = parseState(JSON.stringify({ version: 2, applications: [{ id: "question-app", company: "Example", roleTitle: "Support", applicationQuestions: [editedQuestion], createdAt: NOW }] })).applications[0]?.applicationQuestions[0];
+check("application-question drafts remain editable and persist", revivedQuestion?.userEdited === true && revivedQuestion?.draftAnswer === "User-edited truthful answer");
+
+check("existing evidence-backed behavioral answers still work", question.evidenceIds.length > 0 && question.userEdited === false);
 
 const edited = updatePackVariant(pack, pack.variants[0].id, { ...pack.variants[0].resume, summary: "User-authored truthful summary" }, NOW, ["summary"]);
 check("manual edits are marked and preserved", edited.variants[0].userEdited && edited.variants[0].userAuthoredPaths.includes("summary") && edited.variants[0].resume.summary === "User-authored truthful summary");
