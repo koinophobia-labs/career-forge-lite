@@ -1,4 +1,4 @@
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
 import type { ResumePackage } from "@/types/career";
@@ -28,59 +28,78 @@ export function resumeVariantFilename(
   return `${name}-Resume-${lane}-${variant}.${format}`;
 }
 
-function resumeLines(dossier: CareerDossier, resume: ResumePackage): string[] {
-  const contact = [dossier.identity.email, dossier.identity.phone, dossier.identity.location, ...dossier.identity.links]
-    .filter(Boolean)
-    .join(" | ");
-  const lines = [dossier.identity.fullName, contact, "", "PROFESSIONAL SUMMARY", resume.summary, "", "CORE SKILLS", resume.coreSkills.join(" | "), "", "EXPERIENCE"];
-  resume.experience.forEach((role) => {
-    lines.push("", [role.title, role.company, role.time].filter(Boolean).join(" | "));
-    role.bullets.forEach((bullet) => lines.push(`• ${bullet}`));
-  });
-  if (resume.education) lines.push("", "EDUCATION", resume.education);
-  return lines;
-}
-
-async function docxBlob(dossier: CareerDossier, resume: ResumePackage): Promise<Blob> {
+async function docxBlob(dossier: CareerDossier, resume: ResumePackage, kind: ResumeVariant["kind"] = "ats"): Promise<Blob> {
   const children: Paragraph[] = [];
   const contact = [dossier.identity.email, dossier.identity.phone, dossier.identity.location, ...dossier.identity.links]
     .filter(Boolean)
     .join(" | ");
-  children.push(new Paragraph({ text: dossier.identity.fullName || "Résumé", heading: HeadingLevel.TITLE }));
-  if (contact) children.push(new Paragraph({ text: contact }));
-  children.push(new Paragraph({ text: "Professional Summary", heading: HeadingLevel.HEADING_1 }));
+  children.push(new Paragraph({ text: dossier.identity.fullName || "Résumé", heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, keepNext: true }));
+  if (contact) children.push(new Paragraph({ text: contact, alignment: AlignmentType.CENTER, spacing: { after: 180 } }));
+  children.push(new Paragraph({ text: "Professional Summary", heading: HeadingLevel.HEADING_1, keepNext: true }));
   children.push(new Paragraph({ text: resume.summary }));
-  children.push(new Paragraph({ text: "Core Skills", heading: HeadingLevel.HEADING_1 }));
+  children.push(new Paragraph({ text: "Core Skills", heading: HeadingLevel.HEADING_1, keepNext: true }));
   children.push(new Paragraph({ text: resume.coreSkills.join(" | ") }));
-  children.push(new Paragraph({ text: "Experience", heading: HeadingLevel.HEADING_1 }));
+  children.push(new Paragraph({ text: kind === "recruiter" ? "Selected Experience & Projects" : "Experience", heading: HeadingLevel.HEADING_1, keepNext: true }));
   resume.experience.forEach((role) => {
-    children.push(new Paragraph({ children: [new TextRun({ text: [role.title, role.company, role.time].filter(Boolean).join(" | "), bold: true })] }));
+    children.push(new Paragraph({ keepNext: role.bullets.length > 0, spacing: { before: 120, after: 40 }, children: [new TextRun({ text: [role.title, role.company, role.time].filter(Boolean).join(" | "), bold: true })] }));
     role.bullets.forEach((bullet) => children.push(new Paragraph({ text: bullet, bullet: { level: 0 } })));
   });
   if (resume.education) {
-    children.push(new Paragraph({ text: "Education", heading: HeadingLevel.HEADING_1 }));
+    children.push(new Paragraph({ text: "Education", heading: HeadingLevel.HEADING_1, keepNext: true }));
     children.push(new Paragraph({ text: resume.education }));
   }
-  const document = new Document({ sections: [{ properties: {}, children }] });
+  const document = new Document({
+    styles: { default: { document: { run: { font: kind === "recruiter" ? "Georgia" : "Arial", size: 21 }, paragraph: { spacing: { after: 80, line: 260 } } } } },
+    sections: [{ properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, children }]
+  });
   return Packer.toBlob(document);
 }
 
-function pdfBlob(dossier: CareerDossier, resume: ResumePackage): Blob {
+function pdfBlob(dossier: CareerDossier, resume: ResumePackage, kind: ResumeVariant["kind"] = "ats"): Blob {
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
   const margin = 54;
   const width = 612 - margin * 2;
-  let y = 58;
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  const write = (line: string) => {
-    const wrapped = pdf.splitTextToSize(line || " ", width) as string[];
+  let y = 54;
+  const ensure = (height: number) => { if (y + height > 748) { pdf.addPage(); y = 54; } };
+  const write = (line: string, options?: { bold?: boolean; size?: number; indent?: number; after?: number }) => {
+    const size = options?.size ?? 10;
+    const indent = options?.indent ?? 0;
+    pdf.setFont("helvetica", options?.bold ? "bold" : "normal");
+    pdf.setFontSize(size);
+    const wrapped = pdf.splitTextToSize(line || " ", width - indent) as string[];
+    ensure(wrapped.length * (size + 3) + (options?.after ?? 0));
     wrapped.forEach((part) => {
-      if (y > 738) { pdf.addPage(); y = 58; }
-      pdf.text(part, margin, y);
-      y += 14;
+      pdf.text(part, margin + indent, y);
+      y += size + 3;
     });
+    y += options?.after ?? 0;
   };
-  resumeLines(dossier, resume).forEach(write);
+  const heading = (text: string) => {
+    ensure(32);
+    y += 7;
+    pdf.setDrawColor(kind === "recruiter" ? 50 : 30, kind === "recruiter" ? 85 : 55, kind === "recruiter" ? 75 : 95);
+    pdf.setLineWidth(0.7);
+    write(text.toUpperCase(), { bold: true, size: 10, after: 3 });
+    pdf.line(margin, y - 2, margin + width, y - 2);
+    y += 5;
+  };
+  write(dossier.identity.fullName || "Résumé", { bold: true, size: kind === "recruiter" ? 18 : 16, after: 2 });
+  const contact = [dossier.identity.email, dossier.identity.phone, dossier.identity.location, ...dossier.identity.links].filter(Boolean).join(" | ");
+  if (contact) write(contact, { size: 9, after: 5 });
+  heading("Professional Summary");
+  write(resume.summary, { after: 4 });
+  if (resume.coreSkills.length) {
+    heading("Core Skills");
+    write(resume.coreSkills.join(" | "), { after: 3 });
+  }
+  heading(kind === "recruiter" ? "Selected Experience & Projects" : "Experience");
+  resume.experience.forEach((role) => {
+    ensure(42);
+    write([role.title, role.company, role.time].filter(Boolean).join(" | "), { bold: true, after: 2 });
+    role.bullets.forEach((bullet) => write(`•  ${bullet}`, { indent: 10, after: 1 }));
+    y += 3;
+  });
+  if (resume.education) { heading("Education"); write(resume.education); }
   return pdf.output("blob");
 }
 
@@ -129,8 +148,8 @@ export async function createPackBundle(
     const laneTitle = lanes.find((lane) => lane.id === variant.laneId)?.title ?? "General";
     for (const format of formats) {
       const filename = resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format);
-      const blob = format === "docx" ? await docxBlob(dossier, variant.resume) : pdfBlob(dossier, variant.resume);
-      zip.file(filename, blob);
+      const blob = format === "docx" ? await docxBlob(dossier, variant.resume, variant.kind) : pdfBlob(dossier, variant.resume, variant.kind);
+      zip.file(filename, await blob.arrayBuffer());
       filenames.push(filename);
     }
   }
@@ -148,7 +167,7 @@ export async function createVariantFile(
   format: PackExportFormat
 ): Promise<{ blob: Blob; filename: string }> {
   return {
-    blob: format === "docx" ? await docxBlob(dossier, variant.resume) : pdfBlob(dossier, variant.resume),
+    blob: format === "docx" ? await docxBlob(dossier, variant.resume, variant.kind) : pdfBlob(dossier, variant.resume, variant.kind),
     filename: resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format)
   };
 }

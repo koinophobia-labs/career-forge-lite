@@ -11,6 +11,7 @@ import { assessJobPost } from "@/lib/input-guidance";
 import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
 import { trackCareerEvent } from "@/lib/analytics";
+import { draftApplicationQuestion } from "@/lib/application-questions";
 import { useCommandCenter } from "@/lib/use-command-center";
 
 export default function TailorPage() {
@@ -20,6 +21,14 @@ export default function TailorPage() {
   const [roleTitle, setRoleTitle] = useState("");
   const [laneId, setLaneId] = useState<string>("");
   const [baselineVariantId, setBaselineVariantId] = useState<string>("");
+  const [source, setSource] = useState<"linkedin" | "company-site" | "referral" | "recruiter" | "other">("linkedin");
+  const [discoveryUrl, setDiscoveryUrl] = useState("");
+  const [applicationUrl, setApplicationUrl] = useState("");
+  const [postingDate, setPostingDate] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactUrl, setContactUrl] = useState("");
+  const [questionPrompts, setQuestionPrompts] = useState("");
   const [analysis, setAnalysis] = useState<JobPostAnalysis | null>(null);
   const [savedApplication, setSavedApplication] = useState(false);
   const [savedApplicationId, setSavedApplicationId] = useState<string | null>(null);
@@ -34,7 +43,7 @@ export default function TailorPage() {
   function runAnalysis() {
     if (!jobPost.trim() || !selectedBaseline) return;
     trackCareerEvent("job_tailor_started");
-    setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane));
+    setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane, state.dossier));
     setSavedApplication(false);
   }
 
@@ -52,6 +61,15 @@ export default function TailorPage() {
           laneId: selectedLane?.id ?? null,
           status,
           jobPostUrl: "",
+          source,
+          discoveryUrl: discoveryUrl.trim(),
+          applicationUrl: applicationUrl.trim(),
+          postingDate: postingDate ? new Date(postingDate).toISOString() : null,
+          deadline: deadline ? new Date(deadline).toISOString() : null,
+          contactName: contactName.trim(),
+          contactUrl: contactUrl.trim(),
+          resumeVariantId: selectedBaseline?.id ?? null,
+          applicationQuestions: questionPrompts.split(/\n+/).map((prompt) => prompt.trim()).filter(Boolean).map((prompt, index) => draftApplicationQuestion(prompt, state.dossier, `${newApplicationId}-question-${index + 1}`)),
           resumeVersionId: null,
           appliedAt: status === "applied" ? nowIso : null,
           nextFollowUpAt: status === "applied" ? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS) : null,
@@ -167,6 +185,18 @@ export default function TailorPage() {
               </select>
             </label>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block"><span className="text-sm font-bold text-paper">Discovery source</span><select value={source} onChange={(event) => setSource(event.target.value as typeof source)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="linkedin">LinkedIn</option><option value="company-site">Company site</option><option value="referral">Referral</option><option value="recruiter">Recruiter</option><option value="other">Other</option></select></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Discovery URL</span><input aria-label="Discovery URL" value={discoveryUrl} onChange={(event) => setDiscoveryUrl(event.target.value)} placeholder="LinkedIn posting URL" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Direct application URL</span><input aria-label="Direct application URL" value={applicationUrl} onChange={(event) => setApplicationUrl(event.target.value)} placeholder="Employer portal URL" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Contact</span><input aria-label="Contact name" value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="Recruiter or referral name" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Contact URL</span><input aria-label="Contact URL" value={contactUrl} onChange={(event) => setContactUrl(event.target.value)} placeholder="LinkedIn profile" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Posting date</span><input aria-label="Posting date" type="date" value={postingDate} onChange={(event) => setPostingDate(event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+            <label className="block"><span className="text-sm font-bold text-paper">Deadline</span><input aria-label="Deadline" type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
+          </div>
+
+          <label className="block"><span className="text-sm font-bold text-paper">Custom application questions</span><span className="mt-0.5 block text-xs text-paper/55">One prompt per line. Drafts cite approved evidence and stay editable in the application tracker.</span><textarea aria-label="Application questions" rows={4} value={questionPrompts} onChange={(event) => setQuestionPrompts(event.target.value)} placeholder="What excites you most about this opportunity?" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"/></label>
 
           <div>
             <label className="block">

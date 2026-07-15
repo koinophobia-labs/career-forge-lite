@@ -126,6 +126,20 @@ function reviveApplication(raw: Record<string, unknown>): ApplicationRecord | nu
     laneId: asStringOrNull(raw.laneId),
     status,
     jobPostUrl: asString(raw.jobPostUrl),
+    source: raw.source === "linkedin" || raw.source === "company-site" || raw.source === "referral" || raw.source === "recruiter" ? raw.source : "other",
+    discoveryUrl: asString(raw.discoveryUrl, asString(raw.jobPostUrl)),
+    applicationUrl: asString(raw.applicationUrl),
+    postingDate: asStringOrNull(raw.postingDate),
+    deadline: asStringOrNull(raw.deadline),
+    contactName: asString(raw.contactName),
+    contactUrl: asString(raw.contactUrl),
+    resumeVariantId: asStringOrNull(raw.resumeVariantId),
+    applicationQuestions: Array.isArray(raw.applicationQuestions) ? raw.applicationQuestions.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const item = entry as Record<string, unknown>;
+      if (!asString(item.id) || !asString(item.prompt)) return [];
+      return [{ id: asString(item.id), prompt: asString(item.prompt), draftAnswer: asString(item.draftAnswer), evidenceIds: asStringArray(item.evidenceIds), userEdited: item.userEdited === true }];
+    }) : [],
     resumeVersionId: asStringOrNull(raw.resumeVersionId),
     appliedAt: asStringOrNull(raw.appliedAt),
     nextFollowUpAt: asStringOrNull(raw.nextFollowUpAt),
@@ -240,12 +254,16 @@ function reviveVariant(raw: Record<string, unknown>): ResumeVariant | null {
   if (!snapshot) return null;
   const statusOptions: ResumeVariant["status"][] = ["current", "needs-review", "out-of-date", "missing-evidence", "job-specific", "archived"];
   const kind = raw.kind === "recruiter" || raw.kind === "job-specific" ? raw.kind : "ats";
+  const sectionOrder = asStringArray(raw.sectionOrder).filter((value): value is ResumeVariant["sectionOrder"][number] => ["summary", "skills", "experience", "projects", "education"].includes(value));
   const references = Array.isArray(raw.evidenceReferences)
     ? raw.evidenceReferences.flatMap((entry): ResumeVariant["evidenceReferences"] => {
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
         const item = entry as Record<string, unknown>;
         if (!asString(item.claimText)) return [];
-        return [{ claimPath: asString(item.claimPath), claimText: asString(item.claimText), evidenceIds: asStringArray(item.evidenceIds) }];
+        return [{
+          claimPath: asString(item.claimPath), claimText: asString(item.claimText), evidenceIds: asStringArray(item.evidenceIds),
+          supportType: item.supportType === "combined" || item.supportType === "transferred" ? item.supportType : "direct"
+        }];
       })
     : [];
   return {
@@ -259,6 +277,10 @@ function reviveVariant(raw: Record<string, unknown>): ResumeVariant | null {
     resume: snapshot.resume,
     template: snapshot.template,
     evidenceReferences: references,
+    userAuthoredPaths: asStringArray(raw.userAuthoredPaths),
+    sectionOrder: sectionOrder.length ? sectionOrder : kind === "recruiter"
+      ? ["summary", "projects", "experience", "skills", "education"]
+      : ["summary", "skills", "experience", "projects", "education"],
     sourceDossierUpdatedAt: asString(raw.sourceDossierUpdatedAt, new Date(0).toISOString()),
     baselineVariantId: asStringOrNull(raw.baselineVariantId),
     applicationId: asStringOrNull(raw.applicationId),
@@ -305,6 +327,8 @@ function reviveResumePack(raw: Record<string, unknown>): ResumePack | null {
         : [],
       keywordsIncluded: asStringArray(receiptRaw.keywordsIncluded), gapsAvoided: asStringArray(receiptRaw.gapsAvoided),
       unsupportedClaimsRefused: asStringArray(receiptRaw.unsupportedClaimsRefused)
+      , transferredClaims: asStringArray(receiptRaw.transferredClaims)
+      , gapsLeftUnclaimed: asStringArray(receiptRaw.gapsLeftUnclaimed)
     },
     createdAt: asString(raw.createdAt, new Date(0).toISOString()), updatedAt: asString(raw.updatedAt, new Date(0).toISOString())
   };

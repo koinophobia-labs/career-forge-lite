@@ -7,13 +7,15 @@ import { SiteFooter } from "@/components/SiteFooter";
 import {
   assessDossierReadiness,
   evidenceRecord,
-  parseResumeTextToProposal,
+  mergeImportProposals,
+  parseResumePackToProposals,
   withUpdatedDossier
 } from "@/lib/dossier";
+import { extractLocalResumeFiles } from "@/lib/local-resume-import";
 import { createId } from "@/lib/command-center-store";
 import { trackCareerEvent } from "@/lib/analytics";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { CareerDossier, DossierEducation, DossierProject, DossierRole } from "@/types/dossier";
+import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord } from "@/types/dossier";
 
 function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
@@ -30,12 +32,14 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 
 function TextListEditor({ label, value, hint, onSave }: { label: string; value: string[]; hint: string; onSave: (items: string[]) => void }) {
   const [draft, setDraft] = useState(value.join("\n"));
+  const [saved, setSaved] = useState(false);
   return (
-    <label className="block">
+    <div className="block">
       <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">{label}</span>
-      <textarea className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink" rows={4} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onSave(values(draft))} />
+      <textarea aria-label={label} className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink" rows={4} value={draft} onChange={(event) => { setDraft(event.target.value); setSaved(false); }} />
       <span className="mt-1 block text-xs leading-5 text-paper/45">{hint}</span>
-    </label>
+      <button type="button" onClick={() => { onSave(values(draft)); setSaved(true); }} className="mt-2 rounded border border-cyan/35 px-3 py-1.5 text-xs font-bold text-cyan">Save {label.toLowerCase()}</button>{saved && <span className="ml-2 text-xs font-bold text-mint">Saved</span>}
+    </div>
   );
 }
 
@@ -47,7 +51,9 @@ export default function DossierPage() {
   const [project, setProject] = useState({ name: "", organization: "", dates: "", description: "" });
   const [education, setEducation] = useState({ credential: "", institution: "", dates: "" });
   const [resumeText, setResumeText] = useState("");
-  const [imported, setImported] = useState(false);
+  const [importProposals, setImportProposals] = useState<ImportProposalRecord[]>([]);
+  const [importMessage, setImportMessage] = useState("");
+  const [retainSourceFilenames, setRetainSourceFilenames] = useState(false);
 
   function save(next: CareerDossier) {
     update((current) => withUpdatedDossier(current, { ...next, updatedAt: new Date().toISOString() }));
@@ -80,7 +86,7 @@ export default function DossierPage() {
   }
 
   function approveEvidence(id: string, approved: boolean) {
-    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, approved, updatedAt: new Date().toISOString() } : item);
+    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, approved, rejected: !approved, updatedAt: new Date().toISOString() } : item);
     save({
       ...dossier,
       evidence,
@@ -93,7 +99,7 @@ export default function DossierPage() {
     const now = new Date().toISOString();
     const detail = [project.name, project.organization, project.dates, project.description].filter(Boolean).join(" · ");
     const proof = evidenceRecord("project", detail, "manual", true, now, { label: "Independent work or project" });
-    const record: DossierProject = { id: createId("project"), name: project.name.trim(), organization: project.organization.trim(), dates: project.dates.trim(), description: project.description.trim(), responsibilities: [], tools: [], outcomes: [], evidenceIds: [proof.id] };
+    const record: DossierProject = { id: createId("project"), name: project.name.trim(), organization: project.organization.trim(), dates: project.dates.trim(), description: project.description.trim(), responsibilities: [], tools: [], outcomes: [], metrics: [], links: [], defaultPlacement: "projects", evidenceIds: [proof.id] };
     save({ ...dossier, projects: [...dossier.projects, record], evidence: [...dossier.evidence, proof], approvedClaims: [...new Set([...dossier.approvedClaims, proof.detail])] });
     trackCareerEvent("dossier_evidence_added");
     setProject({ name: "", organization: "", dates: "", description: "" });
@@ -112,18 +118,113 @@ export default function DossierPage() {
 
   function importResume() {
     if (!resumeText.trim()) return;
-    const proposals = parseResumeTextToProposal(resumeText);
-    const existing = new Set(dossier.evidence.map((item) => item.id));
+    setImportProposals(parseResumePackToProposals([{ filename: "Pasted résumé.txt", text: resumeText }]));
+    setImportMessage("Pasted text parsed locally. Review grouped records below.");
+  }
+
+  async function importFiles(files: File[]) {
+    try {
+      const extracted = await extractLocalResumeFiles(files);
+      setImportProposals(parseResumePackToProposals(extracted));
+      setImportMessage(`${files.length} file${files.length === 1 ? "" : "s"} extracted locally. Raw files were not stored.`);
+      trackCareerEvent("resume_pack_imported");
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : "Those files could not be read.");
+    }
+  }
+
+  function decideProposal(id: string, status: ImportProposalRecord["status"]) {
+    setImportProposals((current) => current.map((item) => item.id === id ? { ...item, status } : item));
+  }
+
+  function approveGroup(group: ImportProposalGroup) {
+    setImportProposals((current) => current.map((item) => item.group === group ? { ...item, status: "approved" } : item));
+  }
+
+  function mergeLikelyDuplicates() {
+    setImportProposals((current) => {
+      const merged: ImportProposalRecord[] = [];
+      const tokens = (value: string) => new Set(value.toLowerCase().replace(/(?:19|20)\d{2}|present/g, " ").match(/[a-z0-9]{3,}/g) ?? []);
+      for (const proposal of current) {
+        const sourceTokens = tokens(proposal.detail);
+        const match = merged.find((item) => {
+          if (item.group !== proposal.group) return false;
+          const targetTokens = tokens(item.detail);
+          const overlap = [...sourceTokens].filter((token) => targetTokens.has(token)).length;
+          return overlap / Math.max(1, Math.min(sourceTokens.size, targetTokens.size)) >= 0.7;
+        });
+        if (!match) { merged.push({ ...proposal }); continue; }
+        match.detail = match.detail.length >= proposal.detail.length ? match.detail : proposal.detail;
+        match.sourceFilenames = [...new Set([...match.sourceFilenames, ...proposal.sourceFilenames])];
+        match.sourceExcerpts = [...new Set([...match.sourceExcerpts, ...proposal.sourceExcerpts])];
+        if (proposal.status === "approved") match.status = "approved";
+      }
+      setImportMessage(`Merged ${current.length - merged.length} likely duplicate record${current.length - merged.length === 1 ? "" : "s"}. Review the result before saving.`);
+      return merged;
+    });
+  }
+
+  function commitImportReview() {
+    save(mergeImportProposals(dossier, importProposals, new Date().toISOString(), retainSourceFilenames));
+    setImportMessage("Review saved. Only approved records can now support generated claims.");
+    setImportProposals([]);
+  }
+
+  function deleteRecord(kind: "roles" | "projects" | "education", id: string, evidenceIds: string[]) {
+    const linked = state.resumePacks.some((pack) => pack.variants.some((variant) => variant.evidenceReferences.some((ref) => ref.evidenceIds.some((evidenceId) => evidenceIds.includes(evidenceId)))));
+    if (linked && !window.confirm("This record supports an existing résumé. Delete it and mark that résumé out of date?")) return;
+    if (!linked && !window.confirm("Delete this dossier record?")) return;
     save({
       ...dossier,
-      evidence: [...dossier.evidence, ...proposals.filter((item) => !existing.has(item.id))],
-      migrationReview: [...new Set([...dossier.migrationReview, "Review and approve each imported résumé line before it can support generated claims."])]
+      [kind]: dossier[kind].filter((item) => item.id !== id),
+      evidence: dossier.evidence.filter((item) => !evidenceIds.includes(item.id)),
+      approvedClaims: dossier.approvedClaims.filter((claim) => !dossier.evidence.some((item) => evidenceIds.includes(item.id) && item.detail === claim))
     });
-    setImported(true);
+  }
+
+  function editRole(id: string, form: FormData) {
+    save({ ...dossier, roles: dossier.roles.map((item) => item.id === id ? {
+      ...item, title: String(form.get("title") ?? "").trim(), employer: String(form.get("employer") ?? "").trim(),
+      startDate: String(form.get("dates") ?? "").trim(), responsibilities: values(String(form.get("responsibilities") ?? ""))
+    } : item) });
+  }
+
+  function editProject(id: string, form: FormData) {
+    save({ ...dossier, projects: dossier.projects.map((item) => item.id === id ? {
+      ...item, name: String(form.get("name") ?? "").trim(), organization: String(form.get("organization") ?? "").trim(),
+      dates: String(form.get("dates") ?? "").trim(), description: String(form.get("description") ?? "").trim(),
+      responsibilities: values(String(form.get("responsibilities") ?? "")), tools: values(String(form.get("tools") ?? "")),
+      outcomes: values(String(form.get("outcomes") ?? "")), metrics: values(String(form.get("metrics") ?? "")),
+      links: values(String(form.get("links") ?? "")),
+      defaultPlacement: String(form.get("placement")) as DossierProject["defaultPlacement"]
+    } : item) });
+  }
+
+  function editEducation(id: string, form: FormData) {
+    save({ ...dossier, education: dossier.education.map((item) => item.id === id ? {
+      ...item, credential: String(form.get("credential") ?? "").trim(), institution: String(form.get("institution") ?? "").trim(),
+      field: String(form.get("field") ?? "").trim(), dates: String(form.get("dates") ?? "").trim()
+    } : item) });
+  }
+
+  function editEvidence(id: string, detail: string) {
+    const now = new Date().toISOString();
+    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, detail: detail.trim(), updatedAt: now } : item);
+    save({ ...dossier, evidence, approvedClaims: evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail) });
+  }
+
+  function deleteEvidence(id: string) {
+    const linked = state.resumePacks.some((pack) => pack.variants.some((variant) => variant.evidenceReferences.some((ref) => ref.evidenceIds.includes(id))));
+    if (!window.confirm(linked ? "This evidence supports an existing résumé. Delete it and mark that résumé out of date?" : "Delete this evidence permanently?")) return;
+    const evidence = dossier.evidence.filter((item) => item.id !== id);
+    save({ ...dossier, evidence, approvedClaims: evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail) });
   }
 
   const approvedCount = dossier.evidence.filter((item) => item.approved).length;
-  const proposed = dossier.evidence.filter((item) => !item.approved);
+  const proposed = dossier.evidence.filter((item) => !item.approved && !item.rejected);
+  const rejected = dossier.evidence.filter((item) => item.rejected);
+  const approvedEvidence = dossier.evidence.filter((item) => item.approved && !item.rejected);
+  const importGroups: Array<[ImportProposalGroup, string]> = [["identity", "Identity"], ["employment", "Employment"], ["projects", "Projects"], ["education", "Education"], ["tools", "Tools"], ["skills", "Skills"], ["metrics-outcomes", "Metrics and outcomes"], ["other", "Other proposed evidence"]];
 
   return (
     <main>
@@ -184,16 +285,18 @@ export default function DossierPage() {
                   <textarea aria-label="Responsibilities" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="One recurring responsibility per line" value={role.responsibilities} onChange={(event) => setRole({ ...role, responsibilities: event.target.value })} />
                 </div>
                 <button type="button" onClick={addRole} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan">Add approved role</button>
-                {dossier.roles.length > 0 && <ul className="mt-4 grid gap-2">{dossier.roles.map((item) => <li key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-paper/75"><strong>{item.title || "Role"}</strong>{item.employer ? ` · ${item.employer}` : ""}{item.startDate ? ` · ${item.startDate}` : ""}</li>)}</ul>}
+                {dossier.roles.length > 0 && <div className="mt-4 grid gap-2">{dossier.roles.map((item) => <details key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-paper/75"><summary className="cursor-pointer font-bold">{item.title || "Role"}{item.employer ? ` · ${item.employer}` : ""}{item.startDate ? ` · ${item.startDate}` : ""}</summary><form action={(form) => editRole(item.id, form)} className="mt-3 grid gap-2"><input name="title" aria-label="Edit role title" defaultValue={item.title} className="trust-input border px-3 py-2 text-ink"/><input name="employer" aria-label="Edit role employer" defaultValue={item.employer} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit role dates" defaultValue={item.startDate} className="trust-input border px-3 py-2 text-ink"/><textarea name="responsibilities" aria-label="Edit role responsibilities" defaultValue={item.responsibilities.join("\n")} className="trust-input border px-3 py-2 text-ink"/><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save role</button><button type="button" onClick={() => deleteRecord("roles", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete role</button></div></form></details>)}</div>}
               </div>
             </section>
+
+            {approvedEvidence.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Approved evidence lifecycle</h2><p className="mt-1 text-sm text-paper/55">Edit, reject, or delete individual facts. Existing outputs are preserved and marked out of date.</p><div className="mt-4 grid gap-2">{approvedEvidence.map((item) => <details key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3"><summary className="cursor-pointer text-sm font-bold text-paper/75">{item.label}: {item.detail}</summary><div className="mt-3 grid gap-2"><input aria-label={`Edit evidence ${item.label}`} defaultValue={item.detail} onBlur={(event) => { if (event.target.value.trim() !== item.detail) editEvidence(item.id, event.target.value); }} className="trust-input border px-3 py-2 text-sm text-ink"/><p className="text-xs text-paper/45">Sources: {item.sourceFilenames.join(", ") || item.source} · Exact text: {item.sourceExcerpts[0] ?? item.sourceText}</p><div className="flex flex-wrap gap-2"><button type="button" onClick={() => approveEvidence(item.id, false)} className="rounded border border-gold/50 px-3 py-1.5 text-xs font-bold text-gold">Reject evidence</button><button type="button" onClick={() => deleteEvidence(item.id)} className="rounded border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Delete evidence</button></div></div></details>)}</div></section>}
 
             <section className="trust-panel mt-6 p-5 sm:p-6">
               <h2 className="text-xl font-bold text-paper">Projects, independent work &amp; education</h2>
               <p className="mt-1 text-sm text-paper/55">Founders and recent graduates can build a defensible dossier without conventional employment.</p>
               <div className="mt-5 grid gap-6 lg:grid-cols-2">
-                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add a project or independent venture</h3><div className="mt-3 grid gap-3 sm:grid-cols-2"><input aria-label="Project name" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Project name" value={project.name} onChange={(event) => setProject({ ...project, name: event.target.value })} /><input aria-label="Project organization" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Organization or Independent" value={project.organization} onChange={(event) => setProject({ ...project, organization: event.target.value })} /><input aria-label="Project dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates" value={project.dates} onChange={(event) => setProject({ ...project, dates: event.target.value })} /><textarea aria-label="Project description" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="What you built, did, or shipped—no assumed outcomes" value={project.description} onChange={(event) => setProject({ ...project, description: event.target.value })} /></div><button type="button" onClick={addProject} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved project</button>{dossier.projects.map((item) => <p key={item.id} className="mt-2 text-sm text-paper/65">{item.name}{item.organization ? ` · ${item.organization}` : ""}</p>)}</div>
-                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add education or a credential</h3><div className="mt-3 grid gap-3"><input aria-label="Credential" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Degree, certificate, course, or training" value={education.credential} onChange={(event) => setEducation({ ...education, credential: event.target.value })} /><input aria-label="Institution" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Institution" value={education.institution} onChange={(event) => setEducation({ ...education, institution: event.target.value })} /><input aria-label="Education dates" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Dates" value={education.dates} onChange={(event) => setEducation({ ...education, dates: event.target.value })} /></div><button type="button" onClick={addEducation} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved education</button>{dossier.education.map((item) => <p key={item.id} className="mt-2 text-sm text-paper/65">{item.credential}{item.institution ? ` · ${item.institution}` : ""}</p>)}</div>
+                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add a project or independent venture</h3><div className="mt-3 grid gap-3 sm:grid-cols-2"><input aria-label="Project name" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Project name" value={project.name} onChange={(event) => setProject({ ...project, name: event.target.value })} /><input aria-label="Project organization" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Organization or Independent" value={project.organization} onChange={(event) => setProject({ ...project, organization: event.target.value })} /><input aria-label="Project dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates" value={project.dates} onChange={(event) => setProject({ ...project, dates: event.target.value })} /><textarea aria-label="Project description" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="What you built, did, or shipped—no assumed outcomes" value={project.description} onChange={(event) => setProject({ ...project, description: event.target.value })} /></div><button type="button" onClick={addProject} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved project</button>{dossier.projects.map((item) => <details key={item.id} className="mt-3 rounded-lg border border-white/10 p-3 text-sm text-paper/70"><summary className="cursor-pointer font-bold">{item.name}{item.organization ? ` · ${item.organization}` : ""}</summary><form action={(form) => editProject(item.id, form)} className="mt-3 grid gap-2"><input name="name" aria-label="Edit project name" defaultValue={item.name} className="trust-input border px-3 py-2 text-ink"/><input name="organization" aria-label="Edit project organization" defaultValue={item.organization} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit project dates" defaultValue={item.dates} className="trust-input border px-3 py-2 text-ink"/><textarea name="description" aria-label="Edit project description" defaultValue={item.description} className="trust-input border px-3 py-2 text-ink"/><textarea name="responsibilities" aria-label="Edit project responsibilities" defaultValue={item.responsibilities.join("\n")} placeholder="Responsibilities" className="trust-input border px-3 py-2 text-ink"/><textarea name="tools" aria-label="Edit project tools" defaultValue={item.tools.join("\n")} placeholder="Tools" className="trust-input border px-3 py-2 text-ink"/><textarea name="outcomes" aria-label="Edit project outcomes" defaultValue={item.outcomes.join("\n")} placeholder="Outcomes" className="trust-input border px-3 py-2 text-ink"/><textarea name="metrics" aria-label="Edit project metrics" defaultValue={item.metrics.join("\n")} placeholder="Metrics" className="trust-input border px-3 py-2 text-ink"/><textarea name="links" aria-label="Edit project links" defaultValue={item.links.join("\n")} placeholder="Links" className="trust-input border px-3 py-2 text-ink"/><select name="placement" aria-label="Project resume placement" defaultValue={item.defaultPlacement} className="trust-input border px-3 py-2 text-ink"><option value="projects">Projects</option><option value="experience">Experience</option><option value="selected-projects">Selected Projects</option><option value="omit">Omit by default</option></select><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save project</button><button type="button" onClick={() => deleteRecord("projects", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete project</button></div></form></details>)}</div>
+                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add education or a credential</h3><div className="mt-3 grid gap-3"><input aria-label="Credential" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Degree, certificate, course, or training" value={education.credential} onChange={(event) => setEducation({ ...education, credential: event.target.value })} /><input aria-label="Institution" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Institution" value={education.institution} onChange={(event) => setEducation({ ...education, institution: event.target.value })} /><input aria-label="Education dates" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Dates" value={education.dates} onChange={(event) => setEducation({ ...education, dates: event.target.value })} /></div><button type="button" onClick={addEducation} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved education</button>{dossier.education.map((item) => <details key={item.id} className="mt-3 rounded-lg border border-white/10 p-3 text-sm text-paper/70"><summary className="cursor-pointer font-bold">{item.credential}{item.institution ? ` · ${item.institution}` : ""}</summary><form action={(form) => editEducation(item.id, form)} className="mt-3 grid gap-2"><input name="credential" aria-label="Edit credential" defaultValue={item.credential} className="trust-input border px-3 py-2 text-ink"/><input name="institution" aria-label="Edit institution" defaultValue={item.institution} className="trust-input border px-3 py-2 text-ink"/><input name="field" aria-label="Edit education field" defaultValue={item.field} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit education dates" defaultValue={item.dates} className="trust-input border px-3 py-2 text-ink"/><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save education</button><button type="button" onClick={() => deleteRecord("education", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete education</button></div></form></details>)}</div>
               </div>
             </section>
 
@@ -215,12 +318,18 @@ export default function DossierPage() {
 
             <section className="trust-panel mt-6 p-5 sm:p-6">
               <p className="trust-kicker text-xs font-bold uppercase">Local résumé import</p>
-              <h2 className="mt-2 text-xl font-bold text-paper">Paste résumé text for review</h2>
-              <p className="mt-1 text-sm leading-6 text-paper/55">Nothing is uploaded. Lines are proposed as low-confidence evidence and cannot be used until you approve them.</p>
+              <h2 className="mt-2 text-xl font-bold text-paper">Import a résumé pack for grouped review</h2>
+              <p className="mt-1 text-sm leading-6 text-paper/55">Choose multiple PDF, DOCX, or text résumés. Extraction and deduplication happen in this browser; binary files are never persisted or uploaded.</p>
+              <label className="mt-4 block rounded-xl border border-dashed border-cyan/40 bg-cyan/5 p-4 text-sm text-paper/70"><span className="font-bold text-cyan">Choose résumé files</span><input aria-label="Resume pack files" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="mt-2 block w-full text-xs" onChange={(event) => { const files = [...(event.target.files ?? [])]; if (files.length) void importFiles(files); event.target.value = ""; }} /></label>
+              <p className="mt-5 text-xs font-bold uppercase text-paper/45">Or paste plain text</p>
               <textarea aria-label="Resume text import" className="trust-input mt-4 w-full border px-3 py-2 text-sm text-ink" rows={7} value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Paste the text from an existing résumé…" />
               <button type="button" onClick={importResume} className="mt-3 rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">Extract proposed evidence</button>
-              {imported && <span className="ml-3 text-sm text-mint">Import parsed locally. Review below.</span>}
+              {importMessage && <p className="mt-3 text-sm text-mint" role="status">{importMessage}</p>}
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-paper/55"><input type="checkbox" checked={retainSourceFilenames} onChange={(event) => setRetainSourceFilenames(event.target.checked)} className="mt-1"/><span>Retain source filenames in local dossier metadata after approval. Leave off for maximum privacy; exact supporting text is retained either way.</span></label>
             </section>
+
+            {importProposals.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6" aria-labelledby="import-review-title"><h2 id="import-review-title" className="text-xl font-bold text-paper">Review structured proposals</h2><p className="mt-1 text-sm text-paper/55">Approve a section or individual record, edit the proposed wording, reject it, and inspect every source. Nothing can support generation until this review is saved.</p><div className="mt-5 grid gap-5">{importGroups.map(([group, title]) => { const items = importProposals.filter((item) => item.group === group); if (!items.length) return null; return <section key={group} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold text-paper">{title} <span className="text-paper/45">({items.length})</span></h3><button type="button" onClick={() => approveGroup(group)} className="rounded border border-mint/50 px-3 py-1.5 text-xs font-bold text-mint">Approve section</button></div><div className="mt-3 grid gap-3">{items.map((item) => <article key={item.id} className={`rounded-lg border p-3 ${item.status === "approved" ? "border-mint/40 bg-mint/5" : item.status === "rejected" ? "border-coral/40 bg-coral/5" : "border-white/10"}`}><input aria-label={`Edit proposal ${item.label}`} value={item.detail} onChange={(event) => setImportProposals((current) => current.map((proposal) => proposal.id === item.id ? { ...proposal, detail: event.target.value } : proposal))} className="trust-input w-full border px-3 py-2 text-sm text-ink"/><details className="mt-2 text-xs text-paper/55"><summary className="cursor-pointer">Sources: {item.sourceFilenames.join(", ")}</summary>{item.sourceExcerpts.map((source) => <p key={source} className="mt-2 border-l-2 border-cyan/30 pl-2">{source}</p>)}</details><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => decideProposal(item.id, "approved")} className="rounded bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve</button><button type="button" onClick={() => decideProposal(item.id, "rejected")} className="rounded border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Reject</button><span className="ml-auto text-xs uppercase text-paper/40">{item.confidence} confidence · {item.status}</span></div></article>)}</div></section>; })}</div><button type="button" onClick={commitImportReview} className="mt-5 rounded-md bg-gold px-5 py-2.5 text-sm font-black text-ink">Save reviewed evidence</button></section>}
+            {importProposals.length > 1 && <div className="mt-3 flex justify-end"><button type="button" onClick={mergeLikelyDuplicates} className="rounded border border-cyan/40 px-4 py-2 text-sm font-bold text-cyan">Merge likely duplicates</button></div>}
 
             {(proposed.length > 0 || dossier.migrationReview.length > 0) && (
               <section className="trust-panel mt-6 p-5 sm:p-6">
@@ -232,13 +341,15 @@ export default function DossierPage() {
                     <article key={item.id} className="rounded-xl border border-white/12 bg-obsidian/40 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div><p className="lab-mono text-[0.65rem] font-bold uppercase text-gold">{item.kind} · {item.source} · {item.confidence} confidence</p><p className="mt-1 text-sm font-bold text-paper">{item.detail}</p><p className="mt-2 text-xs leading-5 text-paper/45">Source: {item.sourceText}</p></div>
-                        <button type="button" onClick={() => approveEvidence(item.id, true)} className="rounded-md bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve fact</button>
+                        <div className="flex gap-2"><button type="button" onClick={() => approveEvidence(item.id, true)} className="rounded-md bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve fact</button><button type="button" onClick={() => approveEvidence(item.id, false)} className="rounded-md border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Reject</button></div>
                       </div>
                     </article>
                   ))}
                 </div>
               </section>
             )}
+
+            {rejected.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Rejected evidence</h2><p className="mt-1 text-sm text-paper/55">Restore an item if it was rejected accidentally. It remains unusable until restored.</p><div className="mt-3 grid gap-2">{rejected.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-white/10 p-3 text-sm text-paper/65"><span className="mr-auto">{item.detail}</span><button type="button" onClick={() => approveEvidence(item.id, true)} className="rounded border border-mint/50 px-3 py-1 text-xs font-bold text-mint">Restore and approve</button></div>)}</div></section>}
 
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
               <p className="text-sm text-paper/68">Your dossier is the foundation. Next, choose up to three credible career lanes.</p>
