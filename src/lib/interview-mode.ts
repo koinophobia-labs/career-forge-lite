@@ -1279,7 +1279,11 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
 
 export function generateResumePackageFromInterview(session: InterviewSession): InterviewGeneratedPackage {
   const intake = convertInterviewDraftToExistingResumeInput(session);
-  const resume = generateResumePackage(intake);
+  const generated = generateResumePackage(intake);
+  const target = intake.targetJobTitle.trim();
+  const resume = target && !generated.linkedinHeadline.toLowerCase().includes(target.toLowerCase())
+    ? { ...generated, linkedinHeadline: `${target} | ${generated.linkedinHeadline}` }
+    : generated;
   return {
     intake,
     resume,

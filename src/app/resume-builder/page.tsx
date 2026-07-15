@@ -16,6 +16,7 @@ import { consumeHandoff, recordTailoredResumeVersion, type TailorHandoff } from 
 import { applyTailoredContext, contextFromHandoff, type TailoredInfluence } from "@/lib/tailored-resume";
 import { updateCommandCenter } from "@/lib/use-command-center";
 import { generateResumePackage } from "@/lib/generator";
+import { intakeFromDossier, mergeIntakeIntoDossier, withUpdatedDossier } from "@/lib/dossier";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 import type { ResumeSnapshot } from "@/types/command-center";
 
@@ -111,11 +112,16 @@ export default function Home() {
   // effect (not an initializer): the handoff lives in localStorage, which is
   // unavailable during prerender, and consuming it mutates external state.
   useEffect(() => {
+    const stored = loadState();
     const handoff = consumeHandoff(new Date().toISOString());
+    const dossierIntake = intakeFromDossier(stored.dossier, handoff?.roleTitle ?? "");
+    if (stored.dossier.evidence.length || stored.dossier.roles.length || stored.dossier.projects.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from the canonical local dossier
+      setIntake(dossierIntake);
+    }
     if (!handoff) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from an external store (localStorage), consume-once by design
     setTailorSession(handoff);
-    setIntake((current) => ({ ...current, targetJobTitle: handoff.roleTitle }));
+    setIntake((current) => ({ ...current, ...dossierIntake, targetJobTitle: handoff.roleTitle }));
     setStep("intake");
     if (!hasTrackedGuidedStart.current) {
       trackCareerForgeStart("guided");
@@ -175,6 +181,11 @@ export default function Home() {
       return;
     }
 
+    const nowIso = new Date().toISOString();
+    updateCommandCenter((current) => withUpdatedDossier(
+      current,
+      mergeIntakeIntoDossier(current.dossier, intake, "guided", true, "Guided Career Dossier setup", nowIso)
+    ));
     const basePackage = generateResumePackage(intake);
     if (tailorSession) {
       // The user's career profile counts as evidence too — it's their own

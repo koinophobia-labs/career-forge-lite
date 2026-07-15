@@ -1,13 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { createId } from "@/lib/command-center-store";
 import { laneLibrary } from "@/lib/lane-library";
+import { generateResumePack } from "@/lib/resume-pack";
+import { assessDossierReadiness } from "@/lib/dossier";
+import { trackCareerEvent } from "@/lib/analytics";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { LaneStatus, TargetLane } from "@/types/command-center";
+import type { LaneStatus, ResumeVersionRecord, TargetLane } from "@/types/command-center";
 
 const statusOrder: LaneStatus[] = ["active", "exploring", "paused"];
 
@@ -29,8 +32,10 @@ function LaneDetail({ title, items }: { title: string; items: string[] }) {
 
 export default function TargetsPage() {
   const { state, update, hydrated } = useCommandCenter();
+  const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [customTitle, setCustomTitle] = useState("");
+  const dossierReadiness = assessDossierReadiness(state.dossier);
 
   const adoptedKeys = new Set(
     state.lanes.map((lane) => laneLibrary.find((blueprint) => blueprint.title === lane.title)?.key).filter(Boolean)
@@ -45,7 +50,9 @@ export default function TargetsPage() {
         id: createId("lane"),
         title: blueprint.title,
         status: current.lanes.filter((item) => item.status === "active").length < 3 ? "active" : "exploring",
-        whyFit: blueprint.whyFit,
+        whyFit: current.dossier.approvedClaims.length
+          ? `${blueprint.whyFit} Strongest dossier evidence: ${current.dossier.approvedClaims.slice(0, 2).join("; ")}.`
+          : blueprint.whyFit,
         resumeAngle: blueprint.resumeAngle,
         proof: blueprint.proof,
         gaps: blueprint.gaps,
@@ -55,6 +62,7 @@ export default function TargetsPage() {
       };
       return { ...current, lanes: [...current.lanes, lane] };
     });
+    trackCareerEvent("lane_activated");
   }
 
   function addCustomLane() {
@@ -66,11 +74,15 @@ export default function TargetsPage() {
         id: createId("lane"),
         title,
         status: "exploring",
-        whyFit: "",
-        resumeAngle: "",
-        proof: [],
-        gaps: [],
-        keywords: [],
+        whyFit: current.dossier.approvedClaims.length
+          ? `Dossier-backed fit to validate: ${current.dossier.approvedClaims.slice(0, 3).join("; ")}.`
+          : "Add approved dossier evidence to validate this custom lane.",
+        resumeAngle: current.dossier.transferableSkills.length
+          ? `Lead with ${current.dossier.transferableSkills.slice(0, 3).join(", ")} where the role requires them.`
+          : `Position verified experience toward ${title}; do not claim missing qualifications.`,
+        proof: current.dossier.proofPoints.slice(0, 4),
+        gaps: ["Credentials, tools, and years of experience not supported by approved dossier evidence must not be claimed."],
+        keywords: current.dossier.tools.slice(0, 8),
         source: "custom",
         createdAt: new Date().toISOString()
       };
@@ -80,14 +92,13 @@ export default function TargetsPage() {
   }
 
   function cycleStatus(id: string) {
-    update((current) => ({
-      ...current,
-      lanes: current.lanes.map((lane) =>
-        lane.id === id
-          ? { ...lane, status: statusOrder[(statusOrder.indexOf(lane.status) + 1) % statusOrder.length] }
-          : lane
-      )
-    }));
+    update((current) => {
+      const target = current.lanes.find((lane) => lane.id === id);
+      if (!target) return current;
+      const nextStatus = statusOrder[(statusOrder.indexOf(target.status) + 1) % statusOrder.length];
+      if (nextStatus === "active" && current.lanes.filter((lane) => lane.status === "active").length >= 3) return current;
+      return { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
+    });
   }
 
   function removeLane(id: string) {
@@ -99,6 +110,49 @@ export default function TargetsPage() {
       ...current,
       lanes: current.lanes.map((lane) => (lane.id === id ? { ...lane, [field]: value } : lane))
     }));
+  }
+
+  function forgePack() {
+    const active = state.lanes.filter((lane) => lane.status === "active").slice(0, 3);
+    if (!active.length || dossierReadiness.level === "not-ready") return;
+    trackCareerEvent("resume_pack_started");
+    const now = new Date().toISOString();
+    const pack = generateResumePack(state.dossier, active, now);
+    update((current) => {
+      const versions: ResumeVersionRecord[] = pack.variants.map((variant) => {
+        const lane = current.lanes.find((item) => item.id === variant.laneId);
+        return {
+          id: variant.id,
+          label: variant.title,
+          laneId: variant.laneId,
+          notes: `Canonical ${variant.kind} baseline generated from dossier ${pack.dossierId}.`,
+          source: "builder",
+          applicationId: null,
+          targetCompany: "",
+          targetTitle: lane?.title ?? "",
+          keywordsUsed: pack.receipt.keywordsIncluded,
+          gapsAcknowledged: pack.receipt.gapsAvoided,
+          influenceSummary: `Generated from ${pack.receipt.evidenceUsed.length} approved evidence items; ${pack.receipt.evidenceOmitted.length} unapproved items omitted.`,
+          resumeText: [variant.resume.summary, ...variant.resume.coreSkills, ...variant.resume.experience.flatMap((role) => role.bullets)].join("\n"),
+          resumeSnapshot: {
+            fullName: current.dossier.identity.fullName,
+            email: current.dossier.identity.email,
+            phone: current.dossier.identity.phone,
+            website: current.dossier.identity.links[0] ?? "",
+            template: variant.template,
+            resume: variant.resume
+          },
+          createdAt: now
+        };
+      });
+      return {
+        ...current,
+        resumePacks: [...current.resumePacks.map((item) => item.status === "current" ? { ...item, status: "archived" as const } : item), pack],
+        resumeVersions: [...current.resumeVersions, ...versions]
+      };
+    });
+    trackCareerEvent("resume_pack_completed");
+    router.push("/versions");
   }
 
   return (
@@ -180,7 +234,12 @@ export default function TargetsPage() {
                       </div>
                       <div className="grid content-start gap-4">
                         <LaneDetail title="Proof to emphasize" items={lane.proof} />
+                        <LaneDetail title="Transferable skills" items={state.dossier.transferableSkills.slice(0, 6)} />
+                        <LaneDetail title="Evidence-backed keywords" items={lane.keywords} />
                         <LaneDetail title="Gaps to close" items={lane.gaps} />
+                        <p className="text-[0.78rem] leading-5 text-paper/55">
+                          Résumé readiness: {state.dossier.evidence.filter((item) => item.approved).length >= 3 ? "supported by approved evidence" : "missing approved evidence"}. Qualifications in the gap list will not be claimed.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -225,7 +284,7 @@ export default function TargetsPage() {
                 </button>
               </div>
               <p className="mt-1.5 max-w-xs text-xs leading-4 text-paper/45">
-                Custom lanes start empty — open Details after adding to write why you fit and the resume angle.
+                Custom lanes start with dossier-backed proof, transferable skills, and an explicit honesty gap.
               </p>
             </div>
           </div>
@@ -260,12 +319,8 @@ export default function TargetsPage() {
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
-          <p className="text-sm text-paper/68">
-            Lanes feed the tailoring engine: keywords, angles, and proof are matched against every job post you analyze.
-          </p>
-          <Link href="/tailor" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">
-            Next: tailor to a job post →
-          </Link>
+          <div><p className="text-sm font-bold text-paper">{state.lanes.filter((lane) => lane.status === "active").length} active lane(s) · {state.lanes.filter((lane) => lane.status === "active").length * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p></div>
+          <button type="button" onClick={forgePack} disabled={!state.lanes.some((lane) => lane.status === "active") || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
         </div>
       </section>
 

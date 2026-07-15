@@ -5,6 +5,20 @@ import { track } from "@vercel/analytics";
 type AnalyticsValue = string | number | boolean;
 type AnalyticsProperties = Record<string, AnalyticsValue>;
 
+export type CareerForgeEventName =
+  | "dossier_started"
+  | "dossier_evidence_added"
+  | "dossier_completed"
+  | "lane_recommended"
+  | "lane_activated"
+  | "resume_pack_started"
+  | "resume_pack_completed"
+  | "resume_variant_viewed"
+  | "resume_exported"
+  | "pack_bundle_exported"
+  | "job_tailor_started"
+  | "application_pack_completed";
+
 function cleanProperties(properties?: AnalyticsProperties) {
   if (!properties) return undefined;
 
@@ -15,6 +29,12 @@ function cleanProperties(properties?: AnalyticsProperties) {
 
 export function trackProductEvent(event: string, properties?: AnalyticsProperties) {
   track(event, cleanProperties(properties));
+}
+
+// Career-workflow analytics are deliberately event-name only. Never add a
+// dossier, résumé, job-post, person, employer, or proof value here.
+export function trackCareerEvent(event: CareerForgeEventName) {
+  track(event);
 }
 
 export function trackLandingVisit() {

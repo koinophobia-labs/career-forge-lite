@@ -4,377 +4,249 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
-import { isProfileComplete } from "@/lib/command-center-store";
 import {
-  appendLine,
-  appendSentence,
-  applyStarterPack,
-  assessProfile,
-  constraintPhrases,
-  proofPointPhrases,
-  situationPhrases,
-  skillPhrases,
-  starterPacks,
-  strengthPhrases,
-  targetRolePhrases,
-  workStylePhrases
-} from "@/lib/input-guidance";
+  assessDossierReadiness,
+  evidenceRecord,
+  parseResumeTextToProposal,
+  withUpdatedDossier
+} from "@/lib/dossier";
+import { createId } from "@/lib/command-center-store";
+import { trackCareerEvent } from "@/lib/analytics";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { CareerProfile } from "@/types/command-center";
+import type { CareerDossier, DossierEducation, DossierProject, DossierRole } from "@/types/dossier";
 
-type ThinFlagProps = {
-  message?: string;
-  severity?: "warn" | "info";
-};
-
-function ThinFlag({ message, severity }: ThinFlagProps) {
-  if (!message) return null;
-  return (
-    <span
-      className={`lab-mono ml-2 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold uppercase ${
-        severity === "warn" ? "border-gold/50 bg-gold/10 text-gold" : "border-white/20 text-paper/45"
-      }`}
-      title={message}
-    >
-      {severity === "warn" ? "needs more" : "optional"}
-    </span>
-  );
+function values(text: string): string[] {
+  return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
 }
 
-type PhraseChipsProps = {
-  phrases: string[];
-  current: string;
-  onPick: (phrase: string) => void;
-};
-
-function PhraseChips({ phrases, current, onPick }: PhraseChipsProps) {
-  const remaining = phrases.filter((phrase) => !current.toLowerCase().includes(phrase.toLowerCase().replace(/[.]$/, "")));
-  if (!remaining.length) return null;
+function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {remaining.map((phrase) => (
-        <button
-          key={phrase}
-          type="button"
-          onClick={() => onPick(phrase)}
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-left text-xs font-bold leading-4 text-paper/60 transition hover:border-cyan hover:text-cyan"
-        >
-          + {phrase}
-        </button>
-      ))}
+    <div className="rounded-xl border border-white/12 bg-obsidian/40 p-4">
+      <p className="text-2xl font-black text-paper">{value}</p>
+      <p className="lab-mono mt-1 text-[0.65rem] font-bold uppercase text-paper/50">{label}</p>
     </div>
   );
 }
 
-type FieldProps = {
-  label: string;
-  hint: string;
-  value: string;
-  rows?: number;
-  placeholder: string;
-  flag?: { message: string; severity: "warn" | "info" };
-  showFlag: boolean;
-  phrases?: string[];
-  phraseMode?: "sentence" | "line";
-  onChange: (value: string) => void;
-};
-
-function TextField({ label, hint, value, rows = 3, placeholder, flag, showFlag, phrases, phraseMode = "sentence", onChange }: FieldProps) {
+function TextListEditor({ label, value, hint, onSave }: { label: string; value: string[]; hint: string; onSave: (items: string[]) => void }) {
+  const [draft, setDraft] = useState(value.join("\n"));
   return (
-    <div>
-      <label className="block">
-        <span className="text-sm font-bold text-paper">
-          {label}
-          {showFlag && <ThinFlag message={flag?.message} severity={flag?.severity} />}
-        </span>
-        <span className="mt-0.5 block text-xs leading-5 text-paper/55">{hint}</span>
-        {showFlag && flag?.severity === "warn" && (
-          <span className="mt-1 block text-xs leading-5 text-gold/90">{flag.message}</span>
-        )}
-        <textarea
-          value={value}
-          rows={rows}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
-        />
-      </label>
-      {phrases && (
-        <PhraseChips
-          phrases={phrases}
-          current={value}
-          onPick={(phrase) => onChange(phraseMode === "line" ? appendLine(value, phrase) : appendSentence(value, phrase))}
-        />
-      )}
-    </div>
+    <label className="block">
+      <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">{label}</span>
+      <textarea className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink" rows={4} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onSave(values(draft))} />
+      <span className="mt-1 block text-xs leading-5 text-paper/45">{hint}</span>
+    </label>
   );
 }
 
-type ChipFieldProps = {
-  label: string;
-  hint: string;
-  values: string[];
-  suggestions: string[];
-  placeholder: string;
-  flag?: { message: string; severity: "warn" | "info" };
-  showFlag: boolean;
-  onChange: (values: string[]) => void;
-};
-
-function ChipField({ label, hint, values, suggestions, placeholder, flag, showFlag, onChange }: ChipFieldProps) {
-  const [draft, setDraft] = useState("");
-
-  function add(value: string) {
-    const cleaned = value.trim();
-    if (!cleaned || values.some((item) => item.toLowerCase() === cleaned.toLowerCase())) return;
-    onChange([...values, cleaned]);
-  }
-
-  return (
-    <div>
-      <span className="text-sm font-bold text-paper">
-        {label}
-        {showFlag && <ThinFlag message={flag?.message} severity={flag?.severity} />}
-      </span>
-      <span className="mt-0.5 block text-xs leading-5 text-paper/55">{hint}</span>
-      {showFlag && flag?.severity === "warn" && <span className="mt-1 block text-xs leading-5 text-gold/90">{flag.message}</span>}
-      {values.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {values.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onChange(values.filter((item) => item !== value))}
-              className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-bold text-gold transition hover:border-coral hover:text-coral"
-              title="Remove"
-            >
-              {value} ×
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="mt-2 flex gap-2">
-        <input
-          value={draft}
-          placeholder={placeholder}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              add(draft);
-              setDraft("");
-            }
-          }}
-          className="trust-input w-full border px-3 py-2.5 text-sm text-ink"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            add(draft);
-            setDraft("");
-          }}
-          className="rounded-md bg-gold px-4 text-sm font-black text-ink transition hover:bg-cyan"
-        >
-          Add
-        </button>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {suggestions
-          .filter((suggestion) => !values.some((value) => value.toLowerCase() === suggestion.toLowerCase()))
-          .slice(0, 12)
-          .map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => add(suggestion)}
-              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold text-paper/60 transition hover:border-cyan hover:text-cyan"
-            >
-              + {suggestion}
-            </button>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-export default function ProfilePage() {
+export default function DossierPage() {
   const { state, update, hydrated } = useCommandCenter();
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [appliedPack, setAppliedPack] = useState<string | null>(null);
-  const profile = state.profile;
+  const dossier = state.dossier;
+  const readiness = useMemo(() => assessDossierReadiness(dossier), [dossier]);
+  const [role, setRole] = useState({ title: "", employer: "", dates: "", responsibilities: "" });
+  const [project, setProject] = useState({ name: "", organization: "", dates: "", description: "" });
+  const [education, setEducation] = useState({ credential: "", institution: "", dates: "" });
+  const [resumeText, setResumeText] = useState("");
+  const [imported, setImported] = useState(false);
 
-  function setProfile(patch: Partial<CareerProfile>) {
-    update((current) => ({
-      ...current,
-      profile: { ...current.profile, ...patch, updatedAt: new Date().toISOString() }
-    }));
-    setSavedAt(new Date().toLocaleTimeString());
+  function save(next: CareerDossier) {
+    update((current) => withUpdatedDossier(current, { ...next, updatedAt: new Date().toISOString() }));
   }
 
-  function applyPackByKey(key: string) {
-    const pack = starterPacks.find((item) => item.key === key);
-    if (!pack) return;
-    update((current) => ({ ...current, profile: applyStarterPack(current.profile, pack) }));
-    setAppliedPack(pack.label);
-    setSavedAt(new Date().toLocaleTimeString());
+  function patchIdentity(field: keyof CareerDossier["identity"], value: string | string[]) {
+    save({ ...dossier, identity: { ...dossier.identity, [field]: value } });
   }
 
-  const issues = useMemo(() => assessProfile(profile), [profile]);
-  const flagFor = (field: keyof CareerProfile) => issues.find((issue) => issue.field === field);
-  const warnCount = issues.filter((issue) => issue.severity === "warn").length;
-  const complete = isProfileComplete(profile);
+  function addRole() {
+    if (!role.title.trim() && !role.employer.trim()) return;
+    const now = new Date().toISOString();
+    const responsibilities = values(role.responsibilities);
+    const roleEvidence = evidenceRecord("role", [role.title, role.employer, role.dates].filter(Boolean).join(" · "), "manual", true, now, { label: "Employment record" });
+    const responsibilityEvidence = responsibilities.map((item) => evidenceRecord("responsibility", item, "manual", true, now, { label: "Role responsibility" }));
+    const record: DossierRole = {
+      id: createId("role"), title: role.title.trim(), employer: role.employer.trim(), startDate: role.dates.trim(), endDate: "",
+      current: /present|current|now/i.test(role.dates), responsibilities, tools: [], outcomes: [],
+      evidenceIds: [roleEvidence.id, ...responsibilityEvidence.map((item) => item.id)]
+    };
+    save({
+      ...dossier,
+      roles: [...dossier.roles, record],
+      responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])],
+      evidence: [...dossier.evidence, roleEvidence, ...responsibilityEvidence],
+      approvedClaims: [...new Set([...dossier.approvedClaims, roleEvidence.detail, ...responsibilities])]
+    });
+    trackCareerEvent("dossier_evidence_added");
+    setRole({ title: "", employer: "", dates: "", responsibilities: "" });
+  }
+
+  function approveEvidence(id: string, approved: boolean) {
+    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, approved, updatedAt: new Date().toISOString() } : item);
+    save({
+      ...dossier,
+      evidence,
+      approvedClaims: [...new Set(evidence.filter((item) => item.approved).map((item) => item.detail))]
+    });
+  }
+
+  function addProject() {
+    if (!project.name.trim()) return;
+    const now = new Date().toISOString();
+    const detail = [project.name, project.organization, project.dates, project.description].filter(Boolean).join(" · ");
+    const proof = evidenceRecord("project", detail, "manual", true, now, { label: "Independent work or project" });
+    const record: DossierProject = { id: createId("project"), name: project.name.trim(), organization: project.organization.trim(), dates: project.dates.trim(), description: project.description.trim(), responsibilities: [], tools: [], outcomes: [], evidenceIds: [proof.id] };
+    save({ ...dossier, projects: [...dossier.projects, record], evidence: [...dossier.evidence, proof], approvedClaims: [...new Set([...dossier.approvedClaims, proof.detail])] });
+    trackCareerEvent("dossier_evidence_added");
+    setProject({ name: "", organization: "", dates: "", description: "" });
+  }
+
+  function addEducation() {
+    if (!education.credential.trim()) return;
+    const now = new Date().toISOString();
+    const detail = [education.credential, education.institution, education.dates].filter(Boolean).join(" · ");
+    const proof = evidenceRecord("education", detail, "manual", true, now, { label: "Education or credential" });
+    const record: DossierEducation = { id: createId("education"), credential: education.credential.trim(), institution: education.institution.trim(), field: "", dates: education.dates.trim(), evidenceIds: [proof.id] };
+    save({ ...dossier, education: [...dossier.education, record], evidence: [...dossier.evidence, proof], approvedClaims: [...new Set([...dossier.approvedClaims, proof.detail])] });
+    trackCareerEvent("dossier_evidence_added");
+    setEducation({ credential: "", institution: "", dates: "" });
+  }
+
+  function importResume() {
+    if (!resumeText.trim()) return;
+    const proposals = parseResumeTextToProposal(resumeText);
+    const existing = new Set(dossier.evidence.map((item) => item.id));
+    save({
+      ...dossier,
+      evidence: [...dossier.evidence, ...proposals.filter((item) => !existing.has(item.id))],
+      migrationReview: [...new Set([...dossier.migrationReview, "Review and approve each imported résumé line before it can support generated claims."])]
+    });
+    setImported(true);
+  }
+
+  const approvedCount = dossier.evidence.filter((item) => item.approved).length;
+  const proposed = dossier.evidence.filter((item) => !item.approved);
 
   return (
     <main>
       <CommandNav active="/profile" />
-
-      <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Step 01 · Positioning source</p>
-        <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Your career profile</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
-          Write this once, honestly. Every target lane, tailored resume, outreach message, and interview question pulls
-          from what you put here. Changes save automatically to this device — nothing is uploaded.
+      <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
+        <p className="trust-kicker text-sm font-bold uppercase">Step 1 · Canonical source of truth</p>
+        <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Build your Career Dossier once.</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-paper/68">
+          Every lane résumé, LinkedIn section, and application pack starts here. Facts stay on this device and are only used after you approve them.
         </p>
 
-        <div className="mt-8 rounded-xl border border-cyan/25 bg-cyan/10 p-4 sm:p-5">
-          <p className="trust-kicker text-xs font-bold uppercase">Start from your background</p>
-          <p className="mt-2 text-sm leading-6 text-paper/72">
-            Pick every background that applies — each one seeds your situation, skills, strengths, and proof points with
-            honest starting language. Then edit: keep only what’s true for you, and add your own real numbers and
-            details. Nothing here invents credentials or history.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {starterPacks.map((pack) => (
-              <button
-                key={pack.key}
-                type="button"
-                onClick={() => applyPackByKey(pack.key)}
-                className="rounded-full border border-cyan/35 bg-cyan/10 px-3 py-1.5 text-xs font-bold text-cyan transition hover:border-gold hover:text-gold"
-              >
-                + {pack.label}
-              </button>
-            ))}
-          </div>
-          {appliedPack && (
-            <p className="mt-3 text-xs leading-5 text-paper/60">
-              Added the <span className="font-bold text-cyan">{appliedPack}</span> starter language below. Read each
-              field and delete anything that isn’t actually you.
-            </p>
-          )}
-        </div>
+        {hydrated && (
+          <>
+            <section className="trust-panel mt-8 p-5 sm:p-6" aria-labelledby="arsenal-title">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="trust-kicker text-xs font-bold uppercase">Career Arsenal</p>
+                  <h2 id="arsenal-title" className="mt-2 text-2xl font-bold text-paper">{readiness.level === "resume-ready" ? "Résumé-pack ready" : readiness.level === "foundation" ? "A credible foundation is forming" : "Start with one real role or project"}</h2>
+                  <p className="mt-2 text-sm leading-6 text-paper/60">Readiness is based on approved evidence quality, not a field-count percentage.</p>
+                </div>
+                <span className={`lab-mono rounded-full border px-3 py-1.5 text-xs font-bold uppercase ${readiness.level === "resume-ready" ? "border-mint/40 bg-mint/10 text-mint" : "border-gold/40 bg-gold/10 text-gold"}`}>{readiness.level.replace("-", " ")}</span>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                <MetricCard label="Roles" value={dossier.roles.length} />
+                <MetricCard label="Projects" value={dossier.projects.length} />
+                <MetricCard label="Tools" value={dossier.tools.length} />
+                <MetricCard label="Proof points" value={dossier.proofPoints.length} />
+                <MetricCard label="Metrics" value={dossier.metrics.length} />
+                <MetricCard label="Approved claims" value={approvedCount} />
+                <MetricCard label="Active lanes" value={state.lanes.filter((lane) => lane.status === "active").length} />
+              </div>
+              <ul className="mt-5 grid gap-2 md:grid-cols-2">
+                {readiness.nextActions.map((item) => <li key={item} className="rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm leading-5 text-paper/75">{item}</li>)}
+              </ul>
+            </section>
 
-        <div className="trust-panel mt-6 grid gap-7 p-5 sm:p-7">
-          <TextField
-            label="Current situation"
-            hint="Where you are and where you're headed, in one or two honest sentences. Tap a phrase to start, then make it yours."
-            value={profile.currentSituation}
-            placeholder="e.g., I'm transitioning from sportsbook operations into fraud/risk or AI support, while building a software company on the side."
-            flag={flagFor("currentSituation")}
-            showFlag={hydrated}
-            phrases={situationPhrases}
-            onChange={(value) => setProfile({ currentSituation: value })}
-          />
+            <section className="mt-8 grid gap-6 lg:grid-cols-2">
+              <div className="trust-panel p-5">
+                <h2 className="text-xl font-bold text-paper">Identity &amp; professional links</h2>
+                <p className="mt-1 text-sm text-paper/55">Add once; it appears across every résumé.</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {([[
+                    "fullName", "Full name", "Name"
+                  ], ["email", "Email", "you@example.com"], ["phone", "Phone", "Phone"], ["location", "Location", "City, State"]] as const).map(([field, label, placeholder]) => (
+                    <label key={field} className="block"><span className="text-xs font-bold text-paper/60">{label}</span><input className="trust-input mt-1 w-full border px-3 py-2 text-sm text-ink" placeholder={placeholder} value={dossier.identity[field]} onChange={(event) => patchIdentity(field, event.target.value)} /></label>
+                  ))}
+                </div>
+                <label className="mt-3 block"><span className="text-xs font-bold text-paper/60">LinkedIn / portfolio links</span><input className="trust-input mt-1 w-full border px-3 py-2 text-sm text-ink" value={dossier.identity.links.join(", ")} onChange={(event) => patchIdentity("links", values(event.target.value))} /></label>
+              </div>
 
-          <TextField
-            label="Target roles"
-            hint="The role types you're pursuing — you'll turn these into structured lanes next. Tap to add."
-            value={profile.targetRoles}
-            rows={2}
-            placeholder="e.g., AI Support Specialist, Trust & Safety Analyst, Fraud/Risk Operations, Product Support"
-            flag={flagFor("targetRoles")}
-            showFlag={hydrated}
-            phrases={targetRolePhrases}
-            onChange={(value) => setProfile({ targetRoles: value })}
-          />
+              <div className="trust-panel p-5">
+                <h2 className="text-xl font-bold text-paper">Add an employment record</h2>
+                <p className="mt-1 text-sm text-paper/55">Structured roles unlock reusable experience sections and interview stories.</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <input aria-label="Role title" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Role title" value={role.title} onChange={(event) => setRole({ ...role, title: event.target.value })} />
+                  <input aria-label="Employer" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Employer" value={role.employer} onChange={(event) => setRole({ ...role, employer: event.target.value })} />
+                  <input aria-label="Dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates, e.g. 2022–Present" value={role.dates} onChange={(event) => setRole({ ...role, dates: event.target.value })} />
+                  <textarea aria-label="Responsibilities" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="One recurring responsibility per line" value={role.responsibilities} onChange={(event) => setRole({ ...role, responsibilities: event.target.value })} />
+                </div>
+                <button type="button" onClick={addRole} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan">Add approved role</button>
+                {dossier.roles.length > 0 && <ul className="mt-4 grid gap-2">{dossier.roles.map((item) => <li key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-paper/75"><strong>{item.title || "Role"}</strong>{item.employer ? ` · ${item.employer}` : ""}{item.startDate ? ` · ${item.startDate}` : ""}</li>)}</ul>}
+              </div>
+            </section>
 
-          <ChipField
-            label="Transferable skills"
-            hint="Skills that carry across industries. Aim for at least 5 — the tailoring engine matches these against every job post you analyze."
-            values={profile.transferableSkills}
-            suggestions={skillPhrases}
-            placeholder="Type a skill and press Enter"
-            flag={flagFor("transferableSkills")}
-            showFlag={hydrated}
-            onChange={(values) => setProfile({ transferableSkills: values })}
-          />
+            <section className="trust-panel mt-6 p-5 sm:p-6">
+              <h2 className="text-xl font-bold text-paper">Projects, independent work &amp; education</h2>
+              <p className="mt-1 text-sm text-paper/55">Founders and recent graduates can build a defensible dossier without conventional employment.</p>
+              <div className="mt-5 grid gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add a project or independent venture</h3><div className="mt-3 grid gap-3 sm:grid-cols-2"><input aria-label="Project name" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Project name" value={project.name} onChange={(event) => setProject({ ...project, name: event.target.value })} /><input aria-label="Project organization" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Organization or Independent" value={project.organization} onChange={(event) => setProject({ ...project, organization: event.target.value })} /><input aria-label="Project dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates" value={project.dates} onChange={(event) => setProject({ ...project, dates: event.target.value })} /><textarea aria-label="Project description" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="What you built, did, or shipped—no assumed outcomes" value={project.description} onChange={(event) => setProject({ ...project, description: event.target.value })} /></div><button type="button" onClick={addProject} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved project</button>{dossier.projects.map((item) => <p key={item.id} className="mt-2 text-sm text-paper/65">{item.name}{item.organization ? ` · ${item.organization}` : ""}</p>)}</div>
+                <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add education or a credential</h3><div className="mt-3 grid gap-3"><input aria-label="Credential" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Degree, certificate, course, or training" value={education.credential} onChange={(event) => setEducation({ ...education, credential: event.target.value })} /><input aria-label="Institution" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Institution" value={education.institution} onChange={(event) => setEducation({ ...education, institution: event.target.value })} /><input aria-label="Education dates" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Dates" value={education.dates} onChange={(event) => setEducation({ ...education, dates: event.target.value })} /></div><button type="button" onClick={addEducation} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved education</button>{dossier.education.map((item) => <p key={item.id} className="mt-2 text-sm text-paper/65">{item.credential}{item.institution ? ` · ${item.institution}` : ""}</p>)}</div>
+              </div>
+            </section>
 
-          <TextField
-            label="Experience summary"
-            hint="Your work history in plain language — roles, industries, scale, what you were trusted with. Raw material, not resume copy. Real numbers make everything downstream sharper."
-            value={profile.experienceSummary}
-            rows={5}
-            placeholder="e.g., Several years in sportsbook operations: high-pressure customer situations, policy enforcement, payments and tickets, escalations. Before that, retail — handled 50+ customers a day and trained new hires."
-            flag={flagFor("experienceSummary")}
-            showFlag={hydrated}
-            onChange={(value) => setProfile({ experienceSummary: value })}
-          />
+            <section className="trust-panel mt-6 p-5 sm:p-6">
+              <h2 className="text-xl font-bold text-paper">Evidence that powers every output</h2>
+              <p className="mt-1 text-sm leading-6 text-paper/55">Use one item per line. These claims become reusable only after they are saved as approved dossier evidence.</p>
+              <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                <TextListEditor label="Tools & workflows" value={dossier.tools} hint="Unlocks accurate keyword matching." onSave={(items) => save({ ...dossier, tools: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "tool" || item.source !== "manual"), ...items.map((item) => evidenceRecord("tool", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Transferable skills" value={dossier.transferableSkills} hint="Supports lane positioning without invented credentials." onSave={(items) => save({ ...dossier, transferableSkills: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "skill" || item.source !== "manual"), ...items.map((item) => evidenceRecord("skill", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Proof points" value={dossier.proofPoints} hint="Supports stronger résumé bullets and interview answers." onSave={(items) => save({ ...dossier, proofPoints: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "proof" || item.source !== "manual"), ...items.map((item) => evidenceRecord("proof", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Metrics & outcomes" value={dossier.metrics} hint="One measurable outcome can strengthen several variants." onSave={(items) => save({ ...dossier, metrics: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "metric" || item.source !== "manual"), ...items.map((item) => evidenceRecord("metric", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Constraints" value={dossier.constraints} hint="Prevents recommendations that waste your time." onSave={(items) => save({ ...dossier, constraints: items })} />
+                <TextListEditor label="Target-role interests" value={dossier.targetRoleInterests} hint="Seeds dossier-aware lane recommendations." onSave={(items) => save({ ...dossier, targetRoleInterests: items })} />
+                <TextListEditor label="Career goals" value={dossier.careerGoals} hint="Keeps lane and application decisions aligned." onSave={(items) => save({ ...dossier, careerGoals: items })} />
+                <TextListEditor label="Preferred work style" value={dossier.preferredWorkStyle} hint="Shapes recommendations without entering résumé claims." onSave={(items) => save({ ...dossier, preferredWorkStyle: items })} />
+                <TextListEditor label="Interview stories" value={dossier.interviewStories} hint="Unlocks evidence-backed interview preparation." onSave={(items) => save({ ...dossier, interviewStories: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "story" || item.source !== "manual"), ...items.map((item) => evidenceRecord("story", item, "manual", true, new Date().toISOString()))] })} />
+              </div>
+            </section>
 
-          <ChipField
-            label="Strengths"
-            hint="What people who've worked with you would actually say. These become behavioral interview questions, so pick ones you can back with a story."
-            values={profile.strengths}
-            suggestions={strengthPhrases}
-            placeholder="Type a strength and press Enter"
-            flag={flagFor("strengths")}
-            showFlag={hydrated}
-            onChange={(values) => setProfile({ strengths: values })}
-          />
+            <section className="trust-panel mt-6 p-5 sm:p-6">
+              <p className="trust-kicker text-xs font-bold uppercase">Local résumé import</p>
+              <h2 className="mt-2 text-xl font-bold text-paper">Paste résumé text for review</h2>
+              <p className="mt-1 text-sm leading-6 text-paper/55">Nothing is uploaded. Lines are proposed as low-confidence evidence and cannot be used until you approve them.</p>
+              <textarea aria-label="Resume text import" className="trust-input mt-4 w-full border px-3 py-2 text-sm text-ink" rows={7} value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Paste the text from an existing résumé…" />
+              <button type="button" onClick={importResume} className="mt-3 rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">Extract proposed evidence</button>
+              {imported && <span className="ml-3 text-sm text-mint">Import parsed locally. Review below.</span>}
+            </section>
 
-          <TextField
-            label="Proof points"
-            hint="One line per piece of concrete evidence: shipped products, testing loops, AI workflows, metrics, artifacts. Interview prep quizzes you on each line — so only write what you can defend."
-            value={profile.proofPoints}
-            rows={5}
-            placeholder={"e.g.,\nShipped a product to TestFlight and ran feedback loops with real testers\nHandled payout disputes under strict policy without losing customers\nBuilt the prompt workflows I use daily"}
-            flag={flagFor("proofPoints")}
-            showFlag={hydrated}
-            phrases={proofPointPhrases}
-            phraseMode="line"
-            onChange={(value) => setProfile({ proofPoints: value })}
-          />
+            {(proposed.length > 0 || dossier.migrationReview.length > 0) && (
+              <section className="trust-panel mt-6 p-5 sm:p-6">
+                <h2 className="text-xl font-bold text-paper">Review proposed or migrated evidence</h2>
+                <p className="mt-1 text-sm text-paper/55">Source text and confidence stay attached. Unsupported assumptions remain unapproved.</p>
+                {dossier.migrationReview.map((item) => <p key={item} className="mt-3 rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-paper/70">{item}</p>)}
+                <div className="mt-4 grid gap-3">
+                  {proposed.map((item) => (
+                    <article key={item.id} className="rounded-xl border border-white/12 bg-obsidian/40 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div><p className="lab-mono text-[0.65rem] font-bold uppercase text-gold">{item.kind} · {item.source} · {item.confidence} confidence</p><p className="mt-1 text-sm font-bold text-paper">{item.detail}</p><p className="mt-2 text-xs leading-5 text-paper/45">Source: {item.sourceText}</p></div>
+                        <button type="button" onClick={() => approveEvidence(item.id, true)} className="rounded-md bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve fact</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
 
-          <TextField
-            label="Constraints"
-            hint="Non-negotiables that shape what you apply to. Being clear here saves wasted applications."
-            value={profile.constraints}
-            rows={2}
-            placeholder="e.g., I need a salaried role with benefits, and room to keep building my product outside work hours."
-            flag={flagFor("constraints")}
-            showFlag={hydrated}
-            phrases={constraintPhrases}
-            onChange={(value) => setProfile({ constraints: value })}
-          />
-
-          <TextField
-            label="Preferred work style"
-            hint="How you work best — used for screening roles and answering culture questions."
-            value={profile.workStyle}
-            rows={2}
-            placeholder="e.g., I work best with clear goals and independent execution, and I stay steady under escalation."
-            flag={flagFor("workStyle")}
-            showFlag={hydrated}
-            phrases={workStylePhrases}
-            onChange={(value) => setProfile({ workStyle: value })}
-          />
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
-          <p className="text-sm text-paper/68">
-            {!hydrated
-              ? "Loading…"
-              : complete && warnCount === 0
-                ? "Profile is strong — lanes, tailoring, and interview prep all have real material to work with."
-                : complete
-                  ? `Profile works, with ${warnCount} section${warnCount === 1 ? "" : "s"} that could be stronger.`
-                  : "Minimum for tailoring: situation, target roles, 3+ transferable skills, and an experience summary."}
-            {savedAt && <span className="lab-mono ml-2 text-xs text-paper/45">Saved {savedAt}</span>}
-          </p>
-          <Link href="/targets" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">
-            Next: pick target lanes →
-          </Link>
-        </div>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
+              <p className="text-sm text-paper/68">Your dossier is the foundation. Next, choose up to three credible career lanes.</p>
+              <Link href="/targets" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">Next: choose career lanes →</Link>
+            </div>
+          </>
+        )}
       </section>
-
       <SiteFooter />
     </main>
   );
