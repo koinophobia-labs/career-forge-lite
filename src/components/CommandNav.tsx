@@ -4,15 +4,15 @@ import Link from "next/link";
 
 const stations: Array<[string, string]> = [
   ["Dashboard", "/"],
-  ["Weekly", "/weekly"],
-  ["Profile", "/profile"],
-  ["Targets", "/targets"],
+  ["Career Dossier", "/profile"],
+  ["Career Lanes", "/targets"],
+  ["Résumé Pack", "/versions"],
   ["Tailor", "/tailor"],
   ["Applications", "/applications"],
   ["Outreach", "/outreach"],
-  ["Resume Builder", "/resume-builder"],
-  ["Versions", "/versions"],
+  ["Guided Setup", "/resume-builder"],
   ["Interview Prep", "/interview"],
+  ["Weekly", "/weekly"],
   ["Data", "/settings"]
 ];
 

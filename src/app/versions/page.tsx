@@ -6,9 +6,13 @@ import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { deleteResumeVersion } from "@/lib/command-center-store";
+import { createPackBundle, createVariantFile, downloadBlob } from "@/lib/pack-export";
+import { updatePackVariant } from "@/lib/resume-pack";
+import { trackCareerEvent } from "@/lib/analytics";
 import { handoffFromApplication, saveHandoff } from "@/lib/tailor-handoff";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { ApplicationRecord, ResumeVersionRecord } from "@/types/command-center";
+import type { ResumePack, ResumeVariant } from "@/types/dossier";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -185,10 +189,82 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
   );
 }
 
+function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: ResumePack; state: ReturnType<typeof useCommandCenter>["state"]; onUpdate: (next: ResumePack) => void; onRecordExport: (filenames: string[]) => void }) {
+  const [working, setWorking] = useState(false);
+  const [lastExportCount, setLastExportCount] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [compareId, setCompareId] = useState<string | null>(null);
+
+  async function exportBundle() {
+    setWorking(true);
+    try {
+      const result = await createPackBundle(pack, state.dossier, state.lanes, ["pdf", "docx"]);
+      downloadBlob(result.blob, result.filename);
+      onRecordExport(result.filenames);
+      setLastExportCount(result.filenames.length);
+      trackCareerEvent("pack_bundle_exported");
+    } finally { setWorking(false); }
+  }
+
+  async function exportVariant(variant: ResumeVariant, format: "pdf" | "docx") {
+    const lane = state.lanes.find((item) => item.id === variant.laneId);
+    const file = await createVariantFile(variant, state.dossier, lane?.title ?? "General", format);
+    downloadBlob(file.blob, file.filename);
+    trackCareerEvent("resume_exported");
+  }
+
+  function duplicate(variant: ResumeVariant) {
+    const copy = { ...variant, id: `${variant.id}-copy-${Date.now().toString(36)}`, title: `${variant.title} (copy)`, canonical: false, userEdited: true, status: "needs-review" as const };
+    onUpdate({ ...pack, variants: [...pack.variants, copy], status: "needs-review", updatedAt: new Date().toISOString() });
+  }
+
+  function rename(variant: ResumeVariant) {
+    const title = window.prompt("Rename résumé", variant.title)?.trim();
+    if (!title) return;
+    onUpdate({ ...pack, variants: pack.variants.map((item) => item.id === variant.id ? { ...item, title, userEdited: true } : item) });
+  }
+
+  function markCanonical(variant: ResumeVariant) {
+    onUpdate({ ...pack, variants: pack.variants.map((item) => item.laneId === variant.laneId && item.kind === variant.kind ? { ...item, canonical: item.id === variant.id } : item) });
+  }
+
+  function remove(variant: ResumeVariant) {
+    const linked = state.applications.some((app) => app.resumeVersionId === variant.id) || pack.variants.some((item) => item.baselineVariantId === variant.id);
+    if (linked) { window.alert("This résumé is still linked to an application or job-specific version. Reassign that relationship before deleting it."); return; }
+    onUpdate({ ...pack, variants: pack.variants.filter((item) => item.id !== variant.id), status: "needs-review" });
+  }
+
+  return (
+    <section className="trust-panel mt-8 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><p className="trust-kicker text-xs font-bold uppercase">Current Résumé Pack</p><h2 className="mt-2 text-2xl font-bold text-paper">{pack.variants.length} documents across {pack.lanePacks.length} lane(s)</h2><p className="mt-1 text-sm text-paper/55">Status: {pack.status.replace("-", " ")} · generated {formatDate(pack.createdAt)}</p></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={exportBundle} disabled={working} className="rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan disabled:opacity-50">{working ? "Building ZIP…" : "Export PDF + DOCX bundle"}</button><Link href="/targets" className="rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan">Regenerate from dossier</Link>{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} files: 6 PDF/DOCX pairs plus LinkedIn materials and README.</p>}</div>
+      </div>
+      <div className="mt-5 grid gap-5">
+        {pack.lanePacks.map((lanePack) => {
+          const lane = state.lanes.find((item) => item.id === lanePack.laneId);
+          const variants = pack.variants.filter((item) => item.laneId === lanePack.laneId);
+          return <div key={lanePack.laneId} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="text-lg font-bold text-paper">{lane?.title ?? "Lane"}</h3><p className="mt-1 text-sm leading-5 text-paper/55">{lanePack.positioningPitch}</p><div className="mt-3 grid gap-3">
+            {variants.map((variant) => {
+              const previous = state.resumePacks.flatMap((item) => item.variants).filter((item) => item.id !== variant.id && item.laneId === variant.laneId && item.kind === variant.kind).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+              return <article key={variant.id} className="rounded-lg border border-white/10 bg-white/5 p-4"><div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="font-bold text-paper">{variant.title}</p><p className="lab-mono mt-1 text-[0.62rem] font-bold uppercase text-paper/45">{variant.kind} · {variant.status.replace("-", " ")} · {variant.evidenceReferences.length} traced claims{variant.userEdited ? " · user edited" : ""}</p></div><button type="button" onClick={() => setEditingId(editingId === variant.id ? null : variant.id)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">{editingId === variant.id ? "Close" : "View / edit"}</button><button type="button" onClick={() => void navigator.clipboard.writeText([variant.resume.summary, ...variant.resume.experience.flatMap((role) => role.bullets)].join("\n"))} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Copy</button><button type="button" onClick={() => void exportVariant(variant, "pdf")} className="rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan">Print / PDF</button><button type="button" onClick={() => void exportVariant(variant, "docx")} className="rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan">DOCX</button><button type="button" onClick={() => duplicate(variant)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Duplicate</button><button type="button" onClick={() => rename(variant)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Rename</button><button type="button" onClick={() => markCanonical(variant)} className="rounded-full border border-gold/30 px-3 py-1.5 text-xs text-gold">{variant.canonical ? "Canonical" : "Mark canonical"}</button>{previous && <button type="button" onClick={() => setCompareId(compareId === variant.id ? null : variant.id)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Compare</button>}<button type="button" onClick={() => remove(variant)} className="rounded-full border border-coral/25 px-3 py-1.5 text-xs text-coral">Delete</button></div>
+                {editingId === variant.id && <div className="mt-3 border-t border-white/10 pt-3"><label className="lab-mono text-[0.65rem] font-bold uppercase text-gold">Summary<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={5} value={variant.resume.summary} onChange={(event) => onUpdate(updatePackVariant(pack, variant.id, { ...variant.resume, summary: event.target.value }))} /></label><div className="mt-3 grid gap-2">{variant.evidenceReferences.slice(0, 8).map((ref) => <p key={`${variant.id}-${ref.claimPath}`} className="text-xs leading-5 text-paper/50"><strong className="text-paper/70">{ref.claimPath}:</strong> {ref.evidenceIds.length} approved evidence link(s)</p>)}</div></div>}
+                {compareId === variant.id && previous && <div className="mt-3 grid gap-3 border-t border-white/10 pt-3 md:grid-cols-2"><div><p className="lab-mono text-xs text-paper/45">Previous</p><p className="mt-1 text-sm text-paper/65">{previous.resume.summary}</p></div><div><p className="lab-mono text-xs text-gold">Current</p><p className="mt-1 text-sm text-paper/80">{variant.resume.summary}</p></div></div>}
+              </article>;
+            })}
+          </div></div>;
+        })}
+      </div>
+      <details className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4"><summary className="cursor-pointer text-sm font-bold text-paper">Generation receipt</summary><div className="mt-3 grid gap-2 text-sm text-paper/60 sm:grid-cols-2"><p>Evidence used: {pack.receipt.evidenceUsed.length}</p><p>Evidence omitted: {pack.receipt.evidenceOmitted.length}</p><p>Keywords included: {pack.receipt.keywordsIncluded.join(", ") || "None without evidence"}</p><p>Unsupported claims refused: {pack.receipt.unsupportedClaimsRefused.length}</p></div></details>
+    </section>
+  );
+}
+
 export default function VersionsPage() {
   const { state, update, hydrated } = useCommandCenter();
   const router = useRouter();
   const [deletedLabel, setDeletedLabel] = useState<string | null>(null);
+  const currentPack = useMemo(() => [...state.resumePacks].filter((pack) => pack.status !== "archived").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null, [state.resumePacks]);
 
   const sorted = useMemo(
     () => [...state.resumeVersions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -215,6 +291,14 @@ export default function VersionsPage() {
     router.push("/resume-builder");
   }
 
+  function updatePack(next: ResumePack) {
+    update((current) => ({ ...current, resumePacks: current.resumePacks.map((pack) => pack.id === next.id ? next : pack) }));
+  }
+
+  function recordPackExport(filenames: string[]) {
+    update((current) => ({ ...current, exports: [...current.exports, { id: `export-${Date.now().toString(36)}`, packId: currentPack?.id ?? "", formats: ["pdf", "docx"], filenames, exportedAt: new Date().toISOString() }] }));
+  }
+
   return (
     <main>
       <CommandNav active="/versions" />
@@ -226,6 +310,8 @@ export default function VersionsPage() {
           Each generated resume is saved here with its full text, the job it was built for, the keywords it used, and
           the gaps it refused to claim. Copy a version for an application, reopen an old angle, or clear out drafts.
         </p>
+
+        {hydrated && currentPack && <PackDashboard pack={currentPack} state={state} onUpdate={updatePack} onRecordExport={recordPackExport} />}
 
         {deletedLabel && (
           <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-paper/80">

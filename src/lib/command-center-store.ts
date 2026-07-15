@@ -7,6 +7,8 @@ import type {
   ResumeVersionRecord,
   TargetLane
 } from "@/types/command-center";
+import { emptyDossier, mergeLegacyResumeSnapshots, migrateLegacyProfile, reviveDossier } from "@/lib/dossier";
+import type { ExportMetadata, ResumePack, ResumeVariant } from "@/types/dossier";
 
 export const STORAGE_KEY = "career-forge-command-center-v1";
 
@@ -26,12 +28,15 @@ export function emptyProfile(): CareerProfile {
 
 export function emptyState(): CommandCenterState {
   return {
-    version: 1,
+    version: 2,
     profile: emptyProfile(),
+    dossier: emptyDossier(),
     lanes: [],
     applications: [],
     outreach: [],
-    resumeVersions: []
+    resumeVersions: [],
+    resumePacks: [],
+    exports: []
   };
 }
 
@@ -208,6 +213,9 @@ function reviveResumeVersion(raw: Record<string, unknown>): ResumeVersionRecord 
     notes: asString(raw.notes),
     source: raw.source === "tailor" ? "tailor" : "builder",
     applicationId: asStringOrNull(raw.applicationId),
+    dossierId: asString(raw.dossierId) || undefined,
+    baselineVariantId: asStringOrNull(raw.baselineVariantId),
+    jobPostAnalysisId: asStringOrNull(raw.jobPostAnalysisId),
     targetCompany: asString(raw.targetCompany),
     targetTitle: asString(raw.targetTitle),
     keywordsUsed: asStringArray(raw.keywordsUsed),
@@ -216,6 +224,98 @@ function reviveResumeVersion(raw: Record<string, unknown>): ResumeVersionRecord 
     resumeText: asString(raw.resumeText),
     resumeSnapshot: reviveResumeSnapshot(raw.resumeSnapshot),
     createdAt: asString(raw.createdAt, new Date(0).toISOString())
+  };
+}
+
+function reviveVariant(raw: Record<string, unknown>): ResumeVariant | null {
+  if (!asString(raw.id) || !asString(raw.laneId)) return null;
+  const snapshot = reviveResumeSnapshot({
+    fullName: "",
+    email: "",
+    phone: "",
+    website: "",
+    template: raw.template,
+    resume: raw.resume
+  });
+  if (!snapshot) return null;
+  const statusOptions: ResumeVariant["status"][] = ["current", "needs-review", "out-of-date", "missing-evidence", "job-specific", "archived"];
+  const kind = raw.kind === "recruiter" || raw.kind === "job-specific" ? raw.kind : "ats";
+  const references = Array.isArray(raw.evidenceReferences)
+    ? raw.evidenceReferences.flatMap((entry): ResumeVariant["evidenceReferences"] => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const item = entry as Record<string, unknown>;
+        if (!asString(item.claimText)) return [];
+        return [{ claimPath: asString(item.claimPath), claimText: asString(item.claimText), evidenceIds: asStringArray(item.evidenceIds) }];
+      })
+    : [];
+  return {
+    id: asString(raw.id),
+    laneId: asString(raw.laneId),
+    kind,
+    title: asString(raw.title),
+    status: statusOptions.includes(raw.status as ResumeVariant["status"]) ? raw.status as ResumeVariant["status"] : "needs-review",
+    canonical: raw.canonical === true,
+    userEdited: raw.userEdited === true,
+    resume: snapshot.resume,
+    template: snapshot.template,
+    evidenceReferences: references,
+    sourceDossierUpdatedAt: asString(raw.sourceDossierUpdatedAt, new Date(0).toISOString()),
+    baselineVariantId: asStringOrNull(raw.baselineVariantId),
+    applicationId: asStringOrNull(raw.applicationId),
+    createdAt: asString(raw.createdAt, new Date(0).toISOString()),
+    updatedAt: asString(raw.updatedAt, new Date(0).toISOString())
+  };
+}
+
+function reviveResumePack(raw: Record<string, unknown>): ResumePack | null {
+  if (!asString(raw.id) || !asString(raw.dossierId)) return null;
+  const variants = reviveList(raw.variants, reviveVariant);
+  const lanePacks = Array.isArray(raw.lanePacks)
+    ? raw.lanePacks.flatMap((entry): ResumePack["lanePacks"] => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const item = entry as Record<string, unknown>;
+        if (!asString(item.laneId)) return [];
+        return [{
+          laneId: asString(item.laneId), positioningPitch: asString(item.positioningPitch),
+          variantIds: asStringArray(item.variantIds), evidenceUsed: asStringArray(item.evidenceUsed),
+          evidenceOmitted: asStringArray(item.evidenceOmitted), gapsAvoided: asStringArray(item.gapsAvoided)
+        }];
+      })
+    : [];
+  const receiptRaw = raw.receipt && typeof raw.receipt === "object" && !Array.isArray(raw.receipt)
+    ? raw.receipt as Record<string, unknown>
+    : {};
+  return {
+    id: asString(raw.id), dossierId: asString(raw.dossierId),
+    status: raw.status === "out-of-date" || raw.status === "needs-review" || raw.status === "archived" ? raw.status : "current",
+    lanePacks, variants,
+    linkedinHeadlines: asStringArray(raw.linkedinHeadlines), linkedinAbout: asString(raw.linkedinAbout),
+    linkedinSkills: asStringArray(raw.linkedinSkills), masterProofBank: asStringArray(raw.masterProofBank),
+    coverLetterFoundation: asString(raw.coverLetterFoundation),
+    receipt: {
+      id: asString(receiptRaw.id, `${asString(raw.id)}-receipt`),
+      generatedAt: asString(receiptRaw.generatedAt, new Date(0).toISOString()),
+      evidenceUsed: asStringArray(receiptRaw.evidenceUsed), evidenceOmitted: asStringArray(receiptRaw.evidenceOmitted),
+      laneFraming: Array.isArray(receiptRaw.laneFraming)
+        ? receiptRaw.laneFraming.flatMap((entry): Array<{ laneId: string; angle: string }> => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+            const item = entry as Record<string, unknown>;
+            return asString(item.laneId) ? [{ laneId: asString(item.laneId), angle: asString(item.angle) }] : [];
+          })
+        : [],
+      keywordsIncluded: asStringArray(receiptRaw.keywordsIncluded), gapsAvoided: asStringArray(receiptRaw.gapsAvoided),
+      unsupportedClaimsRefused: asStringArray(receiptRaw.unsupportedClaimsRefused)
+    },
+    createdAt: asString(raw.createdAt, new Date(0).toISOString()), updatedAt: asString(raw.updatedAt, new Date(0).toISOString())
+  };
+}
+
+function reviveExport(raw: Record<string, unknown>): ExportMetadata | null {
+  if (!asString(raw.id) || !asString(raw.packId)) return null;
+  return {
+    id: asString(raw.id), packId: asString(raw.packId),
+    formats: asStringArray(raw.formats).filter((value): value is "pdf" | "docx" => value === "pdf" || value === "docx"),
+    filenames: asStringArray(raw.filenames), exportedAt: asString(raw.exportedAt, new Date(0).toISOString())
   };
 }
 
@@ -243,13 +343,24 @@ export function parseState(serialized: string | null): CommandCenterState {
   try {
     const raw = JSON.parse(serialized) as Record<string, unknown>;
     if (!raw || typeof raw !== "object") return emptyState();
+    const profile = reviveProfile(raw.profile);
+    const resumeVersions = reviveList(raw.resumeVersions, reviveResumeVersion);
+    let dossier = "dossier" in raw
+      ? reviveDossier(raw.dossier, profile)
+      : migrateLegacyProfile(profile, profile.updatedAt ?? new Date(0).toISOString());
+    if (!("dossier" in raw)) {
+      dossier = mergeLegacyResumeSnapshots(dossier, resumeVersions.flatMap((version) => version.resumeSnapshot ? [version.resumeSnapshot] : []));
+    }
     return {
-      version: 1,
-      profile: reviveProfile(raw.profile),
+      version: 2,
+      profile,
+      dossier,
       lanes: reviveList(raw.lanes, reviveLane),
       applications: reviveList(raw.applications, reviveApplication),
       outreach: reviveList(raw.outreach, reviveContact),
-      resumeVersions: reviveList(raw.resumeVersions, reviveResumeVersion)
+      resumeVersions,
+      resumePacks: reviveList(raw.resumePacks, reviveResumePack),
+      exports: reviveList(raw.exports, reviveExport)
     };
   } catch {
     return emptyState();

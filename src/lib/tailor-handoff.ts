@@ -15,6 +15,7 @@ export type TailorHandoff = {
   version: 1;
   createdAt: string;
   applicationId: string | null;
+  baselineVariantId?: string | null;
   company: string;
   roleTitle: string;
   laneId: string | null;
@@ -37,6 +38,7 @@ export function buildHandoff(options: {
   company: string;
   roleTitle: string;
   applicationId: string | null;
+  baselineVariantId?: string | null;
   nowIso?: string;
 }): TailorHandoff {
   const { analysis, lane, company, roleTitle, applicationId } = options;
@@ -47,6 +49,7 @@ export function buildHandoff(options: {
     version: 1,
     createdAt: options.nowIso ?? new Date().toISOString(),
     applicationId,
+    baselineVariantId: options.baselineVariantId ?? null,
     company: company.trim(),
     roleTitle: roleTitle.trim() || lane?.title || "",
     laneId: lane?.id ?? null,
@@ -74,6 +77,7 @@ export function handoffFromApplication(
     version: 1,
     createdAt: nowIso ?? new Date().toISOString(),
     applicationId: application.id,
+    baselineVariantId: null,
     company: application.company === "Unknown company" ? "" : application.company,
     roleTitle: application.roleTitle === "Untitled role" ? (lane?.title ?? "") : application.roleTitle,
     laneId: lane?.id ?? application.laneId,
@@ -118,6 +122,7 @@ export function parseHandoff(serialized: string | null, nowIso: string): TailorH
       version: 1,
       createdAt,
       applicationId: asStringOrNull(raw.applicationId),
+      baselineVariantId: asStringOrNull(raw.baselineVariantId),
       company: asString(raw.company),
       roleTitle,
       laneId: asStringOrNull(raw.laneId),
@@ -169,6 +174,9 @@ export function recordTailoredResumeVersion(
     notes: `Tailored from job-post analysis${handoff.laneTitle ? ` (${handoff.laneTitle} lane)` : ""}.`,
     source: "tailor" as const,
     applicationId: handoff.applicationId,
+    dossierId: state.dossier?.id,
+    baselineVariantId: handoff.baselineVariantId ?? null,
+    jobPostAnalysisId: handoff.applicationId ? `analysis-${handoff.applicationId}` : `analysis-${handoff.createdAt}`,
     targetCompany: handoff.company,
     targetTitle: handoff.roleTitle,
     keywordsUsed: handoff.keywords,

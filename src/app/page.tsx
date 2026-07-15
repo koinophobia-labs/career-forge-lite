@@ -18,12 +18,13 @@ import { isProfileStarted } from "@/lib/command-center-store";
 import { useCommandCenter } from "@/lib/use-command-center";
 
 const loop = [
-  ["01", "Profile", "Who you are, what transfers, what you want", "/profile"],
-  ["02", "Targets", "The 2–3 role lanes you're actually pursuing", "/targets"],
-  ["03", "Resume", "Positioning built for each lane, not one-size-fits-all", "/resume-builder"],
-  ["04", "Applications", "Tailored, tracked, and followed up on time", "/applications"],
-  ["05", "Outreach", "Messages that get you out of the resume pile", "/outreach"],
-  ["06", "Interviews", "Prep against the questions your lane actually gets", "/interview"]
+  ["01", "Dossier", "Capture and approve career evidence once", "/profile"],
+  ["02", "Career Lanes", "Choose up to three credible directions", "/targets"],
+  ["03", "Résumé Pack", "Forge two distinct baselines per lane", "/versions"],
+  ["04", "Tailor", "Start from a lane baseline for each posting", "/tailor"],
+  ["05", "Track", "Link applications, outreach, and follow-ups", "/applications"],
+  ["06", "Interview", "Prepare from real evidence and gaps", "/interview"],
+  ["07", "Weekly", "Review momentum and the next best moves", "/weekly"]
 ] as const;
 
 export default function Dashboard() {
@@ -51,13 +52,14 @@ export default function Dashboard() {
   }, []);
   const showBackupNudge = hydrated && backupChecked && shouldNudgeBackup(state, lastBackupAt, nowIso);
   const showMomentumNudge = hydrated && isMomentumLow(state, nowIso);
+  const currentPack = [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 
   const statCards: Array<[string, number | string, string, string]> = [
     ["Target lanes", stats.activeLanes, "active role lanes", "/targets"],
     ["Applications sent", stats.applicationsSent, `${stats.applicationsThisWeek} of ${WEEKLY_APPLICATION_TARGET} this week`, "/applications"],
     ["Follow-ups due", stats.followUpsDue, "waiting on you today", "/applications"],
     ["Interviews", stats.interviews, "in play right now", "/interview"],
-    ["Resume versions", stats.resumeVersions, "tailored variants saved", "/versions"],
+    ["Résumé pack", currentPack ? currentPack.variants.length : 0, currentPack ? `${currentPack.status.replace("-", " ")} documents` : "not forged yet", "/versions"],
     ["Outreach in flight", stats.outreachInFlight, "conversations open", "/outreach"]
   ];
 
@@ -72,12 +74,11 @@ export default function Dashboard() {
             <div className="mt-4 grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
               <div>
                 <h1 className="text-3xl font-bold text-paper sm:text-4xl">
-                  Run your job search like an operation, not a lottery.
+                  Build your career profile once. Get a complete résumé pack for your strongest lanes.
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
-                  Career Forge turns a career transition into a working system: define your positioning once, pick target
-                  lanes, tailor every application against the actual job post, keep outreach and follow-ups on schedule,
-                  and walk into interviews prepared. No login. Everything stays on this device.
+                  Approve reusable career evidence, forge ATS and networking résumés for up to three lanes in one operation,
+                  then tailor individual applications from that foundation. No login. Everything stays on this device.
                 </p>
                 <p className="mt-3 max-w-2xl text-sm font-semibold text-paper/78">
                   A <span className="text-coral">Koinophobia Labs</span> system for turning job-search chaos into repeatable action.
@@ -99,7 +100,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 p-5 sm:p-7 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-3 p-5 sm:p-7 md:grid-cols-3 lg:grid-cols-7">
             {loop.map(([num, label, detail, href]) => (
               <Link
                 key={num}
@@ -121,14 +122,12 @@ export default function Dashboard() {
             <p className="trust-kicker text-xs font-bold uppercase">First run</p>
             <h2 className="mt-2 text-xl font-bold text-paper">Here’s how this works.</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-paper/72">
-              Start with your <strong className="text-cyan">profile</strong> — your situation, transferable skills, and
-              constraints, written down once. Then pick <strong className="text-cyan">target lanes</strong>: specific role
-              families with a clear reason you fit, a resume angle, and gaps to close. From there, every application gets
-              tailored against the real job post, every message gets a follow-up date, and this dashboard always tells you
-              the single next thing worth doing.
+              Start with your <strong className="text-cyan">Career Dossier</strong>: structured roles, projects, skills,
+              proof, and metrics you explicitly approve. Choose up to three lanes, forge the complete pack, then tailor a
+              canonical lane baseline to each real posting without re-entering your history.
             </p>
             <Link href="/profile" className="lab-pill-button mt-4 inline-block px-5 py-2.5 text-sm font-black transition">
-              Start with your profile
+              Build your Career Dossier
             </Link>
           </div>
         </section>

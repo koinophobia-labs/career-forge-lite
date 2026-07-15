@@ -1,4 +1,5 @@
 import type { ResumePackage, TemplateStyle } from "@/types/career";
+import type { CareerDossier, ExportMetadata, ResumePack } from "@/types/dossier";
 
 export type LaneStatus = "active" | "exploring" | "paused";
 
@@ -48,6 +49,9 @@ export type ResumeVersionRecord = {
   // source "builder" with the target fields empty.
   source: "builder" | "tailor";
   applicationId: string | null;
+  dossierId?: string;
+  baselineVariantId?: string | null;
+  jobPostAnalysisId?: string | null;
   targetCompany: string;
   targetTitle: string;
   keywordsUsed: string[];
@@ -112,12 +116,15 @@ export type OutreachContact = {
 };
 
 export type CommandCenterState = {
-  version: 1;
+  version: 2;
   profile: CareerProfile;
+  dossier: CareerDossier;
   lanes: TargetLane[];
   applications: ApplicationRecord[];
   outreach: OutreachContact[];
   resumeVersions: ResumeVersionRecord[];
+  resumePacks: ResumePack[];
+  exports: ExportMetadata[];
 };
 
 export type NextBestAction = {

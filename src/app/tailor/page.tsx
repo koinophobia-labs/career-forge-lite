@@ -10,6 +10,7 @@ import { createId, isProfileComplete } from "@/lib/command-center-store";
 import { assessJobPost } from "@/lib/input-guidance";
 import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
+import { trackCareerEvent } from "@/lib/analytics";
 import { useCommandCenter } from "@/lib/use-command-center";
 
 export default function TailorPage() {
@@ -18,16 +19,21 @@ export default function TailorPage() {
   const [company, setCompany] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [laneId, setLaneId] = useState<string>("");
+  const [baselineVariantId, setBaselineVariantId] = useState<string>("");
   const [analysis, setAnalysis] = useState<JobPostAnalysis | null>(null);
   const [savedApplication, setSavedApplication] = useState(false);
   const [savedApplicationId, setSavedApplicationId] = useState<string | null>(null);
   const router = useRouter();
 
   const selectedLane = useMemo(() => state.lanes.find((lane) => lane.id === laneId) ?? null, [state.lanes, laneId]);
+  const currentPack = useMemo(() => [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null, [state.resumePacks]);
+  const baselines = useMemo(() => currentPack?.variants.filter((variant) => variant.kind !== "job-specific" && (!laneId || variant.laneId === laneId)) ?? [], [currentPack, laneId]);
+  const selectedBaseline = baselines.find((variant) => variant.id === baselineVariantId) ?? null;
   const profileReady = hydrated && isProfileComplete(state.profile);
 
   function runAnalysis() {
-    if (!jobPost.trim()) return;
+    if (!jobPost.trim() || !selectedBaseline) return;
+    trackCareerEvent("job_tailor_started");
     setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane));
     setSavedApplication(false);
   }
@@ -74,16 +80,18 @@ export default function TailorPage() {
   }
 
   function startTailoredResume() {
-    if (!analysis) return;
+    if (!analysis || !selectedBaseline) return;
     saveHandoff(
       buildHandoff({
         analysis,
         lane: selectedLane,
         company,
         roleTitle,
-        applicationId: savedApplicationId
+        applicationId: savedApplicationId,
+        baselineVariantId: selectedBaseline.id
       })
     );
+    trackCareerEvent("application_pack_completed");
     router.push("/resume-builder");
   }
 
@@ -101,9 +109,8 @@ export default function TailorPage() {
         <p className="trust-kicker text-sm font-bold uppercase">Step 03 · Application tailoring</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Tailor against the actual job post.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
-          Paste a job posting. The engine extracts its keywords and requirements, checks them against your profile and
-          lane, flags weak spots, and suggests honest bullet rewrites. It works from what you’ve claimed — it will never
-          invent experience for you.
+          Begin from a canonical lane résumé, then paste the job posting. The tailored version keeps lineage to your dossier,
+          lane, selected baseline, analysis, and tracked application. It never replaces the canonical baseline.
         </p>
 
         {hydrated && !profileReady && (
@@ -115,9 +122,10 @@ export default function TailorPage() {
             (situation, target roles, 3+ skills, experience summary) — the analysis below will be shallow until then.
           </div>
         )}
+        {hydrated && !currentPack && <div className="mt-6 rounded-xl border border-coral/30 bg-coral/10 p-4 text-sm text-paper/75">Tailoring now starts from an existing lane baseline. <Link href="/targets" className="font-bold text-gold">Choose lanes and forge your résumé pack first.</Link></div>}
 
         <div className="trust-panel mt-8 grid gap-5 p-5 sm:p-7">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="text-sm font-bold text-paper">Company</span>
               <input
@@ -140,7 +148,7 @@ export default function TailorPage() {
               <span className="text-sm font-bold text-paper">Lane</span>
               <select
                 value={laneId}
-                onChange={(event) => setLaneId(event.target.value)}
+                onChange={(event) => { setLaneId(event.target.value); setBaselineVariantId(""); }}
                 className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
               >
                 <option value="">No lane (generic)</option>
@@ -149,6 +157,13 @@ export default function TailorPage() {
                     {lane.title}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-paper">Baseline résumé</span>
+              <select value={baselineVariantId} onChange={(event) => setBaselineVariantId(event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink">
+                <option value="">Select a lane baseline</option>
+                {baselines.map((variant) => <option key={variant.id} value={variant.id}>{variant.kind === "ats" ? "ATS Submission" : "Recruiter / Networking"} · {variant.title}</option>)}
               </select>
             </label>
           </div>
@@ -189,7 +204,7 @@ export default function TailorPage() {
           <button
             type="button"
             onClick={runAnalysis}
-            disabled={!jobPost.trim()}
+            disabled={!jobPost.trim() || !selectedBaseline}
             className="lab-pill-button justify-self-start px-6 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40"
           >
             Analyze this post
@@ -278,6 +293,8 @@ export default function TailorPage() {
                 </ul>
               </div>
             </div>
+
+            {currentPack && <div className="trust-panel p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Optional application materials</h2><p className="mt-1 text-sm text-paper/55">Built from the same approved dossier foundation; review and personalize before sending.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-gold">Cover letter foundation</p><p className="mt-2 text-sm leading-6 text-paper/70">{currentPack.coverLetterFoundation}</p></div><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-cyan">Recruiter / hiring-manager message</p><p className="mt-2 text-sm leading-6 text-paper/70">I’m exploring {roleTitle || selectedLane?.title || "this role"}{company ? ` at ${company}` : ""}. {currentPack.lanePacks.find((item) => item.laneId === selectedLane?.id)?.positioningPitch || "My résumé is attached with the most relevant approved evidence."}</p></div></div></div>}
 
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
               <p className="mr-auto text-sm text-paper/68">

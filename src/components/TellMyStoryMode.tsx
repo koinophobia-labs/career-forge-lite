@@ -6,10 +6,12 @@ import { ATSValidationPanel } from "@/components/ATSValidationPanel";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
 import { ResumePreview } from "@/components/ResumePreview";
 import { initialIntake } from "@/lib/career-data";
-import { trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
+import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
 import { generateResumePackage } from "@/lib/generator";
 import { hasEnoughResumeSignal } from "@/lib/interview-state";
 import { parseStoryToDossier, type StoryDossier } from "@/lib/story-mode";
+import { mergeIntakeIntoDossier, withUpdatedDossier } from "@/lib/dossier";
+import { useCommandCenter } from "@/lib/use-command-center";
 import type { IntakeData, ResumePackage } from "@/types/career";
 
 type StoryModeState = "story" | "dossier" | "edit" | "review";
@@ -55,12 +57,14 @@ function DossierRow({ label, value }: { label: string; value: string | string[] 
 }
 
 export function TellMyStoryMode() {
+  const { state, update } = useCommandCenter();
   const [story, setStory] = useState("");
   const [context, setContext] = useState("");
   const [mode, setMode] = useState<StoryModeState>("story");
   const [intake, setIntake] = useState<IntakeData>(initialIntake);
   const [dossier, setDossier] = useState<StoryDossier | null>(null);
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
+  const [approvedForDossier, setApprovedForDossier] = useState(false);
 
   const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
   const canGenerate = dossier ? hasEnoughResumeSignal(intake) && !dossier.needsRolePriority : false;
@@ -81,6 +85,7 @@ export function TellMyStoryMode() {
     setDossier(nextDossier);
     setIntake(nextDossier.intake);
     setMode("dossier");
+    setApprovedForDossier(false);
   }
 
   function handleStorySubmit(event: FormEvent<HTMLFormElement>) {
@@ -99,12 +104,20 @@ export function TellMyStoryMode() {
   }
 
   function handleGenerate() {
+    if (!approvedForDossier) return;
     const nextResume = generateResumePackage(intake);
     setResume(nextResume);
     trackResumeGeneration("story");
     trackCareerForgeCompletion("story");
     setMode("review");
     window.setTimeout(() => document.getElementById("resume")?.scrollIntoView(), 0);
+  }
+
+  function approveAndSave() {
+    const next = mergeIntakeIntoDossier(state.dossier, intake, "story", true, combinedStory || story);
+    update((current) => withUpdatedDossier(current, next));
+    trackCareerEvent("dossier_evidence_added");
+    setApprovedForDossier(true);
   }
 
   function updateField<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
@@ -301,6 +314,14 @@ export function TellMyStoryMode() {
               <DossierRow label="Education" value={dossier.extracted.education} />
             </div>
 
+            <div className="mt-5 rounded-md border border-white/12 bg-obsidian/50 p-4">
+              <p className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Source and assumption review</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-paper/68">{combinedStory || story}</p>
+              <p className="mt-3 text-xs leading-5 text-paper/50">
+                Possible unsupported assumptions: inferred role family, generalized skill labels, and any relationship between a responsibility and an outcome that you did not state directly. Edit those fields before approval. No extracted fact is saved until you approve it.
+              </p>
+            </div>
+
             {dossier.needsRolePriority && (
               <div className="mt-5 rounded-md border border-gold/30 bg-gold/10 p-4">
                 <p className="text-sm font-bold text-gold">Multiple roles detected</p>
@@ -383,11 +404,18 @@ export function TellMyStoryMode() {
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
+                onClick={approveAndSave}
+                className={`min-h-11 rounded-md px-5 text-sm font-black transition ${approvedForDossier ? "border border-mint/40 bg-mint/10 text-mint" : "bg-mint text-ink hover:bg-cyan"}`}
+              >
+                {approvedForDossier ? "Approved and saved to dossier" : "Approve facts and save to dossier"}
+              </button>
+              <button
+                type="button"
                 onClick={handleGenerate}
-                disabled={!canGenerate}
+                disabled={!canGenerate || !approvedForDossier}
                 className="min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-45"
               >
-                Generate resume draft
+                Continue to résumé draft
               </button>
               <button
                 type="button"

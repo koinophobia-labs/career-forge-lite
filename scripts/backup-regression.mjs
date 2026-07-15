@@ -202,7 +202,7 @@ check(
     validated.preview.laneCount === 1 &&
     validated.preview.profilePresent === true &&
     validated.preview.exportedAt === NOW &&
-    validated.preview.schemaVersion === 1
+    validated.preview.schemaVersion === 2
 );
 check("preview of empty state shows profile absent", buildPreview(emptyState(), null, null).profilePresent === false);
 

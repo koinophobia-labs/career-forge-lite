@@ -6,7 +6,7 @@ import type { CommandCenterState } from "@/types/command-center";
 // versioned envelope. Local-first by design — the file is downloaded to the
 // user's machine and never leaves it unless they move it themselves.
 
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 export const LAST_BACKUP_KEY = "career-forge-last-backup-at";
 
 export type CommandCenterBackup = {
@@ -25,6 +25,9 @@ export type BackupPreview = {
   outreachCount: number;
   resumeVersionCount: number;
   snapshotCount: number;
+  dossierEvidenceCount: number;
+  resumePackCount: number;
+  exportCount: number;
 };
 
 export type BackupValidation =
@@ -61,7 +64,10 @@ export function buildPreview(state: CommandCenterState, exportedAt: string | nul
     applicationCount: state.applications.length,
     outreachCount: state.outreach.length,
     resumeVersionCount: state.resumeVersions.length,
-    snapshotCount: state.resumeVersions.filter((version) => version.resumeSnapshot !== null).length
+    snapshotCount: state.resumeVersions.filter((version) => version.resumeSnapshot !== null).length,
+    dossierEvidenceCount: state.dossier.evidence.length,
+    resumePackCount: state.resumePacks.length,
+    exportCount: state.exports.length
   };
 }
 
