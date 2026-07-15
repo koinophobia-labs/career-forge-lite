@@ -65,6 +65,15 @@ export default function ApplicationsPage() {
           laneId: laneId || null,
           status: "drafting",
           jobPostUrl: "",
+          source: "other",
+          discoveryUrl: "",
+          applicationUrl: "",
+          postingDate: null,
+          deadline: null,
+          contactName: "",
+          contactUrl: "",
+          resumeVariantId: null,
+          applicationQuestions: [],
           resumeVersionId: null,
           appliedAt: null,
           nextFollowUpAt: null,
@@ -233,6 +242,7 @@ export default function ApplicationsPage() {
                           </Link>
                         </p>
                       )}
+                      {(app.discoveryUrl || app.applicationUrl) && <p className="mt-2 flex flex-wrap gap-3 text-xs"><span className="uppercase text-paper/45">Source: {app.source}</span>{app.discoveryUrl && <a href={app.discoveryUrl} target="_blank" rel="noreferrer" className="text-cyan underline">Discovery post</a>}{app.applicationUrl && <a href={app.applicationUrl} target="_blank" rel="noreferrer" className="font-bold text-gold underline">Employer application</a>}</p>}
                     </div>
 
                     <select
@@ -287,6 +297,7 @@ export default function ApplicationsPage() {
                     onChange={(event) => patchApplication(app.id, { notes: event.target.value })}
                     className="mt-3 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80 placeholder:text-paper/35"
                   />
+                  {app.applicationQuestions.length > 0 && <section className="mt-4 border-t border-white/10 pt-4"><h3 className="text-sm font-bold text-paper">Application answers</h3><div className="mt-3 grid gap-3">{app.applicationQuestions.map((question) => <label key={question.id} className="block"><span className="text-xs font-bold text-paper/70">{question.prompt}</span><textarea value={question.draftAnswer} rows={4} onChange={(event) => patchApplication(app.id, { applicationQuestions: app.applicationQuestions.map((item) => item.id === question.id ? { ...item, draftAnswer: event.target.value, userEdited: true } : item) })} className="mt-1 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80"/><span className="mt-1 block text-xs text-paper/45">Supporting evidence: {question.evidenceIds.length ? question.evidenceIds.map((id) => state.dossier.evidence.find((item) => item.id === id)?.detail).filter(Boolean).join(" · ") : "None — do not submit until evidence is added."}{question.userEdited ? " · User edited" : ""}</span></label>)}</div></section>}
                 </article>
               );
             })}

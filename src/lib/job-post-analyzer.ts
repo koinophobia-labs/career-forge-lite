@@ -1,4 +1,5 @@
 import type { CareerProfile, TargetLane } from "@/types/command-center";
+import type { CareerDossier, DossierEvidenceRecord } from "@/types/dossier";
 
 export type KeywordHit = {
   term: string;
@@ -10,6 +11,8 @@ export type RequirementMatch = {
   requirement: string;
   status: "covered" | "partial" | "gap";
   evidence: string;
+  evidenceIds: string[];
+  supportType: "direct" | "transferred" | null;
 };
 
 export type BulletSuggestion = {
@@ -68,7 +71,7 @@ function countOccurrences(haystack: string, phrase: string): number {
   return (haystack.match(pattern) ?? []).length;
 }
 
-function profileCorpus(profile: CareerProfile, lane?: TargetLane | null): string {
+function profileCorpus(profile: CareerProfile): string {
   return normalize(
     [
       profile.currentSituation,
@@ -77,16 +80,23 @@ function profileCorpus(profile: CareerProfile, lane?: TargetLane | null): string
       profile.experienceSummary,
       profile.strengths.join(" "),
       profile.workStyle,
-      profile.proofPoints,
-      lane ? lane.proof.join(" ") : "",
-      lane ? lane.keywords.join(" ") : ""
+      profile.proofPoints
     ].join(" ")
   );
 }
 
-export function extractKeywords(jobPost: string, profile: CareerProfile, lane?: TargetLane | null): KeywordHit[] {
+function approvedRecords(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
+  return dossier?.evidence.filter((item) => item.approved && !item.rejected) ?? [];
+}
+
+function truthCorpus(profile: CareerProfile, dossier?: CareerDossier | null): string {
+  const records = approvedRecords(dossier);
+  return records.length ? normalize(records.map((item) => item.detail).join(" ")) : profileCorpus(profile);
+}
+
+export function extractKeywords(jobPost: string, profile: CareerProfile, _lane?: TargetLane | null, dossier?: CareerDossier | null): KeywordHit[] {
   const post = normalize(jobPost);
-  const corpus = profileCorpus(profile, lane);
+  const corpus = truthCorpus(profile, dossier);
 
   return KEYWORD_BANK.map((term) => ({
     term,
@@ -114,8 +124,9 @@ export function extractRequirements(jobPost: string): string[] {
   return [...new Set(requirements)].slice(0, 18);
 }
 
-function matchRequirement(requirement: string, profile: CareerProfile, lane?: TargetLane | null): RequirementMatch {
-  const corpus = profileCorpus(profile, lane);
+function matchRequirement(requirement: string, profile: CareerProfile, dossier?: CareerDossier | null): RequirementMatch {
+  const records = approvedRecords(dossier);
+  const corpus = truthCorpus(profile, dossier);
   const reqNorm = normalize(requirement);
 
   if (CREDENTIAL_SIGNAL.test(requirement) && !CREDENTIAL_SIGNAL.test(corpus)) {
@@ -123,21 +134,48 @@ function matchRequirement(requirement: string, profile: CareerProfile, lane?: Ta
       requirement,
       status: "gap",
       evidence:
-        "This asks for a formal credential. Never claim one you don't hold — many posts treat these as flexible, so lean on demonstrated skill instead."
+        "This asks for a formal credential. Never claim one you don't hold — many posts treat these as flexible, so lean on demonstrated skill instead.",
+      evidenceIds: [],
+      supportType: null
     };
   }
 
-  const skillHits = profile.transferableSkills.filter((skill) => skill.trim() && reqNorm.includes(normalize(skill)));
-  const keywordHits = (lane?.keywords ?? []).filter((keyword) => keyword.trim() && reqNorm.includes(normalize(keyword)));
+  const skillHits = records.length
+    ? records.filter((item) => (item.kind === "skill" || item.kind === "tool") && reqNorm.includes(normalize(item.detail)))
+    : profile.transferableSkills.filter((skill) => skill.trim() && reqNorm.includes(normalize(skill))).map((detail) => ({ id: "", detail }));
   const meaningfulWords = reqNorm.match(/[a-z]{5,}/g) ?? [];
   const overlap = meaningfulWords.filter((word) => corpus.includes(word));
+  const directlyRelevant = records.filter((item) => {
+    const detail = normalize(item.detail);
+    const hits = meaningfulWords.filter((word) => detail.includes(word));
+    return hits.length >= Math.min(2, meaningfulWords.length);
+  });
 
-  if (skillHits.length || keywordHits.length) {
-    const evidenceSource = skillHits[0] ?? keywordHits[0];
+  if (skillHits.length || directlyRelevant.length) {
+    const evidenceSource = skillHits[0]?.detail ?? directlyRelevant[0]?.detail ?? "approved evidence";
+    const supporting = uniqueRecords([...skillHits, ...directlyRelevant]);
     return {
       requirement,
       status: "covered",
-      evidence: `Maps to your ${skillHits.length ? "transferable skill" : "lane strength"}: "${evidenceSource}". Say this in their vocabulary, with a concrete example.`
+      evidence: `Supported by approved dossier evidence: "${evidenceSource}".`,
+      evidenceIds: supporting.map((item) => item.id).filter(Boolean),
+      supportType: "direct"
+    };
+  }
+
+  const transferred = records.filter((item) => {
+    const detail = normalize(item.detail);
+    if (/\b(saas|technical|product) support\b/i.test(requirement)) return /customer (?:service|support)|issue resolution|dispute|escalation/.test(detail);
+    if (/\b(fraud|risk|trust and safety|abuse)\b/i.test(requirement)) return /policy enforcement|responsible gaming|id verification|dispute|compliance/.test(detail);
+    return false;
+  });
+  if (transferred.length) {
+    return {
+      requirement,
+      status: "partial",
+      evidence: `Approved evidence is transferable but does not prove the exact qualification: "${transferred[0].detail}".`,
+      evidenceIds: transferred.map((item) => item.id),
+      supportType: "transferred"
     };
   }
 
@@ -146,7 +184,9 @@ function matchRequirement(requirement: string, profile: CareerProfile, lane?: Ta
       requirement,
       status: "partial",
       evidence:
-        "You have related experience but maybe not the stated years. Quantify what you have honestly — depth and results can offset duration."
+        "You have related experience but not verified evidence for the stated duration. Quantify only what the dossier proves.",
+      evidenceIds: records.filter((item) => overlap.some((word) => normalize(item.detail).includes(word))).map((item) => item.id),
+      supportType: "transferred"
     };
   }
 
@@ -154,21 +194,29 @@ function matchRequirement(requirement: string, profile: CareerProfile, lane?: Ta
     return {
       requirement,
       status: "partial",
-      evidence: `Your profile touches this (${overlap.slice(0, 3).join(", ")}) but doesn't state it directly. Add an explicit line if it's true.`
+      evidence: `Approved evidence is related (${overlap.slice(0, 3).join(", ")}) but does not prove the exact requirement.`,
+      evidenceIds: records.filter((item) => overlap.some((word) => normalize(item.detail).includes(word))).map((item) => item.id),
+      supportType: "transferred"
     };
   }
 
   return {
     requirement,
     status: "gap",
-    evidence: "Nothing in your profile speaks to this yet. Either it's a real gap to close, or experience you have but haven't written down."
+    evidence: "No approved dossier evidence supports this requirement. A lane keyword cannot change that.",
+    evidenceIds: [],
+    supportType: null
   };
 }
 
-export function analyzeJobPost(jobPost: string, profile: CareerProfile, lane?: TargetLane | null): JobPostAnalysis {
-  const keywords = extractKeywords(jobPost, profile, lane);
+function uniqueRecords<T extends { id: string }>(records: T[]): T[] {
+  return [...new Map(records.map((item) => [item.id || JSON.stringify(item), item])).values()];
+}
+
+export function analyzeJobPost(jobPost: string, profile: CareerProfile, lane?: TargetLane | null, dossier?: CareerDossier | null): JobPostAnalysis {
+  const keywords = extractKeywords(jobPost, profile, lane, dossier);
   const requirementLines = extractRequirements(jobPost);
-  const requirements = requirementLines.map((line) => matchRequirement(line, profile, lane));
+  const requirements = requirementLines.map((line) => matchRequirement(line, profile, dossier));
 
   const weakSpots: string[] = [];
   const gapCount = requirements.filter((req) => req.status === "gap").length;

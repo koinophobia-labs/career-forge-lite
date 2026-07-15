@@ -84,6 +84,15 @@ export type ApplicationRecord = {
   laneId: string | null;
   status: ApplicationStatus;
   jobPostUrl: string;
+  source: "linkedin" | "company-site" | "referral" | "recruiter" | "other";
+  discoveryUrl: string;
+  applicationUrl: string;
+  postingDate: string | null;
+  deadline: string | null;
+  contactName: string;
+  contactUrl: string;
+  resumeVariantId: string | null;
+  applicationQuestions: ApplicationQuestion[];
   resumeVersionId: string | null;
   appliedAt: string | null;
   nextFollowUpAt: string | null;
@@ -98,6 +107,14 @@ export type ApplicationRecord = {
   analysisGaps: string[];
   analysisWeakSpots: string[];
   createdAt: string;
+};
+
+export type ApplicationQuestion = {
+  id: string;
+  prompt: string;
+  draftAnswer: string;
+  evidenceIds: string[];
+  userEdited: boolean;
 };
 
 export type OutreachContact = {

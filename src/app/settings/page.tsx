@@ -13,6 +13,7 @@ import {
   type BackupPreview
 } from "@/lib/backup";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
+import { emptyState, STORAGE_KEY } from "@/lib/command-center-store";
 import type { CommandCenterState } from "@/types/command-center";
 
 function formatDate(iso: string | null): string {
@@ -54,6 +55,7 @@ export default function SettingsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ state: CommandCenterState; preview: BackupPreview } | null>(null);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   // Read once per render on the client; hydration-gated below.
   const lastBackup = lastBackupAt ?? (typeof window !== "undefined" ? getLastBackupAt() : null);
@@ -92,6 +94,14 @@ export default function SettingsPage() {
     updateCommandCenter(() => pendingImport.state);
     setPendingImport(null);
     setRestoredAt(new Date().toLocaleTimeString());
+  }
+
+  function clearLocalData() {
+    window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem("career-forge-last-backup-at");
+    updateCommandCenter(() => emptyState());
+    setPendingImport(null);
+    setConfirmingClear(false);
   }
 
   return (
@@ -141,6 +151,7 @@ export default function SettingsPage() {
           </p>
           <input
             ref={fileInputRef}
+            aria-label="Restore backup file"
             type="file"
             accept="application/json,.json"
             className="hidden"
@@ -200,6 +211,8 @@ export default function SettingsPage() {
             </p>
           )}
         </div>
+
+        <div className="mt-6 rounded-xl border border-coral/30 bg-coral/5 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Clear local data</h2><p className="mt-1 text-sm leading-6 text-paper/60">Use this only after downloading a backup. This removes the dossier, résumé packs, applications, outreach, and export history from this browser.</p>{confirmingClear ? <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={clearLocalData} className="rounded-md bg-coral px-4 py-2 text-sm font-black text-ink">Yes, clear all local Career Forge data</button><button type="button" onClick={() => setConfirmingClear(false)} className="rounded border border-white/20 px-4 py-2 text-sm text-paper/70">Cancel</button></div> : <button type="button" onClick={() => setConfirmingClear(true)} className="mt-4 rounded border border-coral/50 px-4 py-2 text-sm font-bold text-coral">Clear local data…</button>}</div>
       </section>
 
       <SiteFooter />

@@ -36,18 +36,18 @@ export function CommandNav({ active }: CommandNavProps) {
             href="https://koinophobialabs.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="lab-mono rounded-full border border-coral/30 bg-coral/10 px-3 py-2 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-coral transition hover:border-coral hover:bg-coral/15"
+            className="lab-mono hidden rounded-full border border-coral/30 bg-coral/10 px-3 py-2 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-coral transition hover:border-coral hover:bg-coral/15 sm:inline-flex"
           >
             A Koinophobia Labs system ↗
           </a>
         </div>
 
-        <nav className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-paper/70 md:justify-end">
+        <nav aria-label="Career Forge stations" className="-mx-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto px-5 pb-1 text-xs font-bold text-paper/70 sm:-mx-8 sm:px-8 md:mx-0 md:flex-wrap md:justify-end md:overflow-visible md:px-0 md:pb-0">
           {stations.map(([label, href]) => (
             <Link
               key={href}
               href={href}
-              className={`rounded-full border px-3 py-2 transition ${
+              className={`flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-2 transition ${
                 active === href
                   ? "border-gold/50 bg-gold/10 text-gold"
                   : "border-transparent hover:border-cyan/35 hover:bg-white/5 hover:text-cyan"

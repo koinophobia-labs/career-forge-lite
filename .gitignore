@@ -31,3 +31,6 @@ pnpm-debug.log*
 # testing and typescript
 coverage
 tsconfig.tsbuildinfo
+
+# private acceptance fixtures (never commit personal résumé contents)
+fixtures/private/

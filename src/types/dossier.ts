@@ -25,6 +25,9 @@ export type DossierEvidenceRecord = {
   sourceText: string;
   confidence: "high" | "medium" | "low";
   approved: boolean;
+  rejected: boolean;
+  sourceFilenames: string[];
+  sourceExcerpts: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -51,6 +54,9 @@ export type DossierProject = {
   responsibilities: string[];
   tools: string[];
   outcomes: string[];
+  metrics: string[];
+  links: string[];
+  defaultPlacement: "projects" | "experience" | "selected-projects" | "omit";
   evidenceIds: string[];
 };
 
@@ -101,6 +107,7 @@ export type ResumeEvidenceReference = {
   claimPath: string;
   claimText: string;
   evidenceIds: string[];
+  supportType: "direct" | "combined" | "transferred";
 };
 
 export type ResumeVariant = {
@@ -114,6 +121,8 @@ export type ResumeVariant = {
   resume: ResumePackage;
   template: TemplateStyle;
   evidenceReferences: ResumeEvidenceReference[];
+  userAuthoredPaths: string[];
+  sectionOrder: Array<"summary" | "skills" | "experience" | "projects" | "education">;
   sourceDossierUpdatedAt: string;
   baselineVariantId: string | null;
   applicationId: string | null;
@@ -139,6 +148,30 @@ export type PackGenerationReceipt = {
   keywordsIncluded: string[];
   gapsAvoided: string[];
   unsupportedClaimsRefused: string[];
+  transferredClaims: string[];
+  gapsLeftUnclaimed: string[];
+};
+
+export type ImportProposalGroup =
+  | "identity"
+  | "employment"
+  | "projects"
+  | "education"
+  | "tools"
+  | "skills"
+  | "metrics-outcomes"
+  | "other";
+
+export type ImportProposalRecord = {
+  id: string;
+  group: ImportProposalGroup;
+  kind: EvidenceKind;
+  label: string;
+  detail: string;
+  sourceFilenames: string[];
+  sourceExcerpts: string[];
+  confidence: "high" | "medium" | "low";
+  status: "proposed" | "approved" | "rejected";
 };
 
 export type ResumePack = {

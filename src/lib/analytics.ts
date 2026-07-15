@@ -8,6 +8,7 @@ type AnalyticsProperties = Record<string, AnalyticsValue>;
 export type CareerForgeEventName =
   | "dossier_started"
   | "dossier_evidence_added"
+  | "resume_pack_imported"
   | "dossier_completed"
   | "lane_recommended"
   | "lane_activated"
