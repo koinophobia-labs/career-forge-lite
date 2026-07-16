@@ -47,7 +47,7 @@ export function deriveTruthMap(state: CommandCenterState): TruthMap {
     supportType: reference.supportType,
     evidence: reference.evidenceIds.flatMap((id) => approved.get(id) ? [approved.get(id)!] : []),
     userEdited: variant.userEdited && (variant.userAuthoredPaths.includes(reference.claimPath) || variant.userAuthoredPaths.includes("document")),
-    stale: stale || reference.evidenceIds.some((id) => !approved.has(id))
+    stale: stale || reference.evidenceIds.length === 0 || reference.evidenceIds.some((id) => !approved.has(id))
   })));
   const answers = state.applications.flatMap((application) => application.applicationQuestions.flatMap((answer) => answer.evidenceIds
     .filter((id) => approved.has(id))

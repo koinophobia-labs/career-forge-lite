@@ -8,6 +8,7 @@ export type DefensibilityReceipt = {
   combinedEvidence: number;
   transferred: number;
   missingProvenance: number;
+  incompleteProvenance: number;
   verifiedDurations: number;
   unverifiedDurations: number;
   userEditedClaimsNeedingReview: number;
@@ -38,9 +39,15 @@ function yearTokens(value: string): string[] {
 export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: CareerDossier): DefensibilityReceipt {
   const claims = claimsForVariant(variant);
   const approved = new Map(dossier.evidence.filter((item) => item.approved && !item.rejected).map((item) => [item.id, item]));
-  const validReferences = variant.evidenceReferences.filter((reference) => reference.evidenceIds.some((id) => approved.has(id)));
+  const incompletePaths = new Set(variant.evidenceReferences.filter((reference) =>
+    reference.evidenceIds.length === 0 || reference.evidenceIds.some((id) => !approved.has(id))
+  ).map((reference) => reference.claimPath));
+  const validReferences = variant.evidenceReferences.filter((reference) =>
+    !incompletePaths.has(reference.claimPath) && reference.evidenceIds.length > 0 && reference.evidenceIds.every((id) => approved.has(id))
+  );
   const validByPath = new Map(validReferences.map((reference) => [reference.claimPath, reference]));
   const missing = claims.filter((claim) => !validByPath.has(claim.path));
+  const incompleteProvenance = missing.filter((claim) => incompletePaths.has(claim.path)).length;
   const durationClaims = claims.filter((claim) => yearTokens(claim.text).length > 0);
   const verifiedDurations = durationClaims.filter((claim) => {
     const reference = validByPath.get(claim.path);
@@ -52,10 +59,10 @@ export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: Care
   const userEditedClaimsNeedingReview = variant.userEdited
     ? Math.max(1, variant.userAuthoredPaths.filter((path) => path !== "undo").length)
     : 0;
-  const status: DefensibilityStatus = userEditedClaimsNeedingReview
-    ? "User-edited, recheck required"
-    : missing.length
-      ? "Needs evidence review"
+  const status: DefensibilityStatus = missing.length
+    ? "Needs evidence review"
+    : userEditedClaimsNeedingReview
+      ? "User-edited, recheck required"
       : validReferences.some((reference) => reference.supportType === "transferred")
         ? "Traced with transfers"
         : "Fully traced";
@@ -65,6 +72,7 @@ export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: Care
     combinedEvidence: validReferences.filter((reference) => reference.supportType === "combined").length,
     transferred: validReferences.filter((reference) => reference.supportType === "transferred").length,
     missingProvenance: missing.length,
+    incompleteProvenance,
     verifiedDurations,
     unverifiedDurations: durationClaims.length - verifiedDurations,
     userEditedClaimsNeedingReview,

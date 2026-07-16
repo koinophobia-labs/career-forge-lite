@@ -122,8 +122,25 @@ check("defensibility counts match actual references", defense.directlySupported 
 const missingVariant = { ...pack.variants[0], resume: { ...pack.variants[0].resume, coreSkills: [...pack.variants[0].resume.coreSkills, "Unsupported mystery skill"] } };
 check("missing provenance is visible", deriveDefensibilityReceipt(missingVariant, activeDossier).missingProvenance === defense.missingProvenance + 1);
 check("user edits require recheck", deriveDefensibilityReceipt({ ...pack.variants[0], userEdited: true, userAuthoredPaths: ["summary"] }, activeDossier).status === "User-edited, recheck required");
+const receiptResume = { ...pack.variants[0].resume, summary: "Jointly supported claim", coreSkills: [], experience: [], education: "", linkedinHeadline: "", linkedinSummary: "" };
+const combinedReceiptVariant = { ...pack.variants[0], resume: receiptResume, userEdited: false, userAuthoredPaths: [], evidenceReferences: [{ claimPath: "summary", claimText: receiptResume.summary, supportType: "combined", evidenceIds: ["responsibility-proof", "metric-proof"] }] };
+const deletedMetricDossier = { ...activeDossier, evidence: activeDossier.evidence.filter((item) => item.id !== "metric-proof") };
+const completeCombinedReceipt = deriveDefensibilityReceipt(combinedReceiptVariant, activeDossier);
+const partialCombinedReceipt = deriveDefensibilityReceipt(combinedReceiptVariant, deletedMetricDossier);
+check("partially surviving combined reference fails closed", completeCombinedReceipt.combinedEvidence === 1 && partialCombinedReceipt.combinedEvidence === 0 && partialCombinedReceipt.missingProvenance === 1 && partialCombinedReceipt.incompleteProvenance === 1 && partialCombinedReceipt.status === "Needs evidence review");
+const directReceiptVariant = { ...combinedReceiptVariant, evidenceReferences: [{ claimPath: "summary", claimText: receiptResume.summary, supportType: "direct", evidenceIds: ["responsibility-proof"] }] };
+const deletedDirectReceipt = deriveDefensibilityReceipt(directReceiptVariant, { ...activeDossier, evidence: activeDossier.evidence.filter((item) => item.id !== "responsibility-proof") });
+check("deleted cited source invalidates receipt", deletedDirectReceipt.directlySupported === 0 && deletedDirectReceipt.incompleteProvenance === 1 && deletedDirectReceipt.status === "Needs evidence review");
+const rejectedDirectReceipt = deriveDefensibilityReceipt(directReceiptVariant, { ...activeDossier, evidence: activeDossier.evidence.map((item) => item.id === "responsibility-proof" ? { ...item, rejected: true } : item) });
+check("rejected cited source invalidates receipt", rejectedDirectReceipt.directlySupported === 0 && rejectedDirectReceipt.incompleteProvenance === 1 && rejectedDirectReceipt.status === "Needs evidence review");
+const emptyReferenceVariant = { ...directReceiptVariant, evidenceReferences: [{ ...directReceiptVariant.evidenceReferences[0], evidenceIds: [] }] };
+const emptyReferenceReceipt = deriveDefensibilityReceipt(emptyReferenceVariant, activeDossier);
+check("empty evidence reference invalidates receipt", emptyReferenceReceipt.directlySupported === 0 && emptyReferenceReceipt.incompleteProvenance === 1 && emptyReferenceReceipt.status === "Needs evidence review");
+const partialTruthState = { ...stateWithPack, dossier: deletedMetricDossier, resumePacks: [{ ...pack, variants: [combinedReceiptVariant] }] };
+check("Truth Map and receipt agree on incomplete combined provenance", deriveTruthMap(partialTruthState).outputFirst[0].stale && partialCombinedReceipt.status === "Needs evidence review");
 check("defensibility uses no hiring probability", !/probability|chance of hire|ATS score/i.test(source("src/lib/defensibility.ts")));
 check("defensibility receipt is visible per variant", source("src/app/versions/page.tsx").includes("Open Defensibility Receipt"));
+check("incomplete provenance blocks variant and pack exports", source("src/app/versions/page.tsx").includes("disabled={exportBlocked}") && source("src/app/versions/page.tsx").includes("working || packExportBlocked"));
 
 const home = source("src/app/page.tsx");
 check("homepage explains evidence approval", home.includes("approved evidence system") && home.includes("Nothing trusted until you approve it"));

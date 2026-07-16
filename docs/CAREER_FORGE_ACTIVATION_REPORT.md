@@ -88,7 +88,7 @@ Moat discovery adds event-name-only `truth_inbox_created`, `truth_inbox_resumed`
 
 `scripts/cold-user-activation-playtest.mjs` runs ten synthetic fresh-state personas. Nine produce a pack with zero unsupported claims; the intentionally thin persona is stopped with honest evidence guidance. Full results and the five manual comprehension prompts are in `docs/CAREER_FORGE_COLD_USER_PLAYTEST.md`.
 
-`scripts/market-moat-regression.mjs` adds 60 behavioral checks covering the three blockers, at least twelve Truth Inbox cases, pure activation transitions, Truth Map correctness, Defensibility Receipt semantics, positioning, event-name-only analytics, legacy/backup behavior, 500-evidence derivation, storage/backup size, and homepage heavy-library isolation. Browser acceptance now continues through partial review and refresh, completion, receipt, Truth Map, grounded application answers, backup/clear/restore, relationship verification, and all six target viewports.
+`scripts/market-moat-regression.mjs` adds 66 behavioral checks covering the three blockers, at least twelve Truth Inbox cases, pure activation transitions, Truth Map correctness, fail-closed Defensibility Receipt semantics, positioning, event-name-only analytics, legacy/backup behavior, 500-evidence derivation, storage/backup size, and homepage heavy-library isolation. Browser acceptance now continues through partial review and refresh, completion, receipt, Truth Map, grounded application answers, backup/clear/restore, relationship verification, and all six target viewports.
 
 ## Market and category conclusion
 
@@ -100,7 +100,7 @@ The named comparison, price snapshot, source ledger, category strategy, implemen
 
 ## Final validation
 
-- `npm test`: passed; 465 named regression checks, desktop/mobile usability regression, and 82-persona quality suite at 98/100 with 0 hallucinations.
+- `npm test`: passed; 471 named regression checks, desktop/mobile usability regression, and 82-persona quality suite at 98/100 with 0 hallucinations.
 - `npm run lint`: passed.
 - `npm run typecheck`: passed.
 - `npm run build`: passed; 17 static pages generated, including `/truth-map`.
@@ -111,7 +111,7 @@ The named comparison, price snapshot, source ledger, category strategy, implemen
 - `npm run acceptance:private`: 15/15 passed.
 - `npm run acceptance:browser`: passed at 375×667 and 1440×900.
 - `npm run acceptance:activation`: 22 activation regressions, 10 persona simulations, and the full six-viewport browser workflow passed.
-- `npm run acceptance:market-moat`: 60 market/moat regressions plus the extended six-viewport end-to-end browser workflow passed.
+- `npm run acceptance:market-moat`: 66 market/moat regressions plus the extended six-viewport end-to-end browser workflow passed.
 - Production homepage script references total 769,678 uncompressed bytes in the local build snapshot; the regression confirms neither PDF.js nor Mammoth is eagerly imported on the homepage. Truth Map derivation remained below its 250ms budget for 500 evidence records, and the synthetic local/backup envelopes remained below 2MB.
 
 ## Screenshots
