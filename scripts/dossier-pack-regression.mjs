@@ -73,7 +73,7 @@ check("three active lanes produce six variants", pack.variants.length === 6);
 check("variants are distinct ATS and recruiter documents", lanes.every((lane) => { const variants = pack.variants.filter((item) => item.laneId === lane.id); return variants.length === 2 && variants[0].resume.summary !== variants[1].resume.summary; }));
 const approvedIds = new Set(guidedDossier.evidence.filter((item) => item.approved).map((item) => item.id));
 check("every generated claim references approved dossier evidence", pack.variants.every((variant) => variant.evidenceReferences.length > 0 && variant.evidenceReferences.every((ref) => ref.evidenceIds.length > 0 && ref.evidenceIds.every((id) => approvedIds.has(id)))));
-check("unsupported job keywords are refused", pack.receipt.keywordsIncluded.includes("Zendesk") && !pack.receipt.keywordsIncluded.includes("Salesforce") && pack.receipt.unsupportedClaimsRefused.includes("Unsupported credential 0"));
+check("unsupported job keywords stay gaps without invented refusal semantics", pack.receipt.keywordsIncluded.includes("Zendesk") && !pack.receipt.keywordsIncluded.includes("Salesforce") && pack.receipt.gapsLeftUnclaimed.includes("Unsupported credential 0") && pack.receipt.unsupportedClaimsRefused.length === 0);
 check("pack documents are grouped by lane", pack.lanePacks.length === 3 && pack.lanePacks.every((lanePack) => lanePack.variantIds.length === 2));
 
 const stateWithPack = { ...emptyState(), dossier: guidedDossier, profile: migrated.profile, lanes, resumePacks: [pack] };

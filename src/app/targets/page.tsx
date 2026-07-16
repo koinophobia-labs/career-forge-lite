@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { createId } from "@/lib/command-center-store";
@@ -9,8 +10,10 @@ import { laneLibrary } from "@/lib/lane-library";
 import { generateResumePack } from "@/lib/resume-pack";
 import { assessDossierReadiness } from "@/lib/dossier";
 import { trackCareerEvent } from "@/lib/analytics";
+import { activationEventsForTransition } from "@/lib/activation";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { LaneStatus, ResumeVersionRecord, TargetLane } from "@/types/command-center";
+import type { LaneBlueprint } from "@/lib/lane-library";
 
 const statusOrder: LaneStatus[] = ["active", "exploring", "paused"];
 
@@ -30,6 +33,13 @@ function LaneDetail({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+function laneEvidenceView(blueprint: LaneBlueprint, approvedDetails: string[]) {
+  const terms = blueprint.keywords.map((item) => item.toLowerCase()).filter((item) => item.length > 2);
+  const supporting = approvedDetails.filter((detail) => terms.some((term) => detail.toLowerCase().includes(term))).slice(0, 3);
+  const label = supporting.length >= 3 ? "Strong lane" : supporting.length >= 1 ? "Credible transition" : approvedDetails.length ? "Exploratory" : "Not enough evidence yet";
+  return { supporting, label };
+}
+
 export default function TargetsPage() {
   const { state, update, hydrated } = useCommandCenter();
   const router = useRouter();
@@ -44,6 +54,7 @@ export default function TargetsPage() {
   function adoptLane(key: string) {
     const blueprint = laneLibrary.find((item) => item.key === key);
     if (!blueprint) return;
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       if (current.lanes.some((lane) => lane.title === blueprint.title)) return current;
       const lane: TargetLane = {
@@ -60,9 +71,12 @@ export default function TargetsPage() {
         source: "library",
         createdAt: new Date().toISOString()
       };
-      return { ...current, lanes: [...current.lanes, lane] };
+      const next = { ...current, lanes: [...current.lanes, lane] };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
     trackCareerEvent("lane_activated");
+    events.forEach(trackCareerEvent);
   }
 
   function addCustomLane() {
@@ -92,13 +106,17 @@ export default function TargetsPage() {
   }
 
   function cycleStatus(id: string) {
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       const target = current.lanes.find((lane) => lane.id === id);
       if (!target) return current;
       const nextStatus = statusOrder[(statusOrder.indexOf(target.status) + 1) % statusOrder.length];
       if (nextStatus === "active" && current.lanes.filter((lane) => lane.status === "active").length >= 3) return current;
-      return { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
+      const next = { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
+    events.forEach(trackCareerEvent);
   }
 
   function removeLane(id: string) {
@@ -118,6 +136,7 @@ export default function TargetsPage() {
     trackCareerEvent("resume_pack_started");
     const now = new Date().toISOString();
     const pack = generateResumePack(state.dossier, active, now);
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       const versions: ResumeVersionRecord[] = pack.variants.map((variant) => {
         const lane = current.lanes.find((item) => item.id === variant.laneId);
@@ -145,13 +164,15 @@ export default function TargetsPage() {
           createdAt: now
         };
       });
-      return {
+      const next = {
         ...current,
         resumePacks: [...current.resumePacks.map((item) => item.status === "current" ? { ...item, status: "archived" as const } : item), pack],
         resumeVersions: [...current.resumeVersions, ...versions]
       };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
-    trackCareerEvent("resume_pack_completed");
+    events.forEach(trackCareerEvent);
     router.push("/versions");
   }
 
@@ -167,6 +188,8 @@ export default function TargetsPage() {
           with, and what gaps to close. Two or three active lanes beats ten vague ones — every application and message
           gets sharper when it belongs to a lane.
         </p>
+
+        {hydrated && <div className="mt-8"><ActivationPath state={state} compact /></div>}
 
         {hydrated && state.lanes.length > 0 && (
           <div className="mt-8">
@@ -261,7 +284,7 @@ export default function TargetsPage() {
             <div>
               <h2 className="text-xl font-bold text-paper">Lane library</h2>
               <p className="mt-1 text-sm text-paper/60">
-                Nine proven entry lanes for the operations-to-tech transition. Adopt what fits; edit everything after.
+                Nine entry lanes for the operations-to-tech transition. Recommendations below reflect only approved evidence that overlaps the lane; they are not hiring predictions.
               </p>
             </div>
             <div>
@@ -292,16 +315,20 @@ export default function TargetsPage() {
           <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {laneLibrary.map((blueprint) => {
               const adopted = adoptedKeys.has(blueprint.key);
+              const view = laneEvidenceView(blueprint, state.dossier.evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail));
               return (
                 <article key={blueprint.key} className="trust-card flex flex-col p-4">
-                  <h3 className="text-base font-bold text-paper">{blueprint.title}</h3>
+                  <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="text-base font-bold text-paper">{blueprint.title}</h3><span className={`lab-mono rounded-full border px-2.5 py-1 text-[0.62rem] font-bold uppercase ${view.label === "Strong lane" ? "border-mint/40 bg-mint/10 text-mint" : view.label === "Credible transition" ? "border-cyan/40 bg-cyan/10 text-cyan" : view.label === "Exploratory" ? "border-gold/40 bg-gold/10 text-gold" : "border-white/15 text-paper/45"}`}>{view.label}</span></div>
                   <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{blueprint.summary}</p>
+                  <p className="mt-3 text-[0.7rem] font-bold uppercase tracking-wide text-paper/45">Included roles</p><p className="mt-1 text-[0.78rem] leading-5 text-paper/62">{blueprint.summary}</p>
                   <p className="mt-3 text-[0.78rem] leading-5 text-paper/68">
                     <span className="font-bold text-cyan">Why it fits: </span>
-                    {blueprint.whyFit}
+                    {view.supporting.length ? view.supporting.join(" · ") : "No approved evidence directly overlaps this lane yet. Explore it only if you can add truthful proof."}
                   </p>
+                  <details className="mt-3 text-[0.78rem] leading-5 text-paper/60"><summary className="cursor-pointer font-bold text-paper/72">Proof, gaps, and résumé outcome</summary><p className="mt-2"><strong className="text-mint">Résumé produced:</strong> ATS and recruiter baselines framed around {blueprint.resumeAngle}</p><p className="mt-2"><strong className="text-gold">Proof to add:</strong> {blueprint.proof.slice(0, 2).join(" · ")}</p><p className="mt-2"><strong className="text-coral">Gap:</strong> {blueprint.gaps[0]}</p></details>
                   <button
                     type="button"
+                    data-testid="adopt-lane"
                     disabled={adopted}
                     onClick={() => adoptLane(blueprint.key)}
                     className={`mt-4 rounded-md px-4 py-2 text-sm font-black transition ${
@@ -310,7 +337,7 @@ export default function TargetsPage() {
                         : "bg-gold text-ink hover:bg-cyan"
                     }`}
                   >
-                    {adopted ? "In your lanes" : "Adopt this lane"}
+                    {adopted ? "In your lanes" : view.label === "Strong lane" || view.label === "Credible transition" ? "Make this lane active" : "Explore this lane"}
                   </button>
                 </article>
               );
@@ -318,7 +345,7 @@ export default function TargetsPage() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
+        <div id="forge-pack" className="mt-8 scroll-mt-28 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
           <div><p className="text-sm font-bold text-paper">{state.lanes.filter((lane) => lane.status === "active").length} active lane(s) · {state.lanes.filter((lane) => lane.status === "active").length * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p></div>
           <button type="button" onClick={forgePack} disabled={!state.lanes.some((lane) => lane.status === "active") || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
         </div>

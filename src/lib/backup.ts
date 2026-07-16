@@ -28,6 +28,7 @@ export type BackupPreview = {
   dossierEvidenceCount: number;
   resumePackCount: number;
   exportCount: number;
+  pendingImportReviewCount: number;
 };
 
 export type BackupValidation =
@@ -67,7 +68,8 @@ export function buildPreview(state: CommandCenterState, exportedAt: string | nul
     snapshotCount: state.resumeVersions.filter((version) => version.resumeSnapshot !== null).length,
     dossierEvidenceCount: state.dossier.evidence.length,
     resumePackCount: state.resumePacks.length,
-    exportCount: state.exports.length
+    exportCount: state.exports.length,
+    pendingImportReviewCount: state.pendingImportReviews.length
   };
 }
 

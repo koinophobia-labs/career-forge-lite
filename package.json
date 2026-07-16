@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node scripts/command-center-regression.mjs && node scripts/interview-prep-regression.mjs && node scripts/input-guidance-regression.mjs && node scripts/tailor-handoff-regression.mjs && node scripts/tailored-resume-regression.mjs && node scripts/version-management-regression.mjs && node scripts/resume-export-regression.mjs && node scripts/backup-regression.mjs && node scripts/weekly-review-regression.mjs && node scripts/follow-up-log-regression.mjs && node scripts/dossier-pack-regression.mjs && node scripts/truth-workflow-regression.mjs && node scripts/input-stability-regression.mjs && node scripts/quality-regression-suite.mjs",
+    "test": "node scripts/intent-router-regression.mjs && node scripts/command-center-regression.mjs && node scripts/interview-prep-regression.mjs && node scripts/input-guidance-regression.mjs && node scripts/tailor-handoff-regression.mjs && node scripts/tailored-resume-regression.mjs && node scripts/version-management-regression.mjs && node scripts/resume-export-regression.mjs && node scripts/backup-regression.mjs && node scripts/weekly-review-regression.mjs && node scripts/follow-up-log-regression.mjs && node scripts/dossier-pack-regression.mjs && node scripts/truth-workflow-regression.mjs && node scripts/input-stability-regression.mjs && node scripts/activation-regression.mjs && node scripts/market-moat-regression.mjs && node scripts/quality-regression-suite.mjs",
     "test:dossier": "node scripts/dossier-pack-regression.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -16,7 +16,10 @@
     "smoke:resume-intelligence": "node scripts/resume-intelligence-gauntlet.mjs",
     "playtest:adversarial": "node scripts/adversarial-dossier-playtest.mjs",
     "acceptance:private": "node scripts/private-workflow-acceptance.mjs",
-    "acceptance:browser": "node scripts/truth-workflow-browser.mjs"
+    "acceptance:browser": "node scripts/truth-workflow-browser.mjs",
+    "playtest:cold": "node scripts/cold-user-activation-playtest.mjs",
+    "acceptance:activation": "node scripts/intent-router-regression.mjs && node scripts/activation-regression.mjs && node scripts/cold-user-activation-playtest.mjs && node scripts/activation-browser.mjs",
+    "acceptance:market-moat": "node scripts/market-moat-regression.mjs && node scripts/activation-browser.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

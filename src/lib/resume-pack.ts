@@ -181,7 +181,7 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       evidenceOmitted: approved.filter((item) => !used.includes(item.id)).map((item) => item.id),
       laneFraming: active.map((lane) => ({ laneId: lane.id, angle: lane.resumeAngle })),
       keywordsIncluded: unique(active.flatMap((lane) => lane.keywords).filter((keyword) => approved.some((item) => item.detail.toLowerCase().includes(keyword.toLowerCase())))),
-      gapsAvoided: unique(active.flatMap((lane) => lane.gaps)), unsupportedClaimsRefused: unique(active.flatMap((lane) => lane.gaps)),
+      gapsAvoided: unique(active.flatMap((lane) => lane.gaps)), unsupportedClaimsRefused: [],
       transferredClaims: transferred, gapsLeftUnclaimed: unique(active.flatMap((lane) => lane.gaps))
     },
     createdAt: nowIso, updatedAt: nowIso
