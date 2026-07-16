@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
+import { IntentRouter } from "@/components/IntentRouter";
 import { SampleExperience } from "@/components/SampleExperience";
 import { SiteFooter } from "@/components/SiteFooter";
 import { trackCareerEvent } from "@/lib/analytics";
@@ -17,7 +18,7 @@ import {
   outreachFollowUpsDue,
   WEEKLY_APPLICATION_TARGET
 } from "@/lib/command-center-insights";
-import { isProfileStarted } from "@/lib/command-center-store";
+import { isIntentFirstRun } from "@/lib/intent-router";
 import { useCommandCenter } from "@/lib/use-command-center";
 
 const loop = [
@@ -44,7 +45,7 @@ export default function Dashboard() {
     [state, nowIso]
   );
 
-  const isFirstRun = hydrated && !isProfileStarted(state.profile) && !state.lanes.length && !state.applications.length;
+  const isFirstRun = hydrated && isIntentFirstRun(state);
   const untailoredApplications = useMemo(() => applicationsMissingTailoredResume(state), [state]);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [backupChecked, setBackupChecked] = useState(false);
@@ -69,7 +70,9 @@ export default function Dashboard() {
   return (
     <main>
       <CommandNav active="/" />
+      <IntentRouter />
 
+      {(!hydrated || isFirstRun) && <>
       <section className="mx-auto max-w-6xl px-5 pt-6 sm:px-8 sm:pt-10" id="landing">
         <div className="trust-panel overflow-hidden">
           <div className="p-5 sm:p-7">
@@ -105,13 +108,15 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {hydrated && (
+      </>}
+
+      {hydrated && !isFirstRun && (
         <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
           <ActivationPath state={state} compact={isFirstRun} />
         </section>
       )}
 
-      <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="how-title">
+      {(!hydrated || isFirstRun) && <><section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="how-title">
         <div className="trust-panel p-5 sm:p-6">
           <p className="trust-kicker text-xs font-bold uppercase">How it works</p>
           <h2 id="how-title" className="mt-2 text-2xl font-bold text-paper">From scattered history to application-ready baselines</h2>
@@ -131,8 +136,9 @@ export default function Dashboard() {
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="different-title" id="different">
         <div className="trust-panel p-5 sm:p-6"><p className="trust-kicker text-xs font-bold uppercase">The category difference</p><h2 id="different-title" className="mt-2 text-3xl font-bold text-paper">Not another AI résumé writer.</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Writing is the output. Career Forge’s job is to compile approved proof, keep transfer claims honest, and show why every claim appeared.</p><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[38rem] border-collapse text-left text-sm"><thead><tr className="border-b border-white/15 text-paper/45"><th className="px-3 py-3">Typical tool</th><th className="px-3 py-3 text-cyan">Career Forge</th></tr></thead><tbody>{[["Starts from one résumé", "Builds a longitudinal Career Dossier"], ["Generates plausible copy", "Uses evidence you explicitly approved"], ["Gives a match score", "Shows direct, transferred, and missing proof"], ["Makes one tailored document", "Builds an ATS and recruiter baseline for every credible lane"], ["Stores files in an account", "Works locally without an account"], ["Hides why a claim appeared", "Links each generated claim to its source"]].map(([typical, forge]) => <tr key={typical} className="border-b border-white/10"><td className="px-3 py-3 text-paper/55">{typical}</td><td className="px-3 py-3 font-bold text-paper">{forge}</td></tr>)}</tbody></table></div><div className="mt-5 flex flex-wrap gap-3"><Link href="/profile#import" onClick={() => trackCareerEvent("differentiation_section_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Build my approved dossier →</Link><Link href="/truth-map" onClick={() => trackCareerEvent("truth_map_opened")} className="inline-flex min-h-11 items-center rounded border border-cyan/40 px-5 py-2.5 text-sm font-bold text-cyan">See the Truth Map</Link></div></div>
       </section>
+      </>}
 
-      <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="advanced-title">
+      {hydrated && !isFirstRun && <><section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="advanced-title">
         <div className="flex items-end justify-between gap-3"><div><p className="trust-kicker text-xs font-bold uppercase">Advanced workspace</p><h2 id="advanced-title" className="mt-2 text-xl font-bold text-paper">Your complete job-search system</h2></div>{hydrated && !isFirstRun && <Link href={nextAction.href} className="text-sm font-bold text-cyan">{nextAction.actionLabel} →</Link>}</div>
         <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-7">
           {loop.map(([num, label, detail, href]) => <Link key={num} href={href} className="group rounded-xl border border-white/12 bg-obsidian/40 p-4 transition hover:-translate-y-0.5 hover:border-cyan/50"><span className="lab-mono block text-xs font-bold text-gold">{num}</span><span className="mt-2 block text-sm font-bold text-paper group-hover:text-cyan">{label}</span><span className="mt-1 block text-[0.72rem] leading-5 text-paper/55">{detail}</span></Link>)}
@@ -150,6 +156,7 @@ export default function Dashboard() {
           ))}
         </div>
       </section>
+      </>}
 
       {hydrated && (followUps.applications.length > 0 || followUps.outreach.length > 0) && (
         <section className="mx-auto max-w-6xl px-5 pb-8 sm:px-8">

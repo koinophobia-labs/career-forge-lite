@@ -40,6 +40,8 @@ export type CareerForgeEventName =
   | "claim_provenance_opened"
   | "defensibility_receipt_opened"
   | "differentiation_section_cta_clicked"
+  | "intent_goal_selected"
+  | "intent_goal_resumed"
   | "activation_feedback_submitted";
 
 function cleanProperties(properties?: AnalyticsProperties) {

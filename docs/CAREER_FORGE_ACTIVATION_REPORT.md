@@ -100,7 +100,7 @@ The named comparison, price snapshot, source ledger, category strategy, implemen
 
 ## Final validation
 
-- `npm test`: passed; 471 named regression checks, desktop/mobile usability regression, and 82-persona quality suite at 98/100 with 0 hallucinations.
+- `npm test`: passed; 489 named regression checks, desktop/mobile usability regression, and 82-persona quality suite at 98/100 with 0 hallucinations.
 - `npm run lint`: passed.
 - `npm run typecheck`: passed.
 - `npm run build`: passed; 17 static pages generated, including `/truth-map`.
@@ -113,6 +113,10 @@ The named comparison, price snapshot, source ledger, category strategy, implemen
 - `npm run acceptance:activation`: 22 activation regressions, 10 persona simulations, and the full six-viewport browser workflow passed.
 - `npm run acceptance:market-moat`: 66 market/moat regressions plus the extended six-viewport end-to-end browser workflow passed.
 - Production homepage script references total 769,678 uncompressed bytes in the local build snapshot; the regression confirms neither PDF.js nor Mammoth is eagerly imported on the homepage. Truth Map derivation remained below its 250ms budget for 500 evidence records, and the synthetic local/backup envelopes remained below 2MB.
+
+## Homepage intent router
+
+The homepage now uses five descriptive quick choices as a routing layer. A selection persists as the active goal, survives backup and restore, and changes the first workflow destination. First-résumé users start with one manual role or project; interview users enter practice; other goals receive an explanation before evidence import. Returning users see one dominant evidence-aware next move, up to three recent items, and milestone state transitions represented only as complete or incomplete—never a theatrical percentage. Legacy users with existing work receive an inferred continuation without silently writing a goal. This pass did not change evidence approval or truth-evaluation logic.
 
 ## Screenshots
 

@@ -3,6 +3,14 @@ import type { CareerDossier, ExportMetadata, PendingImportReview, ResumePack } f
 
 export type LaneStatus = "active" | "exploring" | "paused";
 
+export type CareerGoalKind = "new-job" | "career-change" | "update-resume" | "first-resume" | "practice-interview";
+
+export type ActiveCareerGoal = {
+  kind: CareerGoalKind;
+  selectedAt: string;
+  updatedAt: string;
+};
+
 export type ApplicationStatus =
   | "drafting"
   | "applied"
@@ -143,6 +151,7 @@ export type CommandCenterState = {
   resumePacks: ResumePack[];
   exports: ExportMetadata[];
   pendingImportReviews: PendingImportReview[];
+  activeGoal: ActiveCareerGoal | null;
 };
 
 export type NextBestAction = {

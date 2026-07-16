@@ -1,5 +1,6 @@
 import type {
   ApplicationRecord,
+  ActiveCareerGoal,
   CareerProfile,
   CommandCenterState,
   OutreachContact,
@@ -37,7 +38,8 @@ export function emptyState(): CommandCenterState {
     resumeVersions: [],
     resumePacks: [],
     exports: [],
-    pendingImportReviews: []
+    pendingImportReviews: [],
+    activeGoal: null
   };
 }
 
@@ -158,6 +160,7 @@ function reviveLane(raw: Record<string, unknown>): TargetLane | null {
 }
 
 const applicationStatuses = ["drafting", "applied", "interviewing", "offer", "rejected", "closed"] as const;
+const careerGoalKinds = ["new-job", "career-change", "update-resume", "first-resume", "practice-interview"] as const;
 const outreachStatuses = ["planned", "sent", "replied", "meeting_booked", "dormant"] as const;
 const outreachChannels = ["linkedin", "email", "recruiter", "referral", "community", "other"] as const;
 
@@ -197,6 +200,18 @@ function reviveApplication(raw: Record<string, unknown>): ApplicationRecord | nu
     analysisGaps: asStringArray(raw.analysisGaps),
     analysisWeakSpots: asStringArray(raw.analysisWeakSpots),
     createdAt: asString(raw.createdAt, new Date(0).toISOString())
+  };
+}
+
+function reviveActiveGoal(raw: unknown): ActiveCareerGoal | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const source = raw as Record<string, unknown>;
+  if (!careerGoalKinds.includes(source.kind as (typeof careerGoalKinds)[number])) return null;
+  const selectedAt = asString(source.selectedAt, new Date(0).toISOString());
+  return {
+    kind: source.kind as ActiveCareerGoal["kind"],
+    selectedAt,
+    updatedAt: asString(source.updatedAt, selectedAt)
   };
 }
 
@@ -432,7 +447,8 @@ export function parseState(serialized: string | null): CommandCenterState {
       resumeVersions,
       resumePacks: reviveList(raw.resumePacks, reviveResumePack),
       exports: reviveList(raw.exports, reviveExport),
-      pendingImportReviews: reviveList(raw.pendingImportReviews, revivePendingImportReview)
+      pendingImportReviews: reviveList(raw.pendingImportReviews, revivePendingImportReview),
+      activeGoal: reviveActiveGoal(raw.activeGoal)
     };
   } catch {
     return emptyState();

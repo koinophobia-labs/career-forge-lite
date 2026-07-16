@@ -23,6 +23,17 @@ try {
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  await page.getByRole("heading", { name: "What are you working toward?" }).waitFor();
+  for (const goal of ["Get a New Job", "Change Careers", "Update My Résumé", "Build My First Résumé", "Practice Interview"]) await page.getByRole("button", { name: new RegExp(`^${goal}`) }).waitFor();
+  await page.getByRole("button", { name: /^Get a New Job/ }).click();
+  await page.waitForURL(`${baseUrl}/profile#import`);
+  verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).activeGoal.kind === "new-job"), "selected intent did not persist");
+  await page.goto(baseUrl);
+  await page.getByText("Continue: New Job Search", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByText("Continue: New Job Search", { exact: true }).waitFor();
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(baseUrl);
   await page.getByRole("heading", { name: "Your career is bigger than your last résumé." }).waitFor();
   await page.getByRole("link", { name: "Import my résumés", exact: true }).waitFor();
   await page.getByText("Files processed locally").waitFor();
