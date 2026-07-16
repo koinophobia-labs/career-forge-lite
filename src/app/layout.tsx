@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { AnalyticsProvider } from "@/components/AnalyticsProvider";
+import { SaveHealthBanner } from "@/components/SaveHealthBanner";
 import "./globals.css";
 import "./koinophobia-ecosystem.css";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${sora.variable} ${inter.variable} ${jetbrains.variable}`}>
       <body>
         {children}
+        <SaveHealthBanner />
         <AnalyticsProvider />
       </body>
     </html>

@@ -13,7 +13,10 @@ import {
   type BackupPreview
 } from "@/lib/backup";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
-import { emptyState, STORAGE_KEY } from "@/lib/command-center-store";
+import { emptyState, RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
+import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
+import { HANDOFF_KEY } from "@/lib/tailor-handoff";
+import { LAST_BACKUP_KEY } from "@/lib/backup";
 import type { CommandCenterState } from "@/types/command-center";
 
 function formatDate(iso: string | null): string {
@@ -98,8 +101,14 @@ export default function SettingsPage() {
   }
 
   function clearLocalData() {
+    // Every Career Forge key, so "clear" actually means clear: main store,
+    // backup marker, in-flight tailor handoff, interview session, and any
+    // quarantined recovery snapshot.
     window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem("career-forge-last-backup-at");
+    window.localStorage.removeItem(LAST_BACKUP_KEY);
+    window.localStorage.removeItem(HANDOFF_KEY);
+    window.localStorage.removeItem(INTERVIEW_SESSION_KEY);
+    window.localStorage.removeItem(RECOVERY_KEY);
     updateCommandCenter(() => emptyState());
     setPendingImport(null);
     setConfirmingClear(false);

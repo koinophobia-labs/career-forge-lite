@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { emptyState, loadState, saveState } from "@/lib/command-center-store";
+import { emptyState, loadState, saveState, STORAGE_KEY } from "@/lib/command-center-store";
 import type { CommandCenterState } from "@/types/command-center";
 
 // Single client-side store: one snapshot shared by every page, kept coherent
@@ -9,6 +9,19 @@ import type { CommandCenterState } from "@/types/command-center";
 const listeners = new Set<() => void>();
 let snapshot: CommandCenterState | null = null;
 const serverSnapshot = emptyState();
+let watchingOtherTabs = false;
+
+// Without this, two open tabs are last-writer-wins: each keeps a stale
+// in-memory snapshot and the later save erases the earlier tab's work.
+function watchOtherTabs(): void {
+  if (watchingOtherTabs || typeof window === "undefined") return;
+  watchingOtherTabs = true;
+  window.addEventListener("storage", (event) => {
+    if (event.key !== STORAGE_KEY && event.key !== null) return;
+    snapshot = loadState();
+    listeners.forEach((listener) => listener());
+  });
+}
 
 function getSnapshot(): CommandCenterState {
   if (snapshot === null) snapshot = loadState();
@@ -20,6 +33,7 @@ function getServerSnapshot(): CommandCenterState {
 }
 
 function subscribe(listener: () => void): () => void {
+  watchOtherTabs();
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
