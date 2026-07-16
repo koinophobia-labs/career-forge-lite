@@ -578,7 +578,8 @@ export function parseResumePackToProposals(files: Array<{ filename: string; text
       } else {
         proposals.set(key, {
           id: stableId("proposal", key), ...classification, detail: line,
-          sourceFilenames: [file.filename], sourceExcerpts: [line], status: "proposed"
+          sourceFilenames: [file.filename], sourceExcerpts: [line], status: "proposed",
+          edited: false, likelyDuplicateOf: null
         });
       }
     }

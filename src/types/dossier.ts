@@ -172,6 +172,19 @@ export type ImportProposalRecord = {
   sourceExcerpts: string[];
   confidence: "high" | "medium" | "low";
   status: "proposed" | "approved" | "rejected";
+  edited: boolean;
+  likelyDuplicateOf: string | null;
+};
+
+export type PendingImportReview = {
+  version: 1;
+  id: string;
+  proposals: ImportProposalRecord[];
+  sourceFilenames: string[];
+  sourceFileCount: number;
+  retainSourceFilenames: boolean;
+  importedAt: string;
+  updatedAt: string;
 };
 
 export type ResumePack = {

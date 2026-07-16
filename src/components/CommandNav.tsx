@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { trackCareerEvent } from "@/lib/analytics";
 
 const stations: Array<[string, string]> = [
   ["Dashboard", "/"],
   ["Career Dossier", "/profile"],
+  ["Truth Map", "/truth-map"],
   ["Career Lanes", "/targets"],
   ["Résumé Pack", "/versions"],
   ["Tailor", "/tailor"],
@@ -45,7 +47,7 @@ export function CommandNav({ active }: CommandNavProps) {
         <details className="relative md:hidden">
           <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-paper/75">Menu</summary>
           <nav aria-label="Career Forge mobile stations" className="absolute right-0 top-12 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
-            {stations.map(([label, href]) => <Link key={href} href={href} className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold ${active === href ? "bg-gold/10 text-gold" : "text-paper/70 hover:bg-white/5 hover:text-cyan"}`}>{label}</Link>)}
+            {stations.map(([label, href]) => <Link key={href} href={href} onClick={() => { if (href === "/truth-map") trackCareerEvent("truth_map_opened"); }} className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold ${active === href ? "bg-gold/10 text-gold" : "text-paper/70 hover:bg-white/5 hover:text-cyan"}`}>{label}</Link>)}
           </nav>
         </details>
 
@@ -54,6 +56,7 @@ export function CommandNav({ active }: CommandNavProps) {
             <Link
               key={href}
               href={href}
+              onClick={() => { if (href === "/truth-map") trackCareerEvent("truth_map_opened"); }}
               className={`flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-2 transition ${
                 active === href
                   ? "border-gold/50 bg-gold/10 text-gold"

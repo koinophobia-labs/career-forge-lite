@@ -9,15 +9,22 @@ import { SiteFooter } from "@/components/SiteFooter";
 import {
   assessDossierReadiness,
   evidenceRecord,
-  mergeImportProposals,
   parseResumePackToProposals,
   withUpdatedDossier
 } from "@/lib/dossier";
 import { extractLocalResumeFiles } from "@/lib/local-resume-import";
 import { createId } from "@/lib/command-center-store";
 import { trackCareerEvent } from "@/lib/analytics";
+import { activationEventsForTransition } from "@/lib/activation";
+import {
+  addProposalsToReview,
+  commitTruthInboxReview,
+  createPendingImportReview,
+  discardTruthInboxReview,
+  truthInboxCounts
+} from "@/lib/truth-inbox";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord } from "@/types/dossier";
+import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
 
 function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
@@ -45,16 +52,20 @@ function TextListEditor({ label, value, hint, onSave }: { label: string; value: 
   );
 }
 
-function ImportReview({ proposals, groups, onChange, onApproveGroup, onDecision, onCommit, onMerge }: {
-  proposals: ImportProposalRecord[];
+function ImportReview({ batch, groups, onChange, onApproveGroup, onDecision, onCommit, onMerge, onDiscard, onRetainFilenames }: {
+  batch: PendingImportReview;
   groups: Array<[ImportProposalGroup, string]>;
   onChange: (id: string, detail: string) => void;
   onApproveGroup: (group: ImportProposalGroup) => void;
   onDecision: (id: string, status: ImportProposalRecord["status"]) => void;
   onCommit: () => void;
   onMerge: () => void;
+  onDiscard: () => void;
+  onRetainFilenames: (retain: boolean) => void;
 }) {
+  const proposals = batch.proposals;
   if (!proposals.length) return null;
+  const counts = truthInboxCounts(batch);
   const supportLabel = (kind: ImportProposalRecord["kind"]) => {
     if (kind === "role" || kind === "responsibility") return "experience sections and evidence-backed bullets";
     if (kind === "project") return "project proof and transferable technical work";
@@ -64,16 +75,22 @@ function ImportReview({ proposals, groups, onChange, onApproveGroup, onDecision,
   };
   return (
     <section id="review" className="trust-panel mt-6 scroll-mt-28 p-5 sm:p-6" aria-labelledby="import-review-title">
-      <h2 id="import-review-title" className="text-xl font-bold text-paper">Review structured proposals</h2>
-      <p className="mt-1 text-sm leading-6 text-paper/55">Approve a section or individual fact, edit the wording, reject it, and inspect its source. Nothing can support generation until this review is saved.</p>
+      <p className="trust-kicker text-xs font-bold uppercase">Truth Inbox · durable local review</p>
+      <h2 id="import-review-title" className="mt-2 text-xl font-bold text-paper">Review what Career Forge found</h2>
+      <p className="mt-1 text-sm leading-6 text-paper/55">Review what Career Forge found before anything becomes part of your career record. Pending facts remain here across navigation and refresh.</p>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full border border-mint/35 bg-mint/10 px-3 py-1 text-mint">{counts.approved} approved</span><span className="rounded-full border border-coral/35 bg-coral/10 px-3 py-1 text-coral">{counts.rejected} rejected</span><span className="rounded-full border border-gold/35 bg-gold/10 px-3 py-1 text-gold">{counts.proposed} still need review</span></div>
+      <p className="mt-3 break-words text-xs leading-5 text-paper/45">Files represented: {batch.sourceFileCount} {batch.retainSourceFilenames ? `(${batch.sourceFilenames.join(", ")})` : "(filenames private)"} · Imported {new Date(batch.importedAt).toLocaleString()} · Last updated {new Date(batch.updatedAt).toLocaleString()}</p>
+      {batch.retainSourceFilenames
+        ? <label className="mt-3 flex min-h-11 items-start gap-2 text-xs leading-5 text-paper/55"><input type="checkbox" checked onChange={(event) => onRetainFilenames(event.target.checked)} className="mt-1"/><span>Retain source filenames in approved evidence metadata. Turn this off before approval to remove them from the review; exact source excerpts stay attached.</span></label>
+        : <p className="mt-3 text-xs leading-5 text-paper/55">Source filename retention was disabled when this review was created. Filenames cannot be restored from the queue; exact source excerpts remain attached.</p>}
       <div className="mt-5 grid gap-5">
         {groups.map(([group, title]) => {
           const items = proposals.filter((item) => item.group === group);
           if (!items.length) return null;
-          return <section key={group} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-paper">{title} <span className="text-paper/45">({items.length})</span></h3><p className="mt-1 text-xs text-paper/48">Approved items become reusable; rejected items remain unusable.</p></div><button type="button" onClick={() => onApproveGroup(group)} className="min-h-11 rounded border border-mint/50 px-3 py-1.5 text-xs font-bold text-mint">Approve section</button></div><div className="mt-3 grid gap-3">{items.map((item) => <article key={item.id} className={`rounded-lg border p-3 ${item.status === "approved" ? "border-mint/40 bg-mint/5" : item.status === "rejected" ? "border-coral/40 bg-coral/5" : "border-white/10"}`}><input aria-label={`Edit proposal ${item.label}`} value={item.detail} onChange={(event) => onChange(item.id, event.target.value)} className="trust-input w-full border px-3 py-2 text-sm text-ink"/><p className="mt-2 text-xs leading-5 text-cyan">Can support: {supportLabel(item.kind)}.</p><details className="mt-2 text-xs text-paper/55"><summary className="cursor-pointer">Review source text</summary>{item.sourceExcerpts.map((source) => <p key={source} className="mt-2 border-l-2 border-cyan/30 pl-2">{source}</p>)}</details><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => onDecision(item.id, "approved")} className="min-h-11 rounded bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve</button><button type="button" onClick={() => onDecision(item.id, "rejected")} className="min-h-11 rounded border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Reject</button><span className="ml-auto self-center text-xs uppercase text-paper/40">{item.confidence} confidence · {item.status}</span></div></article>)}</div></section>;
+          return <section key={group} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-paper">{title} <span className="text-paper/45">({items.length})</span></h3><p className="mt-1 text-xs text-paper/48">Approved items become reusable only after saving; rejected items remain unusable.</p></div><button type="button" onClick={() => onApproveGroup(group)} className="min-h-11 rounded border border-mint/50 px-3 py-1.5 text-xs font-bold text-mint">Approve section</button></div><div className="mt-3 grid gap-3">{items.map((item) => <article key={item.id} className={`rounded-lg border p-3 ${item.status === "approved" ? "border-mint/40 bg-mint/5" : item.status === "rejected" ? "border-coral/40 bg-coral/5" : "border-white/10"}`}><input aria-label={`Edit proposal ${item.label}`} value={item.detail} onChange={(event) => onChange(item.id, event.target.value)} className="trust-input w-full border px-3 py-2 text-sm text-ink"/><p className="mt-2 text-xs leading-5 text-cyan">Can support: {supportLabel(item.kind)}.</p>{item.edited && <p className="mt-1 text-xs font-bold text-gold">Edited in this review</p>}{item.likelyDuplicateOf && <p className="mt-1 text-xs font-bold text-gold">Likely duplicate—compare before approving</p>}<details className="mt-2 text-xs text-paper/55"><summary className="cursor-pointer">Review source text</summary>{item.sourceExcerpts.map((source) => <p key={source} className="mt-2 border-l-2 border-cyan/30 pl-2">{source}</p>)}</details><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => onDecision(item.id, "approved")} className="min-h-11 rounded bg-mint px-3 py-1.5 text-xs font-black text-ink">Approve</button><button type="button" onClick={() => onDecision(item.id, "rejected")} className="min-h-11 rounded border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Reject</button><button type="button" onClick={() => onDecision(item.id, "proposed")} className="min-h-11 rounded border border-white/20 px-3 py-1.5 text-xs font-bold text-paper/65">Undecide</button><span className="ml-auto self-center text-xs uppercase text-paper/40">{item.confidence} confidence · {item.status}</span></div></article>)}</div></section>;
         })}
       </div>
-      <div className="mt-5 flex flex-wrap gap-3"><button type="button" onClick={onCommit} className="min-h-11 rounded-md bg-gold px-5 py-2.5 text-sm font-black text-ink">Save reviewed evidence</button>{proposals.length > 1 && <button type="button" onClick={onMerge} className="min-h-11 rounded border border-cyan/40 px-4 py-2 text-sm font-bold text-cyan">Merge likely duplicates</button>}</div>
+      <div className="mt-5 flex flex-wrap gap-3"><button type="button" onClick={onCommit} disabled={counts.approved + counts.rejected === 0} className="min-h-11 rounded-md bg-gold px-5 py-2.5 text-sm font-black text-ink disabled:cursor-not-allowed disabled:opacity-40">{counts.approved + counts.rejected === 0 ? "Review at least one fact first" : counts.proposed ? "Save decisions and continue later" : "Finish review"}</button>{proposals.length > 1 && <button type="button" onClick={onMerge} className="min-h-11 rounded border border-cyan/40 px-4 py-2 text-sm font-bold text-cyan">Mark likely duplicates</button>}<button type="button" onClick={onDiscard} className="min-h-11 rounded border border-coral/45 px-4 py-2 text-sm font-bold text-coral">Discard this import review</button></div>
     </section>
   );
 }
@@ -86,12 +103,20 @@ export default function DossierPage() {
   const [project, setProject] = useState({ name: "", organization: "", dates: "", description: "" });
   const [education, setEducation] = useState({ credential: "", institution: "", dates: "" });
   const [resumeText, setResumeText] = useState("");
-  const [importProposals, setImportProposals] = useState<ImportProposalRecord[]>([]);
   const [importMessage, setImportMessage] = useState("");
   const [retainSourceFilenames, setRetainSourceFilenames] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [stagedImport, setStagedImport] = useState<{ proposals: ImportProposalRecord[]; message: string } | null>(null);
+  const activeBatch = state.pendingImportReviews.find((item) => item.id === selectedBatchId) ?? state.pendingImportReviews[0] ?? null;
 
   function save(next: CareerDossier) {
-    update((current) => withUpdatedDossier(current, { ...next, updatedAt: new Date().toISOString() }));
+    let events: ReturnType<typeof activationEventsForTransition> = [];
+    update((current) => {
+      const nextState = withUpdatedDossier(current, { ...next, updatedAt: new Date().toISOString() });
+      events = activationEventsForTransition(current, nextState);
+      return nextState;
+    });
+    events.forEach(trackCareerEvent);
   }
 
   function patchIdentity(field: keyof CareerDossier["identity"], value: string | string[]) {
@@ -154,8 +179,7 @@ export default function DossierPage() {
   function importResume() {
     if (!resumeText.trim()) return;
     trackCareerEvent("import_started");
-    setImportProposals(parseResumePackToProposals([{ filename: "Pasted résumé.txt", text: resumeText }]));
-    setImportMessage("Pasted text parsed locally. Review grouped records below.");
+    queueExtractedImport(parseResumePackToProposals([{ filename: "Pasted résumé.txt", text: resumeText }]), "Pasted text parsed locally. Review grouped records below.");
     trackCareerEvent("import_completed");
     trackCareerEvent("proposal_review_started");
   }
@@ -164,8 +188,7 @@ export default function DossierPage() {
     try {
       trackCareerEvent("import_started");
       const extracted = await extractLocalResumeFiles(files);
-      setImportProposals(parseResumePackToProposals(extracted));
-      setImportMessage(`${files.length} file${files.length === 1 ? "" : "s"} extracted locally. Raw files were not stored.`);
+      queueExtractedImport(parseResumePackToProposals(extracted), `${files.length} file${files.length === 1 ? "" : "s"} extracted locally. Raw files were not stored.`);
       trackCareerEvent("resume_pack_imported");
       trackCareerEvent("import_completed");
       trackCareerEvent("proposal_review_started");
@@ -174,44 +197,112 @@ export default function DossierPage() {
     }
   }
 
+  function createReview(proposals: ImportProposalRecord[], message: string) {
+    const now = new Date().toISOString();
+    const batch = createPendingImportReview(createId("truth-inbox"), proposals, now, retainSourceFilenames);
+    update((current) => ({ ...current, pendingImportReviews: [...current.pendingImportReviews, batch] }));
+    setSelectedBatchId(batch.id);
+    setImportMessage(message);
+    trackCareerEvent("truth_inbox_created");
+  }
+
+  function queueExtractedImport(proposals: ImportProposalRecord[], message: string) {
+    if (!proposals.length) {
+      setImportMessage("No reviewable facts were found. Try a text-based résumé or paste the text directly.");
+      return;
+    }
+    if (state.pendingImportReviews.length) {
+      setStagedImport({ proposals, message });
+      return;
+    }
+    createReview(proposals, message);
+  }
+
+  function resolveStagedImport(choice: "add" | "separate" | "cancel") {
+    if (!stagedImport) return;
+    if (choice === "cancel") {
+      setStagedImport(null);
+      setImportMessage("New import canceled. Your existing Truth Inbox was not changed.");
+      return;
+    }
+    if (choice === "separate" || !activeBatch) {
+      createReview(stagedImport.proposals, stagedImport.message);
+    } else {
+      const now = new Date().toISOString();
+      update((current) => ({
+        ...current,
+        pendingImportReviews: current.pendingImportReviews.map((batch) => batch.id === activeBatch.id
+          ? addProposalsToReview(batch, stagedImport.proposals, now)
+          : batch)
+      }));
+      setImportMessage(`${stagedImport.message} Added to the current Truth Inbox without overwriting pending work.`);
+    }
+    setStagedImport(null);
+  }
+
+  function updateActiveBatch(change: (batch: PendingImportReview) => PendingImportReview) {
+    if (!activeBatch) return;
+    update((current) => ({
+      ...current,
+      pendingImportReviews: current.pendingImportReviews.map((batch) => batch.id === activeBatch.id ? change(batch) : batch)
+    }));
+  }
+
   function decideProposal(id: string, status: ImportProposalRecord["status"]) {
-    setImportProposals((current) => current.map((item) => item.id === id ? { ...item, status } : item));
+    updateActiveBatch((batch) => ({ ...batch, updatedAt: new Date().toISOString(), proposals: batch.proposals.map((item) => item.id === id ? { ...item, status } : item) }));
   }
 
   function approveGroup(group: ImportProposalGroup) {
-    setImportProposals((current) => current.map((item) => item.group === group ? { ...item, status: "approved" } : item));
+    updateActiveBatch((batch) => ({ ...batch, updatedAt: new Date().toISOString(), proposals: batch.proposals.map((item) => item.group === group ? { ...item, status: "approved" } : item) }));
   }
 
   function mergeLikelyDuplicates() {
-    setImportProposals((current) => {
-      const merged: ImportProposalRecord[] = [];
+    updateActiveBatch((batch) => {
+      const marked: ImportProposalRecord[] = [];
       const tokens = (value: string) => new Set(value.toLowerCase().replace(/(?:19|20)\d{2}|present/g, " ").match(/[a-z0-9]{3,}/g) ?? []);
-      for (const proposal of current) {
+      let matches = 0;
+      for (const proposal of batch.proposals) {
         const sourceTokens = tokens(proposal.detail);
-        const match = merged.find((item) => {
+        const match = marked.find((item) => {
           if (item.group !== proposal.group) return false;
           const targetTokens = tokens(item.detail);
           const overlap = [...sourceTokens].filter((token) => targetTokens.has(token)).length;
           return overlap / Math.max(1, Math.min(sourceTokens.size, targetTokens.size)) >= 0.7;
         });
-        if (!match) { merged.push({ ...proposal }); continue; }
-        match.detail = match.detail.length >= proposal.detail.length ? match.detail : proposal.detail;
-        match.sourceFilenames = [...new Set([...match.sourceFilenames, ...proposal.sourceFilenames])];
-        match.sourceExcerpts = [...new Set([...match.sourceExcerpts, ...proposal.sourceExcerpts])];
-        if (proposal.status === "approved") match.status = "approved";
+        if (!match) { marked.push({ ...proposal }); continue; }
+        matches += 1;
+        marked.push({ ...proposal, likelyDuplicateOf: match.id });
       }
-      setImportMessage(`Merged ${current.length - merged.length} likely duplicate record${current.length - merged.length === 1 ? "" : "s"}. Review the result before saving.`);
-      return merged;
+      setImportMessage(`Marked ${matches} likely duplicate record${matches === 1 ? "" : "s"}. Source excerpts and both records remain available for review.`);
+      return { ...batch, proposals: marked, updatedAt: new Date().toISOString() };
     });
   }
 
   function commitImportReview() {
-    const hadApproved = dossier.evidence.some((item) => item.approved && !item.rejected);
-    save(mergeImportProposals(dossier, importProposals, new Date().toISOString(), retainSourceFilenames));
-    setImportMessage("Review saved. Only approved records can now support generated claims.");
-    setImportProposals([]);
-    if (!hadApproved && importProposals.some((item) => item.status === "approved")) trackCareerEvent("first_evidence_approved");
-    trackCareerEvent("dossier_activation_reached");
+    if (!activeBatch) return;
+    const result = commitTruthInboxReview(state, activeBatch.id, new Date().toISOString());
+    if (!result.changed) {
+      setImportMessage("Review at least one fact first. Undecided proposals remain safely in the Truth Inbox.");
+      return;
+    }
+    update(() => result.state);
+    activationEventsForTransition(state, result.state).forEach(trackCareerEvent);
+    if (result.completed) {
+      setImportMessage(`Truth Inbox complete: ${result.approved} approved · ${result.rejected} rejected. Only approved evidence can support outputs.`);
+      setSelectedBatchId(null);
+      trackCareerEvent("truth_inbox_completed");
+    } else {
+      setImportMessage(`Decisions saved: ${result.approved} approved · ${result.rejected} rejected · ${result.remaining} still need review.`);
+    }
+  }
+
+  function discardImportReview() {
+    if (!activeBatch) return;
+    if (!window.confirm("This removes the pending review but does not delete evidence you already approved in earlier sessions.")) return;
+    update((current) => discardTruthInboxReview(current, activeBatch.id));
+    setSelectedBatchId(null);
+    setImportMessage("Pending review discarded. Previously approved dossier evidence was not changed.");
+    trackCareerEvent("truth_inbox_discarded");
   }
 
   function deleteRecord(kind: "roles" | "projects" | "education", id: string, evidenceIds: string[]) {
@@ -289,12 +380,15 @@ export default function DossierPage() {
               <h2 id="import-title" className="mt-2 text-2xl font-bold text-paper">Start with the history you already have</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Upload old résumés, role-specific versions, or exported LinkedIn text. Career Forge groups repeated facts and conflicts for review. Multiple versions are useful; duplicates can be merged. Nothing becomes trusted evidence until you approve it.</p>
               <label className="mt-4 block rounded-xl border border-dashed border-cyan/40 bg-cyan/5 p-4 text-sm text-paper/70"><span className="font-bold text-cyan">Choose PDF, DOCX, or text résumé files</span><span className="mt-1 block text-xs text-paper/50">Select more than one. Processing happens in this browser; raw files are never persisted or uploaded.</span><input aria-label="Resume pack files" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="mt-3 block min-h-11 w-full text-xs" onChange={(event) => { const files = [...(event.target.files ?? [])]; if (files.length) void importFiles(files); event.target.value = ""; }} /></label>
-              <details className="mt-4 rounded-xl border border-white/12 bg-white/5 p-4" open={Boolean(resumeText || importProposals.length)}><summary className="cursor-pointer text-sm font-bold text-paper">No file handy? Paste résumé text</summary><textarea aria-label="Resume text import" className="trust-input mt-4 w-full border px-3 py-2 text-sm text-ink" rows={7} value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Paste the text from an existing résumé…" /><button type="button" onClick={importResume} className="mt-3 min-h-11 rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">Extract proposed evidence</button></details>
+              <details className="mt-4 rounded-xl border border-white/12 bg-white/5 p-4" open={Boolean(resumeText || state.pendingImportReviews.length)}><summary className="cursor-pointer text-sm font-bold text-paper">No file handy? Paste résumé text</summary><textarea aria-label="Resume text import" className="trust-input mt-4 w-full border px-3 py-2 text-sm text-ink" rows={7} value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Paste the text from an existing résumé…" /><button type="button" onClick={importResume} className="mt-3 min-h-11 rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">Extract proposed evidence</button></details>
               {importMessage && <p className="mt-3 text-sm text-mint" role="status" aria-live="polite">{importMessage}</p>}
               <label className="mt-3 flex min-h-11 items-start gap-2 text-xs leading-5 text-paper/55"><input type="checkbox" checked={retainSourceFilenames} onChange={(event) => setRetainSourceFilenames(event.target.checked)} className="mt-1"/><span>Retain source filenames in local dossier metadata after approval. Leave off for maximum privacy; exact supporting text is retained either way.</span></label>
+              {stagedImport && <div role="dialog" aria-modal="true" aria-labelledby="import-choice-title" className="mt-4 rounded-xl border border-gold/40 bg-gold/10 p-4"><h3 id="import-choice-title" className="font-bold text-paper">A Truth Inbox already exists</h3><p className="mt-1 text-sm text-paper/65">Choose how to handle the new files. Your current pending review will not be overwritten.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => resolveStagedImport("add")} className="min-h-11 rounded bg-mint px-3 py-2 text-xs font-black text-ink">Add files to current review</button><button type="button" onClick={() => resolveStagedImport("separate")} className="min-h-11 rounded border border-cyan/45 px-3 py-2 text-xs font-bold text-cyan">Start a separate review batch</button><button type="button" onClick={() => resolveStagedImport("cancel")} className="min-h-11 rounded border border-white/20 px-3 py-2 text-xs font-bold text-paper/65">Cancel</button></div></div>}
             </section>
 
-            <ImportReview proposals={importProposals} groups={importGroups} onChange={(id, detail) => setImportProposals((current) => current.map((proposal) => proposal.id === id ? { ...proposal, detail } : proposal))} onApproveGroup={approveGroup} onDecision={decideProposal} onCommit={commitImportReview} onMerge={mergeLikelyDuplicates} />
+            {state.pendingImportReviews.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6" aria-labelledby="truth-inbox-list-title"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="trust-kicker text-xs font-bold uppercase">Truth Inbox</p><h2 id="truth-inbox-list-title" className="mt-2 text-xl font-bold text-paper">{state.pendingImportReviews.length} pending review batch{state.pendingImportReviews.length === 1 ? "" : "es"}</h2><p className="mt-1 text-sm text-paper/55">Nothing here supports readiness, lanes, résumés, matching, or answers until approved and saved.</p></div><Link href="#review" onClick={() => trackCareerEvent("truth_inbox_resumed")} className="min-h-11 rounded border border-cyan/45 px-4 py-2.5 text-sm font-bold text-cyan">Resume review</Link></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{state.pendingImportReviews.map((batch) => { const counts = truthInboxCounts(batch); return <button key={batch.id} type="button" onClick={() => { setSelectedBatchId(batch.id); trackCareerEvent("truth_inbox_resumed"); }} className={`rounded-xl border p-3 text-left ${activeBatch?.id === batch.id ? "border-gold/55 bg-gold/10" : "border-white/12 bg-white/5"}`}><span className="block text-sm font-bold text-paper">{counts.total} proposed facts · {batch.sourceFileCount} file{batch.sourceFileCount === 1 ? "" : "s"}</span><span className="mt-1 block text-xs text-paper/50">{counts.approved} approved · {counts.rejected} rejected · {counts.proposed} undecided</span></button>; })}</div></section>}
+
+            {activeBatch && <ImportReview batch={activeBatch} groups={importGroups} onChange={(id, detail) => updateActiveBatch((batch) => ({ ...batch, updatedAt: new Date().toISOString(), proposals: batch.proposals.map((proposal) => proposal.id === id ? { ...proposal, detail, edited: true } : proposal) }))} onApproveGroup={approveGroup} onDecision={decideProposal} onCommit={commitImportReview} onMerge={mergeLikelyDuplicates} onDiscard={discardImportReview} onRetainFilenames={(retain) => updateActiveBatch((batch) => ({ ...batch, retainSourceFilenames: retain, sourceFilenames: retain ? batch.sourceFilenames : [], proposals: retain ? batch.proposals : batch.proposals.map((proposal) => ({ ...proposal, sourceFilenames: [] })), updatedAt: new Date().toISOString() }))} />}
 
             <section className="trust-panel mt-8 p-5 sm:p-6" aria-labelledby="arsenal-title">
               <div className="flex flex-wrap items-start justify-between gap-4">

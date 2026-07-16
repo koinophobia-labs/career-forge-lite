@@ -45,11 +45,11 @@ try {
     { name: "ats-resume.txt", mimeType: "text/plain", buffer: Buffer.from("Associate Sportsbook Writer — DraftKings | 2021–2024\nPolicy enforcement and ID verification\nMaintained transaction accuracy\nTools: Excel\nEarlham College — Bachelor's degree") },
     { name: "networking-resume.txt", mimeType: "text/plain", buffer: Buffer.from("Associate Sportsbook Writer — DraftKings | 2021–2024\nPolicy enforcement and ID verification\nResolved customer disputes\nCareer Forge project\nMaintained 13 automated regression suites") }
   ]);
-  await page.getByText("Review structured proposals").waitFor();
+  await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
   const approveSections = page.getByRole("button", { name: "Approve section" });
   for (let index = 0; index < await approveSections.count(); index += 1) await approveSections.nth(index).click();
-  await page.getByRole("button", { name: "Save reviewed evidence" }).click();
-  await page.getByText("Only approved records can now support generated claims.").waitFor();
+  await page.getByRole("button", { name: "Finish review" }).click();
+  await page.getByText(/Truth Inbox complete:/).waitFor();
 
   await page.getByRole("textbox", { name: "Full name" }).fill("Blake Example");
   await page.getByLabel("Role title", { exact: true }).fill("Associate Sportsbook Writer");

@@ -8,7 +8,7 @@ import type {
   TargetLane
 } from "@/types/command-center";
 import { emptyDossier, mergeLegacyResumeSnapshots, migrateLegacyProfile, reviveDossier } from "@/lib/dossier";
-import type { ExportMetadata, ResumePack, ResumeVariant } from "@/types/dossier";
+import type { ExportMetadata, ImportProposalRecord, PendingImportReview, ResumePack, ResumeVariant } from "@/types/dossier";
 
 export const STORAGE_KEY = "career-forge-command-center-v1";
 
@@ -36,7 +36,8 @@ export function emptyState(): CommandCenterState {
     outreach: [],
     resumeVersions: [],
     resumePacks: [],
-    exports: []
+    exports: [],
+    pendingImportReviews: []
   };
 }
 
@@ -75,6 +76,52 @@ function asStringArray(value: unknown): string[] {
 // malformed follow-up history can never poison weekly counts.
 function asTimestampArray(value: unknown): string[] {
   return asStringArray(value).filter((item) => !Number.isNaN(new Date(item).getTime()));
+}
+
+const evidenceKinds = ["identity", "role", "project", "education", "responsibility", "tool", "skill", "metric", "proof", "story", "constraint", "goal"] as const;
+const proposalGroups = ["identity", "employment", "projects", "education", "tools", "skills", "metrics-outcomes", "other"] as const;
+
+function reviveImportProposal(raw: Record<string, unknown>): ImportProposalRecord | null {
+  if (!asString(raw.id) || !asString(raw.detail)) return null;
+  const group = proposalGroups.includes(raw.group as (typeof proposalGroups)[number])
+    ? raw.group as ImportProposalRecord["group"]
+    : "other";
+  const kind = evidenceKinds.includes(raw.kind as (typeof evidenceKinds)[number])
+    ? raw.kind as ImportProposalRecord["kind"]
+    : "proof";
+  const status = raw.status === "approved" || raw.status === "rejected" ? raw.status : "proposed";
+  return {
+    id: asString(raw.id),
+    group,
+    kind,
+    label: asString(raw.label, "Imported evidence"),
+    detail: asString(raw.detail),
+    sourceFilenames: asStringArray(raw.sourceFilenames),
+    sourceExcerpts: asStringArray(raw.sourceExcerpts),
+    confidence: raw.confidence === "high" || raw.confidence === "medium" ? raw.confidence : "low",
+    status,
+    edited: raw.edited === true,
+    likelyDuplicateOf: asStringOrNull(raw.likelyDuplicateOf)
+  };
+}
+
+function revivePendingImportReview(raw: Record<string, unknown>): PendingImportReview | null {
+  if (!asString(raw.id) || raw.version !== 1) return null;
+  const proposals = reviveList(raw.proposals, reviveImportProposal);
+  if (!proposals.length) return null;
+  const importedAt = asString(raw.importedAt, new Date(0).toISOString());
+  return {
+    version: 1,
+    id: asString(raw.id),
+    proposals,
+    sourceFilenames: asStringArray(raw.sourceFilenames),
+    sourceFileCount: typeof raw.sourceFileCount === "number" && Number.isFinite(raw.sourceFileCount) && raw.sourceFileCount >= 0
+      ? Math.floor(raw.sourceFileCount)
+      : asStringArray(raw.sourceFilenames).length,
+    retainSourceFilenames: raw.retainSourceFilenames === true,
+    importedAt,
+    updatedAt: asString(raw.updatedAt, importedAt)
+  };
 }
 
 function reviveProfile(raw: unknown): CareerProfile {
@@ -384,7 +431,8 @@ export function parseState(serialized: string | null): CommandCenterState {
       outreach: reviveList(raw.outreach, reviveContact),
       resumeVersions,
       resumePacks: reviveList(raw.resumePacks, reviveResumePack),
-      exports: reviveList(raw.exports, reviveExport)
+      exports: reviveList(raw.exports, reviveExport),
+      pendingImportReviews: reviveList(raw.pendingImportReviews, revivePendingImportReview)
     };
   } catch {
     return emptyState();

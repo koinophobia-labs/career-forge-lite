@@ -12,6 +12,7 @@ import { assessJobPost } from "@/lib/input-guidance";
 import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
 import { trackCareerEvent } from "@/lib/analytics";
+import { activationEventsForTransition } from "@/lib/activation";
 import { draftApplicationQuestion } from "@/lib/application-questions";
 import { useCommandCenter } from "@/lib/use-command-center";
 
@@ -52,9 +53,11 @@ export default function TailorPage() {
   function saveAsApplication(status: "drafting" | "applied") {
     const nowIso = new Date().toISOString();
     const newApplicationId = createId("app");
-    update((current) => ({
-      ...current,
-      applications: [
+    let events: ReturnType<typeof activationEventsForTransition> = [];
+    update((current) => {
+      const next = {
+        ...current,
+        applications: [
         ...current.applications,
         {
           id: newApplicationId,
@@ -93,11 +96,14 @@ export default function TailorPage() {
           analysisWeakSpots: analysis ? analysis.weakSpots.slice(0, 4) : [],
           createdAt: nowIso
         }
-      ]
-    }));
+        ]
+      };
+      events = activationEventsForTransition(current, next);
+      return next;
+    });
     setSavedApplication(true);
     setSavedApplicationId(newApplicationId);
-    trackCareerEvent("application_saved");
+    events.forEach(trackCareerEvent);
   }
 
   function startTailoredResume() {

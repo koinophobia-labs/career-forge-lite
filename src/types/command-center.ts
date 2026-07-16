@@ -1,5 +1,5 @@
 import type { ResumePackage, TemplateStyle } from "@/types/career";
-import type { CareerDossier, ExportMetadata, ResumePack } from "@/types/dossier";
+import type { CareerDossier, ExportMetadata, PendingImportReview, ResumePack } from "@/types/dossier";
 
 export type LaneStatus = "active" | "exploring" | "paused";
 
@@ -142,6 +142,7 @@ export type CommandCenterState = {
   resumeVersions: ResumeVersionRecord[];
   resumePacks: ResumePack[];
   exports: ExportMetadata[];
+  pendingImportReviews: PendingImportReview[];
 };
 
 export type NextBestAction = {

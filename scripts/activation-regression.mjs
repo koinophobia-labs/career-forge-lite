@@ -37,10 +37,10 @@ const feedback = source("src/components/ActivationFeedback.tsx");
 const analytics = source("src/lib/analytics.ts");
 const nav = source("src/components/CommandNav.tsx");
 
-check("homepage explains complete pack before input", home.includes("One career history. A complete résumé pack.") && home.indexOf("What you get") < home.indexOf("Advanced workspace"));
+check("homepage explains the evidence compiler before input", home.includes("Your career is bigger than your last résumé.") && home.includes("Local-first career evidence compiler") && home.indexOf("What you get") < home.indexOf("Advanced workspace"));
 check("primary CTA reaches import-first entrance", /href="\/profile#import"/.test(home) && home.includes("Import my résumés"));
 check("import remains local and approval-gated", profile.includes("Processing happens in this browser") && profile.includes("Nothing becomes trusted evidence until you approve it"));
-check("proposal review explains unusable-before-approval state", profile.includes("Nothing can support generation until this review is saved"));
+check("proposal review explains unusable-before-approval state", profile.includes("Nothing here supports readiness, lanes, résumés, matching, or answers until approved and saved"));
 check("approval unlock messaging uses canonical readiness", profile.includes("readiness.level") && profile.includes("What your approvals unlock"));
 
 let state = emptyState();

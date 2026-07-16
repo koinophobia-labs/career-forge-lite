@@ -82,6 +82,27 @@ export function activationSummary(state: CommandCenterState) {
   };
 }
 
+export function hasReachedDossierActivation(state: CommandCenterState): boolean {
+  if (assessDossierReadiness(state.dossier).level === "not-ready") return false;
+  const approved = new Set(state.dossier.evidence.filter((item) => item.approved && !item.rejected).map((item) => item.id));
+  return state.dossier.roles.some((role) => role.evidenceIds.some((id) => approved.has(id))) ||
+    state.dossier.projects.some((project) => project.evidenceIds.some((id) => approved.has(id)));
+}
+
+export type TransitionEvent = "first_evidence_approved" | "dossier_activation_reached" | "first_lane_activated" | "resume_pack_completed" | "application_saved";
+
+export function activationEventsForTransition(previous: CommandCenterState, next: CommandCenterState): TransitionEvent[] {
+  const events: TransitionEvent[] = [];
+  const approvedCount = (state: CommandCenterState) => state.dossier.evidence.filter((item) => item.approved && !item.rejected).length;
+  const activeLaneCount = (state: CommandCenterState) => state.lanes.filter((lane) => lane.status === "active").length;
+  if (approvedCount(previous) === 0 && approvedCount(next) > 0) events.push("first_evidence_approved");
+  if (!hasReachedDossierActivation(previous) && hasReachedDossierActivation(next)) events.push("dossier_activation_reached");
+  if (activeLaneCount(previous) === 0 && activeLaneCount(next) > 0) events.push("first_lane_activated");
+  if (previous.resumePacks.length === 0 && next.resumePacks.length > 0) events.push("resume_pack_completed");
+  if (previous.applications.length === 0 && next.applications.length > 0) events.push("application_saved");
+  return events;
+}
+
 export function variantPurpose(kind: ResumeVariantKind): { label: string; purpose: string; difference: string } {
   if (kind === "ats") {
     return {

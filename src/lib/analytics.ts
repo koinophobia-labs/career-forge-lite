@@ -31,6 +31,15 @@ export type CareerForgeEventName =
   | "application_pack_completed"
   | "tailored_resume_completed"
   | "application_saved"
+  | "truth_inbox_created"
+  | "truth_inbox_resumed"
+  | "truth_inbox_completed"
+  | "truth_inbox_discarded"
+  | "truth_map_opened"
+  | "evidence_usage_opened"
+  | "claim_provenance_opened"
+  | "defensibility_receipt_opened"
+  | "differentiation_section_cta_clicked"
   | "activation_feedback_submitted";
 
 function cleanProperties(properties?: AnalyticsProperties) {

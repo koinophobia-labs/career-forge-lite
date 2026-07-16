@@ -34,7 +34,8 @@ function PreviewStats({ preview }: { preview: BackupPreview }) {
     ["Resume versions", `${preview.resumeVersionCount} (${preview.snapshotCount} with styled snapshots)`],
     ["Dossier evidence", String(preview.dossierEvidenceCount)],
     ["Résumé packs", String(preview.resumePackCount)],
-    ["Export records", String(preview.exportCount)]
+    ["Export records", String(preview.exportCount)],
+    ["Pending Truth Inbox reviews", String(preview.pendingImportReviewCount)]
   ];
   return (
     <dl className="mt-3 grid gap-1.5 sm:grid-cols-2">

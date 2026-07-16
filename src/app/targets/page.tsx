@@ -10,6 +10,7 @@ import { laneLibrary } from "@/lib/lane-library";
 import { generateResumePack } from "@/lib/resume-pack";
 import { assessDossierReadiness } from "@/lib/dossier";
 import { trackCareerEvent } from "@/lib/analytics";
+import { activationEventsForTransition } from "@/lib/activation";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { LaneStatus, ResumeVersionRecord, TargetLane } from "@/types/command-center";
 import type { LaneBlueprint } from "@/lib/lane-library";
@@ -53,6 +54,7 @@ export default function TargetsPage() {
   function adoptLane(key: string) {
     const blueprint = laneLibrary.find((item) => item.key === key);
     if (!blueprint) return;
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       if (current.lanes.some((lane) => lane.title === blueprint.title)) return current;
       const lane: TargetLane = {
@@ -69,10 +71,12 @@ export default function TargetsPage() {
         source: "library",
         createdAt: new Date().toISOString()
       };
-      return { ...current, lanes: [...current.lanes, lane] };
+      const next = { ...current, lanes: [...current.lanes, lane] };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
     trackCareerEvent("lane_activated");
-    if (!state.lanes.length) trackCareerEvent("first_lane_activated");
+    events.forEach(trackCareerEvent);
   }
 
   function addCustomLane() {
@@ -102,13 +106,17 @@ export default function TargetsPage() {
   }
 
   function cycleStatus(id: string) {
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       const target = current.lanes.find((lane) => lane.id === id);
       if (!target) return current;
       const nextStatus = statusOrder[(statusOrder.indexOf(target.status) + 1) % statusOrder.length];
       if (nextStatus === "active" && current.lanes.filter((lane) => lane.status === "active").length >= 3) return current;
-      return { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
+      const next = { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
+    events.forEach(trackCareerEvent);
   }
 
   function removeLane(id: string) {
@@ -128,6 +136,7 @@ export default function TargetsPage() {
     trackCareerEvent("resume_pack_started");
     const now = new Date().toISOString();
     const pack = generateResumePack(state.dossier, active, now);
+    let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       const versions: ResumeVersionRecord[] = pack.variants.map((variant) => {
         const lane = current.lanes.find((item) => item.id === variant.laneId);
@@ -155,13 +164,15 @@ export default function TargetsPage() {
           createdAt: now
         };
       });
-      return {
+      const next = {
         ...current,
         resumePacks: [...current.resumePacks.map((item) => item.status === "current" ? { ...item, status: "archived" as const } : item), pack],
         resumeVersions: [...current.resumeVersions, ...versions]
       };
+      events = activationEventsForTransition(current, next);
+      return next;
     });
-    trackCareerEvent("resume_pack_completed");
+    events.forEach(trackCareerEvent);
     router.push("/versions");
   }
 

@@ -22,12 +22,12 @@ import { useCommandCenter } from "@/lib/use-command-center";
 
 const loop = [
   ["01", "Dossier", "Capture and approve career evidence once", "/profile"],
-  ["02", "Career Lanes", "Choose up to three credible directions", "/targets"],
-  ["03", "Résumé Pack", "Forge two distinct baselines per lane", "/versions"],
-  ["04", "Tailor", "Start from a lane baseline for each posting", "/tailor"],
-  ["05", "Track", "Link applications, outreach, and follow-ups", "/applications"],
-  ["06", "Interview", "Prepare from real evidence and gaps", "/interview"],
-  ["07", "Weekly", "Review momentum and the next best moves", "/weekly"]
+  ["02", "Truth Map", "Trace facts into every claim and answer", "/truth-map"],
+  ["03", "Career Lanes", "Choose up to three credible directions", "/targets"],
+  ["04", "Résumé Pack", "Forge two distinct baselines per lane", "/versions"],
+  ["05", "Tailor", "Start from a lane baseline for each posting", "/tailor"],
+  ["06", "Track", "Link applications, outreach, and follow-ups", "/applications"],
+  ["07", "Interview", "Prepare from real evidence and gaps", "/interview"]
 ] as const;
 
 export default function Dashboard() {
@@ -73,15 +73,15 @@ export default function Dashboard() {
       <section className="mx-auto max-w-6xl px-5 pt-6 sm:px-8 sm:pt-10" id="landing">
         <div className="trust-panel overflow-hidden">
           <div className="p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-bold uppercase sm:text-sm">Local-first career operating system</p>
+            <p className="trust-kicker text-xs font-bold uppercase sm:text-sm">Local-first career evidence compiler</p>
             <div className="mt-3 grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
               <div>
                 <h1 className="text-3xl font-bold leading-tight text-paper sm:text-5xl">
-                  One career history. A complete résumé pack.
+                  Your career is bigger than your last résumé.
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/72 sm:text-base">
-                  Import existing résumés or describe your work once. Approve the facts, identify credible role lanes,
-                  and generate truthful ATS and recruiter-ready résumés for each one.
+                  Career Forge turns scattered jobs, projects, and old résumés into an approved evidence system, then
+                  compiles truthful application packs for every credible direction.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link href="/profile#import" onClick={() => trackCareerEvent("landing_primary_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black transition">
@@ -126,6 +126,10 @@ export default function Dashboard() {
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="trust-title">
         <div className="rounded-xl border border-white/12 bg-white/5 p-5 sm:p-6"><h2 id="trust-title" className="text-xl font-bold text-paper">What Career Forge trusts—and what it refuses to invent</h2><div className="mt-4 grid gap-3 text-sm leading-6 text-paper/65 md:grid-cols-3"><p><strong className="text-mint">Local by default.</strong> No account is required. Files are processed in your browser, and raw résumé files are not retained.</p><p><strong className="text-mint">Approval-gated.</strong> Imported facts remain proposals until you approve them; source excerpts stay attached for review.</p><p><strong className="text-mint">Honest outputs.</strong> Missing credentials, duration, and experience stay gaps. Review every exported application document before sending.</p></div></div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="different-title" id="different">
+        <div className="trust-panel p-5 sm:p-6"><p className="trust-kicker text-xs font-bold uppercase">The category difference</p><h2 id="different-title" className="mt-2 text-3xl font-bold text-paper">Not another AI résumé writer.</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Writing is the output. Career Forge’s job is to compile approved proof, keep transfer claims honest, and show why every claim appeared.</p><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[38rem] border-collapse text-left text-sm"><thead><tr className="border-b border-white/15 text-paper/45"><th className="px-3 py-3">Typical tool</th><th className="px-3 py-3 text-cyan">Career Forge</th></tr></thead><tbody>{[["Starts from one résumé", "Builds a longitudinal Career Dossier"], ["Generates plausible copy", "Uses evidence you explicitly approved"], ["Gives a match score", "Shows direct, transferred, and missing proof"], ["Makes one tailored document", "Builds an ATS and recruiter baseline for every credible lane"], ["Stores files in an account", "Works locally without an account"], ["Hides why a claim appeared", "Links each generated claim to its source"]].map(([typical, forge]) => <tr key={typical} className="border-b border-white/10"><td className="px-3 py-3 text-paper/55">{typical}</td><td className="px-3 py-3 font-bold text-paper">{forge}</td></tr>)}</tbody></table></div><div className="mt-5 flex flex-wrap gap-3"><Link href="/profile#import" onClick={() => trackCareerEvent("differentiation_section_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Build my approved dossier →</Link><Link href="/truth-map" onClick={() => trackCareerEvent("truth_map_opened")} className="inline-flex min-h-11 items-center rounded border border-cyan/40 px-5 py-2.5 text-sm font-bold text-cyan">See the Truth Map</Link></div></div>
       </section>
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="advanced-title">
