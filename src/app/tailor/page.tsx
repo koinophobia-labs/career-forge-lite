@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
-import { createId, isProfileComplete } from "@/lib/command-center-store";
+import { createId } from "@/lib/command-center-store";
+import { assessDossierReadiness } from "@/lib/dossier";
 import { assessJobPost } from "@/lib/input-guidance";
 import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
@@ -38,11 +39,12 @@ export default function TailorPage() {
   const currentPack = useMemo(() => [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null, [state.resumePacks]);
   const baselines = useMemo(() => currentPack?.variants.filter((variant) => variant.kind !== "job-specific" && (!laneId || variant.laneId === laneId)) ?? [], [currentPack, laneId]);
   const selectedBaseline = baselines.find((variant) => variant.id === baselineVariantId) ?? null;
-  const profileReady = hydrated && isProfileComplete(state.profile);
+  const profileReady = hydrated && assessDossierReadiness(state.dossier).level !== "not-ready";
 
   function runAnalysis() {
     if (!jobPost.trim() || !selectedBaseline) return;
     trackCareerEvent("job_tailor_started");
+    trackCareerEvent("tailor_started");
     setAnalysis(analyzeJobPost(jobPost, state.profile, selectedLane, state.dossier));
     setSavedApplication(false);
   }
@@ -95,6 +97,7 @@ export default function TailorPage() {
     }));
     setSavedApplication(true);
     setSavedApplicationId(newApplicationId);
+    trackCareerEvent("application_saved");
   }
 
   function startTailoredResume() {
@@ -127,17 +130,17 @@ export default function TailorPage() {
         <p className="trust-kicker text-sm font-bold uppercase">Step 03 · Application tailoring</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Tailor against the actual job post.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
-          Begin from a canonical lane résumé, then paste the job posting. The tailored version keeps lineage to your dossier,
-          lane, selected baseline, analysis, and tracked application. It never replaces the canonical baseline.
+          Start from the right lane résumé, then paste the job posting. Career Forge keeps the approved evidence, baseline,
+          and real posting connected while leaving the reusable baseline unchanged.
         </p>
 
         {hydrated && !profileReady && (
           <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">
-            Your profile isn’t complete enough for useful matching yet.{" "}
+            Your dossier needs one more approved role, project, or proof point for useful matching.{" "}
             <Link href="/profile" className="font-bold text-gold underline-offset-2 hover:underline">
-              Finish your profile
+              Add approved evidence
             </Link>{" "}
-            (situation, target roles, 3+ skills, experience summary) — the analysis below will be shallow until then.
+            — the analysis below will stay deliberately cautious until then.
           </div>
         )}
         {hydrated && !currentPack && <div className="mt-6 rounded-xl border border-coral/30 bg-coral/10 p-4 text-sm text-paper/75">Tailoring now starts from an existing lane baseline. <Link href="/targets" className="font-bold text-gold">Choose lanes and forge your résumé pack first.</Link></div>}

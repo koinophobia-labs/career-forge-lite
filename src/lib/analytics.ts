@@ -12,13 +12,26 @@ export type CareerForgeEventName =
   | "dossier_completed"
   | "lane_recommended"
   | "lane_activated"
+  | "landing_primary_cta_clicked"
+  | "import_started"
+  | "import_completed"
+  | "proposal_review_started"
+  | "first_evidence_approved"
+  | "dossier_activation_reached"
+  | "first_lane_activated"
   | "resume_pack_started"
   | "resume_pack_completed"
   | "resume_variant_viewed"
+  | "resume_variant_opened"
   | "resume_exported"
   | "pack_bundle_exported"
+  | "full_pack_exported"
   | "job_tailor_started"
-  | "application_pack_completed";
+  | "tailor_started"
+  | "application_pack_completed"
+  | "tailored_resume_completed"
+  | "application_saved"
+  | "activation_feedback_submitted";
 
 function cleanProperties(properties?: AnalyticsProperties) {
   if (!properties) return undefined;

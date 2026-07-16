@@ -65,15 +65,14 @@ try {
   await noOverflow(page, "populated dossier mobile");
 
   await page.goto(`${baseUrl}/targets`);
-  const adoptButtons = page.getByRole("button", { name: "Adopt this lane" });
-  for (let index = 0; index < 3; index += 1) await adoptButtons.nth(0).click();
+  for (let index = 0; index < 3; index += 1) await page.locator('[data-testid="adopt-lane"]:not(:disabled)').first().click();
   await page.getByText("3 active lane(s) · 6 baseline résumé(s)").waitFor();
   await page.getByRole("button", { name: "Forge complete résumé pack →" }).click();
   await page.waitForURL(`${baseUrl}/versions`);
-  await page.getByText("6 documents across 3 lane(s)").waitFor();
+  await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
   await noOverflow(page, "resume pack mobile");
   const zipPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export PDF + DOCX bundle" }).click();
+  await page.getByRole("button", { name: "Export complete pack" }).click();
   const zipDownload = await zipPromise;
   verify(zipDownload.suggestedFilename().endsWith("-Resume-Pack.zip"), "bundle filename was not deterministic");
 
@@ -147,7 +146,7 @@ try {
   await page.goto(`${baseUrl}/applications`);
   await page.getByRole("heading", { name: /Technical Support Engineer/ }).first().waitFor();
   await page.goto(`${baseUrl}/versions`);
-  await page.getByText("6 documents across 3 lane(s)").waitFor();
+  await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
   await page.getByRole("heading", { name: /Technical Support Engineer.*tailored/i }).waitFor();
 
   await page.setViewportSize({ width: 1440, height: 900 });

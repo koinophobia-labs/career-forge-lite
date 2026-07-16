@@ -21,7 +21,7 @@ type CommandNavProps = { active: string };
 export function CommandNav({ active }: CommandNavProps) {
   return (
     <header className="relative z-40 border-b border-white/10 bg-obsidian/84 px-5 py-4 backdrop-blur-xl sm:px-8 md:sticky md:top-0">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
           <Link href="/" className="group inline-flex items-center gap-3" aria-label="Career Forge dashboard">
             <span className="logo-mark" aria-hidden="true">CF</span>
@@ -42,7 +42,14 @@ export function CommandNav({ active }: CommandNavProps) {
           </a>
         </div>
 
-        <nav aria-label="Career Forge stations" className="-mx-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto px-5 pb-1 text-xs font-bold text-paper/70 sm:-mx-8 sm:px-8 md:mx-0 md:flex-wrap md:justify-end md:overflow-visible md:px-0 md:pb-0">
+        <details className="relative md:hidden">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-paper/75">Menu</summary>
+          <nav aria-label="Career Forge mobile stations" className="absolute right-0 top-12 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
+            {stations.map(([label, href]) => <Link key={href} href={href} className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold ${active === href ? "bg-gold/10 text-gold" : "text-paper/70 hover:bg-white/5 hover:text-cyan"}`}>{label}</Link>)}
+          </nav>
+        </details>
+
+        <nav aria-label="Career Forge stations" className="hidden flex-wrap items-center justify-end gap-1.5 text-xs font-bold text-paper/70 md:flex">
           {stations.map(([label, href]) => (
             <Link
               key={href}

@@ -9,7 +9,7 @@ import { ResumePreview } from "@/components/ResumePreview";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { initialIntake } from "@/lib/career-data";
-import { trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
+import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
 import { createId, loadState } from "@/lib/command-center-store";
 import { resumeToText } from "@/lib/resume-export";
 import { consumeHandoff, recordTailoredResumeVersion, type TailorHandoff } from "@/lib/tailor-handoff";
@@ -207,6 +207,7 @@ export default function Home() {
         resumeToText(intake, tailored.resume),
         buildSnapshot(intake, tailored.resume, template)
       );
+      trackCareerEvent("tailored_resume_completed");
     } else {
       setResume(basePackage);
       setInfluence(null);
