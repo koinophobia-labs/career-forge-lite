@@ -99,6 +99,46 @@ check(
   })()
 );
 
+check(
+  "parseState preserves a project entry's kind through the localStorage round-trip",
+  (() => {
+    const raw = JSON.stringify({
+      resumeVersions: [
+        {
+          id: "v1",
+          label: "Test",
+          createdAt: NOW,
+          source: "tailor",
+          resumeText: "text",
+          notes: "",
+          resumeSnapshot: {
+            fullName: "Jordan Wu",
+            email: "",
+            phone: "",
+            website: "",
+            template: "Modern ATS",
+            resume: {
+              summary: "Summary.",
+              coreSkills: [],
+              experience: [
+                { title: "Campus Accessibility Audit", company: "", time: "2025", bullets: ["Audited buildings"], kind: "project" },
+                { title: "Selected accomplishments", company: "", time: "", bullets: ["Did a thing"] }
+              ],
+              education: "",
+              linkedinHeadline: "",
+              linkedinSummary: ""
+            }
+          }
+        }
+      ]
+    });
+    const state = parseState(raw);
+    const experience = state.resumeVersions[0]?.resumeSnapshot?.resume.experience ?? [];
+    return experience[0]?.kind === "project" && experience[1]?.kind === undefined;
+  })(),
+  "reviveResumeSnapshot must not drop the 'kind' field — dropping it collapses a project-only résumé's Projects section back into a fake-employer Experience row"
+);
+
 const completeProfile = {
   ...emptyProfile(),
   currentSituation: "Operations background, moving into tech-adjacent work while building a software company.",

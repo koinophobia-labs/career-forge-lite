@@ -212,16 +212,19 @@ function buildLaneResume(
       omittedRoles.push([role.title, role.employer].filter(Boolean).join(" · "));
       return [];
     }
-    return [{ title: role.title, company: role.employer, time: [role.startDate, role.endDate].filter(Boolean).join("–"), bullets }];
+    return [{ title: role.title, company: role.employer, time: [role.startDate, role.endDate].filter(Boolean).join("–"), bullets, kind: "role" as const }];
   });
 
   const projectEntries = dossier.projects.flatMap((project) => {
     if (project.defaultPlacement === "omit") return [];
     const support = evidenceByIds(approved, project.evidenceIds).filter((item) => chosenSet.has(item.id));
     if (!support.length) return [];
-    // Must match the rendered heading exactly, including the org fallback,
-    // or the defensibility receipt reports the heading as unmapped.
-    const heading = [project.name, project.organization || "Independent project", project.dates].filter(Boolean).join(" · ");
+    // A project is not an employer. No fake "Independent project" company
+    // label — the organization line is whatever the user actually recorded
+    // (often nothing at all for a personal/school/volunteer project), and
+    // the entry is tagged so rendering can put it under its own Projects
+    // section instead of flattening it into Experience.
+    const heading = [project.name, project.organization, project.dates].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));
     const structuredBullets = unique([project.description, ...project.outcomes, ...project.metrics, ...project.responsibilities])
       .flatMap((candidate) => candidate.split(/\n+/))
@@ -241,7 +244,13 @@ function buildLaneResume(
     support.forEach((item) => usedByRoles.add(item.id));
     const bullets = unique([...structuredBullets, ...evidenceBullets]).slice(0, kind === "ats" ? 5 : 4);
     if (!bullets.length) return [];
-    return [{ title: project.name, company: project.organization || "Independent project", time: project.dates, bullets }];
+    // The user explicitly chose "Experience" placement for this project (via
+    // the dossier's placement selector) — honor it and render alongside
+    // roles rather than splitting it into a separate section they didn't ask
+    // for. Every other placement ("projects"/"selected-projects", and the
+    // default) renders as a project.
+    const entryKind: "role" | "project" = project.defaultPlacement === "experience" ? "role" : "project";
+    return [{ title: project.name, company: project.organization, time: project.dates, bullets, kind: entryKind }];
   });
 
   // Approved metrics and proof that no role or project claimed still belong

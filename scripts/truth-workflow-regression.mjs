@@ -261,6 +261,8 @@ check("legacy jobPostUrl migrates to discoveryUrl", legacyApp.discoveryUrl === "
 
 const projectOnly = { ...emptyDossier(NOW), evidence: projectEvidence, projects: dossier.projects, approvedClaims: projectEvidence.map((item) => item.detail), updatedAt: NOW };
 check("project-only candidates generate without fake employers", generateResumePack(projectOnly, [lanes[0]], NOW).variants.some((variant) => variant.resume.experience.some((item) => item.title === "Career Forge" && item.company === "Koinophobia Labs")));
+const projectOnlyPack = generateResumePack(projectOnly, [lanes[0]], NOW);
+check("project entries are tagged kind: 'project', not flattened into an untagged role shape", projectOnlyPack.variants.every((variant) => variant.resume.experience.every((item) => item.kind === "project")));
 const largeEvidence = Array.from({ length: 500 }, (_, index) => add("proof", `Verified support outcome ${index}`));
 const largeDossier = { ...projectOnly, evidence: [...projectEvidence, ...largeEvidence], approvedClaims: [...projectOnly.approvedClaims, ...largeEvidence.map((item) => item.detail)] };
 // Selection stays bounded on huge dossiers: 18 ranked picks plus the handful

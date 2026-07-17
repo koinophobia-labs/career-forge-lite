@@ -32,6 +32,11 @@ function VersionView() {
     : null;
   const snapshot = version?.resumeSnapshot ?? null;
   const template = templateOverride ?? snapshot?.template ?? "Modern ATS";
+  // A project is not an employer — split by kind so it renders under its own
+  // heading instead of a fake-employer Experience row.
+  const experienceWithContent = snapshot?.resume.experience.filter(roleHasContent) ?? [];
+  const roleRows = experienceWithContent.filter((role) => role.kind !== "project");
+  const projectRows = experienceWithContent.filter((role) => role.kind === "project");
 
   async function copyText() {
     // Prefer serializing the stored snapshot: the full document (name header,
@@ -166,10 +171,36 @@ function VersionView() {
                 </div>
               )}
 
-              {snapshot.resume.experience.filter(roleHasContent).length > 0 && (
+              {roleRows.length > 0 && (
                 <div className="mt-5">
                   <h3 className="border-b border-ink/20 pb-1 text-xs font-black uppercase tracking-[0.14em]">Experience</h3>
-                  {snapshot.resume.experience.filter(roleHasContent).map((role, index) => (
+                  {roleRows.map((role, index) => (
+                    <div key={`${role.title}-${role.company}-${index}`} className="mt-3">
+                      <p className="text-sm font-bold">
+                        {[role.title, role.company, role.time].filter((item) => item.trim()).join(" | ")}
+                      </p>
+                      <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm leading-6">
+                        {role.bullets
+                          .filter((bullet) => bullet.trim())
+                          .map((bullet) => (
+                            <li key={bullet}>{bullet}</li>
+                          ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* A project is not an employer — it renders under its own
+                  heading instead of being flattened into Experience, so a
+                  project-only candidate gets a credible Projects section
+                  instead of fake-employer rows. */}
+              {projectRows.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="border-b border-ink/20 pb-1 text-xs font-black uppercase tracking-[0.14em]">
+                    {roleRows.length > 0 ? "Selected Projects" : "Projects"}
+                  </h3>
+                  {projectRows.map((role, index) => (
                     <div key={`${role.title}-${role.company}-${index}`} className="mt-3">
                       <p className="text-sm font-bold">
                         {[role.title, role.company, role.time].filter((item) => item.trim()).join(" | ")}

@@ -116,6 +116,41 @@ check("stripped termination reason is surfaced as a withheld fact", strippedSumm
 const sparseSections = exportSections({ ...sampleResume, summary: "", coreSkills: [], education: "Education or Certification | School or Provider | Year" }, undefined, "ats").sections;
 check("empty or placeholder sections never emit a heading", sparseSections.length === 1 && sparseSections[0].key === "experience");
 
+// --- Export engine: a project is not an employer -----------------------------
+const projectOnlyResume = {
+  summary: "Built a campus accessibility audit tool.",
+  coreSkills: ["Figma", "Accessibility auditing"],
+  experience: [{ title: "Campus Accessibility Audit", company: "", time: "2025", bullets: ["Audited 12 campus buildings for accessibility barriers"], kind: "project" }],
+  education: "",
+  linkedinHeadline: "",
+  linkedinSummary: ""
+};
+const projectOnlySections = exportSections(projectOnlyResume, undefined, "ats").sections;
+check("a project-only résumé gets a Projects heading, never an Experience heading", projectOnlySections.some((section) => section.key === "projects" && section.heading === "Projects") && !projectOnlySections.some((section) => section.key === "experience"));
+
+const mixedResume = {
+  ...sampleResume,
+  experience: [
+    { title: "Ops Lead", company: "ShopCo", time: "2022–2026", bullets: ["Ran daily operations"], kind: "role" },
+    { title: "Campus Accessibility Audit", company: "", time: "2025", bullets: ["Audited 12 campus buildings"], kind: "project" }
+  ]
+};
+const mixedSections = exportSections(mixedResume, undefined, "ats").sections;
+const mixedExperience = mixedSections.find((section) => section.key === "experience");
+const mixedProjects = mixedSections.find((section) => section.key === "projects");
+check("a mixed résumé keeps roles and projects in separate sections", mixedExperience?.roles.length === 1 && mixedProjects?.roles.length === 1);
+check("the project entry never leaks into the Experience section", !mixedExperience?.roles.some((role) => role.title === "Campus Accessibility Audit"));
+check("a project alongside real roles renders under 'Selected Projects', not a bare 'Projects'", mixedProjects?.heading === "Selected Projects");
+check("a project never carries a fake 'Independent project' employer label", !JSON.stringify(mixedSections).includes("Independent project") && !JSON.stringify(projectOnlySections).includes("Independent project"));
+
+// A stored variant's sectionOrder from before the projects/experience split
+// (no "projects" key at all) must not silently drop project content.
+const legacyOrderSections = exportSections(mixedResume, ["summary", "skills", "experience", "education"], "ats").sections;
+check("project content survives a stale sectionOrder that predates the 'projects' key", legacyOrderSections.some((section) => section.key === "projects" && section.roles.length === 1));
+
+const projectOnlyPlainText = variantPlainText({ ...guidedDossier }, projectOnlyResume, ["summary", "skills", "experience", "projects", "education"], "ats");
+check("project-only plain-text export shows PROJECTS, never a bare EXPERIENCE heading", projectOnlyPlainText.includes("PROJECTS") && !projectOnlyPlainText.includes("\nEXPERIENCE\n"));
+
 const firstVariant = pack.variants[0];
 const plainText = variantPlainText(guidedDossier, firstVariant.resume, firstVariant.sectionOrder, firstVariant.kind);
 check("variant plain text is the full document with identity header", plainText.startsWith("Riley Example") && plainText.includes("riley@example.com") && plainText.includes("CORE SKILLS") && plainText.includes("EXPERIENCE") && plainText.includes("- "));
