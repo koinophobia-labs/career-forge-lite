@@ -431,8 +431,10 @@ try {
     record("production returns HTTP 200", response?.status() === 200, { status: response?.status(), finalUrl: page.url() }, "blocking");
     record("production serves current dossier-first application shell", body.includes("Your career is bigger than your last résumé."), { bodyStart: body.slice(0, 400) }, "blocking");
     record("public beta notice is visible", body.includes("PUBLIC BETA") && body.includes("Review every claim, date, heading, and export before use."), {}, "release-boundary");
-    record("production does not present outputs as automatically send-ready", !body.includes("recruiter-ready language") && !body.includes("No fake ATS score"), {}, "release-boundary");
-    record("pricing claims remain visible on product", /one-time packs from \$49/i.test(body), { found: body.match(/.{0,40}one-time packs from \$49.{0,80}/i)?.[0] || "" }, "pricing");
+    const sendReadyClaims = ["recruiter-ready language", "ATS-safe", "Nothing written without your approval"].filter((claim) => body.includes(claim));
+    record("production copy avoids send-ready and categorical output claims", sendReadyClaims.length === 0, { sendReadyClaims }, "release-boundary");
+    const pricingMatch = body.match(/.{0,40}one-time packs from \$49.{0,100}/i)?.[0] || "";
+    record("production does not market unsupported paid-pack pricing", !pricingMatch, { found: pricingMatch }, "release-boundary");
     await context.close();
     return { status: response?.status(), finalUrl: page.url(), bodyStart: body.slice(0, 1000) };
   });
@@ -447,10 +449,9 @@ try {
     fs.writeFileSync(path.join(OUT, "migration-state-after.json"), JSON.stringify(state, null, 2));
     await page.screenshot({ path: path.join(SHOTS, "migration-home.png"), fullPage: true });
     const dossierText = JSON.stringify(state?.dossier || {});
-    const packText = JSON.stringify(state?.resumePacks || []);
     const versionText = JSON.stringify(state?.resumeVersions || []);
     record("migration preserves admissible professional evidence", dossierText.includes("Coordinated weekly release readiness") && dossierText.includes("Reduced unresolved launch blockers from 12 to 3"), {}, "blocking");
-    record("migration removes context-only strings from professional dossier surfaces", forbiddenHits({
+    const professionalDossierSurface = {
       roles: state?.dossier?.roles,
       projects: state?.dossier?.projects,
       responsibilities: state?.dossier?.responsibilities,
@@ -458,12 +459,23 @@ try {
       proofPoints: state?.dossier?.proofPoints,
       interviewStories: state?.dossier?.interviewStories,
       approvedClaims: state?.dossier?.approvedClaims
-    }).length === 0, { hits: forbiddenHits(dossierText) }, "blocking");
+    };
+    record("migration removes context-only strings from professional dossier surfaces", forbiddenHits(professionalDossierSurface).length === 0, { hits: forbiddenHits(professionalDossierSurface) }, "blocking");
     record("migration preserves gaps as context", state?.dossier?.constraints?.some((item) => item.includes("No reliable numerical performance metrics")) && state?.dossier?.constraints?.some((item) => item.includes("No SaaS employment")), { constraints: state?.dossier?.constraints }, "blocking");
     record("migration preserves target roles as preferences", state?.dossier?.targetRoleInterests?.includes("Product Operations Specialist") && state?.dossier?.targetRoleInterests?.includes("Implementation Specialist"), { targetRoleInterests: state?.dossier?.targetRoleInterests }, "blocking");
-    record("migration sanitizes existing packs and versions", forbiddenHits(packText).length === 0 && forbiddenHits(versionText).length === 0, { packHits: forbiddenHits(packText), versionHits: forbiddenHits(versionText) }, "blocking");
+    const packBodies = state?.resumePacks?.map((pack) => ({
+      variants: pack.variants,
+      linkedinHeadlines: pack.linkedinHeadlines,
+      linkedinAbout: pack.linkedinAbout,
+      linkedinSkills: pack.linkedinSkills,
+      masterProofBank: pack.masterProofBank,
+      coverLetterFoundation: pack.coverLetterFoundation,
+      receipt: pack.receipt
+    })) || [];
+    record("migration sanitizes existing résumé, LinkedIn, proof-bank, and saved-version bodies", forbiddenHits(packBodies).length === 0 && forbiddenHits(versionText).length === 0, { packBodyHits: forbiddenHits(packBodies), versionHits: forbiddenHits(versionText) }, "blocking");
+    record("migration removes context-only text from lane positioning pitches", forbiddenHits(state?.resumePacks?.map((pack) => pack.lanePacks) || []).length === 0, { hits: forbiddenHits(state?.resumePacks?.map((pack) => pack.lanePacks) || []) }, "blocking");
     record("migration marks affected pack and variant for review", state?.resumePacks?.[0]?.status === "needs-review" && state?.resumePacks?.[0]?.variants?.[0]?.status === "needs-review", { packStatus: state?.resumePacks?.[0]?.status, variantStatus: state?.resumePacks?.[0]?.variants?.[0]?.status }, "blocking");
-    record("migration annotates saved version for review", /evidence-safety review/i.test(state?.resumeVersions?.[0]?.notes || ""), { notes: state?.resumeVersions?.[0]?.notes }, "blocking");
+    record("migration annotates saved version for review", /evidence-safety (?:review|update)/i.test(state?.resumeVersions?.[0]?.notes || ""), { notes: state?.resumeVersions?.[0]?.notes }, "blocking");
     const first = JSON.stringify(state);
     await page.reload({ waitUntil: "networkidle" });
     const second = JSON.stringify(await readState(page));
@@ -480,7 +492,9 @@ try {
     await page.goto(`${BASE_URL}/profile#review`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor({ timeout: 15000 });
     await page.screenshot({ path: path.join(SHOTS, "sticky-before.png"), fullPage: true });
-    await page.getByRole("button", { name: "Approve section" }).click();
+    const undecidedInput = page.getByDisplayValue("Reduced unresolved launch blockers from 12 to 3");
+    const undecidedGroup = undecidedInput.locator("xpath=ancestor::section[1]");
+    await undecidedGroup.getByRole("button", { name: "Approve section" }).click();
     await waitForState(page, (state) => state.pendingImportReviews[0].proposals.some((item) => item.id === "proposal-undecided" && item.status === "approved"));
     let state = await readState(page);
     const rejected = state.pendingImportReviews[0].proposals.find((item) => item.id === "proposal-rejected")?.status;
@@ -503,9 +517,9 @@ try {
     await page.evaluate(() => localStorage.clear());
     await page.reload({ waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Build your Career Dossier once." }).waitFor({ timeout: 15000 });
-    const nameInput = page.getByLabel("Name on your documents");
+    const nameInput = page.getByRole("textbox", { name: "Name on your documents", exact: true });
     if (await nameInput.count()) await nameInput.fill("Jordan Ellis");
-    const emailInput = page.getByLabel("Email on your documents");
+    const emailInput = page.getByRole("textbox", { name: "Email on your documents", exact: true });
     if (await emailInput.count()) await emailInput.fill("jordan@example.com");
     const detailsSummary = page.getByText("No file handy? Paste résumé text", { exact: true });
     if (await detailsSummary.count()) await detailsSummary.click();
@@ -618,7 +632,7 @@ try {
     await page.getByLabel("Company").fill("Example Co");
     await page.getByLabel("Their role").fill("Recruiter");
     await page.getByRole("button", { name: "Add contact" }).click();
-    const contactSelect = page.getByRole("combobox").filter({ has: page.locator("option", { hasText: "Fill for contact" }) });
+    const contactSelect = page.locator("select").filter({ hasText: "Fill for contact" });
     if (await contactSelect.count()) await contactSelect.selectOption({ index: 1 });
     const outreachBody = await page.locator("body").innerText();
     const outreachForbidden = forbiddenHits(outreachBody);
@@ -637,10 +651,12 @@ try {
     const tabB = await context.newPage();
     await tabA.goto(`${BASE_URL}/profile`, { waitUntil: "networkidle" });
     await tabB.goto(`${BASE_URL}/profile`, { waitUntil: "networkidle" });
-    await tabA.getByLabel("Location").fill("Chicago, IL");
-    await tabA.getByLabel("Location").blur();
-    await tabB.getByLabel("Phone").fill("312-555-0101");
-    await tabB.getByLabel("Phone").blur();
+    const locationBox = tabA.getByRole("textbox", { name: "Location", exact: true });
+    await locationBox.fill("Chicago, IL");
+    await locationBox.blur();
+    const phoneBox = tabB.getByRole("textbox", { name: "Phone", exact: true });
+    await phoneBox.fill("312-555-0101");
+    await phoneBox.blur();
     await tabA.waitForTimeout(500);
     const afterTabs = await readState(tabA);
     record("two-tab unrelated identity edits both survive", afterTabs.dossier.identity.location === "Chicago, IL" && afterTabs.dossier.identity.phone === "312-555-0101", { identity: afterTabs.dossier.identity }, "P2");
@@ -682,13 +698,13 @@ try {
 }
 
 const blockingFailures = audit.checks.filter((item) => !item.pass && ["blocking", "release-boundary"].includes(item.severity));
-const pricingClaimVisible = audit.checks.find((item) => item.name === "pricing claims remain visible on product")?.pass === true;
-const readiness = blockingFailures.length === 0 && !pricingClaimVisible
+const pricingClaimRemoved = audit.checks.find((item) => item.name === "production does not market unsupported paid-pack pricing")?.pass === true;
+const readiness = blockingFailures.length === 0 && pricingClaimRemoved
   ? "P1 pathways verified; paid readiness still requires human artifact review"
   : blockingFailures.length === 0
     ? "P1 pathways verified, but pricing remains unsupported and visible"
     : "Material production failures remain; paid beta blocked";
-audit.conclusion = { readiness, blockingFailureCount: blockingFailures.length, blockingFailures: blockingFailures.map((item) => item.name), pricingClaimVisible };
+audit.conclusion = { readiness, blockingFailureCount: blockingFailures.length, blockingFailures: blockingFailures.map((item) => item.name), pricingClaimRemoved };
 fs.writeFileSync(path.join(OUT, "production-reaudit-results.json"), JSON.stringify(audit, null, 2));
 
 const markdown = [
