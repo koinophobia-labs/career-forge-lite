@@ -1,0 +1,1854 @@
+=== npm ci ===
+
+added 454 packages, and audited 455 packages in 5s
+
+158 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+--- exit:0 (5s)
+=== npm test ===
+
+> career-forge-lite@0.1.0 test
+> npm run test:unit && npm run test:browser
+
+
+> career-forge-lite@0.1.0 test:unit
+> node scripts/intent-router-regression.mjs && node scripts/command-center-regression.mjs && node scripts/interview-prep-regression.mjs && node scripts/input-guidance-regression.mjs && node scripts/tailor-handoff-regression.mjs && node scripts/tailored-resume-regression.mjs && node scripts/version-management-regression.mjs && node scripts/resume-export-regression.mjs && node scripts/backup-regression.mjs && node scripts/weekly-review-regression.mjs && node scripts/follow-up-log-regression.mjs && node scripts/dossier-pack-regression.mjs && node scripts/truth-workflow-regression.mjs && node scripts/provenance-completeness-regression.mjs && node scripts/usability-hotfix-regression.mjs && node scripts/migration-coverage-regression.mjs && node scripts/pilot-metrics-regression.mjs && node scripts/durability-regression.mjs && node scripts/entitlement-regression.mjs && node scripts/activation-regression.mjs && node scripts/market-moat-regression.mjs && node scripts/quality-regression-suite.mjs
+
+PASS fresh state has no active goal
+PASS legacy state revives without inventing a goal
+PASS unknown goal fails closed
+PASS valid goal persists across serialization
+PASS router offers five distinct meaningful goals
+PASS goal choices materially change workflow entry
+PASS evidence is explained before import
+PASS pending Truth Inbox dominates the next move
+PASS career change routes approved evidence to target selection
+PASS legacy activity infers a useful continuation
+PASS milestones expose audited booleans only
+PASS backup and restore preserve active goal
+PASS first-run UI renders every one-tap goal
+PASS returning UI has one dominant next move and recent work
+PASS router uses no theatrical percentage
+PASS homepage places intent before marketing and hides workspace on first run
+PASS manual first-résumé entry anchor exists
+PASS intent analytics remain event-name only
+
+18 intent router regression checks passed
+PASS parseState handles null
+PASS parseState handles corrupt JSON
+PASS parseState drops malformed records but keeps valid ones
+PASS parseState preserves a project entry's kind through the localStorage round-trip
+PASS isProfileStarted false for empty profile
+PASS isProfileComplete true for full profile
+PASS isProfileComplete false with under 3 skills
+PASS addDays adds exactly N days
+PASS isDue true at exact due time
+PASS isDue false for future
+PASS isDue false for null
+PASS applicationFollowUpsDue finds overdue applied apps only
+PASS outreachFollowUpsDue respects max follow-up cap
+PASS stats.activeLanes excludes paused
+PASS stats.applicationsSent excludes drafting
+PASS stats.followUpsDue counts apps and outreach
+PASS stats.interviews counts interviewing
+PASS stats.resumeVersions counts versions
+PASS next action: empty state → profile
+PASS next action: profile done, no lanes → targets
+PASS next action: interview beats follow-ups
+PASS next action: follow-up when no interview
+PASS next action: low weekly pace → tailor
+PASS analyzer finds keywords with counts
+PASS analyzer marks profile-covered keywords
+PASS analyzer marks missing keywords
+PASS analyzer extracts requirement lines
+PASS analyzer keeps years requirement
+PASS credential requirements are flagged, never claimed
+PASS covered requirement cites real profile evidence
+PASS analysis includes honesty note
+PASS analysis produces weak spots
+PASS analysis produces bullet suggestions
+PASS bullet suggestions are grounded in profile claims
+PASS thin profile → analyzer says so instead of inventing
+PASS lane library has 9 lanes
+PASS every lane is fully specified
+PASS lane keys are unique
+PASS templates exist for core scenarios
+PASS every template is short enough to read
+PASS fillTemplate replaces known placeholders
+PASS remainingPlaceholders reports unfilled brackets
+
+42 passed, 0 failed
+PASS role bank exists for "AI Support Specialist"
+PASS role bank exists for "Trust & Safety Analyst"
+PASS role bank exists for "Fraud / Risk Operations"
+PASS role bank exists for "Community Manager"
+PASS role bank exists for "Product Support Specialist"
+PASS role bank exists for "QA Tester"
+PASS role bank exists for "Junior Product Ops"
+PASS role bank exists for "Customer Success"
+PASS role bank exists for "Technical Support"
+PASS every library lane title matches a role bank
+PASS role questions carry coaching
+PASS distinct lanes get distinct questions
+PASS custom lane falls back to keyword-built role questions
+PASS behavioral questions generated
+PASS behavioral questions quote proof points
+PASS self-reported strengths surface as discovery prompts, not fabricated behavioral questions
+PASS self-reported transferable skills surface as discovery prompts, not fabricated behavioral questions
+PASS empty profile produces no fabricated behavioral or discovery questions
+PASS a bare one-line proof point without story substance never generates a fabricated behavioral question
+PASS a proof point with real story substance still generates a real behavioral question
+PASS gap defense uses job-post analysis gaps
+PASS gap defense names the company
+PASS gap defense also drills lane gap plan
+PASS gap defense coaching forbids inventing credentials
+PASS gap defense falls back to lane gaps without an application
+PASS no lane and no application → no gap questions
+PASS transition questions present
+PASS transition question references the lane
+PASS side-venture commitment question exists when the profile shows founder work
+PASS founder commitment question attributes its real source
+PASS no founder evidence → no fabricated side-venture question
+PASS commitment fallback is labeled generic, not personalized
+PASS pack carries honesty note
+PASS pack labels the application
+PASS answer framework has 5 steps
+PASS tenure computed from role date ranges — covered requirement asserts no false gap
+PASS no gap question ever uses the old 'not on your resume' assertion
+PASS partially-covered requirement gets bridge phrasing citing the user's strongest proof
+PASS partial phrasing never asserts absence
+PASS true gap is asserted only when evidence genuinely lacks it
+PASS explicit stated tenure in approved evidence covers an N+-year requirement
+PASS without a dossier, stored gaps use honest 'not fully proven' phrasing
+PASS lane gaps covered by approved evidence are dropped from the drill list
+PASS library lane gaps are attributed to the lane plan, not the user
+PASS imported dossier metrics and achievements each seed a behavioral question
+PASS dossier behavioral questions quote the actual claims
+PASS quantified dossier claims rank ahead of unquantified ones
+PASS selected application's lane wins over the active-lane default
+PASS explicit lane choice still overrides the application lane
+PASS explicit 'no lane' resolves to generic prep
+PASS no application and no choice falls back to the default lane
+PASS pack includes questions to ask the interviewer
+PASS reverse questions get specific when an analysis exists
+PASS reverse questions fall back to labeled generic staples
+PASS practice drafts persist per question
+PASS blank drafts are removed instead of stored
+PASS corrupt draft storage revives to empty, not a crash
+PASS non-string draft entries are dropped on revival
+PASS coach rejects too-short answers
+PASS coach flags credential claims
+PASS coach flags we-heavy answers
+PASS coach flags gap answers that never concede the gap
+PASS coach rewards honest gap acknowledgment
+PASS coach rewards numbers
+PASS coach rewards stated results
+PASS coach flags missing numbers
+PASS coach flags rambling answers
+
+67 passed, 0 failed
+PASS appendSentence starts a clean sentence
+PASS appendSentence joins with proper punctuation
+PASS appendSentence adds period to unterminated base
+PASS appendSentence dedupes case-insensitively
+PASS appendSentence produces no tag soup
+PASS appendLine starts clean
+PASS appendLine appends on new line
+PASS appendLine dedupes
+PASS mergeChips dedupes case-insensitively
+PASS starter packs cover all required backgrounds
+PASS builder pack exists for side-project founders
+PASS every pack is fully specified
+PASS starter packs never invent numbers or credentials
+PASS applied pack writes a clean first-person situation sentence
+PASS applied pack merges skills as readable phrases
+PASS applied pack writes proof points as lines
+PASS applying the same pack twice adds nothing
+PASS stacking packs reads as sentences, not tags
+PASS empty profile flags all core sections
+PASS empty profile marks optional fields info, not warn
+PASS thin situation is flagged
+PASS two skills is flagged as thin
+PASS complete profile has no warnings
+PASS empty post → empty status
+PASS 10-word post → too_short
+PASS too_short message says the analysis will be shallow
+PASS 60-word post → thin
+PASS 150-word post → good
+PASS word count reported
+PASS missing company flagged on input
+PASS missing both flagged on input
+PASS complete input passes
+PASS placeholder application flagged
+PASS real application passes
+PASS base scaffold is situation/action/result
+PASS gap defense scaffold opens with acknowledgment and ends with a plan
+PASS transition scaffold adds a bridge
+PASS gap defense template prompts plain gap admission
+PASS standard template is fillable lines
+PASS five relationship types
+PASS relationship notes are plain sentences
+PASS each relationship maps to a real template
+
+42 passed, 0 failed
+PASS handoff carries applicationId
+PASS handoff trims company
+PASS handoff splits covered requirements
+PASS handoff splits partial requirements
+PASS handoff splits gaps
+PASS handoff copies keywords verbatim
+PASS handoff copies weak spots and bullet prompts
+PASS handoff carries lane angle
+PASS handoff falls back to lane title when role title is blank
+PASS handoff synthesizes nothing — every string comes from inputs
+PASS fresh handoff parses back completely
+PASS null input → null
+PASS corrupt JSON → null
+PASS wrong version → null
+PASS missing role title → null
+PASS stale handoff (past TTL) → null
+PASS future-dated handoff → null
+PASS malformed arrays are cleaned, not crashed
+PASS tailored version is recorded
+PASS version source is tailor
+PASS version label names the shot
+PASS version carries tailoring metadata
+PASS application is linked via resumeVersionId
+PASS other applications untouched
+PASS no applicationId → version recorded without linking
+PASS version invents no credentials or metrics
+PASS legacy resume versions revive with builder defaults
+PASS application resumeVersionId survives revival
+PASS tailored versions round-trip through parseState
+
+29 passed, 0 failed
+PASS plain generation is deterministic
+PASS applyTailoredContext does not mutate the base package
+PASS tailored output differs from plain output
+PASS tailored summary opens with target framing
+PASS tailored summary keeps the original summary content
+PASS framing mentions evidence-backed keywords
+PASS plain summary has no target framing
+PASS evidence-backed keywords are woven
+PASS gap keywords with no evidence are avoided, not claimed
+PASS gap keywords never appear in skills
+PASS gap keywords never appear in the added framing
+PASS skip reasons explain themselves
+PASS woven keywords are present in tailored skills
+PASS skills stay within the cap
+PASS skills contain no duplicates
+PASS bullets matching woven keywords move to the top
+PASS no bullet text is rewritten or invented
+PASS added text invents no credentials
+PASS added text invents no metrics
+PASS every added skill is evidence-backed
+PASS influence summary names framing, keywords, and declined gaps
+PASS contextFromHandoff carries all tailoring fields
+PASS version metadata records the influence summary
+PASS influence summary survives localStorage round-trip
+PASS legacy versions revive with empty influence summary
+
+25 passed, 0 failed
+PASS resume text is persisted on the version
+PASS resume text is stored verbatim — nothing added
+PASS influence summary persisted alongside text
+PASS stored text survives a localStorage round-trip
+PASS legacy versions revive without stored text
+PASS legacy versions keep builder defaults
+PASS legacy application linkage survives
+PASS version knows its application
+PASS application points back at the version
+PASS tailored metadata is display-ready
+PASS delete removes the version
+PASS delete unlinks the application
+PASS delete leaves unrelated versions and links intact
+PASS deleting an unknown id is a no-op
+PASS rebuilt handoff parses as valid and fresh
+PASS rebuilt handoff carries the application's saved analysis verbatim
+PASS rebuilt handoff links back to the application
+PASS rebuilt handoff uses the lane angle
+PASS rebuilt handoff blanks placeholder company/title instead of claiming them
+PASS rebuilt handoff synthesizes nothing
+PASS active applications without a version are flagged
+PASS covered and closed applications are not flagged
+
+22 passed, 0 failed
+PASS snapshot is persisted on the version
+PASS snapshot is stored verbatim — byte-identical
+PASS resumeText fallback still persisted alongside snapshot
+PASS snapshot survives a localStorage round-trip intact
+PASS template style survives revival
+PASS stored snapshot reproduces the exact stored text (no regeneration needed)
+PASS snapshot summary/skills/bullets match what was generated
+PASS snapshot invents nothing — every section string exists in the generated package or intake
+PASS application resumeVersionId resolves to the version with the snapshot
+PASS text-only legacy version revives with null snapshot
+PASS text-only legacy version keeps its copyable text
+PASS metadata-only legacy version revives safely
+PASS null snapshot → null
+PASS non-object snapshot → null
+PASS snapshot missing resume → null
+PASS snapshot with malformed resume sections → null
+PASS unknown template falls back to Modern ATS
+PASS junk inside experience is cleaned, not crashed
+PASS plain-text export carries header, contact, and every section
+PASS snapshot-shaped contact fields serialize without a full intake object
+PASS termination reasons never survive into exported text
+PASS the rest of a stripped summary is preserved
+PASS section-headings check passes only when every standard section has content
+PASS section-headings check warns and names the empty section
+PASS single-column check passes on clean text
+PASS single-column check detects real column artifacts
+
+26 passed, 0 failed
+PASS backup carries app marker
+PASS backup carries schema version
+PASS backup carries exportedAt
+PASS backup contains every persisted section
+PASS export does not mutate live state
+PASS backup state is a copy, not a reference
+PASS filename is dated
+PASS exported backup validates
+PASS resume snapshot survives export/import
+PASS application → resume version link survives export/import
+PASS restored state equals exported state exactly
+PASS no data invented during backup/restore
+PASS preview reports accurate counts
+PASS preview of empty state shows profile absent
+PASS invalid JSON is rejected with a clear message
+PASS array root is rejected
+PASS string root is rejected
+PASS foreign app envelope is rejected
+PASS newer schema version is blocked with guidance
+PASS missing state section is rejected
+PASS unrelated JSON object is rejected
+PASS bare state object imports as legacy backup
+PASS legacy backup preview has no exportedAt
+PASS legacy backup keeps snapshots and links
+PASS corrupt sections degrade safely instead of crashing
+PASS corrupt sections revive to safe defaults
+PASS no nudge for near-empty state
+PASS no nudge below the meaningful-data threshold
+PASS nudge when meaningful data and never backed up
+PASS no nudge right after a backup
+PASS nudge again when the backup is stale
+
+31 passed, 0 failed
+PASS applications sent this week counted
+PASS applications sent last week counted
+PASS 8-day-old activity lands in last week, not this week
+PASS tailored resumes split by window
+PASS all versions counted separately
+PASS outreach added/messaged counted
+PASS upcoming interview date is not counted as past-week activity
+PASS trend up when this week beats last
+PASS trend down when versions dropped
+PASS trend same when equal and nonzero
+PASS records without timestamps are counted in neither week
+PASS zero-both weeks shows 'none', not a fake trend
+PASS exactly three moves
+PASS every move is actionable
+PASS application move targets untailored application first
+PASS application move pushes pace when everything is tailored
+PASS outreach move surfaces overdue follow-up
+PASS outreach move suggests queuing contacts when nothing is pending
+PASS prep move targets live interview
+PASS prep move falls back to profile when thin and no interviews
+PASS stalled: untailored applications detected
+PASS stalled: overdue follow-ups detected
+PASS stalled: live interviews flagged for prep
+PASS stalled: active lane with no recent applications flagged
+PASS stalled: lane with recent applications not flagged
+PASS no stalled items on a healthy empty pipeline
+PASS new user flagged via hasAnyData=false
+PASS no applications flagged separately
+PASS setup-done-but-no-applications state distinguishable
+PASS quiet week detectable via totalThisWeek
+PASS no nudge for brand-new users
+PASS no nudge for barely-started searches
+PASS nudge when established search goes quiet
+PASS no nudge when this week is active
+
+34 passed, 0 failed
+PASS completion timestamp is recorded
+PASS nextFollowUpAt still reschedules
+PASS original application is not mutated
+PASS second completion appends, not replaces
+PASS logging works on legacy records missing the array
+PASS legacy applications revive with empty follow-up history
+PASS malformed entries are cleaned, valid timestamps kept
+PASS non-array history degrades to empty
+PASS follow-up history survives a localStorage round-trip
+PASS weekly review counts this week's completions
+PASS weekly review counts last week's completions
+PASS trend computed for completions
+PASS metric label says completed, not due
+PASS due dates never count as completions
+PASS no completions → 'none' trend, not a fake one
+PASS records without the array don't crash weekly metrics
+
+16 passed, 0 failed
+PASS legacy state migrates to v2
+PASS migration preserves applications, outreach, lanes, and versions
+PASS legacy summary retained for migration review
+PASS migration is idempotent
+PASS guided setup writes structured canonical dossier
+PASS normal generation can hydrate from dossier without duplicate intake
+PASS Tell My Story writes source-linked canonical evidence
+PASS Story Mode dossier survives refresh
+PASS readiness considers evidence quality
+PASS three active lanes produce six variants
+PASS variants are distinct ATS and recruiter documents
+PASS every generated claim references approved dossier evidence
+PASS unsupported job keywords stay gaps without invented refusal semantics
+PASS pack documents are grouped by lane
+PASS dossier changes mark affected outputs stale
+PASS user-edited résumé text is never overwritten
+PASS job-specific tailoring begins from selected baseline
+PASS job-specific version keeps dossier, lane, baseline, analysis, and application lineage
+PASS job-specific version does not replace canonical pack résumé
+PASS version deletion safely preserves application record
+PASS backup v2 contains dossier, packs, evidence links, and export metadata
+PASS legacy backups still restore
+PASS export filenames are deterministic and sanitized
+PASS exports respect the variant's chosen sectionOrder
+PASS termination reasons are stripped from exported summaries as a final net
+PASS stripped termination reason is surfaced as a withheld fact
+PASS empty or placeholder sections never emit a heading
+PASS a project-only résumé gets a Projects heading, never an Experience heading
+PASS a mixed résumé keeps roles and projects in separate sections
+PASS the project entry never leaks into the Experience section
+PASS a project alongside real roles renders under 'Selected Projects', not a bare 'Projects'
+PASS a project never carries a fake 'Independent project' employer label
+PASS project content survives a stale sectionOrder that predates the 'projects' key
+PASS project-only plain-text export shows PROJECTS, never a bare EXPERIENCE heading
+PASS variant plain text is the full document with identity header
+PASS document headers bind to the CURRENT dossier identity at export time
+PASS plain-text section order follows the variant's sectionOrder
+PASS bundle filenames are de-duplicated, every variant survives
+PASS filename collisions get -2 suffixes instead of overwriting
+PASS ZIP contains one entry per reported filename
+PASS README never mislabels approved-but-unused evidence as unapproved
+PASS exports contain no internal ids or dossier jargon
+PASS unknown lanes fall back to a human label, never a raw lane id
+PASS career workflow analytics are event-name only
+
+44 passed, 0 failed
+PASS multi-file import deduplicates repeated roles
+PASS deduplicated records retain all source filenames
+PASS import proposals are grouped
+PASS import proposals begin unusable
+PASS structured approval promotes only reviewed records
+PASS source text and filenames survive approval
+PASS filenames are not persisted without explicit opt-in
+PASS approved import materializes structured roles and education
+PASS three lanes generate six baseline resumes
+PASS projects can carry a resume
+PASS ATS and recruiter variants differ structurally
+PASS every shipped claim has relevant approved support
+PASS claim references carry support type
+PASS lane-only Salesforce is refused
+PASS Salesforce lane keyword does not become proof
+PASS degree requirement remains gap without approved education
+PASS sportsbook policy enforcement supports risk as direct or transferred
+PASS policy enforcement alone marks fraud investigation partial
+PASS customer service marks SaaS support partial not covered
+PASS skill evidence without dates does not cover five years
+PASS two verified years do not cover five years
+PASS five verified years cover a three-year requirement
+PASS covered duration cites only dated qualifying evidence
+PASS tool familiarity does not cover years of administration
+PASS vague several-years language does not satisfy numeric duration
+PASS present-role duration uses the passed deterministic date
+PASS lane keywords never count toward duration
+PASS relevant non-overlapping roles combine duration
+PASS overlapping date ranges are not double-counted
+PASS ambiguous relevant date ranges remain partial
+PASS compact year ranges are parsed conservatively
+PASS years from unrelated work never satisfy duration
+PASS application answer is evidence backed
+PASS application answer refuses when evidence is absent
+PASS customer-conflict evidence supports a behavioral question
+PASS customer evidence does not support Salesforce administration
+PASS exact Salesforce administration evidence supports the technical question
+PASS security employment does not imply security clearance
+PASS employment evidence does not imply work authorization
+PASS approved degree evidence answers a degree question
+PASS missing degree evidence refuses the degree question
+PASS compensation requires explicit user input
+PASS weekend availability requires explicit evidence
+PASS sponsorship requires explicit work-authorization evidence
+PASS application questions do not infer required duration from related work
+PASS application questions can use exact verified duration evidence
+PASS zero-score evidence is never selected
+PASS second evidence kind compares with the first ranked result
+PASS unknown unrelated prompts select no evidence
+PASS motivation answers use candidate evidence without inventing company facts
+PASS generic company motivation questions require user-specific support
+PASS exact work-authorization evidence can answer authorization
+PASS exact availability evidence can answer a weekend question
+PASS exact clearance evidence can answer a clearance question
+PASS explicit compensation evidence can support a compensation answer
+PASS application-question drafts remain editable and persist
+PASS existing evidence-backed behavioral answers still work
+PASS manual edits are marked and preserved
+PASS legacy jobPostUrl migrates to discoveryUrl
+PASS project-only candidates generate without fake employers
+PASS project entries are tagged kind: 'project', not flattened into an untagged role shape
+PASS large dossiers generate deterministically
+PASS corrupt localStorage payload revives safely
+PASS imported facts attach to their role
+PASS imported roles render with real bullets
+PASS termination reasons never ship in documents
+PASS withheld termination reason is reported on the receipt
+PASS separation-reason sanitizer preserves the safe remainder with no comma to split on
+PASS separation-reason sanitizer still handles comma-separated clauses
+PASS separation-reason sanitizer drops a sentence with no safe remainder at all
+PASS separation-reason sanitizer leaves safe sentences untouched
+PASS separation-reason sanitizer catches reorg phrasing introduced by 'until'
+PASS separation-reason sanitizer catches 'leadership eliminated the role' phrasing
+PASS separation-reason sanitizer catches 'underwent layoffs' introduced by 'before'
+PASS separation-reason sanitizer catches 'division was restructured' with an intervening adverb
+PASS separation-reason sanitizer does not flag a legitimate 'restructured the process' achievement bullet
+PASS separation-reason sanitizer never treats a thousands-separator comma as a clause boundary
+PASS separation-reason sanitizer does not flag a legitimate 'reorganized the taxonomy' achievement bullet
+PASS first-person framing is cleaned from summaries
+PASS tool lists atomize into individual skills
+PASS skill fragments never ship
+PASS approved education renders on the document
+PASS lane pitches carry no second-person coaching
+PASS receipt framing uses the composed pitch, not coaching text
+PASS uncertainty statements stay out of the proof bank
+PASS zero-bullet roles are omitted from documents
+PASS omitted roles are reported honestly
+PASS bare name lines classify as identity
+PASS the user's name is never a bullet or proof entry
+PASS role headings never appear as bullets or summary facts
+PASS facts attach to the role they followed in the source
+PASS a dateless second role keeps its own facts
+PASS education credential does not duplicate the year
+PASS project facts attach to the project heading they followed
+
+94 passed, 0 failed
+PASS a bare generated lane-framing sentence is not misclassified as a preference
+PASS real free-text targeting statements are still caught as preferences
+PASS sportsbook-ops / AI Support Specialist+Trust & Safety Analyst: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-0-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-0-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-0-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-0-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-0-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-0-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-0-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-0-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-0-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-0-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-0-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-0-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / AI Support Specialist+Trust & Safety Analyst: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Trust & Safety Analyst+Fraud / Risk Operations: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-1-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-1-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-1-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-1-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-1-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-1-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-1-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-1-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-1-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-1-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-1-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-1-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Trust & Safety Analyst+Fraud / Risk Operations: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Fraud / Risk Operations+Community Manager: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-2-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-2-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-2-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-2-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-2-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-2-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-2-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-2-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-2-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-2-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-2-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-2-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Fraud / Risk Operations+Community Manager: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Community Manager+Product Support Specialist: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-3-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-3-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-3-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-3-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-3-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-3-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-3-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-3-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-3-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-3-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-3-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-3-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Community Manager+Product Support Specialist: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Product Support Specialist+QA Tester: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-4-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-4-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-4-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-4-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-4-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-4-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-4-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-4-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-4-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-4-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-4-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-4-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Product Support Specialist+QA Tester: pack status is not needs-review after sanitize
+PASS sportsbook-ops / QA Tester+Junior Product Ops: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-5-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-5-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-5-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-5-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-5-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-5-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-5-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-5-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-5-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-5-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-5-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-5-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / QA Tester+Junior Product Ops: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Junior Product Ops+Customer Success: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-6-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-6-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-6-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-6-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-6-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-6-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-6-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-6-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-6-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-6-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-6-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-6-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Junior Product Ops+Customer Success: pack status is not needs-review after sanitize
+PASS sportsbook-ops / Customer Success+Technical Support: forges 4 variants (2 lanes × ATS/recruiter)
+PASS sportsbook-ops / ats / lane-7-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-7-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-7-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-7-a: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-7-a: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-7-a: status is not needs-review purely from sanitization
+PASS sportsbook-ops / ats / lane-7-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / ats / lane-7-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / ats / lane-7-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / recruiter / lane-7-b: linkedinSummary is unchanged by sanitization
+PASS sportsbook-ops / recruiter / lane-7-b: linkedinSummary keeps its evidence reference
+PASS sportsbook-ops / recruiter / lane-7-b: status is not needs-review purely from sanitization
+PASS sportsbook-ops / Customer Success+Technical Support: pack status is not needs-review after sanitize
+PASS retail-manager / AI Support Specialist+Trust & Safety Analyst: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-0-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-0-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-0-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-0-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-0-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-0-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-0-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-0-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-0-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-0-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-0-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-0-b: status is not needs-review purely from sanitization
+PASS retail-manager / AI Support Specialist+Trust & Safety Analyst: pack status is not needs-review after sanitize
+PASS retail-manager / Trust & Safety Analyst+Fraud / Risk Operations: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-1-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-1-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-1-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-1-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-1-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-1-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-1-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-1-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-1-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-1-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-1-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-1-b: status is not needs-review purely from sanitization
+PASS retail-manager / Trust & Safety Analyst+Fraud / Risk Operations: pack status is not needs-review after sanitize
+PASS retail-manager / Fraud / Risk Operations+Community Manager: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-2-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-2-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-2-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-2-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-2-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-2-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-2-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-2-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-2-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-2-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-2-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-2-b: status is not needs-review purely from sanitization
+PASS retail-manager / Fraud / Risk Operations+Community Manager: pack status is not needs-review after sanitize
+PASS retail-manager / Community Manager+Product Support Specialist: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-3-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-3-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-3-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-3-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-3-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-3-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-3-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-3-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-3-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-3-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-3-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-3-b: status is not needs-review purely from sanitization
+PASS retail-manager / Community Manager+Product Support Specialist: pack status is not needs-review after sanitize
+PASS retail-manager / Product Support Specialist+QA Tester: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-4-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-4-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-4-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-4-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-4-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-4-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-4-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-4-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-4-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-4-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-4-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-4-b: status is not needs-review purely from sanitization
+PASS retail-manager / Product Support Specialist+QA Tester: pack status is not needs-review after sanitize
+PASS retail-manager / QA Tester+Junior Product Ops: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-5-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-5-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-5-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-5-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-5-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-5-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-5-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-5-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-5-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-5-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-5-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-5-b: status is not needs-review purely from sanitization
+PASS retail-manager / QA Tester+Junior Product Ops: pack status is not needs-review after sanitize
+PASS retail-manager / Junior Product Ops+Customer Success: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-6-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-6-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-6-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-6-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-6-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-6-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-6-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-6-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-6-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-6-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-6-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-6-b: status is not needs-review purely from sanitization
+PASS retail-manager / Junior Product Ops+Customer Success: pack status is not needs-review after sanitize
+PASS retail-manager / Customer Success+Technical Support: forges 4 variants (2 lanes × ATS/recruiter)
+PASS retail-manager / ats / lane-7-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-7-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-7-a: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-7-a: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-7-a: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-7-a: status is not needs-review purely from sanitization
+PASS retail-manager / ats / lane-7-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / ats / lane-7-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / ats / lane-7-b: status is not needs-review purely from sanitization
+PASS retail-manager / recruiter / lane-7-b: linkedinSummary is unchanged by sanitization
+PASS retail-manager / recruiter / lane-7-b: linkedinSummary keeps its evidence reference
+PASS retail-manager / recruiter / lane-7-b: status is not needs-review purely from sanitization
+PASS retail-manager / Customer Success+Technical Support: pack status is not needs-review after sanitize
+PASS checked a meaningful number of variants
+
+227 passed, 0 failed
+PASS target-role wish is a preference
+PASS no-metrics statement is a gap
+PASS no-employment statement is a gap
+PASS no-SaaS statement is a gap
+PASS real no-code work remains a claim
+PASS target role imports as context-only goal
+PASS negative constraints cannot become project proposals
+PASS negative statements create no roles
+PASS negative statements create no projects
+PASS target roles move to target-role interests
+PASS gaps move to constraints
+PASS context-only items are absent from approved claims
+PASS bulk approval cannot reverse rejection
+PASS bulk approval still approves undecided items
+PASS existing unsafe proof is migrated out of evidence
+PASS existing unsafe proof is removed from proof bank
+PASS fake negative project is removed
+PASS safe proof remains usable
+PASS generic project type is not rendered as the project name
+PASS unsafe summary sentences are removed
+PASS negative fake project is removed from resume
+PASS safe role bullet survives
+PASS termination clause is removed while safe remainder survives
+PASS fresh two-lane pack keeps complete provenance after sanitization
+PASS fresh pack remains exportable after sanitization
+PASS context gaps do not leak into the legacy profile projection
+PASS migration removes context from lane positioning pitch
+PASS migration removes context from receipt lane framing
+PASS migration removes context from LinkedIn and proof-bank metadata
+PASS outreach no longer asserts unverified results
+PASS approved evidence can fill outreach draft
+PASS completed recruiter draft has no unresolved placeholders
+PASS PDF section rule has explicit content clearance
+PASS PDF rule is no longer drawn through the next text baseline
+PASS mobile comparison region is keyboard focusable and named
+PASS public-beta homepage does not hard-code the unsupported $49 offer
+
+36 passed, 0 failed
+PASS résumé summary drops the separation reason but keeps the safe remainder
+PASS résumé bullets drop separation/uncertainty but keep the safe fact and the user edit
+PASS core skills drop the gap statement
+PASS LinkedIn headline and summary are decontaminated
+PASS pack LinkedIn materials are decontaminated
+PASS lane positioning pitch is decontaminated
+PASS receipt lane framing is decontaminated
+PASS master proof bank keeps the safe fact, drops contamination
+PASS cover-letter foundation is decontaminated
+PASS receipt transferred claims are decontaminated
+PASS outreach evidence options exclude every contaminated record and keep the safe ones
+PASS interview seeds contain no separation reasons, preferences, or uncertainty
+PASS gap statements never seed behavioral or role questions
+PASS saved version snapshot is decontaminated and keeps safe content
+PASS saved version resumeText (snapshot-backed) is decontaminated
+PASS text-only saved version is decontaminated line by line and keeps the safe fact
+PASS no contamination anywhere in the migrated pack object
+PASS plain-text export is decontaminated and keeps the safe remainder
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS PDF export is decontaminated (extracted from the real rendered PDF)
+PASS DOCX export is decontaminated (word/document.xml)
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS ZIP bundle (4 entries incl. PDFs, DOCX, LinkedIn materials, README) is fully decontaminated
+PASS safe evidence record remains approved after migration
+PASS user-authored edit path is preserved on the variant
+PASS migration flags the pack for review instead of silently passing it
+
+24 passed, 0 failed
+PASS time to first approved evidence is computed in minutes
+PASS time to first export is computed in minutes
+PASS counts reflect edits, exports, and refused claims
+PASS summary JSON contains no résumé content
+PASS content guard passes a clean summary
+PASS content guard fails closed when a content field sneaks into the shape
+PASS content guard fails closed on nested résumé objects
+PASS empty state produces null timings, zero counts, and no crash
+
+8 passed, 0 failed
+PASS corrupt JSON loads as empty state
+PASS corrupt JSON is quarantined to the recovery key
+PASS quarantine keeps the first corrupt snapshot (does not overwrite)
+PASS non-object JSON is quarantined too
+PASS valid state loads intact
+PASS valid state is not quarantined
+PASS missing state loads as empty without quarantine
+PASS successful save dispatches no error event
+PASS quota-failed save dispatches the save-error event
+PASS quota-failed save does not throw
+PASS parseState still degrades corrupt input to empty state
+PASS no stored session yields a fresh session
+PASS saved session round-trips with messages intact
+PASS restored session preserves the preview answer count
+PASS implausible stored session falls back to a fresh session
+PASS corrupt stored session falls back to a fresh session
+PASS clearInterviewSession removes the stored session
+
+17 passed, 0 failed
+PASS mints a reset license
+PASS verifies a reset license
+PASS reset license carries the purchase ref
+PASS mints a job-search license
+PASS verifies a job-search license
+PASS job-search license carries the purchase ref
+PASS mints a career-switch license
+PASS verifies a career-switch license
+PASS career-switch license carries the purchase ref
+PASS payload-swap upgrade attack is rejected
+PASS license from a different signing key is rejected
+PASS bit-flipped signature is rejected
+PASS malformed key "" is rejected
+PASS malformed key "CF1" is rejected
+PASS malformed key "CF1.only-two" is rejected
+PASS malformed key "CF2.a.b" is rejected
+PASS malformed key "not a key at all" is rejected
+PASS malformed key "CF1.." is rejected
+PASS malformed key "CF1.eyJ2IjoxLCJ0aWVy" is rejected
+PASS signed-but-unknown tier is rejected
+PASS verification without a public key is rejected
+PASS minting without a private key returns null
+PASS minting with garbage private key returns null
+PASS three packages defined
+PASS prices ascend with tier
+PASS higher tiers include every lower-tier feature
+PASS lane limits ascend
+PASS no tier grants nothing
+PASS unentitled lane limit is 1
+PASS tierHasFeature rejects null tier
+PASS isPackageTier rejects junk
+PASS interview stays gated below job-search
+PASS career-switch toolkit is exclusive to the top tier
+PASS valid webhook signature accepted
+PASS wrong-secret webhook signature rejected
+PASS stale webhook timestamp rejected
+PASS tampered webhook body rejected
+PASS missing signature header rejected
+PASS signature list with one valid candidate accepted
+
+39 passed, 0 failed
+PASS homepage explains the evidence compiler before input
+PASS primary CTA reaches import-first entrance
+PASS import remains local and approval-gated
+PASS proposal review explains unusable-before-approval state
+PASS approval unlock messaging uses canonical readiness
+PASS fresh progress begins with history
+PASS proposed evidence is unusable before approval
+PASS approved history persists progress across serialization
+PASS one lane generates two distinct variants
+PASS three lanes generate six variants
+PASS every variant has explicit use guidance
+PASS pack completion leads directly to tailoring
+PASS sample mode cannot contaminate user state
+PASS all content-free activation events are declared
+PASS career analytics accept event names only
+PASS feedback contains no hidden career payload
+PASS backup and restore preserve activation stage
+PASS legacy users skip completed first-run stages
+PASS mobile navigation is a single compact menu
+PASS touch targets are explicit on primary workflow
+PASS empty users receive honest guidance
+PASS variant distinction is semantic, not cosmetic
+
+22 activation regression checks passed
+PASS Truth Inbox reports represented files
+PASS filename privacy keeps count without retaining names
+PASS all-proposed queue cannot vanish after save
+PASS partial decisions persist across serialization
+PASS approved decisions enter dossier
+PASS rejected decisions never support claims
+PASS undecided proposals remain in inbox
+PASS finished queue clears only after all decisions commit
+PASS discard removes only pending review
+PASS second import adds without overwriting first
+PASS separate review batches coexist
+PASS corrupt pending review revives safely
+PASS backup and restore preserve pending review
+PASS legacy state receives empty pending default
+PASS pending proposals never affect readiness or activation
+PASS discard confirmation is explicit
+PASS identity-only approval does not activate
+PASS tool-only approval does not activate
+PASS one weak unstructured line does not activate
+PASS supported role crossing readiness activates
+PASS more evidence after activation does not fire again
+PASS refresh does not fire activation
+PASS restore does not masquerade as activation
+PASS all-rejected review does not activate
+PASS analytics helper returns event names only
+PASS analytics source accepts no content properties
+PASS pending inbox content never enters analytics
+PASS one lane gap displays as one
+PASS generator does not pretend known gaps were active refusals
+PASS unsupported refusals remain separate
+PASS unique reveal count is a set union
+PASS empty refusals do not create misleading UI section
+PASS legacy receipts default missing arrays
+PASS evidence-first relationships include structured role
+PASS output-first relationships include exact claims
+PASS rejected evidence never appears as truth-map support
+PASS proposed inbox evidence never appears in truth map
+PASS user-edited claims are labeled
+PASS direct claims remain direct
+PASS transferred claims are not labeled direct
+PASS deleted evidence makes affected output stale
+PASS application-answer lineage appears
+PASS empty truth map has useful guidance
+PASS truth map analytics are event-name only
+PASS truth map uses overflow-safe containers
+PASS defensibility counts match actual references
+PASS missing provenance is visible
+PASS user edits require recheck
+PASS partially surviving combined reference fails closed
+PASS deleted cited source invalidates receipt
+PASS rejected cited source invalidates receipt
+PASS empty evidence reference invalidates receipt
+PASS Truth Map and receipt agree on incomplete combined provenance
+PASS defensibility uses no hiring probability
+PASS defensibility receipt is visible per variant
+PASS incomplete provenance blocks variant and pack exports
+PASS homepage explains evidence approval
+PASS category contrast precedes advanced workspace
+PASS public contrast names no competitor
+PASS local-first trust is visible
+PASS context exclusion is visible
+PASS role-lane pack and provenance are visible
+PASS public beta does not hard-code paid pricing
+PASS mobile comparison is focusable and named
+PASS truth map derives 500 evidence items promptly
+PASS homepage does not import PDF.js or Mammoth
+PASS localStorage envelope remains bounded
+PASS backup size remains bounded
+
+68 market/moat regression checks passed
+{
+  "passes": 82,
+  "failures": [],
+  "missingSkills": [
+    {
+      "id": "qa-tester",
+      "missingSkills": [
+        "Testing"
+      ]
+    },
+    {
+      "id": "ai-builder",
+      "missingSkills": [
+        "Testing"
+      ]
+    },
+    {
+      "id": "story-mode-teacher",
+      "missingSkills": [
+        "Organization",
+        "Communication"
+      ]
+    },
+    {
+      "id": "story-mode-founder-protection",
+      "missingSkills": [
+        "Website Delivery"
+      ]
+    }
+  ],
+  "hallucinations": [],
+  "weakOutputs": [
+    {
+      "id": "ups-package-handler",
+      "warnings": [],
+      "sampleBullet": "Unloaded packages, scanned labels, and sorted boxes by route to support reliability."
+    },
+    {
+      "id": "electrician-apprentice",
+      "warnings": [],
+      "sampleBullet": "Cleaned work areas, followed safety directions, and supported licensed electricians on job sites to support reliability."
+    },
+    {
+      "id": "video-editor",
+      "warnings": [],
+      "sampleBullet": "Organized footage, tracked revisions, and communicated status to creators to support reliability."
+    },
+    {
+      "id": "it-help-desk",
+      "warnings": [],
+      "sampleBullet": "Assisted users reset passwords, documented issues, and escalated network problems to support reliability."
+    },
+    {
+      "id": "qa-tester",
+      "warnings": [
+        "missing skills: Testing"
+      ],
+      "sampleBullet": "Tested web pages, documented bugs, and checked mobile layouts to support reliability."
+    },
+    {
+      "id": "ai-builder",
+      "warnings": [
+        "missing skills: Testing"
+      ],
+      "sampleBullet": "Planned features, wrote product copy, and documented issues across hands-on product work."
+    },
+    {
+      "id": "consultant",
+      "warnings": [],
+      "sampleBullet": "Wrote recommendations, organized notes, and explained options to clients to support reliability."
+    },
+    {
+      "id": "story-mode-teacher",
+      "warnings": [
+        "missing skills: Organization, Communication"
+      ],
+      "sampleBullet": "Prepared classroom materials, tracked attendance, and organized supplies to support documentation."
+    },
+    {
+      "id": "story-mode-founder-protection",
+      "warnings": [
+        "missing skills: Website Delivery"
+      ],
+      "sampleBullet": "Planned features, wrote product copy, and documented issues across hands-on product work."
+    },
+    {
+      "id": "claims-assistant",
+      "warnings": [],
+      "sampleBullet": "Updated records, answered status questions, and helped adjusters organize daily work to support reliability."
+    }
+  ],
+  "coverageByOccupationFamily": {
+    "Customer Success": 18,
+    "Operations": 28,
+    "Admin": 18,
+    "Project Coordination": 3,
+    "Business": 5,
+    "IT Support": 1,
+    "Tech": 7,
+    "Security": 1,
+    "Sales": 1
+  }
+}
+Regression Score:
+97 / 100
+Coverage:
+82 personas
+Hallucinations:
+0
+Weak Outputs:
+10
+
+> career-forge-lite@0.1.0 test:browser
+> node scripts/input-stability-regression.mjs
+
+START known-career 1280x900
+PASS known-career 1280x900
+START known-career 390x844
+PASS known-career 390x844
+START DoorDash driver 1280x900
+PASS DoorDash driver 1280x900
+START DoorDash driver 390x844
+PASS DoorDash driver 390x844
+START Retail cashier 1280x900
+PASS Retail cashier 1280x900
+START Retail cashier 390x844
+PASS Retail cashier 390x844
+START Warehouse associate 1280x900
+PASS Warehouse associate 1280x900
+START Warehouse associate 390x844
+PASS Warehouse associate 390x844
+START Food service worker 1280x900
+PASS Food service worker 1280x900
+START Food service worker 390x844
+PASS Food service worker 390x844
+START Barber 1280x900
+PASS Barber 1280x900
+START Barber 390x844
+PASS Barber 390x844
+START Software engineer 1280x900
+PASS Software engineer 1280x900
+START Software engineer 390x844
+PASS Software engineer 390x844
+Career Forge usability regression passed on desktop and mobile.
+--- exit:0 (52s)
+=== npm run lint ===
+
+> career-forge-lite@0.1.0 lint
+> eslint .
+
+--- exit:0 (4s)
+=== npm run typecheck ===
+
+> career-forge-lite@0.1.0 typecheck
+> tsc --noEmit
+
+--- exit:0 (3s)
+=== npm run build ===
+
+> career-forge-lite@0.1.0 build
+> node scripts/usability-hotfix-regression.mjs && next build
+
+PASS target-role wish is a preference
+PASS no-metrics statement is a gap
+PASS no-employment statement is a gap
+PASS no-SaaS statement is a gap
+PASS real no-code work remains a claim
+PASS target role imports as context-only goal
+PASS negative constraints cannot become project proposals
+PASS negative statements create no roles
+PASS negative statements create no projects
+PASS target roles move to target-role interests
+PASS gaps move to constraints
+PASS context-only items are absent from approved claims
+PASS bulk approval cannot reverse rejection
+PASS bulk approval still approves undecided items
+PASS existing unsafe proof is migrated out of evidence
+PASS existing unsafe proof is removed from proof bank
+PASS fake negative project is removed
+PASS safe proof remains usable
+PASS generic project type is not rendered as the project name
+PASS unsafe summary sentences are removed
+PASS negative fake project is removed from resume
+PASS safe role bullet survives
+PASS termination clause is removed while safe remainder survives
+PASS fresh two-lane pack keeps complete provenance after sanitization
+PASS fresh pack remains exportable after sanitization
+PASS context gaps do not leak into the legacy profile projection
+PASS migration removes context from lane positioning pitch
+PASS migration removes context from receipt lane framing
+PASS migration removes context from LinkedIn and proof-bank metadata
+PASS outreach no longer asserts unverified results
+PASS approved evidence can fill outreach draft
+PASS completed recruiter draft has no unresolved placeholders
+PASS PDF section rule has explicit content clearance
+PASS PDF rule is no longer drawn through the next text baseline
+PASS mobile comparison region is keyboard focusable and named
+PASS public-beta homepage does not hard-code the unsupported $49 offer
+
+36 passed, 0 failed
+▲ Next.js 16.2.9 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.8s
+  Running TypeScript ...
+  Finished TypeScript in 4.1s ...
+  Collecting page data using 9 workers ...
+  Generating static pages using 9 workers (0/25) ...
+  Generating static pages using 9 workers (6/25) 
+  Generating static pages using 9 workers (12/25) 
+  Generating static pages using 9 workers (18/25) 
+✓ Generating static pages using 9 workers (25/25) in 275ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/checkout
+├ ƒ /api/license
+├ ƒ /api/stripe-webhook
+├ ○ /applications
+├ ○ /icon.svg
+├ ○ /interview
+├ ○ /outreach
+├ ○ /pricing
+├ ○ /privacy
+├ ○ /profile
+├ ○ /resume-builder
+├ ○ /reviewed-service
+├ ○ /settings
+├ ○ /story
+├ ○ /tailor
+├ ○ /targets
+├ ○ /terms
+├ ○ /truth-map
+├ ○ /unlock
+├ ○ /versions
+├ ○ /versions/view
+└ ○ /weekly
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+--- exit:0 (9s)
+=== npm run test:usability ===
+
+> career-forge-lite@0.1.0 test:usability
+> node scripts/usability-hotfix-regression.mjs
+
+PASS target-role wish is a preference
+PASS no-metrics statement is a gap
+PASS no-employment statement is a gap
+PASS no-SaaS statement is a gap
+PASS real no-code work remains a claim
+PASS target role imports as context-only goal
+PASS negative constraints cannot become project proposals
+PASS negative statements create no roles
+PASS negative statements create no projects
+PASS target roles move to target-role interests
+PASS gaps move to constraints
+PASS context-only items are absent from approved claims
+PASS bulk approval cannot reverse rejection
+PASS bulk approval still approves undecided items
+PASS existing unsafe proof is migrated out of evidence
+PASS existing unsafe proof is removed from proof bank
+PASS fake negative project is removed
+PASS safe proof remains usable
+PASS generic project type is not rendered as the project name
+PASS unsafe summary sentences are removed
+PASS negative fake project is removed from resume
+PASS safe role bullet survives
+PASS termination clause is removed while safe remainder survives
+PASS fresh two-lane pack keeps complete provenance after sanitization
+PASS fresh pack remains exportable after sanitization
+PASS context gaps do not leak into the legacy profile projection
+PASS migration removes context from lane positioning pitch
+PASS migration removes context from receipt lane framing
+PASS migration removes context from LinkedIn and proof-bank metadata
+PASS outreach no longer asserts unverified results
+PASS approved evidence can fill outreach draft
+PASS completed recruiter draft has no unresolved placeholders
+PASS PDF section rule has explicit content clearance
+PASS PDF rule is no longer drawn through the next text baseline
+PASS mobile comparison region is keyboard focusable and named
+PASS public-beta homepage does not hard-code the unsupported $49 offer
+
+36 passed, 0 failed
+--- exit:0 (0s)
+=== npm run test:render ===
+
+> career-forge-lite@0.1.0 test:render
+> node scripts/rendered-export-stress.mjs
+
+PASS long-name-contact: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS long-name-contact: PDF page count 1 within [1, 2]
+PASS long-name-contact: PDF text is selectable (text layer present on every page)
+PASS long-name-contact: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS long-name-contact: PDF has section "PROFESSIONAL SUMMARY"
+PASS long-name-contact: PDF has section "CORE SKILLS"
+PASS long-name-contact: PDF has section "EXPERIENCE"
+PASS long-name-contact: PDF has section "EDUCATION"
+PASS long-name-contact: PDF free of internal IDs, debug language, and context/separation leakage
+PASS long-name-contact: PDF header shows candidate name
+PASS long-name-contact: rendered 1 PDF page image(s)
+PASS long-name-contact: DOCX has section "PROFESSIONAL SUMMARY"
+PASS long-name-contact: DOCX has section "CORE SKILLS"
+PASS long-name-contact: DOCX has section "EXPERIENCE"
+PASS long-name-contact: DOCX has section "EDUCATION"
+PASS long-name-contact: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS long-name-contact: DOCX heading styles applied
+PASS long-titles: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS long-titles: PDF page count 1 within [1, 2]
+PASS long-titles: PDF text is selectable (text layer present on every page)
+PASS long-titles: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS long-titles: PDF has section "PROFESSIONAL SUMMARY"
+PASS long-titles: PDF has section "CORE SKILLS"
+PASS long-titles: PDF has section "EXPERIENCE"
+PASS long-titles: PDF has section "SELECTED PROJECTS"
+PASS long-titles: PDF free of internal IDs, debug language, and context/separation leakage
+PASS long-titles: PDF header shows candidate name
+PASS long-titles: rendered 1 PDF page image(s)
+PASS long-titles: DOCX has section "PROFESSIONAL SUMMARY"
+PASS long-titles: DOCX has section "CORE SKILLS"
+PASS long-titles: DOCX has section "EXPERIENCE"
+PASS long-titles: DOCX has section "SELECTED PROJECTS"
+PASS long-titles: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS long-titles: DOCX heading styles applied
+PASS many-roles-two-page: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS many-roles-two-page: PDF page count 2 within [2, 3]
+PASS many-roles-two-page: PDF text is selectable (text layer present on every page)
+PASS many-roles-two-page: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS many-roles-two-page: PDF has section "PROFESSIONAL SUMMARY"
+PASS many-roles-two-page: PDF has section "CORE SKILLS"
+PASS many-roles-two-page: PDF has section "EXPERIENCE"
+PASS many-roles-two-page: PDF has section "EDUCATION"
+PASS many-roles-two-page: PDF free of internal IDs, debug language, and context/separation leakage
+PASS many-roles-two-page: PDF header shows candidate name
+PASS many-roles-two-page: rendered 2 PDF page image(s)
+PASS many-roles-two-page: DOCX has section "PROFESSIONAL SUMMARY"
+PASS many-roles-two-page: DOCX has section "CORE SKILLS"
+PASS many-roles-two-page: DOCX has section "EXPERIENCE"
+PASS many-roles-two-page: DOCX has section "EDUCATION"
+PASS many-roles-two-page: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS many-roles-two-page: DOCX heading styles applied
+PASS many-projects: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS many-projects: PDF page count 1 within [1, 3]
+PASS many-projects: PDF text is selectable (text layer present on every page)
+PASS many-projects: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS many-projects: PDF has section "PROFESSIONAL SUMMARY"
+PASS many-projects: PDF has section "CORE SKILLS"
+PASS many-projects: PDF has section "EXPERIENCE"
+PASS many-projects: PDF has section "SELECTED PROJECTS"
+PASS many-projects: PDF has section "EDUCATION"
+PASS many-projects: PDF free of internal IDs, debug language, and context/separation leakage
+PASS many-projects: PDF header shows candidate name
+PASS many-projects: rendered 1 PDF page image(s)
+PASS many-projects: DOCX has section "PROFESSIONAL SUMMARY"
+PASS many-projects: DOCX has section "CORE SKILLS"
+PASS many-projects: DOCX has section "EXPERIENCE"
+PASS many-projects: DOCX has section "SELECTED PROJECTS"
+PASS many-projects: DOCX has section "EDUCATION"
+PASS many-projects: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS many-projects: DOCX heading styles applied
+PASS project-only: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS project-only: PDF page count 1 within [1, 2]
+PASS project-only: PDF text is selectable (text layer present on every page)
+PASS project-only: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS project-only: PDF has section "PROFESSIONAL SUMMARY"
+PASS project-only: PDF has section "CORE SKILLS"
+PASS project-only: PDF has section "PROJECTS"
+PASS project-only: PDF has NO "EXPERIENCE" heading
+PASS project-only: PDF has NO "SELECTED EXPERIENCE" heading
+PASS project-only: PDF free of internal IDs, debug language, and context/separation leakage
+PASS project-only: PDF header shows candidate name
+PASS project-only: rendered 1 PDF page image(s)
+PASS project-only: DOCX has section "PROFESSIONAL SUMMARY"
+PASS project-only: DOCX has section "CORE SKILLS"
+PASS project-only: DOCX has section "PROJECTS"
+PASS project-only: DOCX has NO "EXPERIENCE" section
+PASS project-only: DOCX has NO "SELECTED EXPERIENCE" section
+PASS project-only: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS project-only: DOCX heading styles applied
+PASS long-wrapped-bullets: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS long-wrapped-bullets: PDF page count 1 within [1, 2]
+PASS long-wrapped-bullets: PDF text is selectable (text layer present on every page)
+PASS long-wrapped-bullets: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS long-wrapped-bullets: PDF has section "PROFESSIONAL SUMMARY"
+PASS long-wrapped-bullets: PDF has section "EXPERIENCE"
+PASS long-wrapped-bullets: PDF has section "SELECTED PROJECTS"
+PASS long-wrapped-bullets: PDF has section "EDUCATION"
+PASS long-wrapped-bullets: PDF free of internal IDs, debug language, and context/separation leakage
+PASS long-wrapped-bullets: PDF header shows candidate name
+PASS long-wrapped-bullets: rendered 1 PDF page image(s)
+PASS long-wrapped-bullets: DOCX has section "PROFESSIONAL SUMMARY"
+PASS long-wrapped-bullets: DOCX has section "EXPERIENCE"
+PASS long-wrapped-bullets: DOCX has section "SELECTED PROJECTS"
+PASS long-wrapped-bullets: DOCX has section "EDUCATION"
+PASS long-wrapped-bullets: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS long-wrapped-bullets: DOCX heading styles applied
+PASS sparse-evidence: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS sparse-evidence: PDF page count 1 within [1, 1]
+PASS sparse-evidence: PDF text is selectable (text layer present on every page)
+PASS sparse-evidence: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS sparse-evidence: PDF has section "PROFESSIONAL SUMMARY"
+PASS sparse-evidence: PDF has section "EXPERIENCE"
+PASS sparse-evidence: PDF has NO "CORE SKILLS" heading
+PASS sparse-evidence: PDF has NO "EDUCATION" heading
+PASS sparse-evidence: PDF has NO "PROJECTS" heading
+PASS sparse-evidence: PDF free of internal IDs, debug language, and context/separation leakage
+PASS sparse-evidence: PDF header shows candidate name
+PASS sparse-evidence: rendered 1 PDF page image(s)
+PASS sparse-evidence: DOCX has section "PROFESSIONAL SUMMARY"
+PASS sparse-evidence: DOCX has section "EXPERIENCE"
+PASS sparse-evidence: DOCX has NO "CORE SKILLS" section
+PASS sparse-evidence: DOCX has NO "EDUCATION" section
+PASS sparse-evidence: DOCX has NO "PROJECTS" section
+PASS sparse-evidence: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS sparse-evidence: DOCX heading styles applied
+PASS long-education: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS long-education: PDF page count 1 within [1, 2]
+PASS long-education: PDF text is selectable (text layer present on every page)
+PASS long-education: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS long-education: PDF has section "PROFESSIONAL SUMMARY"
+PASS long-education: PDF has section "EXPERIENCE"
+PASS long-education: PDF has section "EDUCATION"
+PASS long-education: PDF free of internal IDs, debug language, and context/separation leakage
+PASS long-education: PDF header shows candidate name
+PASS long-education: rendered 1 PDF page image(s)
+PASS long-education: DOCX has section "PROFESSIONAL SUMMARY"
+PASS long-education: DOCX has section "EXPERIENCE"
+PASS long-education: DOCX has section "EDUCATION"
+PASS long-education: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS long-education: DOCX heading styles applied
+PASS three-page: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS three-page: PDF page count 3 within [3, 5]
+PASS three-page: PDF text is selectable (text layer present on every page)
+PASS three-page: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS three-page: PDF has section "PROFESSIONAL SUMMARY"
+PASS three-page: PDF has section "CORE SKILLS"
+PASS three-page: PDF has section "EXPERIENCE"
+PASS three-page: PDF has section "EDUCATION"
+PASS three-page: PDF free of internal IDs, debug language, and context/separation leakage
+PASS three-page: PDF header shows candidate name
+PASS three-page: rendered 3 PDF page image(s)
+PASS three-page: DOCX has section "PROFESSIONAL SUMMARY"
+PASS three-page: DOCX has section "CORE SKILLS"
+PASS three-page: DOCX has section "EXPERIENCE"
+PASS three-page: DOCX has section "EDUCATION"
+PASS three-page: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS three-page: DOCX heading styles applied
+PASS career-changer-gaps: deterministic safe PDF filename
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+PASS career-changer-gaps: PDF page count 1 within [1, 2]
+PASS career-changer-gaps: PDF text is selectable (text layer present on every page)
+PASS career-changer-gaps: PDF geometry clean (no clipping/collisions/orphans/blank pages)
+PASS career-changer-gaps: PDF has section "PROFESSIONAL SUMMARY"
+PASS career-changer-gaps: PDF has section "CORE SKILLS"
+PASS career-changer-gaps: PDF has section "EXPERIENCE"
+PASS career-changer-gaps: PDF has section "SELECTED PROJECTS"
+PASS career-changer-gaps: PDF has section "EDUCATION"
+PASS career-changer-gaps: PDF free of internal IDs, debug language, and context/separation leakage
+PASS career-changer-gaps: PDF header shows candidate name
+PASS career-changer-gaps: rendered 1 PDF page image(s)
+PASS career-changer-gaps: DOCX has section "PROFESSIONAL SUMMARY"
+PASS career-changer-gaps: DOCX has section "CORE SKILLS"
+PASS career-changer-gaps: DOCX has section "EXPERIENCE"
+PASS career-changer-gaps: DOCX has section "SELECTED PROJECTS"
+PASS career-changer-gaps: DOCX has section "EDUCATION"
+PASS career-changer-gaps: DOCX free of internal IDs, debug language, and context/separation leakage
+PASS career-changer-gaps: DOCX heading styles applied
+
+176 passed, 0 failed
+--- exit:0 (3s)
+=== npm run acceptance:private ===
+
+> career-forge-lite@0.1.0 acceptance:private
+> node scripts/private-workflow-acceptance.mjs
+
+PASS six baselines created
+PASS ATS and recruiter variants are substantively distinct
+PASS projects appear without pretending to be conventional employers
+PASS no unsupported credentials appear
+PASS each claim has narrowly relevant evidence
+PASS Fin posting analyzed honestly
+PASS Fin answers use approved evidence
+PASS Enova posting analyzed honestly
+PASS Enova answers use approved evidence
+PASS Implementation Co posting analyzed honestly
+PASS Implementation Co answers use approved evidence
+PASS all applications retain source and both URLs
+PASS follow-up dates calculate correctly
+PASS ZIP contains every promised resume plus materials
+PASS backup and restore preserve every workflow record
+
+15 private acceptance checks passed
+--- exit:0 (0s)
+=== npm run acceptance:browser ===
+
+> career-forge-lite@0.1.0 acceptance:browser
+> node scripts/truth-workflow-browser.mjs
+
+Career Forge truth workflow browser acceptance passed at 375x667 and 1440x900.
+--- exit:0 (18s)
+=== npm run acceptance:activation ===
+
+> career-forge-lite@0.1.0 acceptance:activation
+> node scripts/intent-router-regression.mjs && node scripts/activation-regression.mjs && node scripts/cold-user-activation-playtest.mjs && node scripts/activation-browser.mjs
+
+PASS fresh state has no active goal
+PASS legacy state revives without inventing a goal
+PASS unknown goal fails closed
+PASS valid goal persists across serialization
+PASS router offers five distinct meaningful goals
+PASS goal choices materially change workflow entry
+PASS evidence is explained before import
+PASS pending Truth Inbox dominates the next move
+PASS career change routes approved evidence to target selection
+PASS legacy activity infers a useful continuation
+PASS milestones expose audited booleans only
+PASS backup and restore preserve active goal
+PASS first-run UI renders every one-tap goal
+PASS returning UI has one dominant next move and recent work
+PASS router uses no theatrical percentage
+PASS homepage places intent before marketing and hides workspace on first run
+PASS manual first-résumé entry anchor exists
+PASS intent analytics remain event-name only
+
+18 intent router regression checks passed
+PASS homepage explains the evidence compiler before input
+PASS primary CTA reaches import-first entrance
+PASS import remains local and approval-gated
+PASS proposal review explains unusable-before-approval state
+PASS approval unlock messaging uses canonical readiness
+PASS fresh progress begins with history
+PASS proposed evidence is unusable before approval
+PASS approved history persists progress across serialization
+PASS one lane generates two distinct variants
+PASS three lanes generate six variants
+PASS every variant has explicit use guidance
+PASS pack completion leads directly to tailoring
+PASS sample mode cannot contaminate user state
+PASS all content-free activation events are declared
+PASS career analytics accept event names only
+PASS feedback contains no hidden career payload
+PASS backup and restore preserve activation stage
+PASS legacy users skip completed first-run stages
+PASS mobile navigation is a single compact menu
+PASS touch targets are explicit on primary workflow
+PASS empty users receive honest guidance
+PASS variant distinction is semantic, not cosmetic
+
+22 activation regression checks passed
+PASS Retail worker: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Sportsbook operations worker: 6 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Founder with projects: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Recent graduate: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Warehouse worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Hospitality worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Security worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Customer service to SaaS: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Little measurable evidence: 1 approved · first résumé blocked honestly: add evidence · unsupported=false · next=Add one role, project, or proof point
+PASS Conflicting old résumés: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+
+10 fresh-storage persona simulations passed. All selected the import CTA; 9 reached a pack; the low-evidence persona was stopped with honest guidance.
+Cold-comprehension prompts for manual QA:
+1. What do you think Career Forge does?
+2. What will happen if you upload résumés?
+3. Why are there multiple résumé versions?
+4. What information does Career Forge trust?
+5. What would you click next?
+Career Forge activation browser acceptance passed: fresh landing, isolated sample, import, approval, lane, pack reveal, export, tailoring bridge, refresh, keyboard, and six viewports.
+--- exit:0 (12s)
+=== npm run acceptance:conflict ===
+
+> career-forge-lite@0.1.0 acceptance:conflict
+> node scripts/tab-conflict-browser.mjs
+
+PASS unrelated-field edits from two tabs merge automatically (tab 1 summary survived tab 2 education commit)
+PASS tab 2 education edit persisted
+PASS same-field edit from a stale revision opens the conflict dialog instead of committing
+PASS dialog shows this tab's edit
+PASS dialog shows the newer stored edit
+PASS nothing was overwritten while the dialog is open (stored value intact)
+PASS Keep stored version leaves the newer edit in place
+PASS editor field refreshes to the stored value after Keep stored
+PASS Keep mine commits this tab's edit explicitly
+PASS manual merge commits the user-authored combination
+PASS refresh mid-conflict recovers with no dialog and no corruption
+PASS stored value survives a refresh mid-conflict (nothing silently committed)
+PASS reloaded editor shows the latest stored value
+
+13 passed, 0 failed
+--- exit:0 (4s)
+=== npm run acceptance:mobile-a11y ===
+
+> career-forge-lite@0.1.0 acceptance:mobile-a11y
+> node scripts/mobile-a11y-browser.mjs
+
+PASS /: 1 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /profile: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /targets: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /versions: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /tailor: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /applications: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /outreach: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /interview: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /pricing: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /settings: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /story: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /truth-map: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /unlock: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /weekly: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS /resume-builder: 0 horizontally scrollable region(s), all keyboard-focusable and accessibly named
+PASS comparison table region exposes an accessible name to screen readers
+PASS accessible name includes navigation instructions
+PASS comparison region is keyboard focusable at 390×844
+PASS arrow keys scroll the focused comparison region (scrollLeft 0 → 300)
+PASS page body has no horizontal overflow at 390×844 (390 <= 390)
+
+20 passed, 0 failed
+--- exit:0 (13s)
+=== npm run acceptance:outreach-interview ===
+
+> career-forge-lite@0.1.0 acceptance:outreach-interview
+> node scripts/outreach-interview-browser.mjs
+
+PASS recruiter_intro: copy is disabled while the draft is incomplete (Still required: [Name], [Company], [specific reason])
+PASS recruiter_intro: the missing-field list names the unresolved placeholder(s)
+PASS recruiter_intro: copy unlocks once every required field is supplied
+PASS recruiter_intro: the copied message contains zero unresolved placeholders
+PASS recruiter_intro: the copied message is addressed to the real recipient
+PASS hiring_manager: copy is disabled while the draft is incomplete (Still required: [Name], [Company])
+PASS hiring_manager: the missing-field list names the unresolved placeholder(s)
+PASS hiring_manager: copy unlocks once every required field is supplied
+PASS hiring_manager: the copied message contains zero unresolved placeholders
+PASS hiring_manager: the copied message is addressed to the real recipient
+PASS referral_request: copy is disabled while the draft is incomplete (Still required: [Name], [Company])
+PASS referral_request: the missing-field list names the unresolved placeholder(s)
+PASS referral_request: copy unlocks once every required field is supplied
+PASS referral_request: the copied message contains zero unresolved placeholders
+PASS referral_request: the copied message is addressed to the real recipient
+PASS informational: copy is disabled while the draft is incomplete (Still required: [Name], [Company])
+PASS informational: the missing-field list names the unresolved placeholder(s)
+PASS informational: copy unlocks once every required field is supplied
+PASS informational: the copied message contains zero unresolved placeholders
+PASS informational: the copied message is addressed to the real recipient
+PASS follow_up_1: copy is disabled while the draft is incomplete (Still required: [Name], [Company])
+PASS follow_up_1: the missing-field list names the unresolved placeholder(s)
+PASS follow_up_1: copy unlocks once every required field is supplied
+PASS follow_up_1: the copied message contains zero unresolved placeholders
+PASS follow_up_1: the copied message is addressed to the real recipient
+PASS application_bump: copy is disabled while the draft is incomplete (Still required: [Name])
+PASS application_bump: the missing-field list names the unresolved placeholder(s)
+PASS application_bump: copy unlocks once every required field is supplied
+PASS application_bump: the copied message contains zero unresolved placeholders
+PASS application_bump: the copied message is addressed to the real recipient
+PASS discovery section is present and clearly labeled
+PASS discovery section explains it is not a rehearsal prompt
+PASS story-substantial evidence produced a behavioral question grounded in the real claim
+PASS thin claim ('Good with people') is NOT presented as a behavioral question
+PASS thin claim is routed to the labeled discovery section
+PASS bare metric without a story is routed to discovery, not behavioral
+PASS bare metric does not appear as a behavioral question
+
+37 passed, 0 failed
+--- exit:0 (5s)
+=== npm run playtest:adversarial ===
+
+> career-forge-lite@0.1.0 playtest:adversarial
+> node scripts/adversarial-dossier-playtest.mjs
+
+[
+  {
+    "profile": "retail-to-support",
+    "automatedTimeToOutputMs": 5.3,
+    "readiness": "foundation",
+    "approvedEvidence": 9,
+    "lanes": 3,
+    "variants": 6,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "12 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "warehouse-to-logistics",
+    "automatedTimeToOutputMs": 0.7,
+    "readiness": "foundation",
+    "approvedEvidence": 10,
+    "lanes": 2,
+    "variants": 4,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "8 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "sportsbook-to-risk",
+    "automatedTimeToOutputMs": 0.7,
+    "readiness": "foundation",
+    "approvedEvidence": 9,
+    "lanes": 3,
+    "variants": 6,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "12 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "founder-projects",
+    "automatedTimeToOutputMs": 0.7,
+    "readiness": "foundation",
+    "approvedEvidence": 10,
+    "lanes": 2,
+    "variants": 4,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "8 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "recent-graduate",
+    "automatedTimeToOutputMs": 1.8,
+    "readiness": "foundation",
+    "approvedEvidence": 9,
+    "lanes": 2,
+    "variants": 4,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "8 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "one-vague-sentence",
+    "automatedTimeToOutputMs": 0.2,
+    "readiness": "not-ready",
+    "approvedEvidence": 5,
+    "lanes": 1,
+    "variants": 2,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "4 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "evidence-changed-after-pack",
+    "automatedTimeToOutputMs": 0.4,
+    "readiness": "foundation",
+    "approvedEvidence": 8,
+    "lanes": 1,
+    "variants": 2,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": true,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "4 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "legacy-backup",
+    "automatedTimeToOutputMs": 0.5,
+    "readiness": "foundation",
+    "approvedEvidence": 7,
+    "lanes": 1,
+    "variants": 2,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "4 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "unsupported-credential",
+    "automatedTimeToOutputMs": 0.3,
+    "readiness": "foundation",
+    "approvedEvidence": 7,
+    "lanes": 1,
+    "variants": 2,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "4 résumé files when PDF + DOCX are selected"
+  },
+  {
+    "profile": "returning-tailor",
+    "automatedTimeToOutputMs": 0.2,
+    "readiness": "foundation",
+    "approvedEvidence": 9,
+    "lanes": 1,
+    "variants": 2,
+    "exactRepeatedSummaries": 0,
+    "unsupportedClaims": 0,
+    "packComplete": true,
+    "staleVerified": null,
+    "duplicateIntakeQuestions": 0,
+    "exportExpectation": "4 résumé files when PDF + DOCX are selected"
+  }
+]
+--- exit:0 (0s)
+=== npm run playtest:cold ===
+
+> career-forge-lite@0.1.0 playtest:cold
+> node scripts/cold-user-activation-playtest.mjs
+
+PASS Retail worker: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Sportsbook operations worker: 6 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Founder with projects: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Recent graduate: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Warehouse worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Hospitality worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Security worker: 3 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Customer service to SaaS: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+PASS Little measurable evidence: 1 approved · first résumé blocked honestly: add evidence · unsupported=false · next=Add one role, project, or proof point
+PASS Conflicting old résumés: 4 approved · first résumé 35s modeled · unsupported=false · next=Tailor a résumé to a real job
+
+10 fresh-storage persona simulations passed. All selected the import CTA; 9 reached a pack; the low-evidence persona was stopped with honest guidance.
+Cold-comprehension prompts for manual QA:
+1. What do you think Career Forge does?
+2. What will happen if you upload résumés?
+3. Why are there multiple résumé versions?
+4. What information does Career Forge trust?
+5. What would you click next?
+--- exit:0 (0s)
+OVERALL:0
