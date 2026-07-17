@@ -3,7 +3,7 @@ import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { AnalyticsProvider } from "@/components/AnalyticsProvider";
 import { SaveHealthBanner } from "@/components/SaveHealthBanner";
 import "./globals.css";
-import "./koinophobia-ecosystem.css";
+import "./career-forge-visual-system.css";
 
 const sora = Sora({
   variable: "--font-sora",
