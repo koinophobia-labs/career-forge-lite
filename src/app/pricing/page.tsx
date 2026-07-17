@@ -14,30 +14,57 @@ const checkoutEventByTier: Record<PackageTier, "checkout_started_reset" | "check
   "career-switch": "checkout_started_career_switch"
 };
 
-const faqs: Array<[string, string]> = [
+const betaFaqs: Array<[string, string]> = [
   [
-    "What happens after I buy?",
-    "You get a license key on the confirmation page (and by email if you enter one at checkout). Paste it once on the Unlock page and your pack is active in this browser. The same key works on any device — keep it."
+    "Is anything for sale during the public beta?",
+    "No. Paid packaging and prices remain provisional. The complete workflow is open while production behavior, artifact quality, and real user value are being validated."
   ],
   [
-    "Is this a subscription?",
-    "No. Each pack is a one-time purchase. There is no renewal, no trial that converts, and nothing to cancel."
+    "What can I test for free?",
+    "You can import or describe your history, review evidence, choose role lanes, generate résumé drafts, tailor against postings, use outreach and interview tools, and export your materials."
+  ],
+  [
+    "Are generated materials ready to send?",
+    "They are drafts. Review every claim, date, heading, company, and layout before using a résumé, LinkedIn section, message, or interview answer."
   ],
   [
     "Do I need an account?",
-    "No. Career Forge has no accounts. Your license key is the whole unlock — it contains no personal information, and your career data never leaves your device."
+    "No. Career Forge has no accounts. Career data remains in this browser unless you download a backup and restore it elsewhere."
+  ],
+  [
+    "What happens to the proposed package scopes?",
+    "They remain product hypotheses. They may change or disappear after production re-audits and human testing; no current price or package should be treated as a commitment."
+  ],
+  [
+    "How does Career Forge handle unsupported information?",
+    "Professional evidence is separated from target preferences, constraints, uncertainty, separation reasons, and gaps. The system is designed to keep those context items out of professional drafts, but you must still review every output."
+  ]
+];
+
+const purchaseFaqs: Array<[string, string]> = [
+  [
+    "What happens after I buy?",
+    "You get a license key on the confirmation page and by email when supplied at checkout. Paste it once on the Unlock page and the selected feature grants become active in this browser."
+  ],
+  [
+    "Is this a subscription?",
+    "No. Each package is a one-time purchase. There is no renewal or trial conversion."
+  ],
+  [
+    "Do I need an account?",
+    "No. The license key contains no career data, and your career information remains on your device."
   ],
   [
     "What can I do before buying?",
-    "Everything that builds trust: pick your goal, import or describe your history, approve your evidence, explore role lanes, and preview your résumé pack on screen. Buying unlocks exports, tailoring, outreach templates, and the rest of your pack."
+    "You can build and review the dossier, explore lanes, and preview generated materials. The selected package determines which export and power features unlock."
   ],
   [
-    "Will Career Forge invent things on my résumé?",
-    "No — that is the point of the product. Every claim in an exported document traces back to evidence you explicitly approved. Missing experience stays missing; we help you say what is true, well."
+    "How should I use generated materials?",
+    "Treat every generated item as a draft. Check the evidence receipt, review all claims and dates, and inspect the rendered PDF or DOCX before sending it."
   ],
   [
     "What if my payment goes through but I lose the key?",
-    "Your Stripe receipt email contains a link back to the confirmation page, which always re-issues your key. You can also reply to the receipt to reach support."
+    "Use the link in the Stripe receipt to reopen the confirmation page, or contact support with the receipt reference."
   ]
 ];
 
@@ -45,13 +72,15 @@ export default function PricingPage() {
   const { entitlement, commerceMode, commerceEnabled } = useEntitlement();
   const [pendingTier, setPendingTier] = useState<PackageTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const isPublicBeta = commerceMode === "off";
+  const faqs = isPublicBeta ? betaFaqs : purchaseFaqs;
 
   useEffect(() => {
     trackCareerEvent("pricing_viewed");
   }, []);
 
   async function startCheckout(tier: PackageTier) {
-    if (pendingTier) return; // double-click guard: one checkout at a time
+    if (pendingTier || !commerceEnabled) return;
     setPendingTier(tier);
     setCheckoutError(null);
     trackCareerEvent(checkoutEventByTier[tier]);
@@ -68,7 +97,7 @@ export default function PricingPage() {
       }
       setCheckoutError(data.error ?? "Checkout could not be started. Please try again.");
     } catch {
-      setCheckoutError("Checkout could not be started — check your connection and try again.");
+      setCheckoutError("Checkout could not be started. Check your connection and try again.");
     }
     setPendingTier(null);
   }
@@ -78,28 +107,32 @@ export default function PricingPage() {
       <CommandNav active="/pricing" />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">One-time purchase · No account · No subscription</p>
+        <p className="trust-kicker text-sm font-bold uppercase">
+          {isPublicBeta ? "Public beta · No purchases enabled" : "One-time purchase · No account · No subscription"}
+        </p>
         <h1 className="mt-3 max-w-3xl text-3xl font-bold text-paper sm:text-5xl">
-          Pay once. Leave with a complete, truthful career package.
+          {isPublicBeta
+            ? "Use the complete workflow free while the paid outcome is being validated."
+            : "Choose the feature scope that matches your current search."}
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
-          Build and review everything free. When you are ready to use it — export, tailor, reach out, practice — pick
-          the pack that matches your situation. Your career data stays on your device either way.
+          {isPublicBeta
+            ? "The scopes below show how Career Forge may eventually be packaged. They are not offers, the prices are not displayed, and no commercial-readiness claim is being made."
+            : "Build and review first. When you are ready to export or use power features, choose a one-time package. Career data remains on your device."}
         </p>
 
-        {commerceMode === "off" && (
-          <div className="mt-6 max-w-2xl rounded-xl border border-cyan/25 bg-cyan/5 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Free beta</p>
+        {isPublicBeta && (
+          <div className="mt-6 max-w-3xl rounded-xl border border-cyan/25 bg-cyan/5 p-5">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Release boundary</p>
             <p className="mt-2 text-sm leading-6 text-paper/75">
-              Career Forge is currently free while in beta — every feature below is open. The packs and prices shown
-              are what purchasing is planned to look like. Nothing is for sale yet.
+              Production re-audits and human use must independently support artifact quality, workflow value, and pricing before paid access opens. Every feature is included free during this period.
             </p>
           </div>
         )}
         {commerceMode === "test" && (
           <div className="mt-6 max-w-2xl rounded-xl border border-gold/30 bg-gold/10 p-4">
             <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">
-              Test mode — checkout uses Stripe test cards. No real charges.
+              Test mode. Checkout uses Stripe test cards and creates no real charge.
             </p>
           </div>
         )}
@@ -128,22 +161,20 @@ export default function PricingPage() {
               >
                 {highlighted && (
                   <p className="lab-mono mb-3 w-fit rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-gold">
-                    Most useful for active searches
+                    {isPublicBeta ? "Proposed active-search scope" : "Active-search scope"}
                   </p>
                 )}
-                <h2 className="text-xl font-bold text-paper">{pack.name}</h2>
+                <h2 className="text-xl font-bold text-paper">{isPublicBeta ? `Proposed: ${pack.name}` : pack.name}</h2>
                 <p className="mt-1 text-sm text-paper/60">{pack.audience}</p>
-                <p className="mt-4 text-4xl font-black text-paper">
-                  ${pack.priceUsd}
-                  <span className="ml-2 text-sm font-bold text-paper/50">once</span>
+                <p className="mt-4 text-2xl font-black text-paper">
+                  {isPublicBeta ? "Included in beta" : `$${pack.priceUsd}`}
+                  {!isPublicBeta && <span className="ml-2 text-sm font-bold text-paper/50">once</span>}
                 </p>
                 <p className="mt-3 text-sm leading-6 text-paper/70">{pack.summary}</p>
                 <ul className="mt-5 flex-1 space-y-2">
                   {pack.deliverables.map((item) => (
                     <li key={item} className="flex gap-2 text-sm leading-6 text-paper/80">
-                      <span aria-hidden="true" className="text-cyan">
-                        ✓
-                      </span>
+                      <span aria-hidden="true" className="text-cyan">✓</span>
                       {item}
                     </li>
                   ))}
@@ -167,7 +198,7 @@ export default function PricingPage() {
                   )
                 ) : (
                   <p className="mt-6 rounded-md border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-bold text-paper/60">
-                    Included free during beta
+                    Free during public beta
                   </p>
                 )}
               </article>
@@ -182,16 +213,14 @@ export default function PricingPage() {
         )}
 
         <div className="mt-12 rounded-xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-lg font-bold text-paper">Why this is different from a chatbot or a template site</h2>
+          <h2 className="text-lg font-bold text-paper">How this differs from a stateless chatbot or template site</h2>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-paper/70">
-            Generic AI writers produce plausible-sounding résumés with details you never said. Career Forge works the
-            other way: it collects what actually happened, asks you to approve every fact, and only writes from what
-            you approved. The result is a package you can defend in an interview — because all of it is true.
+            Career Forge keeps a reusable local history, records evidence decisions, separates professional claims from context, and links drafts back to reviewed sources. That structure reduces re-entry, but it does not remove the need for human review or guarantee a hiring outcome.
           </p>
         </div>
 
         <div className="mt-10">
-          <h2 className="text-lg font-bold text-paper">Questions people ask before buying</h2>
+          <h2 className="text-lg font-bold text-paper">{isPublicBeta ? "Public-beta questions" : "Questions before purchasing"}</h2>
           <dl className="mt-5 grid gap-4 md:grid-cols-2">
             {faqs.map(([question, answer]) => (
               <div key={question} className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
@@ -205,16 +234,12 @@ export default function PricingPage() {
         <p className="mt-10 text-sm text-paper/50">
           Already have a license key?{" "}
           <Link href="/unlock" className="font-bold text-cyan underline hover:text-gold">
-            Unlock your pack
+            Manage your key
           </Link>
           {" · "}
-          <Link href="/terms" className="underline hover:text-cyan">
-            Terms
-          </Link>
+          <Link href="/terms" className="underline hover:text-cyan">Terms</Link>
           {" · "}
-          <Link href="/privacy" className="underline hover:text-cyan">
-            Privacy
-          </Link>
+          <Link href="/privacy" className="underline hover:text-cyan">Privacy</Link>
         </p>
       </section>
 
