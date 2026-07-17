@@ -1,4 +1,14 @@
-import type { ExperienceRole, IntakeData, ResumePackage } from "@/types/career";
+import type { ExperienceRole, ResumePackage } from "@/types/career";
+import { stripTerminationReasons } from "@/lib/truth-guards";
+
+// Structural subset of IntakeData/ResumeSnapshot: everything the plain-text
+// export needs, so saved snapshots serialize without a full intake object.
+export type ResumeContactFields = {
+  fullName: string;
+  email: string;
+  phone: string;
+  website: string;
+};
 
 export const educationPlaceholder = "Education or Certification | School or Provider | Year";
 
@@ -33,11 +43,14 @@ export function experienceToText(resume: ResumePackage) {
     .join("\n\n");
 }
 
-export function resumeToText(data: IntakeData, resume: ResumePackage) {
+export function resumeToText(data: ResumeContactFields, resume: ResumePackage) {
   const contact = [data.email, data.phone, data.website].filter(Boolean).join(" | ");
+  // Export-time safety net: termination reasons are never résumé content even
+  // if one slipped past the generation-side filter.
+  const summary = stripTerminationReasons(resume.summary).text;
   const sections = [
     `${normalizeHeaderName(data.fullName)}${contact ? `\n${contact}` : ""}`,
-    resume.summary.trim() ? `SUMMARY\n${resume.summary.trim()}` : "",
+    summary.trim() ? `SUMMARY\n${summary.trim()}` : "",
     resume.coreSkills.filter((skill) => skill.trim()).length
       ? `CORE SKILLS\n${resume.coreSkills.filter((skill) => skill.trim()).join(", ")}`
       : "",

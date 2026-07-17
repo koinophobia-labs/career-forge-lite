@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
-import { isPlaceholderEducation, normalizeHeaderName, roleHasContent } from "@/lib/resume-export";
+import { isPlaceholderEducation, normalizeHeaderName, resumeToText, roleHasContent } from "@/lib/resume-export";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { TemplateStyle } from "@/types/career";
 
@@ -34,9 +34,13 @@ function VersionView() {
   const template = templateOverride ?? snapshot?.template ?? "Modern ATS";
 
   async function copyText() {
-    if (!version?.resumeText) return;
+    // Prefer serializing the stored snapshot: the full document (name header,
+    // summary, skills, experience bullets, education) in the same order the
+    // page renders — never just the summary sentence.
+    const text = snapshot ? resumeToText(snapshot, snapshot.resume) : version?.resumeText;
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(version.resumeText);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -104,7 +108,7 @@ function VersionView() {
                   </label>
                 </>
               )}
-              {version.resumeText && (
+              {(snapshot || version.resumeText) && (
                 <button
                   type="button"
                   onClick={copyText}

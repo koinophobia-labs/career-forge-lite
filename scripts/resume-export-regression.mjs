@@ -40,6 +40,7 @@ function loadTsModule(filePath) {
 const { emptyState, parseState, reviveResumeSnapshot } = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
 const { recordTailoredResumeVersion } = loadTsModule(path.join(root, "src/lib/tailor-handoff.ts"));
 const { resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
+const { runAtsChecks } = loadTsModule(path.join(root, "src/lib/ats.ts"));
 const { generateResumePackage } = loadTsModule(path.join(root, "src/lib/generator.ts"));
 const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 
@@ -239,6 +240,47 @@ check(
     return messy && messy.resume.experience.length === 1 && messy.resume.experience[0].bullets.length === 1;
   })()
 );
+
+// --- Plain-text export is the full document, not one sentence -------------------------------
+check(
+  "plain-text export carries header, contact, and every section",
+  storedText.startsWith("Test Person") &&
+    storedText.includes("test@example.com") &&
+    storedText.includes("SUMMARY") &&
+    storedText.includes("CORE SKILLS") &&
+    storedText.includes("EXPERIENCE") &&
+    storedText.includes("- ")
+);
+check(
+  "snapshot-shaped contact fields serialize without a full intake object",
+  resumeToText(
+    { fullName: "Snapshot Person", email: "snap@example.com", phone: "", website: "" },
+    generated
+  ).startsWith("Snapshot Person")
+);
+
+// --- Export-time termination-reason safety net ------------------------------------------------
+const leakySummary = "Kept satisfaction high until I was laid off in June 2026. Handled escalations calmly.";
+const leakyText = resumeToText(intake, { ...generated, summary: leakySummary });
+check("termination reasons never survive into exported text", !/laid\s+off/i.test(leakyText));
+check("the rest of a stripped summary is preserved", leakyText.includes("Handled escalations calmly."));
+
+// --- ATS checks are computed, never hardcoded PASS ---------------------------------------------
+const atsResume = {
+  summary: "Supported customers across billing and onboarding.",
+  coreSkills: ["Customer Support", "Troubleshooting", "Documentation", "Escalations"],
+  experience: [{ title: "Support Rep", company: "RetailCo", time: "2022–2026", bullets: ["Resolved tickets daily", "Documented repeat fixes"] }],
+  education: "Associate degree",
+  linkedinHeadline: "",
+  linkedinSummary: ""
+};
+const findCheck = (resume, label) => runAtsChecks(intake, resume).find((item) => item.label === label);
+check("section-headings check passes only when every standard section has content", findCheck(atsResume, "Standard section headings").status === "PASS");
+const missingEducation = findCheck({ ...atsResume, education: "" }, "Standard section headings");
+check("section-headings check warns and names the empty section", missingEducation.status === "WARNING" && missingEducation.detail.includes("Education"));
+check("single-column check passes on clean text", findCheck(atsResume, "Single-column structure").status === "PASS");
+const tabbedResume = { ...atsResume, experience: [{ ...atsResume.experience[0], bullets: ["Resolved tickets\tdaily queue", "Documented repeat fixes"] }] };
+check("single-column check detects real column artifacts", findCheck(tabbedResume, "Single-column structure").status === "WARNING");
 
 // --- Result -----------------------------------------------------------------------------------
 console.log(`\n${passes} passed, ${failures} failed`);

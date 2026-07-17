@@ -31,7 +31,7 @@ const { emptyState, parseState, deleteResumeVersion } = loadTsModule(path.join(r
 const { mergeIntakeIntoDossier, intakeFromDossier, withUpdatedDossier, assessDossierReadiness } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
 const { generateResumePack, updatePackVariant } = loadTsModule(path.join(root, "src/lib/resume-pack.ts"));
 const { recordTailoredResumeVersion, buildHandoff } = loadTsModule(path.join(root, "src/lib/tailor-handoff.ts"));
-const { resumeVariantFilename } = loadTsModule(path.join(root, "src/lib/pack-export.ts"));
+const { resumeVariantFilename, exportSections, variantPlainText, createPackBundle } = loadTsModule(path.join(root, "src/lib/pack-export.ts"));
 const { createBackup, validateBackup, BACKUP_SCHEMA_VERSION } = loadTsModule(path.join(root, "src/lib/backup.ts"));
 const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
 
@@ -98,6 +98,50 @@ const restored = validateBackup(JSON.stringify(backup));
 check("backup v2 contains dossier, packs, evidence links, and export metadata", BACKUP_SCHEMA_VERSION === 2 && restored.ok && restored.state.dossier.evidence.length === guidedDossier.evidence.length && restored.state.resumePacks[0].variants[0].evidenceReferences.length > 0 && Array.isArray(restored.state.exports));
 check("legacy backups still restore", validateBackup(JSON.stringify({ app: "career-forge", schemaVersion: 1, exportedAt: NOW, state: legacy })).ok);
 check("export filenames are deterministic and sanitized", resumeVariantFilename("Riley / Example", "Fraud & Risk", "ats", "pdf") === "Riley-Example-Resume-Fraud-Risk-ATS.pdf");
+
+// --- Export engine: section order, empty sections, termination guard -------------------
+const sampleResume = {
+  summary: "Led store operations until I was laid off in June 2026, kept quality high.",
+  coreSkills: ["Excel", "Scheduling"],
+  experience: [{ title: "Ops Lead", company: "ShopCo", time: "2022–2026", bullets: ["Ran daily operations", ""] }],
+  education: "Associate degree",
+  linkedinHeadline: "",
+  linkedinSummary: ""
+};
+const orderedKeys = exportSections(sampleResume, ["education", "experience", "projects", "skills", "summary"], "ats").sections.map((section) => section.key);
+check("exports respect the variant's chosen sectionOrder", orderedKeys.join(",") === "education,experience,skills,summary", orderedKeys.join(","));
+const strippedSummary = exportSections(sampleResume, undefined, "ats");
+check("termination reasons are stripped from exported summaries as a final net", !/laid\s+off/i.test(JSON.stringify(strippedSummary.sections)) && strippedSummary.sections.some((section) => section.key === "summary" && section.text.includes("kept quality high")));
+check("stripped termination reason is surfaced as a withheld fact", strippedSummary.withheldFacts.length === 1 && strippedSummary.withheldFacts[0] === "reason for leaving");
+const sparseSections = exportSections({ ...sampleResume, summary: "", coreSkills: [], education: "Education or Certification | School or Provider | Year" }, undefined, "ats").sections;
+check("empty or placeholder sections never emit a heading", sparseSections.length === 1 && sparseSections[0].key === "experience");
+
+const firstVariant = pack.variants[0];
+const plainText = variantPlainText(guidedDossier, firstVariant.resume, firstVariant.sectionOrder, firstVariant.kind);
+check("variant plain text is the full document with identity header", plainText.startsWith("Riley Example") && plainText.includes("riley@example.com") && plainText.includes("CORE SKILLS") && plainText.includes("EXPERIENCE") && plainText.includes("- "));
+const renamedDossier = { ...guidedDossier, identity: { ...guidedDossier.identity, fullName: "Riley Renamed" } };
+check("document headers bind to the CURRENT dossier identity at export time", variantPlainText(renamedDossier, firstVariant.resume, firstVariant.sectionOrder, firstVariant.kind).startsWith("Riley Renamed"));
+const headingPositions = ["CORE SKILLS", "EXPERIENCE"].map((label) => plainText.indexOf(label));
+const atsOrderMatches = firstVariant.sectionOrder.indexOf("skills") < firstVariant.sectionOrder.indexOf("experience")
+  ? headingPositions[0] < headingPositions[1]
+  : headingPositions[0] > headingPositions[1];
+check("plain-text section order follows the variant's sectionOrder", atsOrderMatches, `sectionOrder=${firstVariant.sectionOrder.join(",")} positions=${headingPositions.join(",")}`);
+
+// --- Bundle integrity: no silent ZIP overwrites, no internal metadata ---------------------
+const duplicatedPack = { ...pack, variants: [...pack.variants, { ...pack.variants[0], id: "dup-variant" }] };
+const bundle = await createPackBundle(duplicatedPack, guidedDossier, lanes, ["pdf", "docx"]);
+check("bundle filenames are de-duplicated, every variant survives", new Set(bundle.filenames).size === bundle.filenames.length && bundle.filenames.length === duplicatedPack.variants.length * 2 + 2);
+check("filename collisions get -2 suffixes instead of overwriting", bundle.filenames.some((name) => /-2\.(pdf|docx)$/.test(name)));
+const JSZipLib = require("jszip");
+const zipContents = await JSZipLib.loadAsync(await bundle.blob.arrayBuffer());
+check("ZIP contains one entry per reported filename", Object.keys(zipContents.files).length === bundle.filenames.length);
+const readmeOut = await zipContents.file("README.txt").async("string");
+const materialsOut = await zipContents.file("LinkedIn-and-Career-Materials.txt").async("string");
+check("README never mislabels approved-but-unused evidence as unapproved", !/unapproved/i.test(readmeOut) && readmeOut.includes("Approved evidence not used by these documents"));
+check("exports contain no internal ids or dossier jargon", ![readmeOut, materialsOut].some((text) => /\blane-\d|variant-|dossier|debug/i.test(text)));
+const noLaneBundle = await createPackBundle(pack, guidedDossier, [], ["pdf"]);
+const noLaneReadme = await (await JSZipLib.loadAsync(await noLaneBundle.blob.arrayBuffer())).file("README.txt").async("string");
+check("unknown lanes fall back to a human label, never a raw lane id", noLaneReadme.includes("- Custom lane") && !/lane-\d/.test(noLaneReadme));
 
 const analyticsSource = fs.readFileSync(path.join(root, "src/lib/analytics.ts"), "utf8");
 check("career workflow analytics are event-name only", /function trackCareerEvent[\s\S]*?track\(event\)/.test(analyticsSource) && !/trackCareerEvent[\s\S]*?properties/.test(analyticsSource));
