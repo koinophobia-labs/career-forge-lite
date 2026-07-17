@@ -9,20 +9,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#111318",
-        paper: "#f2f5fa",
-        obsidian: "#07090d",
-        graphite: "#161b22",
-        gold: "#d4af37",
-        cyan: "#00e5ff",
-        ember: "#ff6a2b",
-        mint: "#d7f2e3",
-        spruce: "#0d6b5f",
-        coral: "#e56b4f"
+        ink: "#17140f",
+        paper: "#f2eee3",
+        obsidian: "#0b0f0d",
+        graphite: "#171e1a",
+        gold: "#d0aa66",
+        cyan: "#8bc7b0",
+        ember: "#c9784f",
+        mint: "#b9dbc9",
+        spruce: "#3f7b67",
+        coral: "#c9784f"
       },
       boxShadow: {
         soft: "0 18px 50px rgba(0, 0, 0, 0.2)",
-        glow: "0 24px 80px rgba(0, 229, 255, 0.12)"
+        glow: "0 20px 48px rgba(0, 0, 0, 0.22)"
       }
     }
   },
