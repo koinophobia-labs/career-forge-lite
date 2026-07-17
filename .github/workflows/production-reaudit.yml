@@ -1,0 +1,70 @@
+name: Production re-audit
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      AUDIT_BASE_URL: https://career-forge-lite.vercel.app
+      AUDIT_OUTPUT_DIR: audit-artifacts
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_COMMERCE_MODE: "off"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and renderers
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils libreoffice-writer
+
+      - name: Run source baselines without stopping evidence collection
+        shell: bash
+        run: |
+          mkdir -p audit-artifacts/baseline
+          : > audit-artifacts/baseline/command-status.tsv
+          run_and_capture() {
+            local name="$1"
+            shift
+            set +e
+            "$@" >"audit-artifacts/baseline/${name}.log" 2>&1
+            local code=$?
+            set -e
+            printf "%s\t%s\n" "$name" "$code" | tee -a audit-artifacts/baseline/command-status.tsv
+          }
+          run_and_capture npm-test npm test
+          run_and_capture lint npm run lint
+          run_and_capture typecheck npm run typecheck
+          run_and_capture build npm run build
+          run_and_capture acceptance-private npm run acceptance:private
+
+      - name: Run independent production browser re-audit
+        run: node scripts/production-reaudit.mjs
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: career-forge-production-reaudit
+          path: audit-artifacts
+          if-no-files-found: error
+          retention-days: 14
