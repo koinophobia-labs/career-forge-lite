@@ -82,6 +82,10 @@ type DatedEvidenceInterval = {
 export type DurationEvidenceResult = {
   requiredYears: number | null;
   verifiedYears: number | null;
+  // "dated" = computed from non-overlapping date ranges; "stated" = an explicit
+  // tenure figure the user approved ("4+ years of customer success"). Kept so
+  // downstream copy can say "verified" vs "your approved evidence states".
+  durationBasis: "dated" | "stated" | null;
   hasRelevantWork: boolean;
   supportingEvidenceIds: string[];
   qualificationSupport: "direct" | "transferred" | "none";
@@ -133,15 +137,57 @@ function directlySupportsQualification(requirement: string, detail: string): boo
   return terms.every((term) => haystack.includes(term));
 }
 
+// Transfer rules: when a posting asks for a domain the candidate hasn't worked
+// in directly, which kinds of verified adjacent work count as related-but-not-
+// equal proof. Data-driven so a new domain is one entry, not a code change.
+// A requirement outside every rule falls through to the generic term-overlap
+// check (or an honest gap) — it is never silently treated as unsupportable.
+const TRANSFER_RULES: Array<{ requirement: RegExp; evidence: RegExp }> = [
+  {
+    requirement: /\b(saas|technical|product|software|help ?desk|it) support\b/i,
+    evidence: /customer (?:service|support|success)|client (?:service|support)|help ?desk|issue resolution|dispute|escalation|troubleshoot/
+  },
+  {
+    requirement: /\bcustomer (?:success|support|service|experience)\b/i,
+    evidence: /customer (?:service|support|success|communication)|client (?:service|support|relations)|guest service|dispute|escalation|retention|help ?desk|issue resolution|account (?:management|support)/
+  },
+  {
+    requirement: /\b(fraud|risk|trust and safety|abuse|investigation|chargeback)\b/i,
+    evidence: /policy enforcement|responsible gaming|id verification|identity verification|dispute|compliance|loss prevention|chargeback|incident report|investigation/
+  },
+  {
+    requirement: /\b(retail|merchandis\w*|point of sale|pos experience)\b/i,
+    evidence: /retail|cashier|store|point of sale|\bpos\b|checkout|inventory|stock|merchandis/
+  },
+  {
+    requirement: /\b(hospitality|guest (?:service|relations)|front desk|food service)\b/i,
+    evidence: /hospitality|hotel|restaurant|server|barista|bartend|guest|front desk|reception|food service/
+  },
+  {
+    requirement: /\b(operations|logistics|fulfillment|warehouse|inventory|supply chain)\b/i,
+    evidence: /operations|logistics|warehouse|fulfillment|inventory|shipping|receiving|stocking|shift (?:lead|coordination|supervision)|scheduling|dispatch/
+  },
+  {
+    requirement: /\b(administrative|admin(?:istration| support)?|office (?:management|coordination|support)|data entry|scheduling|clerical)\b/i,
+    evidence: /administrative|\badmin\b|\boffice\b|calendar|scheduling|data entry|records|filing|receptionist|clerical|documentation/
+  },
+  {
+    requirement: /\b(healthcare|patient|clinical|medical (?:office|records)|caregiving)\b/i,
+    evidence: /patient|caregiv|medical|clinical|health|care coordination|hipaa|home care/
+  },
+  {
+    requirement: /\b(sales|business development|account management|lead generation)\b/i,
+    evidence: /sales|upsell|prospect|lead generation|\bcrm\b|quota|account (?:management|support)|closing deals|pipeline/
+  },
+  {
+    requirement: /\b(community|moderation|content review|social media)\b/i,
+    evidence: /community|moderat|forum|social media|discord|engagement|event (?:planning|coordination)|outreach/
+  }
+];
+
 function transferSupportsQualification(requirement: string, detail: string): boolean {
   const normalizedDetail = normalize(detail);
-  if (/\b(saas|technical|product) support\b/i.test(requirement)) {
-    return /customer (?:service|support)|issue resolution|dispute|escalation/.test(normalizedDetail);
-  }
-  if (/\b(fraud|risk|trust and safety|abuse)\b/i.test(requirement)) {
-    return /policy enforcement|responsible gaming|id verification|dispute|compliance/.test(normalizedDetail);
-  }
-  return false;
+  return TRANSFER_RULES.some((rule) => rule.requirement.test(requirement) && rule.evidence.test(normalizedDetail));
 }
 
 export function requiredYearsFromRequirement(requirement: string): number | null {
@@ -195,8 +241,28 @@ function intervalFromText(value: string, now: Date): Omit<DatedEvidenceInterval,
   if (monthRange) return intervalFromValues(monthRange[1], monthRange[2], now);
   const isoRange = clean.match(/\b(\d{4}-\d{1,2}(?:-\d{1,2})?)\s+(?:to|-)\s+(\d{4}-\d{1,2}(?:-\d{1,2})?|present|current|now)\b/i);
   if (isoRange) return intervalFromValues(isoRange[1], isoRange[2], now);
-  const yearRange = clean.match(/\b(\d{4})\s*-\s*(\d{4}|present|current|now)\b/i);
+  const yearRange = clean.match(/\b(\d{4})\s*(?:-|to)\s*(\d{4}|present|current|now)\b/i);
   return yearRange ? intervalFromValues(yearRange[1], yearRange[2], now) : null;
+}
+
+// Explicit tenure statements inside approved evidence ("4+ years in customer
+// success", "for 3 years"). Only whole figures the user approved count — vague
+// language ("several years") never satisfies a numeric requirement.
+const STATED_TENURE_PATTERNS = [
+  /\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)(?:['’]s?)?\s+(?:of|in|as|with|doing|working|experience)\b/gi,
+  /\b(?:for|over|nearly|almost|about)\s+(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/gi
+];
+
+function statedTenureYears(detail: string): number | null {
+  let max: number | null = null;
+  for (const pattern of STATED_TENURE_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (const match of detail.matchAll(pattern)) {
+      const years = Number(match[1]);
+      if (Number.isFinite(years) && years > 0 && years < 60 && (max === null || years > max)) max = years;
+    }
+  }
+  return max;
 }
 
 function mergedDurationYears(intervals: DatedEvidenceInterval[]): number | null {
@@ -275,14 +341,24 @@ export function verifiedDurationForRequirement(
     if (interval) intervals.push({ ...interval, evidenceIds: [record.id] });
   }
 
-  const verifiedYears = mergedDurationYears(intervals);
+  const datedYears = mergedDurationYears(intervals);
+  const statedRecords = directRecords
+    .map((item) => ({ id: item.id, years: statedTenureYears(item.detail) }))
+    .filter((item): item is { id: string; years: number } => item.years !== null);
+  const statedYears = statedRecords.length ? Math.max(...statedRecords.map((item) => item.years)) : null;
+  const verifiedYears = datedYears !== null && statedYears !== null ? Math.max(datedYears, statedYears) : (datedYears ?? statedYears);
+  const durationBasis: DurationEvidenceResult["durationBasis"] =
+    verifiedYears === null ? null : datedYears !== null && verifiedYears === datedYears ? "dated" : "stated";
   const intervalEvidenceIds = intervals.flatMap((item) => item.evidenceIds);
   return {
     requiredYears,
     verifiedYears,
+    durationBasis,
     hasRelevantWork: directRecords.length > 0 || transferredRecords.length > 0 || intervals.length > 0,
     supportingEvidenceIds: [...new Set(directRecords.length || intervals.length
-      ? verifiedYears !== null ? intervalEvidenceIds : [...supportingIds]
+      ? verifiedYears !== null
+        ? durationBasis === "dated" ? intervalEvidenceIds : [...intervalEvidenceIds, ...statedRecords.map((item) => item.id)]
+        : [...supportingIds]
       : transferredRecords.map((item) => item.id))],
     qualificationSupport: directRecords.length || structuredDirect || intervals.length ? "direct" : transferredRecords.length ? "transferred" : "none"
   };
@@ -318,7 +394,9 @@ export function extractRequirements(jobPost: string): string[] {
   return [...new Set(requirements)].slice(0, 18);
 }
 
-function matchRequirement(requirement: string, profile: CareerProfile, dossier?: CareerDossier | null, now: Date | string = new Date()): RequirementMatch {
+// Exported so interview prep can re-verify a stored gap against current
+// approved evidence instead of trusting a stale (and partial/gap-merged) list.
+export function matchRequirement(requirement: string, profile: CareerProfile, dossier?: CareerDossier | null, now: Date | string = new Date()): RequirementMatch {
   const records = approvedRecords(dossier);
   const corpus = truthCorpus(profile, dossier);
   const reqNorm = normalize(requirement);
@@ -354,7 +432,7 @@ function matchRequirement(requirement: string, profile: CareerProfile, dossier?:
   if (requiredYears !== null) {
     const duration = dossier
       ? verifiedDurationForRequirement(requirement, dossier, now)
-      : { requiredYears, verifiedYears: null, hasRelevantWork: overlap.length >= 1, supportingEvidenceIds: [], qualificationSupport: "none" as const };
+      : { requiredYears, verifiedYears: null, durationBasis: null, hasRelevantWork: overlap.length >= 1, supportingEvidenceIds: [], qualificationSupport: "none" as const };
     const supportingIds = duration.supportingEvidenceIds;
     if (
       duration.qualificationSupport === "direct" &&
@@ -364,7 +442,10 @@ function matchRequirement(requirement: string, profile: CareerProfile, dossier?:
       return {
         requirement,
         status: "covered",
-        evidence: `Approved evidence proves the requested work and at least ${requiredYears} year${requiredYears === 1 ? "" : "s"} of non-overlapping duration.`,
+        evidence:
+          duration.durationBasis === "stated"
+            ? `Approved evidence describes the requested work and states at least ${requiredYears} year${requiredYears === 1 ? "" : "s"} of it.`
+            : `Approved evidence proves the requested work and at least ${requiredYears} year${requiredYears === 1 ? "" : "s"} of non-overlapping duration.`,
         evidenceIds: supportingIds,
         supportType: "direct"
       };
@@ -374,7 +455,7 @@ function matchRequirement(requirement: string, profile: CareerProfile, dossier?:
       return {
         requirement,
         status: "partial",
-        evidence: `Approved evidence verifies about ${verified.toFixed(1)} year${verified === 1 ? "" : "s"} of the requested work, below the ${requiredYears}-year requirement.`,
+        evidence: `Approved evidence ${duration.durationBasis === "stated" ? "states" : "verifies"} about ${verified.toFixed(1)} year${verified === 1 ? "" : "s"} of the requested work, below the ${requiredYears}-year requirement.`,
         evidenceIds: supportingIds,
         supportType: "transferred"
       };
