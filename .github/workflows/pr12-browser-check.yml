@@ -1,0 +1,42 @@
+name: PR12 browser regression
+
+on:
+  push:
+    branches:
+      - audit/pr12-browser-check
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_COMMERCE_MODE: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run input stability regression
+        shell: bash
+        run: |
+          mkdir -p browser-evidence
+          set +e
+          timeout 12m node scripts/input-stability-regression.mjs > browser-evidence/input-stability.log 2>&1
+          status=$?
+          cat browser-evidence/input-stability.log
+          exit "$status"
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr12-browser-evidence
+          path: browser-evidence
+          if-no-files-found: error
+          retention-days: 7
