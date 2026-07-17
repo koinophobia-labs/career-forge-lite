@@ -1,0 +1,114 @@
+name: PR15 independent preview audit
+
+on:
+  push:
+    branches:
+      - audit/pr15-independent-preview-run3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      AUDIT_BASE_URL: https://career-forge-lite-git-feat-f0bb0b-koinophobia999-8829s-projects.vercel.app
+      AUDIT_TARGET_SHA: 8b3a1f5d294f6ca60d8560a5ba9284c2988b29a0
+      AUDIT_OUTPUT_DIR: audit-artifacts
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_COMMERCE_MODE: "off"
+
+    steps:
+      - name: Check out independent audit harness
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install audit-harness dependencies
+        run: npm ci
+
+      - name: Install Chromium and document renderers
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y libreoffice poppler-utils
+
+      - name: Run two exact-SHA clean-checkout release sequences
+        shell: bash
+        run: |
+          set -u
+          mkdir -p "$GITHUB_WORKSPACE/audit-artifacts"
+          : > "$GITHUB_WORKSPACE/audit-artifacts/release-summary.tsv"
+
+          commands=(
+            "npm test"
+            "npm run lint"
+            "npm run typecheck"
+            "npm run build"
+            "npm run test:usability"
+            "npm run test:render"
+            "npm run acceptance:private"
+            "npm run acceptance:browser"
+            "npm run acceptance:activation"
+            "npm run acceptance:conflict"
+            "npm run acceptance:mobile-a11y"
+            "npm run acceptance:outreach-interview"
+            "npm run playtest:adversarial"
+            "npm run playtest:cold"
+          )
+
+          for run_number in 1 2; do
+            clone_dir="/tmp/career-forge-pr15-run-${run_number}"
+            log_dir="$GITHUB_WORKSPACE/audit-artifacts/source-run-${run_number}"
+            rm -rf "$clone_dir"
+            mkdir -p "$log_dir"
+            git clone --quiet https://github.com/koinophobia-labs/career-forge-lite.git "$clone_dir"
+            cd "$clone_dir"
+            git checkout --quiet --detach "$AUDIT_TARGET_SHA"
+            git rev-parse HEAD > "$log_dir/head-sha.txt"
+
+            set +e
+            npm ci > "$log_dir/00-npm-ci.log" 2>&1
+            ci_code=$?
+            set -e
+            printf "%s\t%s\t%s\n" "$run_number" "npm ci" "$ci_code" >> "$GITHUB_WORKSPACE/audit-artifacts/release-summary.tsv"
+
+            index=1
+            for command in "${commands[@]}"; do
+              safe_name=$(printf "%s" "$command" | tr ' /:' '---' | tr -cd '[:alnum:]_.-')
+              log_file=$(printf "%s/%02d-%s.log" "$log_dir" "$index" "$safe_name")
+              set +e
+              bash -lc "$command" > "$log_file" 2>&1
+              code=$?
+              set -e
+              printf "%s\t%s\t%s\n" "$run_number" "$command" "$code" >> "$GITHUB_WORKSPACE/audit-artifacts/release-summary.tsv"
+              index=$((index + 1))
+            done
+          done
+
+          cd "$GITHUB_WORKSPACE"
+          cat audit-artifacts/release-summary.tsv
+
+      - name: Materialize independent audit harness
+        shell: bash
+        run: |
+          cat .github/audit-payload/pr15-*.b64 | base64 -d | gzip -d > /tmp/pr15-independent-preview-audit.mjs
+          node --check /tmp/pr15-independent-preview-audit.mjs
+
+      - name: Run independent browser, migration, export, privacy, and accessibility audit
+        run: node /tmp/pr15-independent-preview-audit.mjs
+
+      - name: Upload complete independent audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: career-forge-pr15-independent-audit
+          path: audit-artifacts
+          if-no-files-found: error
+          retention-days: 14
