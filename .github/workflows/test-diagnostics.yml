@@ -1,0 +1,46 @@
+name: Regression diagnostics
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        script:
+          - intent-router-regression.mjs
+          - command-center-regression.mjs
+          - interview-prep-regression.mjs
+          - input-guidance-regression.mjs
+          - tailor-handoff-regression.mjs
+          - tailored-resume-regression.mjs
+          - version-management-regression.mjs
+          - resume-export-regression.mjs
+          - backup-regression.mjs
+          - weekly-review-regression.mjs
+          - follow-up-log-regression.mjs
+          - dossier-pack-regression.mjs
+          - truth-workflow-regression.mjs
+          - usability-hotfix-regression.mjs
+          - input-stability-regression.mjs
+          - durability-regression.mjs
+          - entitlement-regression.mjs
+          - activation-regression.mjs
+          - market-moat-regression.mjs
+          - quality-regression-suite.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Run ${{ matrix.script }}
+        run: node scripts/${{ matrix.script }}
