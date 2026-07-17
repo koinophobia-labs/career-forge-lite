@@ -8,7 +8,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { createId } from "@/lib/command-center-store";
 import { useEntitlement } from "@/lib/entitlement";
 import { laneLibrary } from "@/lib/lane-library";
-import { generateResumePack } from "@/lib/resume-pack";
+import { generateResumePack, preserveUserEditedVariants } from "@/lib/resume-pack";
 import { assessDossierReadiness } from "@/lib/dossier";
 import { trackCareerEvent } from "@/lib/analytics";
 import { activationEventsForTransition } from "@/lib/activation";
@@ -148,9 +148,15 @@ export default function TargetsPage() {
     if (!active.length || dossierReadiness.level === "not-ready") return;
     trackCareerEvent("resume_pack_started");
     const now = new Date().toISOString();
-    const pack = generateResumePack(state.dossier, active, now);
+    const generated = generateResumePack(state.dossier, active, now);
     let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
+      // Manual edits survive regeneration: a user-edited variant for the same
+      // lane+kind carries over (marked out-of-date) instead of being clobbered.
+      const previousPack = [...current.resumePacks]
+        .filter((item) => item.status !== "archived")
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      const pack = preserveUserEditedVariants(previousPack, generated);
       const versions: ResumeVersionRecord[] = pack.variants.map((variant) => {
         const lane = current.lanes.find((item) => item.id === variant.laneId);
         return {
@@ -187,7 +193,9 @@ export default function TargetsPage() {
       );
       const next = {
         ...current,
-        resumePacks: [...current.resumePacks.map((item) => item.status === "current" ? { ...item, status: "archived" as const } : item), pack],
+        // Every prior pack archives on re-forge — including packs already in
+        // "needs-review" after an edit, or duplicates linger as live packs.
+        resumePacks: [...current.resumePacks.map((item) => item.status === "archived" ? item : { ...item, status: "archived" as const }), pack],
         resumeVersions: [...survivingVersions, ...versions]
       };
       events = activationEventsForTransition(current, next);
