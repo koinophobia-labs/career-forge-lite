@@ -1,0 +1,233 @@
+/* Career Forge visual system
+   Evidence ledger, not neon command center. */
+
+:root {
+  --bg: #101512;
+  --bg2: #0c100e;
+  --panel: #171e1a;
+  --panel2: #1d2520;
+  --text: #f2eee3;
+  --dim: #aeb6ad;
+  --faint: #727d74;
+  --line: rgba(242, 238, 227, 0.075);
+  --line2: rgba(242, 238, 227, 0.15);
+  --gold: #d0aa66;
+  --cyan: #8bc7b0;
+  --orange: #c9784f;
+  --glow: transparent;
+  --coral: #c9784f;
+  --pink: #d0aa66;
+  --magenta: #8bc7b0;
+  --violet: #81988b;
+}
+
+body {
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 55px,
+      rgba(242, 238, 227, 0.025) 55px 56px
+    ),
+    linear-gradient(180deg, #111713 0%, #0b0f0d 100%);
+  background-size: auto;
+  color: var(--text);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.035em;
+}
+
+.trust-panel,
+.trust-card,
+.dark-form-card {
+  border-color: var(--line2);
+  border-radius: 5px;
+  background: var(--panel);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+  backdrop-filter: none;
+}
+
+.trust-card {
+  background: var(--panel2);
+  box-shadow: none;
+}
+
+.trust-kicker,
+.lab-mono {
+  color: var(--gold);
+  letter-spacing: 0.13em;
+}
+
+.logo-mark {
+  border-color: rgba(208, 170, 102, 0.42);
+  border-radius: 4px;
+  background: #1a211d;
+  color: var(--gold);
+  box-shadow: none;
+}
+
+.lab-pill-button {
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  background: var(--gold);
+  color: #17140f;
+  box-shadow: none;
+}
+
+.lab-pill-button:hover {
+  border-color: #efd091;
+  background: #efd091;
+  color: #11100d;
+}
+
+.lab-secondary-button {
+  border-color: rgba(139, 199, 176, 0.42);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cyan);
+}
+
+.lab-secondary-button:hover {
+  border-color: var(--cyan);
+  color: #d7f1e6;
+}
+
+.border-gold\/25,
+.border-gold\/30,
+.border-gold\/50 {
+  border-color: rgba(208, 170, 102, 0.34) !important;
+}
+
+.border-cyan\/25,
+.border-cyan\/30,
+.border-cyan\/40,
+.border-cyan\/50 {
+  border-color: rgba(139, 199, 176, 0.34) !important;
+}
+
+.border-coral\/30 {
+  border-color: rgba(201, 120, 79, 0.34) !important;
+}
+
+.bg-gold\/5 {
+  background-color: rgba(208, 170, 102, 0.045) !important;
+}
+
+.bg-gold\/10 {
+  background-color: rgba(208, 170, 102, 0.08) !important;
+}
+
+.bg-cyan\/10 {
+  background-color: rgba(139, 199, 176, 0.08) !important;
+}
+
+.bg-coral\/10 {
+  background-color: rgba(201, 120, 79, 0.08) !important;
+}
+
+.bg-obsidian\/25,
+.bg-obsidian\/35,
+.bg-obsidian\/40 {
+  background-color: rgba(7, 10, 8, 0.42) !important;
+}
+
+.bg-white\/5 {
+  background-color: rgba(242, 238, 227, 0.035) !important;
+}
+
+.text-gold {
+  color: var(--gold) !important;
+}
+
+.text-cyan {
+  color: var(--cyan) !important;
+}
+
+.text-coral {
+  color: var(--orange) !important;
+}
+
+.text-mint {
+  color: #b9dbc9 !important;
+}
+
+.hover\:text-gold:hover {
+  color: #efd091 !important;
+}
+
+.hover\:text-cyan:hover,
+.group:hover .group-hover\:text-cyan {
+  color: #c9eadb !important;
+}
+
+.hover\:border-gold:hover {
+  border-color: #efd091 !important;
+}
+
+.rounded-xl,
+.rounded-lg,
+.rounded-md {
+  border-radius: 5px;
+}
+
+.rounded {
+  border-radius: 3px;
+}
+
+.rounded-full {
+  border-radius: 999px;
+}
+
+input,
+textarea,
+select {
+  border-radius: 4px !important;
+}
+
+button,
+a {
+  text-underline-offset: 3px;
+}
+
+.ecosystem-dot {
+  box-shadow: none;
+}
+
+.ecosystem-dot-gold {
+  background: var(--gold);
+  color: var(--gold);
+}
+
+.ecosystem-dot-cyan {
+  background: var(--cyan);
+  color: var(--cyan);
+}
+
+.ecosystem-dot-ember {
+  background: var(--orange);
+  color: var(--orange);
+}
+
+.completion-pulse {
+  animation: none;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .trust-panel,
+  .trust-card,
+  .dark-form-card {
+    border-radius: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
