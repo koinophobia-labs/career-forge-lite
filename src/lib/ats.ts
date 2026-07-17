@@ -1,5 +1,5 @@
 import type { AtsCheck, IntakeData, ResumePackage } from "@/types/career";
-import { isPlaceholderEducation } from "@/lib/resume-export";
+import { isPlaceholderEducation, roleHasContent } from "@/lib/resume-export";
 
 const actionVerbs = [
   "coordinated",
@@ -89,17 +89,37 @@ export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[
   });
   const missingRoleContext = resume.experience.some((role) => !role.company.trim() || role.company.includes("Company") || !role.time.trim() || role.time === "Dates");
   const hasEmptySections = !resume.summary.trim() || resume.coreSkills.filter((skill) => skill.trim()).length === 0 || resume.experience.length === 0;
+  // Real checks, not template assertions: headings only render when their
+  // section has content, and column artifacts come from the user's own text.
+  const missingHeadings = [
+    resume.summary.trim() ? null : "Summary",
+    resume.coreSkills.some((skill) => skill.trim()) ? null : "Core Skills",
+    resume.experience.some(roleHasContent) ? null : "Experience",
+    resume.education.trim() && !isPlaceholderEducation(resume.education) ? null : "Education"
+  ].filter((heading): heading is string => Boolean(heading));
+  const columnArtifacts = [
+    resume.summary,
+    ...resume.coreSkills,
+    resume.education,
+    ...resume.experience.flatMap((role) => [role.title, role.company, role.time, ...role.bullets])
+  ].filter((line) => /\t| {3,}/.test(line ?? ""));
 
   return [
     {
       label: "Standard section headings",
-      status: "PASS",
-      detail: "Resume uses Summary, Core Skills, Experience, and Education."
+      status: missingHeadings.length === 0 ? "PASS" : "WARNING",
+      detail:
+        missingHeadings.length === 0
+          ? "All four standard ATS headings will render: Summary, Core Skills, Experience, and Education each have content."
+          : `Empty sections omit their headings from the export: ${missingHeadings.join(", ")}. Add content so ATS parsers find every standard section.`
     },
     {
       label: "Single-column structure",
-      status: "PASS",
-      detail: "Templates render as one-column resume content without sidebars, tables, or charts."
+      status: columnArtifacts.length === 0 ? "PASS" : "WARNING",
+      detail:
+        columnArtifacts.length === 0
+          ? "No tabs or wide spacing that ATS parsers can misread as columns or tables were found in the resume text."
+          : `Some lines contain tabs or wide spacing that can parse as columns or tables. Replace them with single spaces: ${columnArtifacts.slice(0, 2).map((line) => `“${line.trim().slice(0, 60)}”`).join(", ")}.`
     },
     {
       label: "Quantified achievements present",

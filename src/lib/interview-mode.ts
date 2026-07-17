@@ -1,8 +1,9 @@
 import { allToolOptions, initialIntake } from "@/lib/career-data";
 import { extractEducationEntries, formatEducationEntries, hasEducationEvidence } from "@/lib/education-intelligence";
 import { generateResumePackage } from "@/lib/generator";
-import { findIndependentWorkRole, independentWorkArsenals, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
+import { findIndependentWorkRole, inferIndependentWorkCategory } from "@/lib/independent-work-intelligence";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
+import { isUncertaintyStatement } from "@/lib/truth-guards";
 import type { IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 import type {
   AssistantIntent,
@@ -143,8 +144,8 @@ const educationPattern = /\b(degree|certification|certificate|bootcamp|course|un
 const gapPattern = /\b(i don'?t have|i lack|not much experience|still learning|gap|career change|limited direct|no direct|new to)\b/i;
 const skipPattern = /\b(skip|none|n\/a|not applicable|no projects|nothing to add|no education|no cert|no gap)\b/i;
 const weakAnswerPattern = /^(ok|yes|no|none|n\/a|test|asdf|idk|not sure|maybe|.)$/i;
-const metricPattern =
-  /\b(?:\$?\d[\d,.]*\+?(?:%|k|m| hours?| minutes?| days?| weeks?| months?| years?)?\s*(?:customers|clients|users|tickets|calls|reports|projects|transactions|orders|accounts|team members|people|cases|requests|dollars|revenue|budget|weekly|monthly|daily|per week|per month|per day)?|\$\d[\d,.]*\+?|\d+%\+?)\b(?:[^,.]*)/gi;
+const metricSignalPattern =
+  /\$|%|\+|\b(?:customers?|clients?|users?|tickets?|calls?|reports?|projects?|transactions?|orders?|accounts?|team|people|cases?|requests?|dollars?|revenue|budget|weekly|monthly|daily|per\s+(?:week|month|day|shift)|hours?|minutes?|days?|weeks?|months?|years?|saved|reduced|increased|arr|mrr|uptime|csat|nps)\b/i;
 
 const skillKeywords = [
   "customer communication",
@@ -236,7 +237,7 @@ function unique(items: string[]) {
 }
 
 function titleCase(value: string) {
-  const acronyms = new Set(["ai", "api", "ats", "crm", "css", "html", "it", "kpi", "pos", "qa", "sql", "ui", "ux"]);
+  const acronyms = new Set(["ai", "api", "arr", "ats", "crm", "csat", "csm", "css", "html", "it", "kpi", "pos", "qa", "qbr", "qbrs", "sql", "ui", "ux"]);
   return value
     .split(" ")
     .map((part) => {
@@ -493,20 +494,31 @@ function extractAiWorkflowSignals(answer: string, tools: string[]) {
 }
 
 function extractMetricSignals(answer: string) {
-  return unique(answer.match(metricPattern) ?? [])
-    .filter((metric) => {
-      const trimmed = metric.trim();
-      if (/^(?:19|20)\d{2}(?:\s*-\s*(?:present|(?:19|20)\d{2}))?$/i.test(trimmed)) return false;
-      if (/\bfrom\s+(?:19|20)\d{2}\b/i.test(trimmed)) return false;
-      if (/\b(?:19|20)\d{2}\s*-\s*(?:present|(?:19|20)\d{2})\b/i.test(trimmed)) return false;
-      return /\$|%|\+|customers?|clients?|users?|tickets?|calls?|reports?|projects?|transactions?|orders?|accounts?|team members?|people|cases?|requests?|revenue|budget|weekly|monthly|daily|per week|per month|per day|hours?|minutes?|days?|saved|reduced|increased/i.test(trimmed);
-    })
-    .slice(0, 10);
+  if (isUncertaintyStatement(answer)) return [];
+  // Clause-based extraction: split points ignore decimals and thousands
+  // separators so "$3.2M ARR", "4.5 years", and "99.9%" survive intact, and a
+  // number's context never swallows the next clause.
+  const clauses = answer
+    .split(/(?:[.;!?](?!\d))|,(?!\d)|\band\b|\n/i)
+    .map((clause) => cleanItem(clause))
+    .filter((clause) => /\d/.test(clause))
+    .map((clause) => clause.replace(/^(?:i|we)\s+(?:also\s+)?(?:supported|handled|managed|helped|served|prepared|processed|completed|made|did|had|averaged|delivered|took|answered|tracked|grew|kept|maintained|covered|worked|improved|reduced|increased)\s+(?:up\s+to\s+)?/i, "").replace(/^(?:my|our)\s+/i, ""))
+    .filter((clause) => {
+      if (/^(?:19|20)\d{2}(?:\s*-\s*(?:present|(?:19|20)\d{2}))?$/i.test(clause)) return false;
+      if (/\b(?:from|since)\s+(?:19|20)\d{2}\b/i.test(clause)) return false;
+      if (/\b(?:19|20)\d{2}\s*-\s*(?:present|(?:19|20)\d{2})\b/i.test(clause)) return false;
+      return metricSignalPattern.test(clause);
+    });
+  return unique(clauses).slice(0, 10);
 }
 
 function extractResponsibilitySignals(answer: string) {
   const sentenceSignals = splitSentences(answer).filter((sentence) => responsibilityPattern.test(sentence));
-  const listSignals = responsibilityPattern.test(answer) ? splitSignals(answer.replace(responsibilityPattern, "")) : [];
+  // Stripping the verb can leave the subject pronoun behind ("I onboarding");
+  // drop it so fragments read as responsibilities, not shards.
+  const listSignals = responsibilityPattern.test(answer)
+    ? splitSignals(answer.replace(responsibilityPattern, "")).map((item) => item.replace(/^(i|we)\s+/i, "")).filter((item) => item.length > 2)
+    : [];
   return unique([...sentenceSignals, ...listSignals]).slice(0, 12);
 }
 
@@ -664,6 +676,9 @@ function acknowledgementFor(session: InterviewSession) {
   const role = draft.roles[0];
 
   if (!answer) return "Got it.";
+  if (isUncertaintyStatement(answer)) {
+    return "No problem — we can write this without exact numbers. Nothing uncertain goes into the draft as a claim.";
+  }
   if (role?.company && role.timeInRole && answer.toLowerCase().includes(role.company.toLowerCase())) {
     return `Great. ${role.timeInRole} at ${role.company} gives us solid recent experience.`;
   }
@@ -719,6 +734,17 @@ function isStageSatisfied(session: InterviewSession, stageId: InterviewStageId) 
 
 export function updateInterviewDraftFromUserAnswer(session: InterviewSession, userMessage: InterviewMessage): InterviewSession {
   const answer = userMessage.content.trim();
+
+  // "I don't know my numbers" advances the conversation but never becomes
+  // draft content: no extraction, stage marked answered, memory updated.
+  if (isUncertaintyStatement(answer)) {
+    const withUserMessage = addMessage(session, userMessage);
+    const completedStages = unique([...session.completedStages, session.currentStage]) as InterviewStageId[];
+    const statusSession = withStatuses({ ...withUserMessage, completedStages });
+    const memorySession = { ...statusSession, memory: updateConversationMemory(session, statusSession, answer) };
+    return withStatuses({ ...memorySession, currentStage: getNextInterviewStage(memorySession).id });
+  }
+
   const nextDraft: InterviewResumeDraft = applyGeneralExtraction(session.resumeDraft, answer);
 
   if (session.currentStage === "role_targeting") {
@@ -741,14 +767,18 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
     nextDraft.responsibilities = unique([...nextDraft.responsibilities, ...splitSignals(answer)]).slice(0, 12);
   }
 
-  if (session.currentStage === "achievements" && !nextDraft.achievements.length && !skipPattern.test(answer)) {
+  if (session.currentStage === "achievements" && !nextDraft.achievements.length && !skipPattern.test(answer) && !weakAnswerPattern.test(answer)) {
     nextDraft.achievements = unique([...nextDraft.achievements, answer]).slice(0, 10);
   }
 
   if (session.currentStage === "metrics" && !nextDraft.metrics.length) nextDraft.metrics = unique([...nextDraft.metrics, ...extractMetricSignals(answer)]).slice(0, 10);
 
   if (session.currentStage === "tools_and_skills") {
-    const extraSkills = splitSignals(answer).filter((item) => !nextDraft.tools.some((tool) => tool.toLowerCase() === item.toLowerCase()));
+    // Only fragments that read as skill labels enter the skills list — no
+    // first-person shards or number-bearing sentences.
+    const extraSkills = splitSignals(answer)
+      .filter((item) => !nextDraft.tools.some((tool) => tool.toLowerCase() === item.toLowerCase()))
+      .filter((item) => item.split(/\s+/).length <= 4 && !/^i\b/i.test(item) && !/\d|\$/.test(item) && !/\b(me|my|them|they|was|were|about)\b/i.test(item));
     nextDraft.skills = unique([
       ...nextDraft.skills,
       ...extraSkills.map(titleCase),
@@ -756,7 +786,7 @@ export function updateInterviewDraftFromUserAnswer(session: InterviewSession, us
     ]).slice(0, 12);
   }
 
-  if (session.currentStage === "projects_or_portfolio" && !skipPattern.test(answer)) {
+  if (session.currentStage === "projects_or_portfolio" && !skipPattern.test(answer) && !weakAnswerPattern.test(answer)) {
     nextDraft.projects = unique([...nextDraft.projects, ...extractProjectSignals(answer), answer]).slice(0, 8);
   }
 
@@ -1216,11 +1246,10 @@ export function getSmartInterviewSummary(session: InterviewSession): { learned: 
   };
 }
 
-function metricForPattern(metrics: string, pattern: RegExp) {
-  return metrics
-    .split(",")
-    .map((metric) => metric.trim())
-    .find((metric) => pattern.test(metric)) ?? "";
+function metricForPattern(metrics: string[], pattern: RegExp) {
+  // Operates on the metric array directly so values containing commas or
+  // decimals ("$3,200", "$3.2M ARR") are never re-split.
+  return metrics.map((metric) => metric.trim()).find((metric) => pattern.test(metric)) ?? "";
 }
 
 export function convertInterviewDraftToExistingResumeInput(session: InterviewSession): IntakeData {
@@ -1236,7 +1265,7 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     : undefined;
   const primaryRole = role ?? projectFallbackRole;
   const roleFamily = inferRoleFamily([draft.targetRole, draft.targetIndustry, ...draft.skills, ...draft.responsibilities, primaryRole?.title ?? ""].join(" "));
-  const metrics = draft.metrics.join(", ");
+  const metrics = draft.metrics;
   const independentCategory = inferIndependentWorkCategory([
     draft.targetRole,
     draft.targetIndustry,
@@ -1258,7 +1287,9 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     tools: draft.tools.join(", "),
     selectedAiWorkflows,
     independentWorkType: independentCategory || findIndependentWorkRole(primaryRole?.title ?? "") ? "Independent" : "",
-    selectedIndependentWorkSignals: independentCategory ? independentWorkArsenals[independentCategory].skills.slice(0, 5) : [],
+    // Arsenal skills are template taxonomy the user never said in this
+    // conversation — they must not seed the draft.
+    selectedIndependentWorkSignals: [],
     responsibilities: draft.responsibilities.join(", "),
     selectedResponsibilities: unique([...draft.responsibilities, ...draft.skills]).slice(0, 10),
     customersServed: metricForPattern(metrics, /customer|client|user|people/i),
@@ -1268,8 +1299,11 @@ export function convertInterviewDraftToExistingResumeInput(session: InterviewSes
     callsHandled: metricForPattern(metrics, /call/i),
     revenueInfluenced: metricForPattern(metrics, /\$|revenue|budget|money|dollars/i),
     reportsCreated: metricForPattern(metrics, /report|document|dashboard/i),
-    selectedOutcomes: unique([...draft.achievements, ...draft.projects]).slice(0, 3),
-    outcomes: draft.achievements.join(", "),
+    // Long achievement sentences become their own bullets via `outcomes`;
+    // selectedOutcomes stays reserved for short labels so nothing is spliced
+    // mid-sentence into template clauses.
+    selectedOutcomes: unique([...draft.achievements, ...draft.projects]).filter((item) => item.split(/\s+/).length <= 4).slice(0, 3),
+    outcomes: draft.achievements.join(". "),
     education: draft.education || draft.certifications.join(", "),
     customRoleIndustry: draft.targetIndustry,
     customRoleTransferableSkills: draft.skills,

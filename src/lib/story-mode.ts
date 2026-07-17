@@ -14,7 +14,9 @@ import {
   inferIndependentWorkCategory,
   inferIndependentWorkRoleTitle
 } from "@/lib/independent-work-intelligence";
+import { dedupeNearIdentical, isGroundedClaim } from "@/lib/generator";
 import { getMissingSignals, getNextUsefulPrompt, hasEnoughResumeSignal } from "@/lib/interview-state";
+import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { parseRoleAnswer } from "@/lib/natural-role-parser";
 import { inferTransferTarget } from "@/lib/transferable-targets";
@@ -146,9 +148,6 @@ const blueCollarTools = [
   "Scanner",
   "Vehicle"
 ];
-
-const scopePattern =
-  /\b(?:\$?\d[\d,.]*\+?(?:%|k|m| hours?| minutes?| days?| weeks?| months?| years?)?\s*(?:customers|clients|users|tickets|calls|reports|projects|transactions|wagers|orders|accounts|team members|people|cases|requests|dollars|revenue|budget|weekly|monthly|daily|per week|per month|per day)?|\$\d[\d,.]*\+?|\d+%\+?)\b(?:[^,.]*)/gi;
 
 function clean(value = "") {
   return value
@@ -317,7 +316,7 @@ function extractTools(story: string) {
     /\bcar\b|\bvehicle\b|\bdriving\b|\bdrove\b/i.test(story) ? "Vehicle" : ""
   ];
   const toolClause = story.match(/\b(?:used|tools? like|worked with|systems? like|platforms? like|equipment like|equipment included|operated)\s+([^.;]+)/i)?.[1] ?? "";
-  return unique([...knownTools, ...knownWorkTools, ...inferredTools, ...splitSignals(toolClause).filter((item) => item.length <= 32).map(titleCase)]).slice(0, 12);
+  return dedupeNearIdentical(unique([...knownTools, ...knownWorkTools, ...inferredTools, ...splitSignals(toolClause).filter((item) => item.length <= 32).map(titleCase)])).slice(0, 12);
 }
 
 function extractAiWorkflows(story: string, tools: string[]) {
@@ -345,13 +344,23 @@ function extractResponsibilities(story: string, roleFamily: RoleFamily) {
   const familyMatches = roleIntelligence[roleFamily].responsibilities.filter((item) => lower.includes(item.toLowerCase()));
   const independentCategory = inferIndependentWorkCategory(story);
   const independentMatches = independentCategory ? independentWorkArsenals[independentCategory].responsibilities.filter((item) => lower.includes(item.toLowerCase()) || lower.includes(item.split(" ")[0].toLowerCase())) : [];
-  return unique([...familyMatches, ...keywordMatches, ...actionMatches, ...clauseMatches, ...independentMatches]).slice(0, 10);
+  return dedupeNearIdentical(unique([...familyMatches, ...keywordMatches, ...actionMatches, ...clauseMatches, ...independentMatches])).slice(0, 10);
 }
 
 function extractScope(story: string) {
-  return unique(story.match(scopePattern) ?? [])
-    .filter((item) => !/^(?:19|20)\d{2}(?:\s*(?:-|to)\s*(?:present|now|current|(?:19|20)\d{2}))?$/i.test(item))
-    .slice(0, 8);
+  // Clause-based extraction keeps decimals and units intact ($3.2M ARR stays
+  // whole) and stops a number's context from swallowing the next clause.
+  const clauses = story
+    .split(/(?:[.;!?](?!\d))|,(?!\d)|\band\b|\n/i)
+    .map(clean)
+    .filter((clause) => /\d/.test(clause))
+    .map((clause) => clause.replace(/^(?:i|we)\s+(?:also\s+)?(?:supported|handled|managed|helped|served|prepared|processed|completed|made|did|had|averaged|delivered|took|answered|tracked|grew|maintained|covered|worked)\s+/i, ""))
+    .filter((clause) => !/^(?:19|20)\d{2}(?:\s*(?:-|to)\s*(?:present|now|current|(?:19|20)\d{2}))?$/i.test(clause))
+    .filter((clause) => !/\b(?:from|since|in)\s+(?:19|20)\d{2}\b/i.test(clause))
+    .filter((clause) =>
+      /\$|%|\+|\b(?:customers?|clients?|users?|tickets?|calls?|reports?|projects?|transactions?|wagers?|orders?|accounts?|team|people|cases?|requests?|dollars?|revenue|budget|weekly|monthly|daily|per\s+(?:week|month|day|shift)|hours?|minutes?|days?|weeks?|months?|years?|shifts?|haircuts?|deliveries)\b/i.test(clause)
+    );
+  return unique(clauses).slice(0, 8);
 }
 
 function extractEducation(story: string) {
@@ -376,7 +385,7 @@ function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
   const independentSkills = independentCategory
     ? independentWorkArsenals[independentCategory].skills.filter((skill) => lower.includes(skill.toLowerCase()) || lower.includes(skill.split(" ")[0].toLowerCase()))
     : [];
-  return unique([...familySkills, ...keywordMatches, ...inferredProof, ...independentSkills]).slice(0, 10);
+  return dedupeNearIdentical(unique([...familySkills, ...keywordMatches, ...inferredProof, ...independentSkills])).slice(0, 10);
 }
 
 function metricForPattern(metrics: string[], pattern: RegExp) {
@@ -434,6 +443,11 @@ function buildInfoChecklist(story: string, intake: IntakeData, role: { title: st
 }
 
 export function parseStoryToDossier(story: string, previousIntake: IntakeData = initialIntake): StoryDossier {
+  // Uncertainty statements ("I don't know my numbers") advance the story but
+  // never become extracted evidence.
+  const factualStory = splitSentences(story)
+    .filter((sentence) => !isUncertaintyStatement(sentence))
+    .join(". ");
   const detectedRoles = detectRoleMentions(story);
   const role = extractRole(story);
   const initialRoleFamily = role.family ?? inferRoleFamily(story, role.title);
@@ -449,12 +463,12 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   const roleFamily: RoleFamily = founderProductStory ? "Tech" : transferTarget?.roleFamily ?? (explicitTarget ? inferRoleFamily(targetRole, targetRole) : initialRoleFamily);
   const email = extractEmail(story);
   const name = extractName(story);
-  const responsibilities = extractResponsibilities(story, roleFamily);
-  const tools = extractTools(story);
-  const aiWorkflows = extractAiWorkflows(story, tools);
-  const scope = extractScope(story);
+  const responsibilities = extractResponsibilities(factualStory, roleFamily);
+  const tools = extractTools(factualStory);
+  const aiWorkflows = extractAiWorkflows(factualStory, tools);
+  const scope = extractScope(factualStory);
   const education = extractEducation(story);
-  const transferableSignals = extractTransferableSignals(story, roleFamily);
+  const transferableSignals = extractTransferableSignals(factualStory, roleFamily);
   const selectedOutcomes = transferableSignals.filter((item) =>
     /accuracy|satisfaction|efficiency|reliability|compliance|speed|retention|revenue|problem|de-escalation|documentation|safety|sanitation|time management|patient care/i.test(item)
   );
@@ -478,9 +492,13 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     tools: unique([previousIntake.tools, ...tools]).join(", "),
     selectedAiWorkflows: unique([...previousIntake.selectedAiWorkflows, ...aiWorkflows]).slice(0, 8),
     independentWorkType: previousIntake.independentWorkType || (independentCategory ? "Independent" : ""),
+    // Arsenal skills are template taxonomy: only entries grounded in the
+    // user's own story may seed the dossier.
     selectedIndependentWorkSignals: unique([
       ...previousIntake.selectedIndependentWorkSignals,
-      ...(independentCategory ? independentWorkArsenals[independentCategory].skills.slice(0, 4) : [])
+      ...(independentCategory
+        ? independentWorkArsenals[independentCategory].skills.filter((skill) => isGroundedClaim(skill, story.toLowerCase())).slice(0, 4)
+        : [])
     ]),
     responsibilities: unique([previousIntake.responsibilities, ...responsibilities]).join(", "),
     selectedResponsibilities: unique([...previousIntake.selectedResponsibilities, ...responsibilities]).slice(0, 10),

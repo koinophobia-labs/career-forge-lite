@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { CopyButton } from "@/components/CopyButton";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
@@ -8,7 +8,6 @@ import { PremiumBadge, PremiumLockedPanel, PremiumPreviewMeter, UpgradeCallout }
 import { ResumePreview } from "@/components/ResumePreview";
 import {
   canGenerateResumeFromInterview,
-  createInitialInterviewSession,
   createNextAssistantInterviewTurn,
   createUserInterviewMessage,
   generateResumePackageFromInterview,
@@ -21,7 +20,15 @@ import {
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
 import { trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
+import { useEntitlement } from "@/lib/entitlement";
 import { getInterviewModeLimitState } from "@/lib/feature-access";
+import {
+  getInterviewSessionServerSnapshot,
+  getInterviewSessionSnapshot,
+  resetInterviewSession,
+  setInterviewSession,
+  subscribeInterviewSession
+} from "@/lib/interview-session-store";
 import { resumeToText } from "@/lib/resume-export";
 import type { ResumePackage } from "@/types/career";
 import type { InterviewSession } from "@/types/interview";
@@ -101,15 +108,23 @@ function focusCopy(stage: InterviewSession["currentStage"]) {
 }
 
 export function InterviewMode() {
-  const [session, setSession] = useState<InterviewSession>(() => createInitialInterviewSession());
+  // Sessions persist locally and survive refresh; the server snapshot keeps
+  // static prerendering happy until the stored session hydrates in.
+  const session = useSyncExternalStore(
+    subscribeInterviewSession,
+    getInterviewSessionSnapshot,
+    getInterviewSessionServerSnapshot
+  );
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<InterviewModeState>("interview");
   const [isThinking, setIsThinking] = useState(false);
   const [generatedPackage, setGeneratedPackage] = useState<InterviewGeneratedPackage | null>(null);
 
+  const { hasFeature } = useEntitlement();
+  const interviewUnlimited = hasFeature("interview_unlimited");
   const missingFields = useMemo(() => getMissingOrWeakFields(session), [session]);
   const canGenerate = canGenerateResumeFromInterview(session);
-  const limitState = useMemo(() => getInterviewModeLimitState(session), [session]);
+  const limitState = useMemo(() => getInterviewModeLimitState(session, interviewUnlimited), [session, interviewUnlimited]);
   const coachingMessages = useMemo(() => getInterviewCoachingMessages(session), [session]);
   const smartSummary = useMemo(() => getSmartInterviewSummary(session), [session]);
   const interviewFocus = useMemo(() => focusCopy(session.currentStage), [session.currentStage]);
@@ -141,11 +156,11 @@ export function InterviewMode() {
 
     const userMessage = createUserInterviewMessage(content);
     const updated = updateInterviewDraftFromUserAnswer(session, userMessage);
-    setSession(updated);
+    setInterviewSession(updated);
     setInput("");
     setIsThinking(true);
     window.setTimeout(() => {
-      setSession(createNextAssistantInterviewTurn(updated));
+      setInterviewSession(createNextAssistantInterviewTurn(updated));
       setIsThinking(false);
     }, 180);
   }
@@ -153,7 +168,7 @@ export function InterviewMode() {
   function handleGenerate() {
     if (!canGenerate) return;
     const readySession = markInterviewReadyForGeneration(session);
-    setSession(readySession);
+    setInterviewSession(readySession);
     setMode("generating");
     window.setTimeout(() => {
       setGeneratedPackage(generateResumePackageFromInterview(readySession));
@@ -171,12 +186,12 @@ export function InterviewMode() {
   function handleImproveWeakAreas() {
     const weakestStage = getWeakestInterviewStage(session);
     const targetedSession: InterviewSession = { ...session, currentStage: weakestStage };
-    setSession(createNextAssistantInterviewTurn(targetedSession));
+    setInterviewSession(createNextAssistantInterviewTurn(targetedSession));
     setMode("interview");
   }
 
   function handleStartOver() {
-    setSession(createInitialInterviewSession());
+    resetInterviewSession();
     setGeneratedPackage(null);
     setInput("");
     setIsThinking(false);
@@ -433,7 +448,7 @@ export function InterviewMode() {
           </div>
 
           <aside className="trust-panel rounded-md p-5">
-            <PremiumPreviewMeter state={limitState} />
+            {limitState.isLimited && <PremiumPreviewMeter state={limitState} />}
             {limitState.isLocked && (
               <div className="mt-4">
                 <PremiumLockedPanel
@@ -443,9 +458,11 @@ export function InterviewMode() {
                 />
               </div>
             )}
-            <div className="mt-4">
-              <UpgradeCallout />
-            </div>
+            {limitState.isLimited && (
+              <div className="mt-4">
+                <UpgradeCallout />
+              </div>
+            )}
             <section className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Resume Readiness</p>
               <div className="mt-3 h-2 rounded-full bg-white/10">

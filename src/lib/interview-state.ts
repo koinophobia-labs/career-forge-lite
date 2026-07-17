@@ -270,7 +270,12 @@ export function mergeReactiveSignals(data: IntakeData, text: string): IntakeData
   const matchedAiWorkflows = aiWorkflowOptions.filter((workflow) => lower.includes(workflow.toLowerCase()));
   const matchedResponsibilities = roleIntelligence[data.roleFamily].responsibilities.filter((item) => lower.includes(item.toLowerCase()));
   const escalationSignals = /escalation|escalations|escalated/i.test(text) ? ["Escalation handling"] : [];
-  const sportsbookSignals = /draftkings|sportsbook|wager|gaming/i.test(text) ? ["Customer communication", "Issue escalation"] : [];
+  // Gaming-venue work only implies customer-facing responsibilities when the
+  // text actually describes serving people there — a bare venue mention (or a
+  // gaming hobby) must not fabricate responsibilities the user never claimed.
+  const gamingVenueWork = /draftkings|sportsbook|casino|wagering?|betting|responsible gaming/i.test(text);
+  const gamingServiceContext = /customer|guest|patron|bettor|ticket|escalat|service|served|window|counter|dispute/i.test(text);
+  const sportsbookSignals = gamingVenueWork && gamingServiceContext ? ["Customer communication", "Issue escalation"] : [];
   const nextTools = unique([data.tools, ...matchedTools]).join(", ");
 
   return {

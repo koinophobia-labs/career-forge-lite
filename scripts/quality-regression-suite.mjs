@@ -39,10 +39,43 @@ function loadTsModule(filePath) {
 }
 
 const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
-const { generateResumePackage } = loadTsModule(path.join(root, "src/lib/generator.ts"));
+const { generateResumePackage, isGroundedClaim } = loadTsModule(path.join(root, "src/lib/generator.ts"));
 const { buildCareerRecommendations } = loadTsModule(path.join(root, "src/lib/career-recommendations.ts"));
 const { resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
 const { parseStoryToDossier } = loadTsModule(path.join(root, "src/lib/story-mode.ts"));
+
+// Template-signature guard: these terms exist in role/occupation templates and
+// may appear in output ONLY when the persona's own input evidences them
+// (stem-matched). Any other appearance is a hallucination.
+const templateSignatureStems = [
+  "sanitation",
+  "restock",
+  "upsell",
+  "prospect",
+  "crm manag",
+  "mobile qa",
+  "workflow automation",
+  "onboard",
+  "lead generation",
+  "pipeline",
+  "access control",
+  "visitor management",
+  "emergency response",
+  "forklift",
+  "pallet",
+  "route planning",
+  "patient care",
+  "care note",
+  "calendar manag",
+  "data entry",
+  "timeline track",
+  "status report",
+  "troubleshoot",
+  "ticket manag",
+  "system maintenance",
+  "surveillance",
+  "de escalat"
+];
 
 const genericPhrases = [
   "Supported operations",
@@ -168,6 +201,19 @@ function validatePersona(persona) {
   for (const forbidden of persona.forbidden) {
     if (textHas(allText, forbidden) && !textHas(persona.description, forbidden) && !textHas(persona.tools, forbidden)) {
       hallucinations.push(forbidden);
+    }
+  }
+
+  // Stronger guard: template-taxonomy terms may only appear when the persona
+  // input (description, expected skills, tools, titles) grounds them under the
+  // same grounding gate the generator itself uses, so any template content
+  // that bypasses the gate is flagged as a hallucination.
+  const personaInput = [persona.description, persona.title, persona.company, persona.targetRole, persona.tools, ...persona.skills, ...persona.expectedRecommendations]
+    .join(" ")
+    .toLowerCase();
+  for (const stem of templateSignatureStems) {
+    if (normalize(allText).includes(normalize(stem)) && !isGroundedClaim(stem, personaInput)) {
+      hallucinations.push(`template-term:${stem}`);
     }
   }
 

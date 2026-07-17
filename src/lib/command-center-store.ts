@@ -12,6 +12,11 @@ import { emptyDossier, mergeLegacyResumeSnapshots, migrateLegacyProfile, reviveD
 import type { ExportMetadata, ImportProposalRecord, PendingImportReview, ResumePack, ResumeVariant } from "@/types/dossier";
 
 export const STORAGE_KEY = "career-forge-command-center-v1";
+// Where an unreadable stored blob is quarantined instead of being destroyed.
+// Recovery keeps exactly one snapshot: the first corruption wins until a
+// support path (or the user, via backup tooling) inspects it.
+export const RECOVERY_KEY = "career-forge-command-center-v1-recovery";
+export const SAVE_ERROR_EVENT = "career-forge-save-error";
 
 export function emptyProfile(): CareerProfile {
   return {
@@ -455,14 +460,42 @@ export function parseState(serialized: string | null): CommandCenterState {
   }
 }
 
+// A stored blob that is not even valid JSON would previously be replaced by an
+// empty state on the next save, silently destroying months of work. Instead it
+// is copied to RECOVERY_KEY (first corruption wins) before the reset proceeds.
+function quarantineCorruptState(serialized: string): void {
+  try {
+    if (!window.localStorage.getItem(RECOVERY_KEY)) {
+      window.localStorage.setItem(RECOVERY_KEY, serialized);
+    }
+  } catch {
+    // Quarantine is best-effort; a full disk must not block loading.
+  }
+}
+
 export function loadState(): CommandCenterState {
   if (typeof window === "undefined") return emptyState();
-  return parseState(window.localStorage.getItem(STORAGE_KEY));
+  const serialized = window.localStorage.getItem(STORAGE_KEY);
+  if (serialized) {
+    try {
+      const raw = JSON.parse(serialized) as unknown;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) quarantineCorruptState(serialized);
+    } catch {
+      quarantineCorruptState(serialized);
+    }
+  }
+  return parseState(serialized);
 }
 
 export function saveState(state: CommandCenterState): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Almost always QuotaExceededError. The in-memory state is still correct,
+    // so surface the failure instead of losing it silently.
+    window.dispatchEvent(new CustomEvent(SAVE_ERROR_EVENT));
+  }
 }
 
 export function createId(prefix: string): string {

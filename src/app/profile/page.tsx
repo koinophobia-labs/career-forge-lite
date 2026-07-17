@@ -23,8 +23,11 @@ import {
   discardTruthInboxReview,
   truthInboxCounts
 } from "@/lib/truth-inbox";
+import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
+
+const IDENTITY_CALLOUT_DISMISSED_KEY = "career-forge-identity-callout-dismissed-v1";
 
 function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
@@ -39,15 +42,30 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function TextListEditor({ label, value, hint, onSave }: { label: string; value: string[]; hint: string; onSave: (items: string[]) => void }) {
+function TextListEditor({ label, value, hint, onSave, guardUncertainty }: { label: string; value: string[]; hint: string; onSave: (items: string[]) => void; guardUncertainty?: boolean }) {
   const [draft, setDraft] = useState(value.join("\n"));
   const [saved, setSaved] = useState(false);
+  const [skippedUncertain, setSkippedUncertain] = useState<string[]>([]);
+  function handleSave() {
+    const items = values(draft);
+    // "I don't know my numbers" is an honest answer, never evidence — keep it
+    // out of the dossier instead of laundering it into an approved claim.
+    const uncertain = guardUncertainty ? items.filter((item) => isUncertaintyStatement(item)) : [];
+    onSave(items.filter((item) => !uncertain.includes(item)));
+    setSkippedUncertain(uncertain);
+    setSaved(true);
+  }
   return (
     <div className="block">
       <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">{label}</span>
-      <textarea aria-label={label} className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink" rows={4} value={draft} onChange={(event) => { setDraft(event.target.value); setSaved(false); }} />
+      <textarea aria-label={label} className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink" rows={4} value={draft} onChange={(event) => { setDraft(event.target.value); setSaved(false); setSkippedUncertain([]); }} />
       <span className="mt-1 block text-xs leading-5 text-paper/45">{hint}</span>
-      <button type="button" onClick={() => { onSave(values(draft)); setSaved(true); }} className="mt-2 rounded border border-cyan/35 px-3 py-1.5 text-xs font-bold text-cyan">Save {label.toLowerCase()}</button>{saved && <span className="ml-2 text-xs font-bold text-mint">Saved</span>}
+      <button type="button" onClick={handleSave} className="mt-2 rounded border border-cyan/35 px-3 py-1.5 text-xs font-bold text-cyan">Save {label.toLowerCase()}</button>{saved && <span className="ml-2 text-xs font-bold text-mint">Saved</span>}
+      {skippedUncertain.length > 0 && (
+        <span role="status" className="mt-2 block rounded border border-gold/35 bg-gold/10 px-3 py-2 text-xs leading-5 text-paper/75">
+          That&apos;s a &ldquo;don&apos;t know&rdquo; — skip it or add what you CAN defend. Not saved as evidence: {skippedUncertain.map((item) => `“${item}”`).join(", ")}. It&apos;s fine to have no numbers; leave the line out rather than record uncertainty as proof.
+        </span>
+      )}
     </div>
   );
 }
@@ -104,6 +122,9 @@ export default function DossierPage() {
   const [education, setEducation] = useState({ credential: "", institution: "", dates: "" });
   const [resumeText, setResumeText] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  // Initializer runs client-side on first render; SSR sees `hydrated === false`
+  // so the callout never renders before the stored dismissal is known.
+  const [identityCalloutDismissed, setIdentityCalloutDismissed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(IDENTITY_CALLOUT_DISMISSED_KEY) === "1");
   const [retainSourceFilenames, setRetainSourceFilenames] = useState(false);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [stagedImport, setStagedImport] = useState<{ proposals: ImportProposalRecord[]; message: string } | null>(null);
@@ -343,8 +364,17 @@ export default function DossierPage() {
   }
 
   function editEvidence(id: string, detail: string) {
+    const trimmed = detail.trim();
+    // Editing an approved fact INTO an uncertainty statement would launder
+    // "I don't know" into evidence through the back door; demote it to a
+    // rejected state instead of storing it as an approved claim.
+    if (isUncertaintyStatement(trimmed)) {
+      const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, detail: trimmed, approved: false, rejected: true, updatedAt: new Date().toISOString() } : item);
+      save({ ...dossier, evidence, approvedClaims: evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail) });
+      return;
+    }
     const now = new Date().toISOString();
-    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, detail: detail.trim(), updatedAt: now } : item);
+    const evidence = dossier.evidence.map((item) => item.id === id ? { ...item, detail: trimmed, updatedAt: now } : item);
     save({ ...dossier, evidence, approvedClaims: evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail) });
   }
 
@@ -365,7 +395,7 @@ export default function DossierPage() {
     <main>
       <CommandNav active="/profile" />
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Step 1 · Canonical source of truth</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Steps 1–2 · Your career facts, reviewed</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Build your Career Dossier once.</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-paper/68">
           Every lane résumé, LinkedIn section, and application pack starts here. Facts stay on this device and are only used after you approve them.
@@ -374,6 +404,23 @@ export default function DossierPage() {
         {hydrated && (
           <>
             <div className="mt-8"><ActivationPath state={state} compact /></div>
+
+            {(!dossier.identity.fullName.trim() || !dossier.identity.email.trim()) && !identityCalloutDismissed && (
+              <section className="trust-panel mt-6 border-gold/45 p-5 sm:p-6" aria-labelledby="identity-quickfill-title">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="trust-kicker text-xs font-bold uppercase">Before anything exports</p>
+                    <h2 id="identity-quickfill-title" className="mt-2 text-xl font-bold text-paper">Put your name on your documents</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-paper/60">Every résumé header uses this name and email. Ten seconds here prevents sending a document headed &ldquo;Candidate Name&rdquo; — and files you already generated pick it up automatically on export.</p>
+                  </div>
+                  <button type="button" onClick={() => { setIdentityCalloutDismissed(true); try { window.localStorage.setItem(IDENTITY_CALLOUT_DISMISSED_KEY, "1"); } catch { /* storage full: dismiss for this session only */ } }} className="min-h-11 rounded-full border border-white/20 px-3 py-1.5 text-xs font-bold text-paper/60 transition hover:border-cyan hover:text-cyan">Dismiss</button>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="block"><span className="text-xs font-bold text-paper/60">Name on your documents</span><input className="trust-input mt-1 w-full border px-3 py-2 text-sm text-ink" placeholder="Name" value={dossier.identity.fullName} onChange={(event) => patchIdentity("fullName", event.target.value)} /></label>
+                  <label className="block"><span className="text-xs font-bold text-paper/60">Email on your documents</span><input className="trust-input mt-1 w-full border px-3 py-2 text-sm text-ink" placeholder="you@example.com" value={dossier.identity.email} onChange={(event) => patchIdentity("email", event.target.value)} /></label>
+                </div>
+              </section>
+            )}
 
             <section id="import" className="trust-panel mt-6 scroll-mt-28 p-5 sm:p-6" aria-labelledby="import-title">
               <p className="trust-kicker text-xs font-bold uppercase">Recommended first entrance · local résumé import</p>
@@ -416,7 +463,7 @@ export default function DossierPage() {
             {approvedEvidence.length > 0 && <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.72fr]" id="unlocks"><div className="rounded-xl border border-mint/35 bg-mint/10 p-5"><p className="trust-kicker text-xs font-bold uppercase">What your approvals unlock</p><h2 className="mt-2 text-xl font-bold text-paper">{readiness.level === "not-ready" ? "A truthful foundation is taking shape" : readiness.level === "foundation" ? "You can begin testing credible role lanes" : "You have enough proof to forge lane résumés"}</h2><ul className="mt-3 grid gap-2 text-sm leading-6 text-paper/70"><li>• Roles and projects can become traced experience sections and bullets.</li><li>• Tools and skills can support matching only when the underlying work is approved.</li><li>• Missing credentials and unverified duration remain visible gaps—not generated claims.</li></ul><Link href="/targets" className="mt-4 inline-flex min-h-11 items-center rounded-md bg-mint px-4 py-2 text-sm font-black text-ink">See dossier-backed role lanes →</Link></div><ActivationFeedback milestone="dossier" question="Did the review make it clear what Career Forge now trusts?" /></section>}
 
             <section className="mt-8 grid gap-6 lg:grid-cols-2" id="manual-history">
-              <div className="trust-panel p-5">
+              <div className="trust-panel scroll-mt-28 p-5" id="identity">
                 <h2 className="text-xl font-bold text-paper">Identity &amp; professional links</h2>
                 <p className="mt-1 text-sm text-paper/55">Add once; it appears across every résumé.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -460,8 +507,8 @@ export default function DossierPage() {
               <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                 <TextListEditor label="Tools & workflows" value={dossier.tools} hint="Unlocks accurate keyword matching." onSave={(items) => save({ ...dossier, tools: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "tool" || item.source !== "manual"), ...items.map((item) => evidenceRecord("tool", item, "manual", true, new Date().toISOString()))] })} />
                 <TextListEditor label="Transferable skills" value={dossier.transferableSkills} hint="Supports lane positioning without invented credentials." onSave={(items) => save({ ...dossier, transferableSkills: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "skill" || item.source !== "manual"), ...items.map((item) => evidenceRecord("skill", item, "manual", true, new Date().toISOString()))] })} />
-                <TextListEditor label="Proof points" value={dossier.proofPoints} hint="Supports stronger résumé bullets and interview answers." onSave={(items) => save({ ...dossier, proofPoints: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "proof" || item.source !== "manual"), ...items.map((item) => evidenceRecord("proof", item, "manual", true, new Date().toISOString()))] })} />
-                <TextListEditor label="Metrics & outcomes" value={dossier.metrics} hint="One measurable outcome can strengthen several variants." onSave={(items) => save({ ...dossier, metrics: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "metric" || item.source !== "manual"), ...items.map((item) => evidenceRecord("metric", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Proof points" guardUncertainty value={dossier.proofPoints} hint="Supports stronger résumé bullets and interview answers." onSave={(items) => save({ ...dossier, proofPoints: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "proof" || item.source !== "manual"), ...items.map((item) => evidenceRecord("proof", item, "manual", true, new Date().toISOString()))] })} />
+                <TextListEditor label="Metrics & outcomes" guardUncertainty value={dossier.metrics} hint="One measurable outcome can strengthen several variants." onSave={(items) => save({ ...dossier, metrics: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "metric" || item.source !== "manual"), ...items.map((item) => evidenceRecord("metric", item, "manual", true, new Date().toISOString()))] })} />
                 <TextListEditor label="Constraints" value={dossier.constraints} hint="Prevents recommendations that waste your time." onSave={(items) => save({ ...dossier, constraints: items })} />
                 <TextListEditor label="Target-role interests" value={dossier.targetRoleInterests} hint="Seeds dossier-aware lane recommendations." onSave={(items) => save({ ...dossier, targetRoleInterests: items })} />
                 <TextListEditor label="Career goals" value={dossier.careerGoals} hint="Keeps lane and application decisions aligned." onSave={(items) => save({ ...dossier, careerGoals: items })} />

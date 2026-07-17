@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ATSValidationPanel } from "@/components/ATSValidationPanel";
+import { CommandNav } from "@/components/CommandNav";
 import { IntakeForm } from "@/components/IntakeForm";
-import { LandingPage } from "@/components/LandingPage";
 import { LinkedInPreview } from "@/components/LinkedInPreview";
 import { ResumePreview } from "@/components/ResumePreview";
 import { SiteFooter } from "@/components/SiteFooter";
-import { SiteHeader } from "@/components/SiteHeader";
 import { initialIntake } from "@/lib/career-data";
 import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
 import { createId, loadState } from "@/lib/command-center-store";
@@ -20,7 +19,7 @@ import { intakeFromDossier, mergeIntakeIntoDossier, withUpdatedDossier } from "@
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 import type { ResumeSnapshot } from "@/types/command-center";
 
-type Step = "landing" | "mode" | "intake" | "preview";
+type Step = "mode" | "intake" | "preview";
 
 // Log each generated resume as a version in the command center so the
 // dashboard's "resume versions" count reflects real work. Tailored sessions
@@ -96,7 +95,7 @@ const workflowSteps: Array<{ label: string; step: Step }> = [
 ];
 
 export default function Home() {
-  const [step, setStep] = useState<Step>("landing");
+  const [step, setStep] = useState<Step>("mode");
   const [intake, setIntake] = useState<IntakeData>(initialIntake);
   const [errors, setErrors] = useState<IntakeErrors>({});
   const [template, setTemplate] = useState<TemplateStyle>("Modern ATS");
@@ -224,7 +223,17 @@ export default function Home() {
 
   return (
     <main>
-      <SiteHeader onStart={() => jump("mode")} />
+      <CommandNav active="/resume-builder" />
+
+      <section className="mx-auto max-w-6xl px-5 pt-10 sm:px-8">
+        <p className="trust-kicker text-sm font-bold uppercase">Guided setup</p>
+        <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Build a résumé by answering questions.</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
+          The guided builder walks you through your experience one focused question at a time, then generates an
+          editable, ATS-safe draft from your answers — nothing invented. Everything you enter also strengthens your
+          Career Dossier.
+        </p>
+      </section>
 
       {tailorSession && (
         <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
@@ -331,8 +340,6 @@ export default function Home() {
         </section>
       )}
 
-      <LandingPage onStart={() => jump("mode")} />
-
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8" id="demo">
         <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-3 md:grid-cols-3">
           {workflowSteps.map(({ label, step: targetStep }, index) => (
@@ -372,7 +379,7 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8" id="mode">
           <div className="trust-panel overflow-hidden">
             <div className="border-b border-white/10 p-5 sm:p-7">
-              <p className="trust-kicker text-sm font-bold uppercase">Product Lab Module 05</p>
+              <p className="trust-kicker text-sm font-bold uppercase">Two ways to start</p>
               <div className="mt-4 grid gap-4 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
                 <div>
                   <h2 className="text-3xl font-bold text-paper sm:text-4xl">Choose how you want to start.</h2>

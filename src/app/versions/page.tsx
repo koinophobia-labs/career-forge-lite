@@ -8,7 +8,9 @@ import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { deleteResumeVersion } from "@/lib/command-center-store";
-import { createPackBundle, createVariantFile, downloadBlob } from "@/lib/pack-export";
+import { LockedActionPill, LockedFeaturePanel } from "@/components/LockedFeature";
+import { useEntitlement } from "@/lib/entitlement";
+import { createPackBundle, createVariantFile, downloadBlob, exportSections, variantPlainText } from "@/lib/pack-export";
 import { updatePackVariant } from "@/lib/resume-pack";
 import { trackCareerEvent } from "@/lib/analytics";
 import { variantPurpose } from "@/lib/activation";
@@ -201,35 +203,77 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
   );
 }
 
+function IdentityGatePrompt({ compact }: { compact?: boolean }) {
+  // Real explanation instead of a dead/blocked control: one field on the
+  // dossier fixes every export at once, because documents read identity at
+  // export time — no re-forge needed.
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Link href="/profile#identity" className="inline-flex min-h-11 items-center rounded-md border border-gold/50 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink">
+        Add your name first → one field, 10 seconds
+      </Link>
+      {!compact && <span className="text-xs leading-5 text-paper/55">Exports are paused so you never send a résumé without your name on it. Documents pick up your name the moment you save it.</span>}
+    </span>
+  );
+}
+
 function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: ResumePack; state: ReturnType<typeof useCommandCenter>["state"]; onUpdate: (next: ResumePack) => void; onRecordExport: (filenames: string[]) => void }) {
   const [working, setWorking] = useState(false);
   const [lastExportCount, setLastExportCount] = useState<number | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [compareId, setCompareId] = useState<string | null>(null);
   const [undoByVariant, setUndoByVariant] = useState<Record<string, ResumeVariant["resume"]>>({});
+  const { hasFeature } = useEntitlement();
+  // Building, reviewing, and editing stay free; taking documents out of the
+  // app (copy/PDF/DOCX/bundle) is what a pack purchase unlocks.
+  const exportsUnlocked = hasFeature("export_baseline_pack");
+  // Documents bind identity at export time, so a missing name means every
+  // file would ship headed "Résumé"/placeholder — block with an explanation.
+  const identityMissing = !state.dossier.identity.fullName.trim();
   const uniqueUnclaimed = uniqueUnclaimedReceiptItems(pack.receipt);
   const defensibilityByVariant = new Map(pack.variants.map((variant) => [variant.id, deriveDefensibilityReceipt(variant, state.dossier)]));
   const packExportBlocked = [...defensibilityByVariant.values()].some((receipt) => receipt.missingProvenance > 0);
 
   async function exportBundle() {
-    if (packExportBlocked) return;
+    if (packExportBlocked || !exportsUnlocked || identityMissing) return;
     setWorking(true);
     try {
       const result = await createPackBundle(pack, state.dossier, state.lanes, ["pdf", "docx"]);
       downloadBlob(result.blob, result.filename);
       onRecordExport(result.filenames);
       setLastExportCount(result.filenames.length);
+      setExportNotice({ tone: "ok", text: `Saved ${result.filename} to your downloads.` });
       trackCareerEvent("pack_bundle_exported");
       trackCareerEvent("full_pack_exported");
+    } catch (error) {
+      setExportNotice({ tone: "error", text: `Pack export failed${error instanceof Error ? `: ${error.message}` : ""}. Try exporting a single résumé, or copy its text.` });
     } finally { setWorking(false); }
   }
 
   async function exportVariant(variant: ResumeVariant, format: "pdf" | "docx") {
+    if (!exportsUnlocked || identityMissing) return;
     if ((defensibilityByVariant.get(variant.id)?.missingProvenance ?? 1) > 0) return;
     const lane = state.lanes.find((item) => item.id === variant.laneId);
-    const file = await createVariantFile(variant, state.dossier, lane?.title ?? "General", format);
-    downloadBlob(file.blob, file.filename);
-    trackCareerEvent("resume_exported");
+    try {
+      const file = await createVariantFile(variant, state.dossier, lane?.title ?? "General", format);
+      downloadBlob(file.blob, file.filename);
+      // Downloads give no visible page feedback; confirm so the button never
+      // reads as a silent no-op.
+      setExportNotice({ tone: "ok", text: `Saved ${file.filename} to your downloads. Open it to review or print.` });
+      trackCareerEvent("resume_exported");
+    } catch (error) {
+      setExportNotice({ tone: "error", text: `${format.toUpperCase()} export failed${error instanceof Error ? `: ${error.message}` : ""}. Try the other format, or copy the text instead.` });
+    }
+  }
+
+  async function copyVariant(variant: ResumeVariant) {
+    try {
+      await navigator.clipboard.writeText(variantPlainText(state.dossier, variant.resume, variant.sectionOrder, variant.kind));
+      setExportNotice({ tone: "ok", text: "Copied the complete document — header, summary, skills, experience, and education — in your chosen section order." });
+    } catch {
+      setExportNotice({ tone: "error", text: "Clipboard unavailable in this browser. Open View / edit and copy the text manually." });
+    }
   }
 
   function duplicate(variant: ResumeVariant) {
@@ -269,8 +313,17 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
     <section className="trust-panel mt-8 overflow-hidden p-5 sm:p-6" aria-labelledby="pack-ready-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="trust-kicker text-xs font-bold uppercase">{packExportBlocked ? "Evidence integrity changed" : "Generation complete"}</p><h2 id="pack-ready-title" className="mt-2 text-3xl font-bold text-paper">{packExportBlocked ? "Your Résumé Pack needs evidence review." : "Your Résumé Pack is ready."}</h2><p className="mt-2 text-sm text-paper/65">{pack.lanePacks.length} active lane{pack.lanePacks.length === 1 ? "" : "s"} · {pack.variants.length} generated résumés · {pack.receipt.evidenceUsed.length} evidence items in the original generation receipt · {uniqueUnclaimed.length} unique gaps or unsupported claims left unclaimed</p>{packExportBlocked && <p className="mt-2 text-sm font-bold text-coral">A cited source is missing, rejected, or incomplete. Review dossier evidence and regenerate before tailoring or export.</p>}</div>
-        <div className="flex flex-wrap gap-2">{packExportBlocked ? <Link href="/profile" className="inline-flex min-h-11 items-center rounded border border-coral/45 px-5 py-2.5 text-sm font-bold text-coral">Review dossier evidence →</Link> : <Link href="/tailor" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Tailor a résumé to a real job →</Link>}<button type="button" onClick={exportBundle} disabled={working || packExportBlocked} title={packExportBlocked ? "Restore every cited source before exporting this pack." : undefined} className="min-h-11 rounded-md border border-gold/45 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">{working ? "Building ZIP…" : "Export complete pack"}</button>{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} résumé files plus LinkedIn materials and a README.</p>}</div>
+        <div className="flex flex-wrap gap-2">{packExportBlocked ? <Link href="/profile" className="inline-flex min-h-11 items-center rounded border border-coral/45 px-5 py-2.5 text-sm font-bold text-coral">Review dossier evidence →</Link> : <Link href="/tailor" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Tailor a résumé to a real job →</Link>}{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Export complete pack" /> : identityMissing ? <IdentityGatePrompt /> : <button type="button" onClick={exportBundle} disabled={working || packExportBlocked} title={packExportBlocked ? "Restore every cited source before exporting this pack." : undefined} className="min-h-11 rounded-md border border-gold/45 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">{working ? "Building ZIP…" : "Export complete pack"}</button>}{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} résumé files plus LinkedIn materials and a README.</p>}{exportNotice && <p role="status" aria-live="polite" className={`w-full text-xs font-bold ${exportNotice.tone === "ok" ? "text-mint" : "text-coral"}`}>{exportNotice.text}</p>}</div>
       </div>
+      {!exportsUnlocked && (
+        <div className="mt-5">
+          <LockedFeaturePanel
+            feature="export_baseline_pack"
+            title="Your pack is built — unlock it to use it."
+            description="Everything below is generated from your approved evidence and free to review and edit. A one-time pack unlocks copying, PDF and DOCX export, and the complete ZIP bundle with your LinkedIn materials."
+          />
+        </div>
+      )}
       <div className="mt-5 grid gap-5">
         {pack.lanePacks.map((lanePack) => {
           const lane = state.lanes.find((item) => item.id === lanePack.laneId);
@@ -282,7 +335,8 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
               const defensibility = defensibilityByVariant.get(variant.id)!;
               const exportBlocked = defensibility.missingProvenance > 0;
               const tracedClaimCount = defensibility.directlySupported + defensibility.combinedEvidence + defensibility.transferred;
-              return <article key={variant.id} className="rounded-lg border border-white/10 bg-white/5 p-4"><div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="font-bold text-paper">{purpose.label} · {lane?.title ?? "Lane"}</p><p className="lab-mono mt-1 text-[0.62rem] font-bold uppercase text-paper/45">{variant.status.replace("-", " ")} · {tracedClaimCount} fully traced claims{variant.userEdited ? " · user edited" : ""}</p></div><button type="button" onClick={() => { setEditingId(editingId === variant.id ? null : variant.id); if (editingId !== variant.id) trackCareerEvent("resume_variant_opened"); }} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">{editingId === variant.id ? "Close" : "View / edit"}</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before copying." : undefined} onClick={() => void navigator.clipboard.writeText([variant.resume.summary, ...variant.resume.experience.flatMap((role) => role.bullets)].join("\n"))} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70 disabled:cursor-not-allowed disabled:opacity-40">Copy</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "pdf")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">Print / PDF</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "docx")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">DOCX</button><button type="button" onClick={() => duplicate(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Duplicate</button><button type="button" onClick={() => rename(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Rename</button><button type="button" onClick={() => markCanonical(variant)} className="min-h-11 rounded-full border border-gold/30 px-3 py-1.5 text-xs text-gold">{variant.canonical ? "Baseline" : "Make baseline"}</button>{previous && <button type="button" onClick={() => setCompareId(compareId === variant.id ? null : variant.id)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Compare</button>}<button type="button" onClick={() => remove(variant)} className="min-h-11 rounded-full border border-coral/25 px-3 py-1.5 text-xs text-coral">Delete</button></div><div className="mt-3 grid gap-2 rounded-lg border border-cyan/20 bg-cyan/5 p-3 text-xs leading-5 text-paper/65"><p><strong className="text-cyan">Use this for:</strong> {purpose.purpose}</p><p><strong className="text-gold">Why it differs:</strong> {purpose.difference}</p></div><details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-3 rounded-lg border border-white/12 bg-obsidian/35 p-3"><summary className="cursor-pointer text-xs font-bold text-paper"><span className={defensibility.status.includes("review") || defensibility.status.includes("recheck") ? "text-coral" : "text-mint"}>{defensibility.status}</span> · Open Defensibility Receipt</summary><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-paper/60 sm:grid-cols-3"><p>Total claims: {defensibility.totalClaims}</p><p>Direct: {defensibility.directlySupported}</p><p>Combined: {defensibility.combinedEvidence}</p><p>Transferred: {defensibility.transferred}</p><p>Missing provenance: {defensibility.missingProvenance}</p><p>Incomplete cited sources: {defensibility.incompleteProvenance}</p><p>Verified durations: {defensibility.verifiedDurations}</p><p>Unverified durations: {defensibility.unverifiedDurations}</p><p>User edits to recheck: {defensibility.userEditedClaimsNeedingReview}</p></div></details>
+              const withheldFacts = exportSections(variant.resume, variant.sectionOrder, variant.kind).withheldFacts;
+              return <article key={variant.id} className="rounded-lg border border-white/10 bg-white/5 p-4"><div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="font-bold text-paper">{purpose.label} · {lane?.title ?? "Lane"}</p><p className="lab-mono mt-1 text-[0.62rem] font-bold uppercase text-paper/45">{variant.status.replace("-", " ")} · {tracedClaimCount} fully traced claims{variant.userEdited ? " · user edited" : ""}</p></div><button type="button" onClick={() => { setEditingId(editingId === variant.id ? null : variant.id); if (editingId !== variant.id) trackCareerEvent("resume_variant_opened"); }} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">{editingId === variant.id ? "Close" : "View / edit"}</button>{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Copy / PDF / DOCX" /> : identityMissing ? <IdentityGatePrompt compact /> : <><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before copying." : undefined} onClick={() => void copyVariant(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70 disabled:cursor-not-allowed disabled:opacity-40">Copy</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "pdf")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">Print / PDF</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "docx")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">DOCX</button></>}<button type="button" onClick={() => duplicate(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Duplicate</button><button type="button" onClick={() => rename(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Rename</button><button type="button" onClick={() => markCanonical(variant)} className="min-h-11 rounded-full border border-gold/30 px-3 py-1.5 text-xs text-gold">{variant.canonical ? "Baseline" : "Make baseline"}</button>{previous && <button type="button" onClick={() => setCompareId(compareId === variant.id ? null : variant.id)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Compare</button>}<button type="button" onClick={() => remove(variant)} className="min-h-11 rounded-full border border-coral/25 px-3 py-1.5 text-xs text-coral">Delete</button></div><div className="mt-3 grid gap-2 rounded-lg border border-cyan/20 bg-cyan/5 p-3 text-xs leading-5 text-paper/65"><p><strong className="text-cyan">Use this for:</strong> {purpose.purpose}</p><p><strong className="text-gold">Why it differs:</strong> {purpose.difference}</p>{withheldFacts.length > 0 && <p className="font-bold text-gold">{withheldFacts.length} fact{withheldFacts.length === 1 ? "" : "s"} withheld ({withheldFacts.join(", ")}) — deliberately kept out of every copy and export.</p>}</div><details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-3 rounded-lg border border-white/12 bg-obsidian/35 p-3"><summary className="cursor-pointer text-xs font-bold text-paper"><span className={defensibility.status.includes("review") || defensibility.status.includes("recheck") ? "text-coral" : "text-mint"}>{defensibility.status}</span> · Open Defensibility Receipt</summary><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-paper/60 sm:grid-cols-3"><p>Total claims: {defensibility.totalClaims}</p><p>Direct: {defensibility.directlySupported}</p><p>Combined: {defensibility.combinedEvidence}</p><p>Transferred: {defensibility.transferred}</p><p>Missing provenance: {defensibility.missingProvenance}</p><p>Incomplete cited sources: {defensibility.incompleteProvenance}</p><p>Verified durations: {defensibility.verifiedDurations}</p><p>Unverified durations: {defensibility.unverifiedDurations}</p><p>User edits to recheck: {defensibility.userEditedClaimsNeedingReview}</p></div></details>
                 {editingId === variant.id && <div className="mt-3 grid gap-4 border-t border-white/10 pt-3"><div className="flex items-center justify-between"><p className="lab-mono text-[0.65rem] font-bold uppercase text-gold">Full document editor</p>{undoByVariant[variant.id] && <button type="button" onClick={() => undoLatest(variant)} className="rounded border border-gold/40 px-3 py-1 text-xs font-bold text-gold">Undo latest edit</button>}</div><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Summary<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={5} defaultValue={variant.resume.summary} onBlur={(event) => { if (event.target.value !== variant.resume.summary) editVariant(variant, { ...variant.resume, summary: event.target.value }, "summary"); }} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Skills<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={4} defaultValue={variant.resume.coreSkills.join("\n")} onBlur={(event) => editVariant(variant, { ...variant.resume, coreSkills: valuesForEditor(event.target.value) }, "coreSkills")} /></label>{variant.resume.experience.map((role, roleIndex) => <fieldset key={`${variant.id}-role-${roleIndex}`} className="rounded-lg border border-white/10 p-3"><legend className="px-2 text-xs font-bold uppercase text-paper/50">Role or project {roleIndex + 1}</legend><div className="grid gap-2 sm:grid-cols-3"><input aria-label={`Edit heading ${roleIndex + 1}`} defaultValue={role.title} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, title: event.target.value } : item) }, `experience.${roleIndex}.title`)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit company ${roleIndex + 1}`} defaultValue={role.company} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, company: event.target.value } : item) }, `experience.${roleIndex}.company`)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit dates ${roleIndex + 1}`} defaultValue={role.time} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, time: event.target.value } : item) }, `experience.${roleIndex}.time`)} className="trust-input border p-2 text-sm text-ink"/></div><textarea aria-label={`Edit bullets ${roleIndex + 1}`} defaultValue={role.bullets.join("\n")} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, bullets: valuesForEditor(event.target.value) } : item) }, `experience.${roleIndex}.bullets`)} rows={5} className="trust-input mt-2 w-full border p-2 text-sm text-ink"/></fieldset>)}<label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Education<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={3} defaultValue={variant.resume.education} onBlur={(event) => editVariant(variant, { ...variant.resume, education: event.target.value }, "education")} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Section order<select value={variant.sectionOrder.join(",")} onChange={(event) => onUpdate({ ...pack, variants: pack.variants.map((item) => item.id === variant.id ? { ...item, sectionOrder: event.target.value.split(",") as ResumeVariant["sectionOrder"], userEdited: true } : item) })} className="trust-input mt-1.5 w-full border p-2 text-sm text-ink"><option value="summary,skills,experience,projects,education">ATS: summary, skills, experience, projects, education</option><option value="summary,projects,experience,skills,education">Recruiter: summary, projects, experience, skills, education</option><option value="summary,experience,projects,education,skills">Narrative: summary, experience, projects, education, skills</option></select></label><div className="mt-1 grid gap-2">{variant.evidenceReferences.map((ref) => <details key={`${variant.id}-${ref.claimPath}`} className="rounded border border-white/10 p-2 text-xs leading-5 text-paper/50"><summary><strong className="text-paper/70">{ref.claimPath}</strong> · {ref.supportType} · {ref.evidenceIds.length} source(s)</summary><p className="mt-1 text-paper/70">{ref.claimText}</p>{ref.evidenceIds.map((id) => <p key={id} className="mt-1 border-l-2 border-cyan/30 pl-2">{state.dossier.evidence.find((item) => item.id === id)?.detail ?? "Missing evidence"}</p>)}</details>)}</div></div>}
                 {compareId === variant.id && previous && <div className="mt-3 grid gap-3 border-t border-white/10 pt-3 md:grid-cols-2"><div><p className="lab-mono text-xs text-paper/45">Previous</p><p className="mt-1 text-sm text-paper/65">{previous.resume.summary}</p></div><div><p className="lab-mono text-xs text-gold">Current</p><p className="mt-1 text-sm text-paper/80">{variant.resume.summary}</p></div></div>}
               </article>;
@@ -339,7 +393,7 @@ export default function VersionsPage() {
       <CommandNav active="/versions" />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Resume archive</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Step 4 · Résumé Pack</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Every version, and why it exists.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
           Each generated resume is saved here with its full text, the job it was built for, the keywords it used, and

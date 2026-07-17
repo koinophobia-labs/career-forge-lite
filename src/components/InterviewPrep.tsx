@@ -9,6 +9,9 @@ import { answerScaffold, scaffoldTemplate } from "@/lib/input-guidance";
 import {
   coachAnswer,
   generateInterviewPrep,
+  loadPrepDraft,
+  resolvePrepLane,
+  savePrepDraft,
   type CoachingFeedback,
   type PrepCategory,
   type PrepQuestion
@@ -26,7 +29,7 @@ const categoryMeta: Record<PrepCategory, { label: string; blurb: string }> = {
   },
   behavioral: {
     label: "Behavioral — from your own claims",
-    blurb: "Built from your proof points, strengths, and skills. If it's on your resume, expect the deep-dive."
+    blurb: "Built from your approved evidence, proof points, strengths, and skills. If it's on your resume, expect the deep-dive."
   },
   gap_defense: {
     label: "Gap defense",
@@ -42,7 +45,10 @@ type QuestionCardProps = {
 
 function QuestionCard({ question }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
-  const [answer, setAnswer] = useState("");
+  // Drafts persist per question text; the textarea only renders after an
+  // explicit click, so the lazy localStorage read can't cause a hydration
+  // mismatch.
+  const [answer, setAnswer] = useState(() => loadPrepDraft(question.question));
   const [feedback, setFeedback] = useState<CoachingFeedback[] | null>(null);
 
   return (
@@ -95,6 +101,7 @@ function QuestionCard({ question }: QuestionCardProps) {
                 placeholder="Write it the way you'd say it out loud — or insert the structure below and fill in each line."
                 onChange={(event) => {
                   setAnswer(event.target.value);
+                  savePrepDraft(question.question, event.target.value);
                   setFeedback(null);
                 }}
                 className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
@@ -104,7 +111,10 @@ function QuestionCard({ question }: QuestionCardProps) {
               {!answer.trim() && (
                 <button
                   type="button"
-                  onClick={() => setAnswer(scaffoldTemplate(question.category))}
+                  onClick={() => {
+                    setAnswer(scaffoldTemplate(question.category));
+                    savePrepDraft(question.question, scaffoldTemplate(question.category));
+                  }}
                   className="rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
                 >
                   Insert answer structure
@@ -164,8 +174,6 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
     return state.lanes.find((lane) => lane.status === "active") ?? state.lanes[0] ?? null;
   }, [state.lanes, state.applications]);
 
-  const selectedLane = laneId === null ? defaultLane : (state.lanes.find((lane) => lane.id === laneId) ?? null);
-
   const defaultApplication = useMemo(
     () => state.applications.find((app) => app.status === "interviewing") ?? null,
     [state.applications]
@@ -175,9 +183,18 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
       ? defaultApplication
       : (state.applications.find((app) => app.id === applicationId) ?? null);
 
+  // The selected application's lane wins over the active-lane default so the
+  // questions target the role actually being interviewed; picking a lane by
+  // hand still overrides.
+  const selectedLane = resolvePrepLane(state.lanes, laneId, selectedApplication, defaultLane);
+  const laneMismatch =
+    Boolean(selectedApplication?.laneId) &&
+    selectedLane?.id !== selectedApplication?.laneId &&
+    state.lanes.some((lane) => lane.id === selectedApplication?.laneId);
+
   const pack = useMemo(
-    () => generateInterviewPrep(state.profile, selectedLane, selectedApplication),
-    [state.profile, selectedLane, selectedApplication]
+    () => generateInterviewPrep(state.profile, selectedLane, selectedApplication, state.dossier),
+    [state.profile, selectedLane, selectedApplication, state.dossier]
   );
 
   const grouped = useMemo(
@@ -207,13 +224,18 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
               found — with coaching that pushes you toward specific, honest answers. No invented credentials, ever.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onSwitchToIntake}
-            className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
-          >
-            Switch to resume interview →
-          </button>
+          <div className="max-w-64 text-right">
+            <button
+              type="button"
+              onClick={onSwitchToIntake}
+              className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
+            >
+              Build a résumé by conversation instead →
+            </button>
+            <p className="mt-1.5 text-[0.7rem] leading-4 text-paper/45">
+              Opens the capped résumé-building intake. This prep page is the uncapped practice tool.
+            </p>
+          </div>
         </div>
 
         {setupNeeded && (
@@ -250,7 +272,12 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
             <span className="text-sm font-bold text-paper">Application (optional)</span>
             <select
               value={selectedApplication?.id ?? ""}
-              onChange={(event) => setApplicationId(event.target.value || "none")}
+              onChange={(event) => {
+                setApplicationId(event.target.value || "none");
+                // A newly-picked application brings its own lane; clear any
+                // stale manual lane choice so the application's lane wins.
+                setLaneId(null);
+              }}
               className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
             >
               <option value="">No specific application</option>
@@ -269,6 +296,18 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
               : "Pick a saved application to get gap-defense questions built from its actual job post."}
           </div>
         </div>
+
+        {laneMismatch && selectedApplication && (
+          <div className="mt-3 rounded-lg border border-gold/40 bg-gold/10 p-3 text-[0.8rem] leading-5 text-paper/80">
+            This application targets the{" "}
+            <span className="font-bold text-gold">
+              {state.lanes.find((lane) => lane.id === selectedApplication.laneId)?.title}
+            </span>{" "}
+            lane, but questions below use{" "}
+            <span className="font-bold text-gold">{selectedLane ? selectedLane.title : "no lane"}</span>. Set the lane
+            picker back to match the application unless the switch is deliberate.
+          </div>
+        )}
 
         <div className="mt-6 rounded-xl border border-cyan/25 bg-cyan/10 p-4 sm:p-5">
           <p className="trust-kicker text-xs font-bold uppercase">Answer framework</p>
@@ -294,6 +333,28 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
               </div>
             </div>
           ))}
+
+        {hydrated && pack.reverseQuestions.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-paper">Questions to ask the interviewer</h2>
+            <p className="mt-1 text-sm text-paper/60">
+              Interviews end with “any questions for us?” — bring these. Specific ones come from your saved posting
+              and lane; the generic staples work anywhere.
+            </p>
+            <div className="mt-4 grid gap-3">
+              {pack.reverseQuestions.map((item) => (
+                <article key={item.question} className="rounded-xl border border-white/12 bg-obsidian/40 p-4 sm:p-5">
+                  <p className="max-w-3xl text-sm font-bold leading-6 text-paper">{item.question}</p>
+                  <p className="mt-2 text-[0.78rem] leading-5 text-paper/55">
+                    <span className="font-bold text-cyan">Why it works: </span>
+                    {item.why}
+                  </p>
+                  <p className="lab-mono mt-2 text-[0.62rem] font-bold uppercase text-paper/40">Based on: {item.basedOn}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <SiteFooter />

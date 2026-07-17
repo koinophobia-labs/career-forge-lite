@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
+import { LockedFeaturePanel } from "@/components/LockedFeature";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MAX_OUTREACH_FOLLOW_UPS, OUTREACH_FOLLOW_UP_DAYS, addDays, isDue } from "@/lib/command-center-insights";
+import { useEntitlement } from "@/lib/entitlement";
 import { createId } from "@/lib/command-center-store";
 import { relationshipPhrases } from "@/lib/input-guidance";
 import { fillTemplate, outreachTemplates, remainingPlaceholders } from "@/lib/outreach-templates";
@@ -42,6 +44,7 @@ function formatDate(iso: string | null): string {
 
 export default function OutreachPage() {
   const { state, update, hydrated } = useCommandCenter();
+  const { hasFeature } = useEntitlement();
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
@@ -152,7 +155,7 @@ export default function OutreachPage() {
       <CommandNav active="/outreach" />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Step 05 · Outreach</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Outreach</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Get out of the resume pile.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
           Applications alone put you in a stack of hundreds. A short, specific message to a recruiter or hiring manager
@@ -353,23 +356,33 @@ export default function OutreachPage() {
                 </select>
               )}
 
-              <pre className="whitespace-pre-wrap rounded-lg border border-white/12 bg-obsidian/50 p-4 font-sans text-sm leading-6 text-paper/85">
-                {renderedTemplate}
-              </pre>
+              {hasFeature("outreach_toolkit") ? (
+                <>
+                  <pre className="whitespace-pre-wrap rounded-lg border border-white/12 bg-obsidian/50 p-4 font-sans text-sm leading-6 text-paper/85">
+                    {renderedTemplate}
+                  </pre>
 
-              {placeholders.length > 0 && (
-                <p className="text-xs leading-5 text-gold">
-                  Still to personalize: {placeholders.join(", ")}
-                </p>
+                  {placeholders.length > 0 && (
+                    <p className="text-xs leading-5 text-gold">
+                      Still to personalize: {placeholders.join(", ")}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={copyTemplate}
+                    className="rounded-md bg-gold px-4 py-2.5 text-sm font-black text-ink transition hover:bg-cyan"
+                  >
+                    {copied ? "Copied" : "Copy message"}
+                  </button>
+                </>
+              ) : (
+                <LockedFeaturePanel
+                  feature="outreach_toolkit"
+                  title="Ready-to-send recruiter and hiring-manager messages"
+                  description="Each template is short, specific, and fills itself in from your saved contacts and lanes. Contact tracking above stays free — the message library comes with the Job Search Pack."
+                />
               )}
-
-              <button
-                type="button"
-                onClick={copyTemplate}
-                className="rounded-md bg-gold px-4 py-2.5 text-sm font-black text-ink transition hover:bg-cyan"
-              >
-                {copied ? "Copied" : "Copy message"}
-              </button>
             </div>
           </div>
         </div>

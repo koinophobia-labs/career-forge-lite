@@ -1,4 +1,6 @@
+import { matchRequirement } from "@/lib/job-post-analyzer";
 import type { ApplicationRecord, CareerProfile, TargetLane } from "@/types/command-center";
+import type { CareerDossier, DossierEvidenceRecord } from "@/types/dossier";
 
 export type PrepCategory = "role" | "behavioral" | "gap_defense" | "transition";
 
@@ -11,10 +13,19 @@ export type PrepQuestion = {
   basedOn: string;
 };
 
+// Questions the candidate asks the interviewer. No practice/coaching UI —
+// they are a checklist to bring, so they are a separate shape from PrepQuestion.
+export type ReverseQuestion = {
+  question: string;
+  why: string;
+  basedOn: string;
+};
+
 export type InterviewPrepPack = {
   laneTitle: string | null;
   applicationLabel: string | null;
   questions: PrepQuestion[];
+  reverseQuestions: ReverseQuestion[];
   answerFramework: string[];
   honestyNote: string;
 };
@@ -33,7 +44,7 @@ export const ANSWER_FRAMEWORK = [
 ];
 
 export const HONESTY_NOTE =
-  "Every question here is built from what you put in your profile, lanes, and job-post analyses. Practice honest answers: name real gaps, use real numbers, and never claim credentials, titles, or metrics you don't have. Interviewers probe — a truthful \"here's how I'd close that gap\" outlasts a bluff.";
+  "Questions are built from your profile, lanes, approved evidence, and job-post analyses where you've added them; the generic staples every interviewer asks are labeled as generic. Practice honest answers: name real gaps, use real numbers, and never claim credentials, titles, or metrics you don't have. Interviewers probe — a truthful \"here's how I'd close that gap\" outlasts a bluff.";
 
 // ---------------------------------------------------------------------------
 // Role-specific question banks, keyed by lane. Matched against lane titles so
@@ -357,6 +368,49 @@ function makeId(category: PrepCategory, index: number): string {
   return `${category}-${index}`;
 }
 
+function approvedEvidence(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
+  return dossier?.evidence.filter((item) => item.approved && !item.rejected) ?? [];
+}
+
+const QUANTIFIED = /[\d$%]/;
+
+function truncateClaim(text: string, max = 110): string {
+  const clean = text.trim().replace(/\s+/g, " ");
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
+}
+
+// Matcher fallback when a caller has a dossier but no profile: matchRequirement
+// only consults the profile when the dossier has no approved records.
+const EMPTY_PREP_PROFILE: CareerProfile = {
+  currentSituation: "",
+  targetRoles: "",
+  transferableSkills: [],
+  experienceSummary: "",
+  strengths: [],
+  constraints: "",
+  workStyle: "",
+  proofPoints: "",
+  updatedAt: null
+};
+
+// When a saved application is selected, its lane wins over the active-lane
+// default — prep should target the role actually being interviewed, not the
+// last lane the user happened to activate. An explicit lane choice still
+// overrides ("none" or a lane id the application doesn't use).
+export function resolvePrepLane(
+  lanes: TargetLane[],
+  explicitLaneId: string | null,
+  application: ApplicationRecord | null,
+  fallbackLane: TargetLane | null
+): TargetLane | null {
+  if (explicitLaneId !== null) return lanes.find((lane) => lane.id === explicitLaneId) ?? null;
+  if (application?.laneId) {
+    const applicationLane = lanes.find((lane) => lane.id === application.laneId);
+    if (applicationLane) return applicationLane;
+  }
+  return fallbackLane;
+}
+
 function splitProofPoints(proofPoints: string): string[] {
   return proofPoints
     .split(/\r?\n|;|(?<=[.!?])\s+/)
@@ -401,11 +455,49 @@ function buildRoleQuestions(lane: TargetLane): PrepQuestion[] {
   return questions;
 }
 
-function buildBehavioralQuestions(profile: CareerProfile): PrepQuestion[] {
+function buildBehavioralQuestions(profile: CareerProfile, dossier?: CareerDossier | null): PrepQuestion[] {
   const questions: PrepQuestion[] = [];
   let index = 0;
+  const seen = new Set<string>();
+  const claimKey = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+
+  // Approved dossier evidence first: metrics and achievements are the claims
+  // interviewers deep-dive hardest, so each one seeds its own STAR question,
+  // quantified proof ranked on top. This is what makes the import path as
+  // well-covered as the hand-typed profile path.
+  const dossierClaims = approvedEvidence(dossier)
+    .filter(
+      (item) =>
+        item.kind === "metric" ||
+        item.kind === "proof" ||
+        item.kind === "story" ||
+        (item.kind === "responsibility" && QUANTIFIED.test(item.detail))
+    )
+    .filter((item) => item.detail.trim().length >= 15)
+    .sort((a, b) => Number(QUANTIFIED.test(b.detail)) - Number(QUANTIFIED.test(a.detail)))
+    .slice(0, 5);
+  for (const record of dossierClaims) {
+    const claim = truncateClaim(record.detail);
+    if (seen.has(claimKey(claim))) continue;
+    seen.add(claimKey(claim));
+    questions.push({
+      id: makeId("behavioral", index++),
+      category: "behavioral",
+      question: `Your approved evidence says: "${claim}". Walk me through the story behind it — what was your specific part, and what changed because of you?`,
+      why: QUANTIFIED.test(record.detail)
+        ? "Quantified claims draw the hardest probing — interviewers test whether the number survives a follow-up."
+        : "Anything in your dossier can end up on your resume, and anything on your resume is fair game for a deep-dive.",
+      coaching: [
+        "Know this story cold: the situation, your specific actions, the honest result. Rehearse it out loud once.",
+        "If part of the claim is shared credit, say which part was yours — interviewers respect precision."
+      ],
+      basedOn: `Approved evidence (${record.kind})`
+    });
+  }
 
   for (const proof of splitProofPoints(profile.proofPoints).slice(0, 3)) {
+    if (seen.has(claimKey(proof))) continue;
+    seen.add(claimKey(proof));
     questions.push({
       id: makeId("behavioral", index++),
       category: "behavioral",
@@ -450,17 +542,57 @@ function buildBehavioralQuestions(profile: CareerProfile): PrepQuestion[] {
   return questions;
 }
 
-export function buildGapDefenseQuestions(lane: TargetLane | null, application: ApplicationRecord | null): PrepQuestion[] {
+// Stored analysisGaps merge PARTIAL and GAP verdicts, so each one is
+// re-verified against current approved evidence before prep asserts anything:
+// covered requirements are dropped (asserting a gap the user doesn't have is a
+// false concession), partial ones get honest bridge phrasing, and "not covered"
+// is only stated when the evidence genuinely lacks it.
+export function buildGapDefenseQuestions(
+  lane: TargetLane | null,
+  application: ApplicationRecord | null,
+  dossier?: CareerDossier | null,
+  profile?: CareerProfile
+): PrepQuestion[] {
   const questions: PrepQuestion[] = [];
   let index = 0;
+  const evidenceById = new Map(approvedEvidence(dossier).map((item) => [item.id, item]));
+  const matcherProfile = profile ?? EMPTY_PREP_PROFILE;
+  const canVerify = evidenceById.size > 0;
 
-  const analysisGaps = (application?.analysisGaps ?? []).slice(0, 3);
+  const analysisGaps = (application?.analysisGaps ?? []).slice(0, 4);
   for (const gap of analysisGaps) {
+    const verdict = canVerify ? matchRequirement(gap, matcherProfile, dossier) : null;
+    if (verdict?.status === "covered") continue;
+    const company = application?.company || "this application";
+
+    if (verdict?.status === "partial") {
+      const proofDetail = verdict.evidenceIds.map((id) => evidenceById.get(id)?.detail).find(Boolean);
+      questions.push({
+        id: makeId("gap_defense", index++),
+        category: "gap_defense",
+        question: `The posting asks for: "${gap}". Your strongest related proof is ${
+          proofDetail ? `"${truncateClaim(proofDetail)}"` : "related work in your dossier"
+        } — how do you bridge from there to what they need?`,
+        why: `${verdict.evidence} Expect the interviewer to probe the part your evidence doesn't reach.`,
+        coaching: [
+          "Don't concede a gap you don't have: open with the real proof, sized honestly.",
+          "Then name exactly what's left uncovered — a tool, the years, the domain — and the concrete step you're taking on it.",
+          "Never claim the full qualification outright; bridge from verified experience instead."
+        ],
+        basedOn: `Job-post analysis (${company}) — partially covered by your evidence`
+      });
+      continue;
+    }
+
     questions.push({
       id: makeId("gap_defense", index++),
       category: "gap_defense",
-      question: `The posting asks for: "${gap}" — and that's not on your resume. How do you respond when they raise it?`,
-      why: `Your job-post analysis for ${application?.company || "this application"} flagged this as unsupported. Assume the interviewer noticed too.`,
+      question: verdict
+        ? `The posting asks for: "${gap}" — and your approved evidence doesn't cover it. How do you respond when they raise it?`
+        : `The posting asks for: "${gap}" — your dossier doesn't fully prove it yet. How do you respond when they raise it?`,
+      why: `Your job-post analysis for ${company} flagged this as ${
+        verdict ? "unsupported by your approved evidence" : "not fully proven"
+      }. Assume the interviewer noticed too.`,
       coaching: [
         "Acknowledge it plainly first — one sentence, no squirming. Bluffing here is how offers die in reference checks.",
         "Then bridge: the closest real experience you have, plus the concrete step you're taking to close the gap.",
@@ -471,12 +603,23 @@ export function buildGapDefenseQuestions(lane: TargetLane | null, application: A
   }
 
   if (lane) {
-    for (const gap of lane.gaps.slice(0, questions.length ? 2 : 3)) {
+    const laneGapLimit = questions.length ? 2 : 3;
+    let laneGapCount = 0;
+    for (const gap of lane.gaps) {
+      if (laneGapCount >= laneGapLimit) break;
+      // Lane gap templates can lag the dossier — skip any plan gap the user's
+      // approved evidence already covers instead of coaching a false concession.
+      if (canVerify && matchRequirement(gap, matcherProfile, dossier).status === "covered") continue;
+      laneGapCount += 1;
       questions.push({
         id: makeId("gap_defense", index++),
         category: "gap_defense",
         question: `Your lane plan says you're still closing this gap: "${gap}". If it comes up, what's your honest answer?`,
-        why: `You identified this yourself in the ${lane.title} lane — better to rehearse the defense than improvise it.`,
+        why: `${
+          lane.source === "custom"
+            ? `You added this gap to your ${lane.title} lane`
+            : `The ${lane.title} lane plan suggests closing this`
+        } — better to rehearse the defense than improvise it.`,
         coaching: [
           "Show progress, not perfection: what you've done on this gap so far, however small.",
           "Frame it as trajectory: where you were a month ago, where you are now, where you'll be in three months."
@@ -489,9 +632,62 @@ export function buildGapDefenseQuestions(lane: TargetLane | null, application: A
   return questions;
 }
 
-function buildTransitionQuestions(profile: CareerProfile, lane: TargetLane | null): PrepQuestion[] {
+// Signals that the user actually has independent/founder work — the side-company
+// commitment question is only personalized when one of these appears in the
+// profile or approved evidence. Everyone else gets the generic commitment
+// staple, labeled as generic.
+const FOUNDER_SIGNAL =
+  /\b(founder|co-?founder|started (?:a|my own|my) (?:company|business|startup)|my own (?:company|business|startup)|building (?:a|my|our)(?:\s+\w+){0,2}\s+(?:company|startup|business)|side (?:business|hustle|company)|self-?employed|freelanc\w+|independent (?:business|venture|contractor))\b/i;
+
+function founderEvidence(profile: CareerProfile, dossier?: CareerDossier | null): string | null {
+  const profileFields: Array<[string, string]> = [
+    ["current situation", profile.currentSituation],
+    ["constraints", profile.constraints],
+    ["experience summary", profile.experienceSummary],
+    ["proof points", profile.proofPoints]
+  ];
+  for (const [field, value] of profileFields) {
+    const match = value.match(FOUNDER_SIGNAL);
+    if (match) return `Profile ${field}: "${match[0]}"`;
+  }
+  for (const record of approvedEvidence(dossier)) {
+    const match = record.detail.match(FOUNDER_SIGNAL);
+    if (match) return `Approved evidence (${record.kind}): "${truncateClaim(record.detail, 80)}"`;
+  }
+  return null;
+}
+
+function buildTransitionQuestions(profile: CareerProfile, lane: TargetLane | null, dossier?: CareerDossier | null): PrepQuestion[] {
   const laneTitle = lane?.title ?? "this kind of role";
-  const background = profile.currentSituation.trim() || "your current background";
+  const situation = profile.currentSituation.trim();
+  const background = situation || "your current background";
+  const founderSource = founderEvidence(profile, dossier);
+
+  const commitmentQuestion: PrepQuestion = founderSource
+    ? {
+        id: makeId("transition", 1),
+        category: "transition",
+        question: "You're building your own venture on the side. Why should we believe you'll stay and be committed here?",
+        why: "If your side project is visible anywhere, assume this gets asked. An unrehearsed answer sounds evasive.",
+        coaching: [
+          "Don't hide the venture — it's proof of initiative. Address the concern head-on instead.",
+          "Give the honest, practical answer: what the salary role means to you, how you separate the hours, why the skills compound.",
+          "If your profile lists constraints about this, your answer here should match them exactly."
+        ],
+        basedOn: founderSource
+      }
+    : {
+        id: makeId("transition", 1),
+        category: "transition",
+        question: "What would keep you here two years from now?",
+        why: "The commitment probe — asked of nearly every career changer.",
+        coaching: [
+          "Anchor to what you actually want from the next role — the work, the team, the growth — named specifically.",
+          "If you have real constraints (schedule, location), state them plainly; surprises later cost offers.",
+          "Skip flattery without content: a concrete \"here's what I want to be doing in year two\" lands better."
+        ],
+        basedOn: "Generic commitment question (asked of most career changers)"
+      };
 
   return [
     {
@@ -504,39 +700,87 @@ function buildTransitionQuestions(profile: CareerProfile, lane: TargetLane | nul
         "Connect the dots concretely: name the parts of your old work that are literally this job.",
         "Keep it under 60 seconds — this is a framing answer, not your life story."
       ],
-      basedOn: "Profile: current situation"
+      basedOn: situation ? "Profile: current situation" : "Generic career-changer question"
+    },
+    commitmentQuestion
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Reverse questions: what the candidate asks the interviewer. Specific when a
+// job-post analysis or lane exists; generic-but-strong staples otherwise.
+// ---------------------------------------------------------------------------
+
+export function buildReverseQuestions(lane: TargetLane | null, application: ApplicationRecord | null): ReverseQuestion[] {
+  const questions: ReverseQuestion[] = [];
+
+  if (application) {
+    const company = application.company && application.company !== "Unknown company" ? application.company : "the team";
+    for (const term of application.analysisKeywords.slice(0, 2)) {
+      questions.push({
+        question: `The posting leans on ${term} — what does doing it well look like here in the first 90 days?`,
+        why: "Shows you read the posting closely and turns a keyword into a concrete expectations conversation.",
+        basedOn: `Job-post analysis (${company})`
+      });
+    }
+    questions.push({
+      question: `What would make the first six months a clear win for the person you hire as ${application.roleTitle}?`,
+      why: "Gets the real success criteria on the table — and often surfaces the problem behind the opening.",
+      basedOn: `Saved application (${company})`
+    });
+  }
+
+  if (lane) {
+    questions.push({
+      question: `How is the ${lane.title} team measured — which numbers matter most right now?`,
+      why: "Metrics reveal what the job actually is, and asking signals you think in outcomes.",
+      basedOn: `${lane.title} lane`
+    });
+  }
+
+  const staples: ReverseQuestion[] = [
+    {
+      question: "What's the hardest part of this job that doesn't show up in the posting?",
+      why: "Invites honesty and shows you want the real job, not the brochure version.",
+      basedOn: "Generic — strong in any interview"
     },
     {
-      id: makeId("transition", 1),
-      category: "transition",
-      question: "You're building your own company on the side. Why should we believe you'll stay and be committed here?",
-      why: "If your side project is visible anywhere, assume this gets asked. An unrehearsed answer sounds evasive.",
-      coaching: [
-        "Don't hide the company — it's proof of initiative. Address the concern head-on instead.",
-        "Give the honest, practical answer: what the salary role means to you, how you separate the hours, why the skills compound.",
-        "If your profile lists constraints about this, your answer here should match them exactly."
-      ],
-      basedOn: "Profile: constraints / situation"
+      question: "What separates the people who've thrived in this role from those who haven't?",
+      why: "Gives you the informal success profile and a preview of how performance is judged.",
+      basedOn: "Generic — strong in any interview"
+    },
+    {
+      question: "What would the team most need from this hire in the first 90 days?",
+      why: "Turns the interview toward their problems — and gives your follow-up note its content.",
+      basedOn: "Generic — strong in any interview"
     }
   ];
+  for (const staple of staples) {
+    if (questions.length >= 6) break;
+    questions.push(staple);
+  }
+
+  return questions;
 }
 
 export function generateInterviewPrep(
   profile: CareerProfile,
   lane: TargetLane | null,
-  application: ApplicationRecord | null
+  application: ApplicationRecord | null,
+  dossier?: CareerDossier | null
 ): InterviewPrepPack {
   const questions: PrepQuestion[] = [
-    ...buildTransitionQuestions(profile, lane),
+    ...buildTransitionQuestions(profile, lane, dossier),
     ...(lane ? buildRoleQuestions(lane) : []),
-    ...buildBehavioralQuestions(profile),
-    ...buildGapDefenseQuestions(lane, application)
+    ...buildBehavioralQuestions(profile, dossier),
+    ...buildGapDefenseQuestions(lane, application, dossier, profile)
   ];
 
   return {
     laneTitle: lane?.title ?? null,
     applicationLabel: application ? `${application.roleTitle} at ${application.company}` : null,
     questions,
+    reverseQuestions: buildReverseQuestions(lane, application),
     answerFramework: ANSWER_FRAMEWORK,
     honestyNote: HONESTY_NOTE
   };
@@ -636,4 +880,56 @@ export function coachAnswer(answer: string, question: PrepQuestion): CoachingFee
   }
 
   return feedback;
+}
+
+// ---------------------------------------------------------------------------
+// Practice-draft persistence: answers drafted on prep cards used to live only
+// in component state, so navigation or refresh destroyed them. Drafts persist
+// locally, keyed by question text (stable across regenerations, and shared
+// when the same question appears for multiple lanes — which is what you want).
+// ---------------------------------------------------------------------------
+
+export const PREP_DRAFT_KEY = "career-forge-prep-drafts-v1";
+const PREP_DRAFT_LIMIT = 300;
+
+// Sanity check, not a full revival: anything that isn't a string→string map
+// entry is dropped, matching the interview-session-store pattern.
+function revivePrepDrafts(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const drafts: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string" && value.trim()) drafts[key] = value;
+  }
+  return drafts;
+}
+
+export function loadPrepDrafts(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const serialized = window.localStorage.getItem(PREP_DRAFT_KEY);
+    return serialized ? revivePrepDrafts(JSON.parse(serialized)) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function loadPrepDraft(question: string): string {
+  return loadPrepDrafts()[question] ?? "";
+}
+
+export function savePrepDraft(question: string, draft: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const drafts = loadPrepDrafts();
+    if (draft.trim()) drafts[question] = draft;
+    else delete drafts[question];
+    const keys = Object.keys(drafts);
+    // Insertion-ordered map: trim oldest entries rather than fail the save.
+    if (keys.length > PREP_DRAFT_LIMIT) {
+      for (const key of keys.slice(0, keys.length - PREP_DRAFT_LIMIT)) delete drafts[key];
+    }
+    window.localStorage.setItem(PREP_DRAFT_KEY, JSON.stringify(drafts));
+  } catch {
+    // A failed save keeps the in-memory draft usable for this visit.
+  }
 }

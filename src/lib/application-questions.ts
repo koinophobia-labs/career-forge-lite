@@ -224,15 +224,22 @@ export function draftApplicationQuestion(
       userEdited: false
     };
   }
-  const ranked = rankEvidence(cleanPrompt, approved).filter((item) => item.score >= MIN_RELEVANCE_SCORE);
+  const rankedAll = rankEvidence(cleanPrompt, approved);
+  const ranked = rankedAll.filter((item) => item.score >= MIN_RELEVANCE_SCORE);
   const first = ranked[0];
   const second = ranked.find((item) => item.evidence.id !== first?.evidence.id && item.evidence.kind !== first?.evidence.kind);
   const supporting = [first, second].filter((item): item is RankedEvidence => Boolean(item)).map((item) => item.evidence);
   const evidenceIds = supporting.map((item) => item.id);
+  // Below-threshold matches still help the user write their own answer —
+  // vocabulary mismatches (retention vs. turnover) shouldn't yield a bare
+  // refusal when related approved facts exist.
+  const closest = rankedAll.filter((item) => item.score > 0).slice(0, 2).map((item) => item.evidence.detail);
   const draftAnswer = supporting.length
     ? draftFromEvidence(category, supporting)
     : category === "compensation"
       ? "Add your preferred compensation range before submitting this answer."
-      : REFUSAL;
+      : closest.length
+        ? `No approved fact answers this directly, so no draft was written for you. Your closest approved facts: ${closest.join("; ")}. If one of these genuinely fits, write the answer in your own words — and don't claim anything beyond them.`
+        : REFUSAL;
   return { id, prompt: cleanPrompt, draftAnswer, evidenceIds, userEdited: false };
 }

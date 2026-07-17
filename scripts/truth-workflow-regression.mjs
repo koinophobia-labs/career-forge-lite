@@ -262,8 +262,143 @@ const projectOnly = { ...emptyDossier(NOW), evidence: projectEvidence, projects:
 check("project-only candidates generate without fake employers", generateResumePack(projectOnly, [lanes[0]], NOW).variants.some((variant) => variant.resume.experience.some((item) => item.title === "Career Forge" && item.company === "Koinophobia Labs")));
 const largeEvidence = Array.from({ length: 500 }, (_, index) => add("proof", `Verified support outcome ${index}`));
 const largeDossier = { ...projectOnly, evidence: [...projectEvidence, ...largeEvidence], approvedClaims: [...projectOnly.approvedClaims, ...largeEvidence.map((item) => item.detail)] };
-check("large dossiers generate deterministically", generateResumePack(largeDossier, [lanes[0]], NOW).variants.length === 2 && generateResumePack(largeDossier, [lanes[0]], NOW).receipt.evidenceUsed.length <= 18);
+// Selection stays bounded on huge dossiers: 18 ranked picks plus the handful
+// of structural records (education, role/project support) that always render.
+check("large dossiers generate deterministically", generateResumePack(largeDossier, [lanes[0]], NOW).variants.length === 2 && generateResumePack(largeDossier, [lanes[0]], NOW).receipt.evidenceUsed.length <= 24);
 check("corrupt localStorage payload revives safely", parseState("{not json").dossier.evidence.length === 0);
+
+// --- Document-quality honesty (post-audit): what ships must be submittable ---
+
+const auditFiles = [{
+  filename: "history.txt",
+  text: [
+    "Operations Coordinator — Brightline Logistics | 2019–2026",
+    "I managed vendor contracts worth $2M annually until I was laid off in June 2026",
+    "Reduced onboarding time from 3 weeks to 9 days",
+    "Tools: Workday, Kronos, and some Excel from a class",
+    "City College — Associate degree in Business",
+  ].join("\n")
+}];
+const auditProposals = parseResumePackToProposals(auditFiles).map((item) => ({ ...item, status: "approved" }));
+const auditDossier = mergeImportProposals(emptyDossier(NOW), auditProposals, NOW);
+const auditRole = auditDossier.roles.find((role) => /Operations Coordinator/i.test(role.title));
+check("imported facts attach to their role", Boolean(auditRole) && auditRole.evidenceIds.length > 1, JSON.stringify(auditDossier.roles));
+
+const auditLane = {
+  id: "lane-audit", title: "Operations Manager", status: "active",
+  whyFit: "", resumeAngle: "Frame yourself as a translator: turn ops experience into leadership stories.",
+  proof: [], gaps: [], keywords: ["operations", "vendor", "onboarding"], source: "custom", createdAt: NOW
+};
+const auditPack = generateResumePack(auditDossier, [auditLane], NOW);
+const auditAts = auditPack.variants.find((variant) => variant.kind === "ats");
+const auditRoleEntry = auditAts.resume.experience.find((entry) => /Operations Coordinator/i.test(entry.title));
+check("imported roles render with real bullets", Boolean(auditRoleEntry) && auditRoleEntry.bullets.length >= 1, JSON.stringify(auditAts.resume.experience));
+const allDocText = [auditAts.resume.summary, ...auditAts.resume.coreSkills, ...auditAts.resume.experience.flatMap((entry) => [entry.title, ...entry.bullets]), auditAts.resume.education, auditAts.resume.linkedinHeadline, auditAts.resume.linkedinSummary, ...auditPack.masterProofBank, ...auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)].join("\n");
+check("termination reasons never ship in documents", !/laid off|terminated|fired/i.test(allDocText), allDocText);
+check("withheld termination reason is reported on the receipt", auditPack.receipt.unsupportedClaimsRefused.some((item) => /reason for leaving/i.test(item)));
+check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);
+check("tool lists atomize into individual skills", auditAts.resume.coreSkills.includes("Workday") && auditAts.resume.coreSkills.includes("Kronos"), JSON.stringify(auditAts.resume.coreSkills));
+check("skill fragments never ship", auditAts.resume.coreSkills.every((skill) => !/^and\s|^some\s|from a class/i.test(skill)), JSON.stringify(auditAts.resume.coreSkills));
+check("approved education renders on the document", /Associate degree|City College/i.test(auditAts.resume.education), auditAts.resume.education);
+check("lane pitches carry no second-person coaching", auditPack.lanePacks.every((lanePack) => !/frame yourself|position verified/i.test(lanePack.positioningPitch)), JSON.stringify(auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)));
+check("receipt framing uses the composed pitch, not coaching text", auditPack.receipt.laneFraming.every((framing) => !/frame yourself/i.test(framing.angle)));
+
+// Uncertainty statements must not become proof-bank content.
+const uncertainDossier = {
+  ...auditDossier,
+  evidence: [...auditDossier.evidence, add("metric", "I don't know my numbers")],
+  proofPoints: [...auditDossier.proofPoints, "I don't know my numbers"]
+};
+const uncertainPack = generateResumePack(uncertainDossier, [auditLane], NOW);
+check("uncertainty statements stay out of the proof bank", uncertainPack.masterProofBank.every((entry) => !/don'?t know/i.test(entry)), JSON.stringify(uncertainPack.masterProofBank));
+
+// A role with no usable approved detail is omitted, not rendered hollow.
+const hollowDossier = {
+  ...emptyDossier(NOW),
+  evidence: [add("role", "Shift Lead — Corner Cafe")],
+  roles: [{ id: "role-hollow", title: "Shift Lead", employer: "Corner Cafe", startDate: "", endDate: "", current: false, responsibilities: [], tools: [], outcomes: [], evidenceIds: [] }],
+  updatedAt: NOW
+};
+hollowDossier.roles[0].evidenceIds = [hollowDossier.evidence[0].id];
+const hollowPack = generateResumePack(hollowDossier, [auditLane], NOW);
+check("zero-bullet roles are omitted from documents", hollowPack.variants.every((variant) => variant.resume.experience.every((entry) => entry.bullets.length > 0)));
+check("omitted roles are reported honestly", hollowPack.receipt.unsupportedClaimsRefused.some((item) => /Shift Lead/i.test(item)), JSON.stringify(hollowPack.receipt.unsupportedClaimsRefused));
+
+// --- Release-candidate pack inspection fixes (2026-07-16 manual review) ------
+
+// The user's own name must never become document content.
+const namedImport = parseResumePackToProposals([{ filename: "n.txt", text: "Marcus Bell\nmarcus@example.com\nTicket Writer — BetRiver | 2021–2026\nTrained 6 new ticket writers on POS" }])
+  .map((item) => ({ ...item, status: "approved" }));
+const namedDossier = mergeImportProposals(emptyDossier(NOW), namedImport, NOW);
+check("bare name lines classify as identity", namedDossier.identity.fullName === "Marcus Bell", JSON.stringify(namedDossier.identity));
+const namedPack = generateResumePack(namedDossier, [auditLane], NOW);
+const namedDocText = JSON.stringify(namedPack.variants.map((variant) => variant.resume)) + JSON.stringify(namedPack.masterProofBank);
+check("the user's name is never a bullet or proof entry", !namedDocText.includes("Marcus Bell"), namedDocText.slice(0, 300));
+
+// Heading-shaped evidence heads sections; it never reprints as bullet/summary.
+check(
+  "role headings never appear as bullets or summary facts",
+  namedPack.variants.every((variant) =>
+    !variant.resume.summary.includes("BetRiver |") &&
+    variant.resume.experience.every((entry) => entry.bullets.every((bullet) => !/—.*\b(19|20)\d{2}\b|\|\s*(19|20)\d{2}/.test(bullet)))
+  )
+);
+
+// Facts attach to the heading they followed in the source text.
+const multiRole = parseResumePackToProposals([{
+  filename: "m.txt",
+  text: [
+    "Casey Tran",
+    "Substitute Teacher — Metro School District | 2023–2026",
+    "Covered K-8 classrooms on short notice",
+    "Line Cook — Pho Palace | 2021–2023",
+    "Worked the wok station during 200-cover dinner rushes"
+  ].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const multiDossier = mergeImportProposals(emptyDossier(NOW), multiRole, NOW);
+const multiPack = generateResumePack(multiDossier, [auditLane], NOW);
+const teacherEntry = multiPack.variants[0].resume.experience.find((entry) => /Substitute Teacher/.test(entry.title));
+const cookEntry = multiPack.variants[0].resume.experience.find((entry) => /Line Cook/.test(entry.title));
+check(
+  "facts attach to the role they followed in the source",
+  Boolean(teacherEntry?.bullets.some((bullet) => /classrooms/.test(bullet))) &&
+    Boolean(cookEntry?.bullets.some((bullet) => /wok station/.test(bullet))) &&
+    !teacherEntry?.bullets.some((bullet) => /wok station/.test(bullet)),
+  JSON.stringify(multiPack.variants[0].resume.experience)
+);
+
+// A dateless second role must not donate its facts to the first role.
+const datelessSecond = parseResumePackToProposals([{
+  filename: "d.txt",
+  text: ["Warehouse Associate — Fulfillment Co | 2020–2022", "Picked and packed 300+ orders daily", "Delivery Driver — QuickShip", "Delivered 80-100 packages per route"].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const datelessDossier = mergeImportProposals(emptyDossier(NOW), datelessSecond, NOW);
+const datelessPack = generateResumePack(datelessDossier, [auditLane], NOW);
+const warehouseEntry = datelessPack.variants[0].resume.experience.find((entry) => /Warehouse/.test(entry.title));
+check(
+  "a dateless second role keeps its own facts",
+  Boolean(warehouseEntry) && !warehouseEntry.bullets.some((bullet) => /packages per route/.test(bullet)),
+  JSON.stringify(datelessPack.variants[0].resume.experience)
+);
+
+// Education renders once, without a duplicated year.
+const eduImport = parseResumePackToProposals([{ filename: "e.txt", text: "State University — BS in Communications | 2019" }]).map((item) => ({ ...item, status: "approved" }));
+const eduDossier = mergeImportProposals(emptyDossier(NOW), eduImport, NOW);
+const eduEntry = eduDossier.education[0];
+check("education credential does not duplicate the year", Boolean(eduEntry) && !/(19|20)\d{2}/.test(eduEntry.credential) && eduEntry.dates === "2019", JSON.stringify(eduDossier.education));
+
+// Founder/project headings collect the facts that follow them.
+const founderImport = parseResumePackToProposals([{
+  filename: "f.txt",
+  text: ["Founder — Loomwork Studio | 2023–Present", "Built and shipped 4 client websites", "Set up automated intake workflows"].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const founderDossier = mergeImportProposals(emptyDossier(NOW), founderImport, NOW);
+const founderProject = founderDossier.projects[0];
+check(
+  "project facts attach to the project heading they followed",
+  Boolean(founderProject) && founderProject.organization === "Loomwork Studio" && founderProject.evidenceIds.length >= 2,
+  JSON.stringify(founderDossier.projects)
+);
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

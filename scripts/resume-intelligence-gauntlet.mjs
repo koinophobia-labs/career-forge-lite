@@ -446,6 +446,68 @@ const results = profiles.map((profile) => {
   };
 });
 
+// --- Honesty regressions -----------------------------------------------
+
+// 1. Placeholder-ridden drafts cap at "Needs Work" and name the problem.
+{
+  const placeholderData = intake({ fullName: "", currentCompany: "", currentTime: "" });
+  const placeholderResume = generateResumePackage(placeholderData);
+  const placeholderQuality = analyzeResumeQuality(placeholderData, placeholderResume);
+  assert(placeholderQuality.rating === "Needs Work", `placeholder draft is never praised (got ${placeholderQuality.rating})`);
+  assert(placeholderQuality.score <= 45, `placeholder draft score capped (got ${placeholderQuality.score})`);
+  assert(
+    placeholderQuality.suggestedImprovements.some((item) => item.startsWith("Not ready to send:")),
+    "placeholder draft names the placeholder problem"
+  );
+  assert(placeholderQuality.strongestSections.length === 0, "placeholder draft has no praised sections");
+}
+
+// 2. Quantified-achievements requires an actual number; uncertainty text in a
+// scope field never counts as quantified.
+{
+  const uncertainData = intake({ customersServed: "I don't know my numbers", selectedOutcomes: [] });
+  const uncertainResume = generateResumePackage(uncertainData);
+  const uncertainText = resumeToText(uncertainData, uncertainResume);
+  assert(!/don'?t know my numbers/i.test(uncertainText), "uncertainty text never reaches the resume");
+  const uncertainQuality = analyzeResumeQuality(uncertainData, uncertainResume);
+  assert(
+    uncertainQuality.suggestedImprovements.some((item) => /Add approximate numbers/i.test(item)),
+    "uncertainty scope still coaches for real numbers"
+  );
+}
+
+// 3. Word-salad titles fail readability with a named fix.
+{
+  const messyData = intake({ currentTitle: "Csm Managing 45 Mid-market Accounts Worth About $3" });
+  const messyResume = generateResumePackage(messyData);
+  const messyQuality = analyzeResumeQuality(messyData, messyResume);
+  assert(messyQuality.score <= 74, `word-salad title caps the score (got ${messyQuality.score})`);
+  assert(messyQuality.suggestedImprovements.some((item) => /Shorten the job title/i.test(item)), "word-salad title gets a named fix");
+}
+
+// 4. Comma-splitting never fabricates skills from conjunctions/qualifiers, and
+// prose fragments are rejected as skills.
+{
+  const listData = intake({ tools: "HTML, CSS, and some JavaScript from class, Showing up on time every shift" });
+  const listResume = generateResumePackage(listData);
+  const skillsText = listResume.coreSkills.join(" | ");
+  assert(listResume.coreSkills.includes("HTML") && listResume.coreSkills.includes("CSS"), `list skills keep real tools (got ${skillsText})`);
+  assert(skillsText.includes("JavaScript"), `qualifier stripped to the real skill (got ${skillsText})`);
+  assert(!/and some|from class/i.test(skillsText), `no conjunction/qualifier fragments in skills (got ${skillsText})`);
+  assert(!/showing up on time/i.test(skillsText), `prose fragments rejected as skills (got ${skillsText})`);
+}
+
+// 5. Termination reasons never survive into generated documents.
+{
+  const terminationData = intake({
+    responsibilities: "handled customer escalations until I was laid off in June 2026, kept records accurate",
+    outcomes: "I improved retention until I was laid off in June 2026."
+  });
+  const terminationResume = generateResumePackage(terminationData);
+  const terminationText = resumeToText(terminationData, terminationResume);
+  assert(!/laid off|terminated|fired/i.test(terminationText), "termination reasons are stripped from generated documents");
+}
+
 const ratingCounts = results.reduce((counts, result) => {
   counts[result.rating] = (counts[result.rating] ?? 0) + 1;
   return counts;

@@ -37,9 +37,18 @@ function loadTsModule(filePath) {
   return cjsModule.exports;
 }
 
-const { buildGapDefenseQuestions, coachAnswer, generateInterviewPrep, getRoleQuestions, HONESTY_NOTE } = loadTsModule(
-  path.join(root, "src/lib/interview-prep.ts")
-);
+const {
+  buildGapDefenseQuestions,
+  buildReverseQuestions,
+  coachAnswer,
+  generateInterviewPrep,
+  getRoleQuestions,
+  loadPrepDraft,
+  resolvePrepLane,
+  savePrepDraft,
+  HONESTY_NOTE,
+  PREP_DRAFT_KEY
+} = loadTsModule(path.join(root, "src/lib/interview-prep.ts"));
 const { laneLibrary } = loadTsModule(path.join(root, "src/lib/lane-library.ts"));
 const { emptyProfile } = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
 
@@ -195,12 +204,217 @@ check(
   transition.some((question) => question.question.includes("Product Support Specialist"))
 );
 check(
-  "side-company commitment question exists",
-  transition.some((question) => /own company/i.test(question.question))
+  "side-venture commitment question exists when the profile shows founder work",
+  transition.some((question) => /own venture/i.test(question.question))
+);
+check(
+  "founder commitment question attributes its real source",
+  transition.every((question) => !/own venture/i.test(question.question) || /current situation/i.test(question.basedOn))
+);
+const noFounderTransition = generateInterviewPrep(
+  { ...profile, currentSituation: "Five years of retail shift work", proofPoints: "", experienceSummary: "Retail work." },
+  makeLane("Product Support Specialist"),
+  null
+).questions.filter((question) => question.category === "transition");
+check(
+  "no founder evidence → no fabricated side-venture question",
+  noFounderTransition.every((question) => !/own (venture|company)/i.test(question.question))
+);
+check(
+  "commitment fallback is labeled generic, not personalized",
+  noFounderTransition.some((question) => /generic/i.test(question.basedOn))
 );
 check("pack carries honesty note", pack.honestyNote === HONESTY_NOTE && /never claim/i.test(pack.honestyNote));
 check("pack labels the application", pack.applicationLabel === "Product Support Specialist at Acme");
 check("answer framework has 5 steps", pack.answerFramework.length === 5);
+
+// --- Gap defense verifies stored gaps against approved evidence -------------------
+// analysisGaps merges PARTIAL and GAP verdicts at save time, so prep must
+// re-check them: covered → dropped, partial → bridge phrasing, gap → honest.
+function evidenceRecord(id, kind, detail) {
+  return {
+    id,
+    kind,
+    label: kind,
+    detail,
+    source: "resume-import",
+    sourceText: detail,
+    confidence: "high",
+    approved: true,
+    rejected: false,
+    sourceFilenames: [],
+    sourceExcerpts: [detail],
+    createdAt: NOW,
+    updatedAt: NOW
+  };
+}
+const csEvidence = evidenceRecord("ev-cs-role", "role", "Customer Success Manager owning onboarding and renewals for mid-market accounts");
+const csDossier = {
+  evidence: [
+    csEvidence,
+    evidenceRecord("ev-metric", "metric", "Cut churn from 14% to 8% across 45 mid-market accounts"),
+    evidenceRecord("ev-proof", "proof", "Grew the managed book of business to $3.2M ARR"),
+    evidenceRecord("ev-saas", "responsibility", "Provided SaaS support and resolved product escalations")
+  ],
+  roles: [
+    {
+      id: "role-cs",
+      title: "Customer Success Manager",
+      employer: "Northwind",
+      startDate: "January 2022",
+      endDate: "",
+      current: true,
+      responsibilities: ["Owned customer success onboarding and renewals"],
+      tools: [],
+      outcomes: [],
+      evidenceIds: ["ev-cs-role"]
+    }
+  ],
+  projects: []
+};
+const tenureApplication = {
+  ...application,
+  analysisGaps: [
+    "3+ years of customer success experience required",
+    "2+ years of SaaS support experience required",
+    "Familiarity with Zendesk"
+  ]
+};
+const verifiedGapQuestions = buildGapDefenseQuestions(makeLane("Customer Success"), tenureApplication, csDossier, profile);
+check(
+  "tenure computed from role date ranges — covered requirement asserts no false gap",
+  !verifiedGapQuestions.some((question) => question.question.includes("3+ years of customer success")),
+  JSON.stringify(verifiedGapQuestions.map((question) => question.question))
+);
+check(
+  "no gap question ever uses the old 'not on your resume' assertion",
+  verifiedGapQuestions.every((question) => !/not on your resume/i.test(question.question)) &&
+    generateInterviewPrep(profile, makeLane("Product Support Specialist"), application).questions.every(
+      (question) => !/not on your resume/i.test(question.question)
+    )
+);
+const partialQuestion = verifiedGapQuestions.find((question) => question.question.includes("2+ years of SaaS support"));
+check(
+  "partially-covered requirement gets bridge phrasing citing the user's strongest proof",
+  Boolean(partialQuestion) && /strongest related proof/i.test(partialQuestion.question) && /bridge/i.test(partialQuestion.question)
+);
+check(
+  "partial phrasing never asserts absence",
+  Boolean(partialQuestion) && !/doesn't cover it|not on your resume/i.test(partialQuestion.question)
+);
+const zendeskQuestion = verifiedGapQuestions.find((question) => question.question.includes("Familiarity with Zendesk"));
+check(
+  "true gap is asserted only when evidence genuinely lacks it",
+  Boolean(zendeskQuestion) && /approved evidence doesn't cover it/i.test(zendeskQuestion.question)
+);
+const statedTenureDossier = {
+  evidence: [evidenceRecord("ev-stated", "role", "4+ years of customer success experience managing mid-market accounts")],
+  roles: [],
+  projects: []
+};
+const statedTenureQuestions = buildGapDefenseQuestions(
+  null,
+  { ...application, analysisGaps: ["3+ years of customer success experience required"] },
+  statedTenureDossier,
+  profile
+);
+check(
+  "explicit stated tenure in approved evidence covers an N+-year requirement",
+  statedTenureQuestions.length === 0,
+  JSON.stringify(statedTenureQuestions.map((question) => question.question))
+);
+check(
+  "without a dossier, stored gaps use honest 'not fully proven' phrasing",
+  buildGapDefenseQuestions(null, application).every((question) => /doesn't fully prove it yet/i.test(question.question))
+);
+const coveredLaneGapDossier = {
+  evidence: [evidenceRecord("ev-zendesk", "tool", "Zendesk ticketing at demo level")],
+  roles: [],
+  projects: []
+};
+check(
+  "lane gaps covered by approved evidence are dropped from the drill list",
+  !buildGapDefenseQuestions(
+    makeLane("Product Support Specialist", { gaps: ["Zendesk ticketing at demo level", "Practice reading basic logs"] }),
+    null,
+    coveredLaneGapDossier,
+    profile
+  ).some((question) => question.question.includes("Zendesk ticketing at demo level"))
+);
+check(
+  "library lane gaps are attributed to the lane plan, not the user",
+  buildGapDefenseQuestions(makeLane("Product Support Specialist"), null).every(
+    (question) => !/you identified this yourself/i.test(question.why)
+  )
+);
+
+// --- Behavioral questions from imported dossier evidence ---------------------------
+const dossierPack = generateInterviewPrep(emptyProfile(), makeLane("Customer Success"), null, csDossier);
+const dossierBehavioral = dossierPack.questions.filter((question) => question.category === "behavioral");
+check(
+  "imported dossier metrics and achievements each seed a behavioral question",
+  dossierBehavioral.filter((question) => question.basedOn.startsWith("Approved evidence")).length >= 2
+);
+check(
+  "dossier behavioral questions quote the actual claims",
+  dossierBehavioral.some((question) => question.question.includes("14% to 8%")) &&
+    dossierBehavioral.some((question) => question.question.includes("$3.2M ARR"))
+);
+check(
+  "quantified dossier claims rank ahead of unquantified ones",
+  dossierBehavioral.findIndex((question) => /[\d$%]/.test(question.question)) === 0
+);
+
+// --- Application lane wins over the active lane -------------------------------------
+const activeLane = makeLane("AI Support Specialist", { id: "lane-active" });
+const appLane = makeLane("Customer Success", { id: "lane-app", status: "exploring" });
+const lanes = [activeLane, appLane];
+const appForLane = { ...application, laneId: "lane-app" };
+check(
+  "selected application's lane wins over the active-lane default",
+  resolvePrepLane(lanes, null, appForLane, activeLane)?.id === "lane-app"
+);
+check(
+  "explicit lane choice still overrides the application lane",
+  resolvePrepLane(lanes, "lane-active", appForLane, null)?.id === "lane-active"
+);
+check("explicit 'no lane' resolves to generic prep", resolvePrepLane(lanes, "none", appForLane, activeLane) === null);
+check(
+  "no application and no choice falls back to the default lane",
+  resolvePrepLane(lanes, null, null, activeLane)?.id === "lane-active"
+);
+
+// --- Reverse questions ---------------------------------------------------------------
+check("pack includes questions to ask the interviewer", pack.reverseQuestions.length >= 3);
+check(
+  "reverse questions get specific when an analysis exists",
+  pack.reverseQuestions.some((item) => item.basedOn.includes("Job-post analysis")) &&
+    pack.reverseQuestions.some((item) => item.question.includes("zendesk") || item.question.includes("customer support"))
+);
+const genericReverse = buildReverseQuestions(null, null);
+check(
+  "reverse questions fall back to labeled generic staples",
+  genericReverse.length >= 3 && genericReverse.every((item) => /generic/i.test(item.basedOn))
+);
+
+// --- Practice draft persistence --------------------------------------------------------
+const draftStore = new Map();
+globalThis.window = {
+  localStorage: {
+    getItem: (key) => (draftStore.has(key) ? draftStore.get(key) : null),
+    setItem: (key, value) => draftStore.set(key, String(value)),
+    removeItem: (key) => draftStore.delete(key)
+  }
+};
+savePrepDraft("Why this role?", "Because the work is the same skill in a new context.");
+check("practice drafts persist per question", loadPrepDraft("Why this role?") === "Because the work is the same skill in a new context.");
+savePrepDraft("Why this role?", "   ");
+check("blank drafts are removed instead of stored", loadPrepDraft("Why this role?") === "");
+draftStore.set(PREP_DRAFT_KEY, "{not json");
+check("corrupt draft storage revives to empty, not a crash", loadPrepDraft("Why this role?") === "");
+draftStore.set(PREP_DRAFT_KEY, JSON.stringify({ ok: "kept", bad: 42 }));
+check("non-string draft entries are dropped on revival", loadPrepDraft("ok") === "kept" && loadPrepDraft("bad") === "");
+delete globalThis.window;
 
 // --- Answer coaching --------------------------------------------------------------
 const gapQuestion = gapQuestions[0];

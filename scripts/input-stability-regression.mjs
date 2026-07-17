@@ -11,7 +11,7 @@ function startServer() {
     "npm",
     ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
     {
-      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
@@ -109,9 +109,10 @@ const sampleUsers = [
 ];
 
 async function startGuidedFlow(page) {
+  // The builder now lives inside the main product shell and lands directly on
+  // the choose-your-path panel (the separate marketing landing was removed).
   await page.goto(`${baseUrl}/resume-builder`, { waitUntil: "load" });
-  await assertNoHorizontalOverflow(page, "landing");
-  await page.getByRole("button", { name: "Build My Resume" }).click();
+  await assertNoHorizontalOverflow(page, "guided-setup");
   await page.getByText("Choose how you want to start.").waitFor();
   await page.getByText("Start guided build").click();
   await page.getByRole("heading", { name: "What do you need help with?" }).waitFor();

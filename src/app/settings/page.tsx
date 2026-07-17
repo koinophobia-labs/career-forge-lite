@@ -13,7 +13,10 @@ import {
   type BackupPreview
 } from "@/lib/backup";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
-import { emptyState, STORAGE_KEY } from "@/lib/command-center-store";
+import { emptyState, RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
+import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
+import { HANDOFF_KEY } from "@/lib/tailor-handoff";
+import { LAST_BACKUP_KEY } from "@/lib/backup";
 import type { CommandCenterState } from "@/types/command-center";
 
 function formatDate(iso: string | null): string {
@@ -24,9 +27,13 @@ function formatDate(iso: string | null): string {
     : parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function PreviewStats({ preview }: { preview: BackupPreview }) {
+function PreviewStats({ preview, context = "backup" }: { preview: BackupPreview; context?: "backup" | "current" }) {
   const rows: Array<[string, string]> = [
-    ["Exported", preview.exportedAt ? formatDate(preview.exportedAt) : "not recorded (legacy backup)"],
+    // "Exported" only means something when describing a backup file; on the
+    // live-data panel it read as if the app had already lost something.
+    ...(context === "backup"
+      ? [["Exported", preview.exportedAt ? formatDate(preview.exportedAt) : "not recorded (older backup format)"] as [string, string]]
+      : []),
     ["Profile", preview.profilePresent ? "present" : "empty"],
     ["Target lanes", String(preview.laneCount)],
     ["Applications", String(preview.applicationCount)],
@@ -98,8 +105,14 @@ export default function SettingsPage() {
   }
 
   function clearLocalData() {
+    // Every Career Forge key, so "clear" actually means clear: main store,
+    // backup marker, in-flight tailor handoff, interview session, and any
+    // quarantined recovery snapshot.
     window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem("career-forge-last-backup-at");
+    window.localStorage.removeItem(LAST_BACKUP_KEY);
+    window.localStorage.removeItem(HANDOFF_KEY);
+    window.localStorage.removeItem(INTERVIEW_SESSION_KEY);
+    window.localStorage.removeItem(RECOVERY_KEY);
     updateCommandCenter(() => emptyState());
     setPendingImport(null);
     setConfirmingClear(false);
@@ -123,7 +136,7 @@ export default function SettingsPage() {
             Downloads one JSON file containing your profile, lanes, applications, outreach, and every resume version
             including styled snapshots.
           </p>
-          {hydrated && <PreviewStats preview={currentPreview} />}
+          {hydrated && <PreviewStats preview={currentPreview} context="current" />}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"

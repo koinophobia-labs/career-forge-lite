@@ -214,7 +214,12 @@ function runProfile(profile) {
     earlyReadiness.push(canGenerateResumeFromInterview(session));
     session = createNextAssistantInterviewTurn(session);
     const lastAssistant = session.messages.at(-1)?.content ?? "";
-    assert(/Great|helpful|Perfect|Excellent|That|Nice|Got it|start/i.test(lastAssistant), `${profile.id}: assistant acknowledges answer ${index + 1}`);
+    // "No problem" is the graceful uncertainty acknowledgement ("I don't know
+    // my numbers" advances the conversation without becoming draft content).
+    assert(/Great|helpful|Perfect|Excellent|That|Nice|Got it|start|No problem/i.test(lastAssistant), `${profile.id}: assistant acknowledges answer ${index + 1}`);
+    if (/no problem/i.test(lastAssistant)) {
+      assert(!JSON.stringify(session.resumeDraft).toLowerCase().includes(answer.toLowerCase()), `${profile.id}: uncertain answer ${index + 1} never becomes draft content`);
+    }
   }
 
   const ready = canGenerateResumeFromInterview(session);
@@ -267,6 +272,58 @@ function runProfile(profile) {
 }
 
 const results = fixtures.map(runProfile);
+
+// Regression: decimal/unit fidelity. "$3.2M ARR" must never truncate to "$3",
+// "4.5 years" and "99.9%" must survive extraction intact.
+{
+  let session = createInitialInterviewSession();
+  const decimalAnswers = [
+    "Customer Success Manager in software",
+    "I have five years in customer success.",
+    "I worked as a Customer Success Manager at Acme from 2021 - Present.",
+    "I managed onboarding, renewals, and escalations for enterprise accounts.",
+    "I grew my book to $3.2M ARR and kept 99.9% CSAT for 4.5 years.",
+    "I used Salesforce, Zendesk, and Excel."
+  ];
+  for (const answer of decimalAnswers) {
+    session = updateInterviewDraftFromUserAnswer(session, createUserInterviewMessage(answer));
+    session = createNextAssistantInterviewTurn(session);
+  }
+  const metricsText = session.resumeDraft.metrics.join(" | ");
+  assert(metricsText.includes("$3.2M ARR"), `decimal metrics: $3.2M ARR preserved intact (got: ${metricsText})`);
+  assert(metricsText.includes("99.9%"), `decimal metrics: 99.9% preserved intact (got: ${metricsText})`);
+  assert(metricsText.includes("4.5 years"), `decimal metrics: 4.5 years preserved intact (got: ${metricsText})`);
+  assert(!session.resumeDraft.metrics.some((metric) => /\$3(?!\.2)/.test(metric)), "decimal metrics: no truncated $3 fragment");
+  const generatedPackage = generateResumePackageFromInterview(session);
+  const generatedText = resumeToText(generatedPackage.intake, generatedPackage.resume);
+  assert(generatedText.includes("$3.2M ARR"), "decimal metrics: generated resume keeps $3.2M ARR");
+  assert(!/\$3(?![.,]?\d)/.test(generatedText), "decimal metrics: generated resume has no bare $3 fragment");
+  // Skills must stay labels, not first-person sentence shards.
+  assert(generatedPackage.resume.coreSkills.every((skill) => !/^i\b/i.test(skill) && skill.split(/\s+/).length <= 5), "skills stay label-shaped");
+}
+
+// Regression: uncertainty answers advance the conversation but never enter the
+// draft or its metrics.
+{
+  let session = createInitialInterviewSession();
+  const uncertainAnswers = [
+    "Project Coordinator in operations",
+    "I have coordination experience.",
+    "I worked as a Project Assistant at BrightBuild from 2023 - Present.",
+    "I tracked timelines, coordinated meetings, and maintained project documentation.",
+    "I don't know my numbers.",
+    "I used Asana and Slack."
+  ];
+  for (const answer of uncertainAnswers) {
+    session = updateInterviewDraftFromUserAnswer(session, createUserInterviewMessage(answer));
+    session = createNextAssistantInterviewTurn(session);
+  }
+  const draftText = JSON.stringify(session.resumeDraft).toLowerCase();
+  assert(!draftText.includes("don't know my numbers") && !draftText.includes("dont know my numbers"), "uncertainty: never stored in draft");
+  assert(session.resumeDraft.metrics.length === 0, "uncertainty: no metric fabricated from uncertainty");
+  const acknowledgement = session.messages.filter((message) => message.role === "assistant").map((message) => message.content).join("\n");
+  assert(/no problem/i.test(acknowledgement), "uncertainty: acknowledged gracefully");
+}
 
 const staticResume = generateResumePackage({
   ...initialIntake,

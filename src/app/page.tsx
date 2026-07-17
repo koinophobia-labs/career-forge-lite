@@ -9,6 +9,7 @@ import { SampleExperience } from "@/components/SampleExperience";
 import { SiteFooter } from "@/components/SiteFooter";
 import { trackCareerEvent } from "@/lib/analytics";
 import { getLastBackupAt, shouldNudgeBackup } from "@/lib/backup";
+import { getCommerceMode } from "@/lib/entitlement";
 import { isMomentumLow } from "@/lib/weekly-review";
 import {
   applicationFollowUpsDue,
@@ -79,9 +80,9 @@ export default function Dashboard() {
             <p className="trust-kicker text-xs font-bold uppercase sm:text-sm">Local-first career evidence compiler</p>
             <div className="mt-3 grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
               <div>
-                <h1 className="text-3xl font-bold leading-tight text-paper sm:text-5xl">
+                <h2 className="text-3xl font-bold leading-tight text-paper sm:text-5xl">
                   Your career is bigger than your last résumé.
-                </h1>
+                </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/72 sm:text-base">
                   Career Forge turns scattered jobs, projects, and old résumés into an approved evidence system, then
                   compiles truthful application packs for every credible direction.
@@ -121,13 +122,33 @@ export default function Dashboard() {
           <p className="trust-kicker text-xs font-bold uppercase">How it works</p>
           <h2 id="how-title" className="mt-2 text-2xl font-bold text-paper">From scattered history to application-ready baselines</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {[["1", "Import two old résumés", "Multiple versions help surface repeated facts and conflicts. PDF, DOCX, and text stay in this browser."], ["2", "Approve facts and choose lanes", "You decide what is true. A lane is a family of related roles that can share one positioning strategy and baseline résumé."], ["3", "Receive four or six baselines", "Each credible lane gets an ATS and recruiter version, plus a bundle and a direct bridge to job-specific tailoring."]].map(([number, title, detail]) => <article key={number} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><span className="lab-mono text-xs font-bold text-gold">{number}</span><h3 className="mt-2 font-bold text-paper">{title}</h3><p className="mt-1 text-sm leading-6 text-paper/58">{detail}</p></article>)}
+            {[["1", "Bring your history — files or your own words", "Import old résumés (PDF, DOCX, text — parsed in this browser) or simply describe your work. Multiple versions help surface repeated facts and conflicts."], ["2", "Approve facts and choose lanes", "You decide what is true. A lane is a family of related roles that can share one positioning strategy and baseline résumé."], ["3", "Receive your résumé pack", "Every lane you activate gets an ATS version and a recruiter version, plus LinkedIn materials, a bundle, and a direct bridge to job-specific tailoring."]].map(([number, title, detail]) => <article key={number} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><span className="lab-mono text-xs font-bold text-gold">{number}</span><h3 className="mt-2 font-bold text-paper">{title}</h3><p className="mt-1 text-sm leading-6 text-paper/58">{detail}</p></article>)}
           </div>
           <p className="mt-5 text-sm leading-6 text-paper/65"><strong className="text-cyan">Why multiple résumés?</strong> One generic résumé forces unrelated roles to compete for space. Career Forge creates a truthful baseline for each credible direction, then tailors from the right foundation.</p>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8"><SampleExperience /></section>
+
+      <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="pricing-strip-title">
+        <div className="rounded-xl border border-gold/25 bg-gold/5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="trust-kicker text-xs font-bold uppercase">Simple to buy</p>
+              <h2 id="pricing-strip-title" className="mt-2 text-xl font-bold text-paper">
+                Build and review everything free. Pay once when you&apos;re ready to use it.
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-paper/65">
+                One-time packs from $49 — no subscription, no account, and your career data never leaves this device.
+                {getCommerceMode() === "off" ? " Everything is free while Career Forge is in beta." : ""}
+              </p>
+            </div>
+            <Link href="/pricing" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">
+              See the packs →
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="trust-title">
         <div className="rounded-xl border border-white/12 bg-white/5 p-5 sm:p-6"><h2 id="trust-title" className="text-xl font-bold text-paper">What Career Forge trusts—and what it refuses to invent</h2><div className="mt-4 grid gap-3 text-sm leading-6 text-paper/65 md:grid-cols-3"><p><strong className="text-mint">Local by default.</strong> No account is required. Files are processed in your browser, and raw résumé files are not retained.</p><p><strong className="text-mint">Approval-gated.</strong> Imported facts remain proposals until you approve them; source excerpts stay attached for review.</p><p><strong className="text-mint">Honest outputs.</strong> Missing credentials, duration, and experience stay gaps. Review every exported application document before sending.</p></div></div>

@@ -15,7 +15,7 @@ export default function TruthMapPage() {
     <main>
       <CommandNav active="/truth-map" />
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Career Truth Map · derived, read-only lineage</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Truth Map · where every claim comes from</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">See what supports every claim—and where each fact is used.</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-paper/68">This map is rebuilt from your approved dossier, role lanes, résumé variants, and saved answers. Rejected and pending Truth Inbox facts never appear as support.</p>
         {hydrated && map.evidenceFirst.length === 0 && <section className="trust-panel mt-8 p-6"><h2 className="text-xl font-bold text-paper">Your Truth Map starts after approval</h2><p className="mt-2 text-sm leading-6 text-paper/60">Import old résumés or add a role or project, then approve the facts you recognize. Career Forge will show their lineage here.</p><Link href="/profile#import" className="mt-4 inline-flex min-h-11 items-center rounded bg-gold px-4 py-2 text-sm font-black text-ink">Build my Career Dossier →</Link></section>}
