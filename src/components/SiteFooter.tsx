@@ -1,9 +1,4 @@
-const productLinks: Array<[string, string, string, boolean]> = [
-  ["You Know Ball", "LIVE", "gold", false],
-  ["Creator Command Center", "BUILD", "cyan", false],
-  ["KOI Cave", "LOCAL", "ember", false],
-  ["Career Forge Lite", "MODULE 05", "cyan", true]
-];
+import Link from "next/link";
 
 export function SiteFooter() {
   return (
@@ -15,16 +10,15 @@ export function SiteFooter() {
               CF
             </span>
             <span>
-              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Koinophobia Labs</span>
+              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
               <span className="block text-[0.7rem] font-bold uppercase tracking-[0.2em] text-paper/50">
-                Product Lab Module 05
+                by Koinophobia Labs
               </span>
             </span>
           </div>
           <p className="mt-4 max-w-sm leading-6">
-            Product Lab Module 05. Built and shipped by Koinophobia Labs.
-            Created to translate real work into recruiter-ready language.
-            Career Forge stays local, editable, ATS-safe, and unbranded in exported resume content.
+            Built and shipped by Koinophobia Labs to translate real work into recruiter-ready language. Career Forge
+            stays local, editable, ATS-safe, and unbranded in every exported résumé.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
             <a
@@ -47,37 +41,34 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Product Lab</h2>
-          <div className="mt-4 space-y-3">
-            {productLinks.map(([name, status, accent, active]) => (
-              <div
-                key={name}
-                className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 ${
-                  active ? "border-cyan/35 bg-cyan/10" : "border-white/10 bg-white/5"
-                }`}
-              >
-                <span className="inline-flex items-center gap-2 text-paper/78">
-                  <span className={`ecosystem-dot ecosystem-dot-${accent}`} aria-hidden="true" />
-                  {name}
-                </span>
-                <span className={`text-[0.65rem] font-black uppercase tracking-[0.14em] ${
-                  active ? "text-cyan" : "text-paper/45"
-                }`}>
-                  {status}
-                </span>
-              </div>
-            ))}
+          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Product</h2>
+          <div className="mt-4 grid gap-2.5">
+            <Link href="/pricing" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Packs &amp; pricing
+            </Link>
+            <Link href="/unlock" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Unlock a license key
+            </Link>
+            <Link href="/settings" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Backup &amp; restore
+            </Link>
+            <Link href="/terms" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Terms of use
+            </Link>
+            <Link href="/privacy" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Privacy
+            </Link>
           </div>
         </div>
 
         <div>
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Utility</h2>
+          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Promises</h2>
           <div className="mt-4 grid gap-2 text-paper/66">
-            <span>No login</span>
-            <span>No database</span>
+            <span>No account, no login</span>
+            <span>Career data stays on your device</span>
             <span>No fake ATS score</span>
-            <span>Single-column resume output</span>
-            <span>Browser print/export path</span>
+            <span>Nothing written without your approval</span>
+            <span>PDF, DOCX, and bundle export</span>
           </div>
         </div>
       </div>

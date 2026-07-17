@@ -133,7 +133,7 @@ export default function ApplicationsPage() {
       <CommandNav active="/applications" />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Step 04 · Pipeline</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Step 5 · Applications</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Applications tracker</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
           Every application gets a status and a follow-up date. Marking one as applied schedules a follow-up in{" "}

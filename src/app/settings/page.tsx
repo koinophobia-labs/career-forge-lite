@@ -27,9 +27,13 @@ function formatDate(iso: string | null): string {
     : parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function PreviewStats({ preview }: { preview: BackupPreview }) {
+function PreviewStats({ preview, context = "backup" }: { preview: BackupPreview; context?: "backup" | "current" }) {
   const rows: Array<[string, string]> = [
-    ["Exported", preview.exportedAt ? formatDate(preview.exportedAt) : "not recorded (legacy backup)"],
+    // "Exported" only means something when describing a backup file; on the
+    // live-data panel it read as if the app had already lost something.
+    ...(context === "backup"
+      ? [["Exported", preview.exportedAt ? formatDate(preview.exportedAt) : "not recorded (older backup format)"] as [string, string]]
+      : []),
     ["Profile", preview.profilePresent ? "present" : "empty"],
     ["Target lanes", String(preview.laneCount)],
     ["Applications", String(preview.applicationCount)],
@@ -132,7 +136,7 @@ export default function SettingsPage() {
             Downloads one JSON file containing your profile, lanes, applications, outreach, and every resume version
             including styled snapshots.
           </p>
-          {hydrated && <PreviewStats preview={currentPreview} />}
+          {hydrated && <PreviewStats preview={currentPreview} context="current" />}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"

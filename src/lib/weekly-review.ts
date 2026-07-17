@@ -89,7 +89,7 @@ export function computeWeeklyMetrics(state: CommandCenterState, nowIso: string):
   };
 
   return [
-    metric("apps_sent", "Applications sent", `target: ${WEEKLY_APPLICATION_TARGET}/week`, appsSent.thisWeek, appsSent.lastWeek),
+    metric("apps_sent", "Applications sent", `a steady default of ${WEEKLY_APPLICATION_TARGET} tailored applications/week — quality over volume; adjust to your capacity`, appsSent.thisWeek, appsSent.lastWeek),
     metric(
       "follow_ups_completed",
       "Follow-ups completed",
