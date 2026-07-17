@@ -75,7 +75,7 @@ Thanks for your time either way.`
     key: "application_bump",
     label: "Post-interview thank you",
     scenario: "Within 24 hours after an interview.",
-    body: `Hi [Name] — thank you for the conversation today. [one specific thing discussed] made me more confident this is the right kind of work for me.
+    body: `Hi [Name] — thank you for the conversation today. [specific reason] made me more confident this is the right kind of work for me.
 
 One point I want to reinforce with approved evidence: [approved evidence].
 
