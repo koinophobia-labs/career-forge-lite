@@ -219,7 +219,9 @@ function buildLaneResume(
     if (project.defaultPlacement === "omit") return [];
     const support = evidenceByIds(approved, project.evidenceIds).filter((item) => chosenSet.has(item.id));
     if (!support.length) return [];
-    const heading = [project.name, project.organization, project.dates].filter(Boolean).join(" · ");
+    // Must match the rendered heading exactly, including the org fallback,
+    // or the defensibility receipt reports the heading as unmapped.
+    const heading = [project.name, project.organization || "Independent project", project.dates].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));
     const structuredBullets = unique([project.description, ...project.outcomes, ...project.metrics, ...project.responsibilities])
       .flatMap((candidate) => candidate.split(/\n+/))
@@ -245,13 +247,15 @@ function buildLaneResume(
   // Approved metrics and proof that no role or project claimed still belong
   // on the document — a "Selected accomplishments" block beats silently
   // wasting the user's strongest facts.
+  const looseIds: string[] = [];
   const looseAccomplishments = ranked
     .filter((item) => chosenSet.has(item.id) && !usedByRoles.has(item.id) && (item.kind === "metric" || item.kind === "proof") && isDocumentFact(item))
-    .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); return bullet; }))
+    .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); looseIds.push(item.id); return bullet; }))
     .slice(0, kind === "ats" ? 5 : 3);
   const accomplishmentEntries = looseAccomplishments.length
     ? [{ title: "Selected accomplishments", company: "", time: "", bullets: looseAccomplishments }]
     : [];
+  if (accomplishmentEntries.length) mapClaim("Selected accomplishments", looseIds);
 
   const experience = kind === "ats"
     ? [...roleEntries, ...projectEntries, ...accomplishmentEntries]

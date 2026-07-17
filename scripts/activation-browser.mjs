@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 
 const port = 3231;
 const baseUrl = `http://127.0.0.1:${port}`;
-const server = spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: process.cwd(), env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: process.cwd(), env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" }, stdio: ["ignore", "pipe", "pipe"] });
 let output = "";
 server.stdout.on("data", (chunk) => { output += chunk.toString(); });
 server.stderr.on("data", (chunk) => { output += chunk.toString(); });
@@ -104,6 +104,12 @@ try {
   await page.getByRole("heading", { name: "Output-first" }).waitFor();
   await noOverflow(page, "truth map 375");
   await page.screenshot({ path: "docs/market-moat/truth-map-375x667.png", fullPage: false });
+
+  // Exports are identity-gated: a nameless pack must never leave the app, so
+  // the persona fills their name the way the gate directs before exporting.
+  await page.goto(`${baseUrl}/profile`);
+  await page.getByRole("textbox", { name: "Full name" }).first().fill("Riley Example");
+  await page.getByRole("textbox", { name: "Full name" }).first().blur();
 
   await page.goto(`${baseUrl}/versions`);
   const zipPromise = page.waitForEvent("download");

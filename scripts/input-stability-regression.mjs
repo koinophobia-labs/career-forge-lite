@@ -11,7 +11,7 @@ function startServer() {
     "npm",
     ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
     {
-      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
