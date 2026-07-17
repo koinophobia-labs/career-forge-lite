@@ -9,8 +9,7 @@ export type OutreachTemplate = {
 
 // Templates are deliberately short. They remain visibly incomplete until the
 // user adds a real recipient, a specific reason, and approved evidence where
-// the scenario calls for it. No template asserts results that the dossier does
-// not contain.
+// the scenario calls for it. No template asserts results the dossier lacks.
 export const outreachTemplates: OutreachTemplate[] = [
   {
     key: "recruiter_intro",
@@ -100,7 +99,7 @@ export function fillTemplate(
 ): string {
   let body = template.body;
   const { contact, lane, profile } = options;
-  const roleTitle = lane?.title?.trim() || "";
+  const roleTitle = lane?.title?.trim() || contact?.role?.trim() || "";
   const approvedEvidence = options.approvedEvidence?.trim() || profile?.proofPoints
     ?.split(/\r?\n|;/)
     .map((item) => item.trim())
