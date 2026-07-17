@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { emptyState, loadState, saveState, STORAGE_KEY } from "@/lib/command-center-store";
+import { sanitizeCommandCenterState } from "@/lib/evidence-admissibility";
 import type { CommandCenterState } from "@/types/command-center";
 
 // Single client-side store: one snapshot shared by every page, kept coherent
@@ -11,20 +12,28 @@ let snapshot: CommandCenterState | null = null;
 const serverSnapshot = emptyState();
 let watchingOtherTabs = false;
 
-// Without this, two open tabs are last-writer-wins: each keeps a stale
-// in-memory snapshot and the later save erases the earlier tab's work.
+function readSanitizedState(): CommandCenterState {
+  const loaded = loadState();
+  const sanitized = sanitizeCommandCenterState(loaded);
+  if (JSON.stringify(sanitized) !== JSON.stringify(loaded)) saveState(sanitized);
+  return sanitized;
+}
+
+// Storage events keep every open tab pointed at the newest durable state.
+// Each write also rebases on localStorage immediately before applying its
+// updater, so a stale tab cannot erase unrelated work from a newer tab.
 function watchOtherTabs(): void {
   if (watchingOtherTabs || typeof window === "undefined") return;
   watchingOtherTabs = true;
   window.addEventListener("storage", (event) => {
     if (event.key !== STORAGE_KEY && event.key !== null) return;
-    snapshot = loadState();
+    snapshot = readSanitizedState();
     listeners.forEach((listener) => listener());
   });
 }
 
 function getSnapshot(): CommandCenterState {
-  if (snapshot === null) snapshot = loadState();
+  if (snapshot === null) snapshot = readSanitizedState();
   return snapshot;
 }
 
@@ -39,7 +48,9 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function updateCommandCenter(updater: (current: CommandCenterState) => CommandCenterState): void {
-  snapshot = updater(getSnapshot());
+  const latest = readSanitizedState();
+  const proposed = updater(latest);
+  snapshot = sanitizeCommandCenterState(proposed, latest);
   saveState(snapshot);
   listeners.forEach((listener) => listener());
 }

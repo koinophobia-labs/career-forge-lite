@@ -1,4 +1,5 @@
-import { mergeImportProposals, withUpdatedDossier } from "@/lib/dossier";
+import { withUpdatedDossier } from "@/lib/dossier";
+import { mergeSafeImportProposals, normalizeImportProposal } from "@/lib/evidence-admissibility";
 import type { CommandCenterState } from "@/types/command-center";
 import type { ImportProposalRecord, PendingImportReview } from "@/types/dossier";
 
@@ -28,8 +29,9 @@ export function createPendingImportReview(
   nowIso: string,
   retainSourceFilenames: boolean
 ): PendingImportReview {
-  const sourceFileCount = unique(proposals.flatMap((item) => item.sourceFilenames)).length;
-  const storedProposals = proposals.map((proposal) => retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
+  const normalized = proposals.map(normalizeImportProposal);
+  const sourceFileCount = unique(normalized.flatMap((item) => item.sourceFilenames)).length;
+  const storedProposals = normalized.map((proposal) => retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
   return {
     version: 1,
     id,
@@ -51,8 +53,9 @@ export function addProposalsToReview(
   additions: ImportProposalRecord[],
   nowIso: string
 ): PendingImportReview {
-  const addedSourceFileCount = unique(additions.flatMap((item) => item.sourceFilenames)).length;
-  const safeAdditions = additions.map((proposal) => batch.retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
+  const normalizedAdditions = additions.map(normalizeImportProposal);
+  const addedSourceFileCount = unique(normalizedAdditions.flatMap((item) => item.sourceFilenames)).length;
+  const safeAdditions = normalizedAdditions.map((proposal) => batch.retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
   const byKey = new Map(batch.proposals.map((item) => [`${item.group}|${normalized(item.detail)}`, item]));
   for (const addition of safeAdditions) {
     const key = `${addition.group}|${normalized(addition.detail)}`;
@@ -101,7 +104,7 @@ export function commitTruthInboxReview(
     return { state, approved: 0, rejected: 0, remaining: remaining.length, completed: false, changed: false };
   }
 
-  const dossier = mergeImportProposals(state.dossier, decided, nowIso, batch.retainSourceFilenames);
+  const dossier = mergeSafeImportProposals(state.dossier, decided, nowIso, batch.retainSourceFilenames);
   const nextWithDossier = withUpdatedDossier(state, dossier);
   const completed = remaining.length === 0;
   const pendingImportReviews = completed
