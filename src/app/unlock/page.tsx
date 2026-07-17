@@ -93,7 +93,12 @@ function UnlockContent() {
               Your Stripe receipt links back to this page if you ever lose it.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <code className="lab-mono block max-w-full overflow-x-auto rounded-md border border-white/15 bg-obsidian px-4 py-3 text-xs text-gold">
+              <code
+                tabIndex={0}
+                role="region"
+                aria-label="Your license key. Scroll horizontally with arrow keys to read the full key, or use the Copy key button."
+                className="lab-mono block max-w-full overflow-x-auto rounded-md border border-white/15 bg-obsidian px-4 py-3 text-xs text-gold"
+              >
                 {fulfillment.license}
               </code>
               <button
