@@ -32,11 +32,15 @@ export function isUncertaintyStatement(text: string): boolean {
 const terminationPatterns: RegExp[] = [
   /\b(was|were|got|getting|been)\s+(laid\s+off|let\s+go|terminated|fired|downsized|made\s+redundant)\b/i,
   /\blaid\s+off\b/i,
-  /\b(company|employer|org(anization)?)\s+(closed|shut\s+down|folded|went\s+under|downsized)\b/i,
-  /\bposition\s+(was\s+)?eliminated\b/i,
+  /\b(company|employer|org(anization)?|department|team|division)\s+(closed|shut\s+down|folded|went\s+under|downsized|reorganized|restructured)\b/i,
+  /\b(role|position|job|department|team)\s+(was\s+)?eliminated\b/i,
   /\buntil\s+(i\s+was\s+)?(laid\s+off|let\s+go|terminated|fired)\b/i,
   /\breduction\s+in\s+force\b/i,
-  /\bRIF'?(ed|d)?\b/
+  /\bRIF'?(ed|d)?\b/,
+  /\b(underwent|went\s+through|had|announced)\s+(a\s+)?(round\s+of\s+)?layoffs?\b/i,
+  /\b(company|employer|org(anization)?|department|team)\s+(was\s+)?reorganiz(ed|ation)\b/i,
+  /\b(department|team|role|position|division|group|unit)\s+(was|were)\s+(\w+\s+)?(reorganiz(ed)|restructur(ed)|eliminated|dissolved|downsized)\b/i,
+  /\bleadership\s+(decided\s+to\s+)?eliminat(ed?|ing)\s+(the\s+)?(role|position|team|department)\b/i
 ];
 
 export function containsTerminationReason(text: string): boolean {
@@ -80,7 +84,7 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       // one clause with no comma) — a temporal/causal conjunction almost
       // always introduces the reason as a trailing dependent clause, so
       // split there instead of discarding safe content along with it.
-      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(?:until|because|since|when|after|though|although)\b\s+(.*)$/i);
+      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(?:until|because|since|when|after|though|although|before)\b\s+(.*)$/i);
       if (conjunctionMatch) {
         const [, before, after] = conjunctionMatch;
         const beforeUnsafe = containsTerminationReason(before);
