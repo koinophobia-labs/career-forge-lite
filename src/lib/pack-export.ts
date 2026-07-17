@@ -5,45 +5,48 @@ import type { ResumePackage } from "@/types/career";
 import type { CareerDossier, ResumePack, ResumeVariant } from "@/types/dossier";
 import type { TargetLane } from "@/types/command-center";
 import { isPlaceholderEducation } from "@/lib/resume-export";
+import {
+  classifyEvidenceAdmissibility,
+  isProfessionalEvidence,
+  sanitizeResumeForProfessionalUse
+} from "@/lib/evidence-admissibility";
 import { stripTerminationReasons } from "@/lib/truth-guards";
 
 export type PackExportFormat = "pdf" | "docx";
 export type SectionKey = ResumeVariant["sectionOrder"][number];
 
 const DEFAULT_SECTION_ORDER: SectionKey[] = ["summary", "skills", "experience", "projects", "education"];
+export const PDF_RULE_TO_CONTENT_GAP = 13;
 
 export type ExportSection =
   | { key: "summary" | "skills" | "education"; heading: string; text: string }
   | { key: "experience"; heading: string; roles: ResumePackage["experience"] };
 
-// Resolves the render plan for one document. Single source of truth for every
-// format (PDF, DOCX, plain text) so they cannot drift: the variant's chosen
-// sectionOrder is respected, empty sections are dropped entirely (never an
-// empty heading), and the summary passes through the termination-reason guard
-// as an export-time safety net on top of the generation-side filter.
-// "projects" has no dedicated ResumePackage section — project work is already
-// folded into experience — so that key renders nothing extra.
+// One render plan for PDF, DOCX, and plain text. The resume is sanitized at the
+// export boundary as a final fail-closed check, even when the pack was created
+// before the evidence-admissibility migration.
 export function exportSections(
   resume: ResumePackage,
   sectionOrder?: SectionKey[],
   kind: ResumeVariant["kind"] = "ats"
 ): { sections: ExportSection[]; withheldFacts: string[] } {
+  const safeResume = sanitizeResumeForProfessionalUse(resume);
   const order = sectionOrder?.length ? sectionOrder : DEFAULT_SECTION_ORDER;
   const withheldFacts: string[] = [];
   const sections: ExportSection[] = [];
   for (const key of order) {
     if (key === "summary") {
-      const cleaned = stripTerminationReasons(resume.summary ?? "");
+      const cleaned = stripTerminationReasons(safeResume.summary ?? "");
       if (cleaned.withheld) withheldFacts.push("reason for leaving");
       if (cleaned.text.trim()) sections.push({ key, heading: "Professional Summary", text: cleaned.text.trim() });
     } else if (key === "skills") {
-      const skills = resume.coreSkills.filter((skill) => skill.trim());
+      const skills = safeResume.coreSkills.filter((skill) => skill.trim());
       if (skills.length) sections.push({ key, heading: "Core Skills", text: skills.join(" | ") });
     } else if (key === "experience") {
-      const roles = resume.experience.filter((role) => [role.title, role.company, role.time, ...role.bullets].some((value) => value?.trim()));
+      const roles = safeResume.experience.filter((role) => [role.title, role.company, role.time, ...role.bullets].some((value) => value?.trim()));
       if (roles.length) sections.push({ key, heading: kind === "recruiter" ? "Selected Experience & Projects" : "Experience", roles });
     } else if (key === "education") {
-      const education = (resume.education ?? "").trim();
+      const education = (safeResume.education ?? "").trim();
       if (education && !isPlaceholderEducation(education)) sections.push({ key, heading: "Education", text: education });
     }
   }
@@ -56,9 +59,6 @@ function identityContactLine(dossier: CareerDossier): string {
     .join(" | ");
 }
 
-// Full plain-text serialization of one variant — clipboard/paste-into-portal
-// path. Reads identity from the CURRENT dossier at call time, so a name added
-// after forging still lands on the copied document.
 export function variantPlainText(
   dossier: CareerDossier,
   resume: ResumePackage,
@@ -79,7 +79,7 @@ export function variantPlainText(
         .join("\n\n");
       parts.push(`${section.heading.toUpperCase()}\n${roles}`);
     } else if (section.key === "skills") {
-      parts.push(`${section.heading.toUpperCase()}\n${resume.coreSkills.filter((skill) => skill.trim()).join(", ")}`);
+      parts.push(`${section.heading.toUpperCase()}\n${section.text.replace(/ \| /g, ", ")}`);
     } else {
       parts.push(`${section.heading.toUpperCase()}\n${section.text}`);
     }
@@ -161,13 +161,16 @@ function pdfBlob(
     y += options?.after ?? 0;
   };
   const heading = (text: string) => {
-    ensure(32);
+    ensure(44);
     y += 7;
     pdf.setDrawColor(kind === "recruiter" ? 50 : 30, kind === "recruiter" ? 85 : 55, kind === "recruiter" ? 75 : 95);
     pdf.setLineWidth(0.7);
-    write(text.toUpperCase(), { bold: true, size: 10, after: 3 });
-    pdf.line(margin, y - 2, margin + width, y - 2);
-    y += 5;
+    write(text.toUpperCase(), { bold: true, size: 10, after: 1 });
+    const ruleY = y + 1;
+    pdf.line(margin, ruleY, margin + width, ruleY);
+    // Keep the rule visually tied to the heading while giving the next text
+    // baseline enough room that it cannot cross the rule.
+    y = ruleY + PDF_RULE_TO_CONTENT_GAP;
   };
   write(dossier.identity.fullName || "Résumé", { bold: true, size: kind === "recruiter" ? 18 : 16, after: 2 });
   const contact = identityContactLine(dossier);
@@ -188,39 +191,60 @@ function pdfBlob(
   return pdf.output("blob");
 }
 
-function materialsText(pack: ResumePack, lanes: TargetLane[]): string {
+function safeMaterialLines(values: string[]): string[] {
+  return values.filter((value) => value.trim() && classifyEvidenceAdmissibility(value) === "claim");
+}
+
+function materialsText(pack: ResumePack, lanes: TargetLane[], dossier: CareerDossier): string {
   const pitches = pack.lanePacks.map((lanePack) => {
     const lane = lanes.find((item) => item.id === lanePack.laneId);
     return `${lane?.title ?? "Custom lane"}: ${lanePack.positioningPitch}`;
   }).join("\n");
+  const approvedFacts = dossier.evidence
+    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+    .map((item) => item.detail);
   return [
-    "LINKEDIN HEADLINE OPTIONS", ...pack.linkedinHeadlines, "", "LINKEDIN ABOUT", pack.linkedinAbout,
-    "", "RECOMMENDED LINKEDIN SKILLS", pack.linkedinSkills.join(", "), "", "LANE POSITIONING PITCHES", pitches,
-    "", "MASTER PROOF BANK", ...pack.masterProofBank.map((item) => `- ${item}`), "", "COVER LETTER FOUNDATION", pack.coverLetterFoundation
+    "DRAFT MATERIALS — REVIEW EVERY CLAIM BEFORE USE",
+    "",
+    "LINKEDIN HEADLINE OPTIONS",
+    ...safeMaterialLines(pack.linkedinHeadlines),
+    "",
+    "LINKEDIN ABOUT",
+    safeMaterialLines([pack.linkedinAbout]).join("\n"),
+    "",
+    "RECOMMENDED LINKEDIN SKILLS",
+    safeMaterialLines(pack.linkedinSkills).join(", "),
+    "",
+    "LANE POSITIONING PITCHES",
+    pitches,
+    "",
+    "MASTER PROOF BANK",
+    ...safeMaterialLines(pack.masterProofBank).map((item) => `- ${item}`),
+    "",
+    "APPROVED PROFESSIONAL EVIDENCE FOR COVER-LETTER DRAFTING",
+    ...approvedFacts.slice(0, 8).map((item) => `- ${item}`)
   ].join("\n");
 }
 
 function readmeText(pack: ResumePack, lanes: TargetLane[], formats: PackExportFormat[]): string {
   return [
-    "Career Forge Résumé Pack",
+    "Career Forge Résumé Pack — Public Beta",
     "",
     `Generated: ${pack.createdAt}`,
     `Formats: ${formats.join(", ").toUpperCase()}`,
     "",
+    "IMPORTANT: Every generated document is a draft. Review every claim, heading, date, and layout before using it.",
     "Use the ATS Submission résumé for application portals and direct submissions.",
     "Use the Recruiter / Networking résumé for referrals, conversations, and human-first sharing.",
     "Tailor a copy for each specific job; keep these originals unchanged as your starting points.",
     "",
     "Lanes:",
-    // Internal lane ids never ship in exported documents.
     ...pack.lanePacks.map((item) => `- ${lanes.find((lane) => lane.id === item.laneId)?.title ?? "Custom lane"}`),
     "",
     "Evidence receipt:",
-    `- Approved evidence used: ${pack.receipt.evidenceUsed.length}`,
-    // evidenceOmitted holds APPROVED items these documents didn't use — never
-    // call them "unapproved" (that misstates the user's own decisions).
-    `- Approved evidence not used by these documents: ${pack.receipt.evidenceOmitted.length}`,
-    `- Unsupported claims refused: ${pack.receipt.unsupportedClaimsRefused.length}`
+    `- Approved professional evidence used: ${pack.receipt.evidenceUsed.length}`,
+    `- Approved professional evidence not used by these documents: ${pack.receipt.evidenceOmitted.length}`,
+    `- Unsupported or context-only claims refused: ${pack.receipt.unsupportedClaimsRefused.length}`
   ].join("\n");
 }
 
@@ -233,8 +257,6 @@ export async function createPackBundle(
   const zip = new JSZip();
   const filenames: string[] = [];
   const used = new Set<string>();
-  // Duplicated variants (same lane + kind) produce identical filenames; suffix
-  // -2, -3… so no document silently overwrites another inside the ZIP.
   const uniqueName = (filename: string): string => {
     if (!used.has(filename)) { used.add(filename); return filename; }
     const dot = filename.lastIndexOf(".");
@@ -245,16 +267,17 @@ export async function createPackBundle(
   };
   for (const variant of pack.variants.filter((item) => item.kind !== "job-specific")) {
     const laneTitle = lanes.find((lane) => lane.id === variant.laneId)?.title ?? "General";
+    const safeResume = sanitizeResumeForProfessionalUse(variant.resume);
     for (const format of formats) {
       const filename = uniqueName(resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format));
       const blob = format === "docx"
-        ? await docxBlob(dossier, variant.resume, variant.kind, variant.sectionOrder)
-        : pdfBlob(dossier, variant.resume, variant.kind, variant.sectionOrder);
+        ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)
+        : pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder);
       zip.file(filename, await blob.arrayBuffer());
       filenames.push(filename);
     }
   }
-  zip.file("LinkedIn-and-Career-Materials.txt", materialsText(pack, lanes));
+  zip.file("LinkedIn-and-Career-Materials.txt", materialsText(pack, lanes, dossier));
   zip.file("README.txt", readmeText(pack, lanes, formats));
   filenames.push("LinkedIn-and-Career-Materials.txt", "README.txt");
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
@@ -267,10 +290,11 @@ export async function createVariantFile(
   laneTitle: string,
   format: PackExportFormat
 ): Promise<{ blob: Blob; filename: string }> {
+  const safeResume = sanitizeResumeForProfessionalUse(variant.resume);
   return {
     blob: format === "docx"
-      ? await docxBlob(dossier, variant.resume, variant.kind, variant.sectionOrder)
-      : pdfBlob(dossier, variant.resume, variant.kind, variant.sectionOrder),
+      ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)
+      : pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder),
     filename: resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format)
   };
 }
