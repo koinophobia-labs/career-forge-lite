@@ -127,6 +127,15 @@ export default function PricingPage() {
             <p className="mt-2 text-sm leading-6 text-paper/75">
               Production re-audits and human use must independently support artifact quality, workflow value, and pricing before paid access opens. Every feature is included free during this period.
             </p>
+            <p className="mt-3 border-t border-white/10 pt-3 text-sm leading-6 text-paper/75">
+              Available now, separately: a{" "}
+              <Link href="/reviewed-service" className="font-bold text-gold underline">
+                $149 human-reviewed résumé service
+              </Link>{" "}
+              where a person reviews your dossier, lanes, résumé, LinkedIn positioning, and final files before
+              delivery. It is a different offer from the automated beta — automated outputs do not receive that
+              review.
+            </p>
           </div>
         )}
         {commerceMode === "test" && (

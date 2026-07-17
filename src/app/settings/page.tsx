@@ -12,6 +12,7 @@ import {
   validateBackup,
   type BackupPreview
 } from "@/lib/backup";
+import { buildPilotSummary, pilotSummaryContainsContent } from "@/lib/pilot-metrics";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
 import { emptyState, RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
 import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
@@ -64,6 +65,27 @@ export default function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<{ state: CommandCenterState; preview: BackupPreview } | null>(null);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [pilotConsent, setPilotConsent] = useState(false);
+  const [pilotNotice, setPilotNotice] = useState<string | null>(null);
+
+  function exportPilotSummary() {
+    if (!pilotConsent) return;
+    const summary = buildPilotSummary(state, new Date().toISOString());
+    // Fail closed: if the summary shape ever grows a content-bearing field,
+    // refuse to export rather than leak résumé text.
+    if (pilotSummaryContainsContent(summary)) {
+      setPilotNotice("Export blocked: the summary unexpectedly contained content fields. Please report this.");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `career-forge-pilot-summary-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setPilotNotice("Saved. Open the file to review it before sharing.");
+  }
 
   // Read once per render on the client; hydration-gated below.
   const lastBackup = lastBackupAt ?? (typeof window !== "undefined" ? getLastBackupAt() : null);
@@ -155,6 +177,36 @@ export default function SettingsPage() {
             Backups contain your personal career data — work history, contacts, applications. Store the file somewhere
             private, and don’t share it or commit it to a public repo.
           </p>
+        </div>
+
+        <div className="trust-panel mt-6 p-5 sm:p-6" aria-labelledby="pilot-summary-title">
+          <h2 id="pilot-summary-title" className="text-xl font-bold text-paper">Founding-user pilot summary</h2>
+          <p className="mt-1 text-sm leading-6 text-paper/60">
+            If you are part of the founding-user pilot, this exports a small JSON of timings and counts — how long
+            setup took, how many facts you approved, how much you edited, what you exported. It contains{" "}
+            <strong className="text-paper/85">no résumé content</strong>: no claims, names, employers, or document
+            text. Nothing is sent anywhere; you review the file and share it yourself if you choose to.
+          </p>
+          <label className="mt-3 flex items-start gap-2 text-sm text-paper/75">
+            <input
+              type="checkbox"
+              checked={pilotConsent}
+              onChange={(event) => setPilotConsent(event.target.checked)}
+              className="mt-1"
+            />
+            <span>I consent to generating this counts-and-timings summary for the pilot. I understand I will review the file before sharing it.</span>
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={exportPilotSummary}
+              disabled={!pilotConsent}
+              className="rounded-md border border-cyan/40 bg-cyan/10 px-5 py-2.5 text-sm font-bold text-cyan transition hover:bg-cyan hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Download pilot summary (no résumé content)
+            </button>
+            {pilotNotice && <span role="status" className="text-xs font-bold text-mint">{pilotNotice}</span>}
+          </div>
         </div>
 
         <div className="trust-panel mt-6 p-5 sm:p-6">
