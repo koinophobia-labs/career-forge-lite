@@ -245,7 +245,7 @@ export function TellMyStoryMode() {
                 className="mt-4 min-h-11 rounded-md bg-gold px-5 text-sm font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-45"
                 disabled={!story.trim()}
               >
-                Extract dossier
+                Turn my story into facts to review
               </button>
             </form>
           </div>

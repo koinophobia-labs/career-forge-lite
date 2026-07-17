@@ -1,3 +1,4 @@
+import { isUncertaintyStatement } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage } from "@/types/career";
 
 export type ResumeQualityRating = "Needs Work" | "Good" | "Strong" | "Excellent";
@@ -202,6 +203,9 @@ function polishSkills(skills: string[]) {
   )
     .map((skill) => skill.replace(/[.!?]+$/g, ""))
     .filter((skill) => skill.length > 1)
+    // Skill labels stay labels: no first-person fragments ("I Own Onboarding")
+    // and no sentence-length entries.
+    .filter((skill) => !/^(i|we|my|our)\b/i.test(skill) && skill.split(/\s+/).length <= 5)
     .slice(0, 14);
 }
 
@@ -228,6 +232,8 @@ export function polishResumePackage(resume: ResumePackage): ResumePackage {
 }
 
 function hasMetrics(data: IntakeData, resume: ResumePackage) {
+  // "Quantified" requires an actual number: uncertainty statements saved in a
+  // scope field ("I don't know my numbers") and date strings do not count.
   const scopeValues = [
     data.customersServed,
     data.ticketsHandled,
@@ -237,7 +243,29 @@ function hasMetrics(data: IntakeData, resume: ResumePackage) {
     data.revenueInfluenced,
     data.reportsCreated
   ];
-  return scopeValues.some((value) => value.trim()) || /\d|\$|%/.test(JSON.stringify(resume.experience));
+  const scopeHasNumber = scopeValues.some((value) => /\d/.test(value) && !isUncertaintyStatement(value));
+  const narrative = [resume.summary, ...resume.experience.flatMap((role) => role.bullets)].join(" ");
+  return scopeHasNumber || /\d/.test(narrative);
+}
+
+// Placeholder tokens make a draft unsendable; each one caps the grade and is
+// called out by name.
+function findPlaceholderProblems(data: IntakeData, resume: ResumePackage) {
+  const problems: string[] = [];
+  if (!data.fullName.trim()) problems.push('add your real name (documents currently say "Candidate Name")');
+  resume.experience.forEach((role) => {
+    if (/^(current|previous|additional) company$/i.test(role.company.trim())) problems.push(`add the real company for "${role.title}"`);
+    if (/^dates$/i.test(role.time.trim())) problems.push(`add real dates for "${role.title}"`);
+  });
+  return problems;
+}
+
+// Word-salad titles ("Csm Managing 45 Mid-market Accounts Worth About $3")
+// fail readability instead of passing silently.
+function messyTitleProblems(resume: ResumePackage) {
+  return resume.experience
+    .filter((role) => role.title.split(/\s+/).length > 6 || /\$|\d/.test(role.title) || /\b(i|we|my)\b/i.test(role.title))
+    .map((role) => `Shorten the job title "${role.title}" to a real title (2-4 words, no numbers).`);
 }
 
 function repeatedOpeners(resume: ResumePackage) {
@@ -265,6 +293,10 @@ function ratingForScore(score: number): ResumeQualityRating {
 
 export function analyzeResumeQuality(data: IntakeData, resume: ResumePackage): ResumeQualityAnalysis {
   const bullets = resume.experience.flatMap((role) => role.bullets.filter(Boolean));
+  const placeholderProblems = findPlaceholderProblems(data, resume);
+  const titleProblems = messyTitleProblems(resume);
+  const overlongBullets = bullets.filter((bullet) => bullet.split(/\s+/).length > 30);
+  const firstPersonSkills = resume.coreSkills.filter((skill) => /^(i|we|my)\b/i.test(skill));
   const scoreParts = [
     resume.summary.trim().length > 80 ? 12 : 6,
     resume.coreSkills.length >= 8 ? 12 : resume.coreSkills.length >= 4 ? 8 : 3,
@@ -275,19 +307,33 @@ export function analyzeResumeQuality(data: IntakeData, resume: ResumePackage): R
     hasLeadership(data, resume) ? 8 : 4,
     hasProjects(data) ? 6 : 3,
     resume.experience.every((role) => role.title && role.company && role.time) ? 10 : 4,
-    /stuff|things|various|candidate targeting|customers customers|tickets tickets/i.test(JSON.stringify(resume)) ? 0 : 4
+    /stuff|things|various|candidate targeting|customers customers|tickets tickets/i.test(JSON.stringify(resume)) ? 0 : 4,
+    titleProblems.length || overlongBullets.length || firstPersonSkills.length ? 0 : 4
   ];
-  const score = Math.min(100, scoreParts.reduce((sum, item) => sum + item, 0));
+  const rawScore = Math.min(100, scoreParts.reduce((sum, item) => sum + item, 0));
+  // Placeholder text is disqualifying: the meter must never praise a draft
+  // that still says "Candidate Name", "Current Company", or "Dates".
+  const score = placeholderProblems.length
+    ? Math.min(rawScore, 45)
+    : titleProblems.length || firstPersonSkills.length
+      ? Math.min(rawScore, 74)
+      : hasMetrics(data, resume)
+        ? rawScore
+        : Math.min(rawScore, 88); // no numbers at all: never "Excellent"
 
   const strongestSections = [
-    resume.summary.trim().length > 80 ? "Professional summary" : "",
-    resume.coreSkills.length >= 8 ? "Core skills" : "",
-    bullets.length >= 3 ? "Experience bullets" : "",
+    resume.summary.trim().length > 80 && !titleProblems.length ? "Professional summary" : "",
+    resume.coreSkills.length >= 8 && !firstPersonSkills.length ? "Core skills" : "",
+    bullets.length >= 3 && !overlongBullets.length ? "Experience bullets" : "",
     hasMetrics(data, resume) ? "Measurable scope" : "",
     resume.linkedinHeadline.length <= 115 && resume.linkedinHeadline.includes("|") ? "LinkedIn headline" : ""
   ].filter(Boolean);
 
   const suggestedImprovements = [
+    ...placeholderProblems.map((problem) => `Not ready to send: ${problem}.`),
+    ...titleProblems,
+    overlongBullets.length ? "Split bullets longer than 30 words into shorter, single-claim lines." : "",
+    firstPersonSkills.length ? `Rewrite first-person skill entries (${firstPersonSkills.slice(0, 2).join(", ")}) as short skill labels.` : "",
     hasMetrics(data, resume) ? "" : "Add approximate numbers for customers, tickets, projects, reports, calls, money handled, or team size.",
     hasLeadership(data, resume) ? "" : "Add leadership, training, ownership, or collaboration examples if they are true.",
     hasProjects(data) ? "" : "Add a project, portfolio item, coursework example, or workflow improvement if relevant.",
@@ -300,7 +346,7 @@ export function analyzeResumeQuality(data: IntakeData, resume: ResumePackage): R
   return {
     rating: ratingForScore(score),
     score,
-    strongestSections: strongestSections.length ? strongestSections : ["ATS-safe structure"],
+    strongestSections: placeholderProblems.length ? [] : strongestSections.length ? strongestSections : ["ATS-safe structure"],
     suggestedImprovements: suggestedImprovements.length ? suggestedImprovements : ["Tailor the top bullets and skills to each job before applying."]
   };
 }

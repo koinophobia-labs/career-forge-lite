@@ -29,6 +29,7 @@ import {
   inferIndependentWorkCategory
 } from "@/lib/independent-work-intelligence";
 import { hasEnoughResumeSignal, mergeReactiveSignals } from "@/lib/interview-state";
+import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { formatParsedRoleConfirmation, parseRoleAnswer, type ParsedRoleAnswer } from "@/lib/natural-role-parser";
 import { buildCareerEvidence, buildCareerRecommendations, type CareerRecommendation } from "@/lib/career-recommendations";
 import type { IntakeData, IntakeErrors, RoleFamily, TemplateStyle } from "@/types/career";
@@ -489,6 +490,10 @@ export function IntakeForm({
   const [customEducation, setCustomEducation] = useState("");
   const [quickStartPath, setQuickStartPath] = useState<QuickStartPath>("first_resume");
   const [quickStartText, setQuickStartText] = useState("");
+  // Raw proof/outcome text lives in local state so an honest "I don't know my
+  // numbers" is never stored as scope or outcome evidence.
+  const [scopeDraft, setScopeDraft] = useState(data.customRoleNotes || data.customersServed);
+  const [outcomeDraft, setOutcomeDraft] = useState(data.outcomes);
   const [naturalRoleInputs, setNaturalRoleInputs] = useState<Record<RoleSlot, string>>({
     additional: "",
     current: "",
@@ -602,6 +607,13 @@ export function IntakeForm({
   const hasEnoughSignal = hasEnoughResumeSignal(data);
   const careerEvidence = useMemo(() => buildCareerEvidence(data), [data]);
   const careerRecommendations = useMemo(() => buildCareerRecommendations(data), [data]);
+  // Project/volunteer content described in the story deserves its own entry so
+  // it renders in the draft instead of vanishing.
+  const sideWorkPattern = /\b(volunteer(?:ed|ing)?|capstone|class project|personal project|side project|portfolio|built (?:a |an )?(?:website|app|site|page))\b/i;
+  const detectedSideWorkSentence = sideWorkPattern.test(data.responsibilities)
+    ? data.responsibilities.split(/(?<=[.!?])\s+|\n+/).find((sentence) => sideWorkPattern.test(sentence)) ?? ""
+    : "";
+  const shouldOfferSideWorkEntry = Boolean(detectedSideWorkSentence) && !data.additionalTitle.trim();
 
   function update<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
     onChange({ ...data, [key]: value });
@@ -1542,15 +1554,25 @@ export function IntakeForm({
             <label className="block">
               <span className="sr-only">Any number or proof detail you honestly remember?</span>
               <textarea
-                value={data.customRoleNotes || data.customersServed}
+                value={scopeDraft}
                 onChange={(event) => {
-                  onChange({ ...data, customRoleNotes: event.target.value, customersServed: event.target.value });
+                  const value = event.target.value;
+                  setScopeDraft(value);
+                  // Uncertainty is a valid answer, but it must never be saved
+                  // as proof — the draft simply proceeds without numbers.
+                  const stored = isUncertaintyStatement(value) ? "" : value;
+                  onChange({ ...data, customRoleNotes: stored, customersServed: stored });
                 }}
                 placeholder="Example: 30+ customers per shift."
                 rows={5}
                 className="trust-input w-full rounded-md border px-4 py-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
               />
             </label>
+            {isUncertaintyStatement(scopeDraft) && (
+              <p className="rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm leading-6 text-ink/75">
+                No problem — Career Forge will write your draft without numbers. &quot;I don&apos;t know&quot; never becomes a claim on your resume.
+              </p>
+            )}
           </div>
         );
       case "outcomes":
@@ -1559,13 +1581,22 @@ export function IntakeForm({
             <label className="block">
               <span className="sr-only">Did your work improve anything?</span>
               <textarea
-                value={data.outcomes}
-                onChange={(event) => update("outcomes", event.target.value)}
+                value={outcomeDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setOutcomeDraft(value);
+                  update("outcomes", isUncertaintyStatement(value) ? "" : value);
+                }}
                 placeholder="Example: fewer errors, faster service."
                 rows={4}
                 className="trust-input w-full rounded-md border px-4 py-3 text-ink outline-none transition focus:border-gold focus:ring-4 focus:ring-gold/15"
               />
             </label>
+            {isUncertaintyStatement(outcomeDraft) && (
+              <p className="rounded-md border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm leading-6 text-ink/75">
+                That&apos;s fine — the draft will skip results claims instead of turning this into one.
+              </p>
+            )}
             {data.outcomes.trim().length >= 4 && (
               <div className="rounded-md bg-white p-3">
                 <p className="text-sm font-bold text-ink">Possible outcome labels</p>
@@ -1749,6 +1780,24 @@ export function IntakeForm({
                 ))}
               </div>
             </div>
+            {shouldOfferSideWorkEntry && (
+              <div className="rounded-md border border-gold/25 bg-gold/10 p-4">
+                <p className="text-sm font-bold text-ink">We noticed project or volunteer work in what you wrote.</p>
+                <p className="mt-1 text-sm leading-6 text-ink/70">
+                  &quot;{detectedSideWorkSentence.trim()}&quot; — add it as its own entry so it shows up clearly in your draft.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateNaturalRoleInput("additional", detectedSideWorkSentence.trim());
+                    goToQuestionId("additional_role");
+                  }}
+                  className="mt-3 min-h-11 rounded-md border border-ink/12 bg-white px-4 py-2 text-sm font-bold text-ink transition hover:border-gold hover:bg-gold/15"
+                >
+                  + Add it as a project entry
+                </button>
+              </div>
+            )}
             {renderEvidenceBackedRecommendations()}
             <div className="grid gap-3 md:grid-cols-2">
               <ReviewItem label="Quick start path" value={quickStartPaths.find((path) => path.id === quickStartPath)?.label ?? "First resume"} onEdit={() => goToQuestionId("quick_start")} />
