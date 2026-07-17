@@ -16,7 +16,6 @@ import { useCommandCenter } from "@/lib/use-command-center";
 import type { LaneStatus, ResumeVersionRecord, TargetLane } from "@/types/command-center";
 import type { LaneBlueprint } from "@/lib/lane-library";
 
-const statusOrder: LaneStatus[] = ["active", "exploring", "paused"];
 
 function LaneDetail({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;
@@ -90,18 +89,27 @@ export default function TargetsPage() {
     if (!title) return;
     update((current) => {
       if (current.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase())) return current;
+      // Prefer evidence that actually relates to the requested lane; falling
+      // back to strongest general proof beats rendering empty sections.
+      const titleWords = title.toLowerCase().split(/\s+/).filter((word) => word.length >= 4);
+      const related = (values: string[]) => values.filter((value) => titleWords.some((word) => value.toLowerCase().includes(word)));
+      const relatedProof = related(current.dossier.proofPoints);
+      const proof = (relatedProof.length ? relatedProof : current.dossier.proofPoints).slice(0, 4);
+      const relatedClaims = related(current.dossier.approvedClaims);
       const lane: TargetLane = {
         id: createId("lane"),
         title,
         status: "exploring",
-        whyFit: current.dossier.approvedClaims.length
-          ? `Dossier-backed fit to validate: ${current.dossier.approvedClaims.slice(0, 3).join("; ")}.`
-          : "Add approved dossier evidence to validate this custom lane.",
+        whyFit: relatedClaims.length
+          ? `Your approved facts that relate most directly: ${relatedClaims.slice(0, 3).join("; ")}.`
+          : current.dossier.approvedClaims.length
+            ? `No approved fact mentions ${title} yet — your strongest general proof will carry this lane until you add related experience.`
+            : "Add approved experience first so this lane has real facts behind it.",
         resumeAngle: current.dossier.transferableSkills.length
           ? `Lead with ${current.dossier.transferableSkills.slice(0, 3).join(", ")} where the role requires them.`
           : `Position verified experience toward ${title}; do not claim missing qualifications.`,
-        proof: current.dossier.proofPoints.slice(0, 4),
-        gaps: ["Credentials, tools, and years of experience not supported by approved dossier evidence must not be claimed."],
+        proof,
+        gaps: [`Only claim ${title} qualifications your approved evidence supports.`],
         keywords: current.dossier.tools.slice(0, 8),
         source: "custom",
         createdAt: new Date().toISOString()
@@ -111,12 +119,11 @@ export default function TargetsPage() {
     setCustomTitle("");
   }
 
-  function cycleStatus(id: string) {
+  function setLaneStatus(id: string, nextStatus: LaneStatus) {
     let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
       const target = current.lanes.find((lane) => lane.id === id);
-      if (!target) return current;
-      const nextStatus = statusOrder[(statusOrder.indexOf(target.status) + 1) % statusOrder.length];
+      if (!target || target.status === nextStatus) return current;
       if (nextStatus === "active" && current.lanes.filter((lane) => lane.status === "active").length >= 3) return current;
       const next = { ...current, lanes: current.lanes.map((lane) => lane.id === id ? { ...lane, status: nextStatus } : lane) };
       events = activationEventsForTransition(current, next);
@@ -157,7 +164,7 @@ export default function TargetsPage() {
           targetTitle: lane?.title ?? "",
           keywordsUsed: pack.receipt.keywordsIncluded,
           gapsAcknowledged: pack.receipt.gapsAvoided,
-          influenceSummary: `Generated from ${pack.receipt.evidenceUsed.length} approved evidence items; ${pack.receipt.evidenceOmitted.length} unapproved items omitted.`,
+          influenceSummary: `Built from ${pack.receipt.evidenceUsed.length} of your ${pack.receipt.evidenceUsed.length + pack.receipt.evidenceOmitted.length} approved facts; ${pack.receipt.evidenceOmitted.length} approved fact${pack.receipt.evidenceOmitted.length === 1 ? " was" : "s were"} not needed by this document.`,
           resumeText: [variant.resume.summary, ...variant.resume.coreSkills, ...variant.resume.experience.flatMap((role) => role.bullets)].join("\n"),
           resumeSnapshot: {
             fullName: current.dossier.identity.fullName,
@@ -170,10 +177,18 @@ export default function TargetsPage() {
           createdAt: now
         };
       });
+      // Re-forging supersedes: prior packs archive, and their auto-generated
+      // baseline versions are removed unless an application points at them —
+      // otherwise every re-forge doubles the archive with stale duplicates.
+      const linkedVersionIds = new Set(current.applications.map((app) => app.resumeVersionId).filter(Boolean));
+      const survivingVersions = current.resumeVersions.filter(
+        (version) =>
+          !(version.source === "builder" && version.notes.startsWith("Canonical") && !version.applicationId && !linkedVersionIds.has(version.id))
+      );
       const next = {
         ...current,
         resumePacks: [...current.resumePacks.map((item) => item.status === "current" ? { ...item, status: "archived" as const } : item), pack],
-        resumeVersions: [...current.resumeVersions, ...versions]
+        resumeVersions: [...survivingVersions, ...versions]
       };
       events = activationEventsForTransition(current, next);
       return next;
@@ -206,20 +221,35 @@ export default function TargetsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-lg font-bold text-paper">{lane.title}</h3>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => cycleStatus(lane.id)}
-                        className={`lab-mono rounded-full border px-3 py-1 text-[0.65rem] font-bold uppercase transition ${
-                          lane.status === "active"
-                            ? "border-gold/50 bg-gold/10 text-gold"
-                            : lane.status === "exploring"
-                              ? "border-cyan/50 bg-cyan/10 text-cyan"
-                              : "border-white/20 text-paper/50"
-                        }`}
-                        title="Click to change status"
-                      >
-                        {lane.status}
-                      </button>
+                      {lane.status !== "active" && (
+                        <button
+                          type="button"
+                          onClick={() => setLaneStatus(lane.id, "active")}
+                          disabled={activeLaneCount >= 3}
+                          title={activeLaneCount >= 3 ? "Three lanes are already active — pause one first." : "Include this lane when you forge your résumé pack."}
+                          className="min-h-11 rounded-full bg-gold px-4 py-1.5 text-xs font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Make this lane active
+                        </button>
+                      )}
+                      <label className="lab-mono flex items-center gap-1.5 text-[0.65rem] font-bold uppercase text-paper/50">
+                        <span className="sr-only">Status for {lane.title}</span>
+                        <select
+                          value={lane.status}
+                          onChange={(event) => setLaneStatus(lane.id, event.target.value as LaneStatus)}
+                          className={`min-h-11 rounded-full border bg-obsidian px-3 py-1 text-[0.65rem] font-bold uppercase ${
+                            lane.status === "active"
+                              ? "border-gold/50 text-gold"
+                              : lane.status === "exploring"
+                                ? "border-cyan/50 text-cyan"
+                                : "border-white/20 text-paper/50"
+                          }`}
+                        >
+                          <option value="active">Active — in my pack</option>
+                          <option value="exploring">Exploring</option>
+                          <option value="paused">Paused</option>
+                        </select>
+                      </label>
                       <button
                         type="button"
                         onClick={() => setExpandedId(expandedId === lane.id ? null : lane.id)}
@@ -331,7 +361,7 @@ export default function TargetsPage() {
                     <span className="font-bold text-cyan">Why it fits: </span>
                     {view.supporting.length ? view.supporting.join(" · ") : "No approved evidence directly overlaps this lane yet. Explore it only if you can add truthful proof."}
                   </p>
-                  <details className="mt-3 text-[0.78rem] leading-5 text-paper/60"><summary className="cursor-pointer font-bold text-paper/72">Proof, gaps, and résumé outcome</summary><p className="mt-2"><strong className="text-mint">Résumé produced:</strong> ATS and recruiter baselines framed around {blueprint.resumeAngle}</p><p className="mt-2"><strong className="text-gold">Proof to add:</strong> {blueprint.proof.slice(0, 2).join(" · ")}</p><p className="mt-2"><strong className="text-coral">Gap:</strong> {blueprint.gaps[0]}</p></details>
+                  <details className="mt-3 text-[0.78rem] leading-5 text-paper/60"><summary className="cursor-pointer font-bold text-paper/72">Proof, gaps, and résumé outcome</summary><p className="mt-2"><strong className="text-mint">Résumé produced:</strong> ATS and recruiter baselines for {blueprint.title}.</p><p className="mt-2"><strong className="text-cyan">Positioning tip:</strong> {blueprint.resumeAngle}</p><p className="mt-2"><strong className="text-gold">Proof to add:</strong> {blueprint.proof.slice(0, 2).join(" · ")}</p><p className="mt-2"><strong className="text-coral">Gap:</strong> {blueprint.gaps[0]}</p></details>
                   <button
                     type="button"
                     data-testid="adopt-lane"
@@ -353,7 +383,19 @@ export default function TargetsPage() {
 
         <div id="forge-pack" className="mt-8 scroll-mt-28 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
           <div><p className="text-sm font-bold text-paper">{activeLaneCount} active lane(s) · {Math.min(activeLaneCount, packLaneCap) * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p>{commerceEnabled && activeLaneCount > packLaneCap && <p className="mt-1 text-xs font-bold text-gold">Your pack covers {packLaneCap} lane{packLaneCap === 1 ? "" : "s"}, so the first {packLaneCap} active lane{packLaneCap === 1 ? "" : "s"} will be forged. Larger packs cover up to three.</p>}</div>
-          <button type="button" onClick={forgePack} disabled={!state.lanes.some((lane) => lane.status === "active") || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
+          <div className="flex flex-col items-end gap-2">
+            <button type="button" onClick={forgePack} disabled={activeLaneCount === 0 || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
+            {activeLaneCount === 0 && state.lanes.length > 0 && (
+              <p className="max-w-xs text-right text-xs font-bold text-gold">
+                {state.lanes.length} lane{state.lanes.length === 1 ? "" : "s"} added, none active yet — use “Make this lane active” above to include one.
+              </p>
+            )}
+            {activeLaneCount > 0 && state.lanes.some((lane) => lane.source === "custom" && lane.status !== "active") && (
+              <p className="max-w-xs text-right text-xs text-paper/55">
+                Not included: {state.lanes.filter((lane) => lane.source === "custom" && lane.status !== "active").map((lane) => lane.title).join(", ")} (not active).
+              </p>
+            )}
+          </div>
         </div>
       </section>
 

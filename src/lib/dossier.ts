@@ -632,10 +632,35 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
   const skills = accepted.filter((item) => item.group === "skills").flatMap((item) => item.detail.replace(/^.*?:/, "").split(/[,;|]/));
   const metrics = accepted.filter((item) => item.kind === "metric").map((item) => item.detail);
   const proofPoints = accepted.filter((item) => item.kind === "proof").map((item) => item.detail);
+
+  // Imported roles used to carry only their own heading record, leaving every
+  // approved responsibility/metric/proof stranded — the pack generator then
+  // rendered roles with zero bullets. Attach each approved fact to the role
+  // it plausibly belongs to: the role whose title/employer it mentions, or
+  // the only role there is. Ambiguous facts stay unattached (the generator
+  // surfaces those under "Selected accomplishments" rather than guessing).
+  const mergedRoles = [...dossier.roles.filter((role) => !importedRoles.some((item) => item.id === role.id)), ...importedRoles];
+  const attachableKinds = new Set(["responsibility", "metric", "proof", "story"]);
+  const attachable = decided
+    .filter((item) => item.status === "approved" && attachableKinds.has(item.kind))
+    .flatMap((item) => {
+      const record = recordFor(item);
+      return record ? [record] : [];
+    });
+  attachable.forEach((record) => {
+    const detailLower = record.detail.toLowerCase();
+    const mentioned = mergedRoles.filter((role) => {
+      const anchors = [role.title, role.employer].filter((anchor) => anchor && anchor.length >= 4);
+      return anchors.some((anchor) => detailLower.includes(anchor.toLowerCase()));
+    });
+    const target = mentioned.length === 1 ? mentioned[0] : mergedRoles.length === 1 ? mergedRoles[0] : null;
+    if (target && !target.evidenceIds.includes(record.id)) target.evidenceIds = [...target.evidenceIds, record.id];
+  });
+
   return {
     ...dossier,
     identity,
-    roles: [...dossier.roles.filter((role) => !importedRoles.some((item) => item.id === role.id)), ...importedRoles],
+    roles: mergedRoles,
     projects: [...dossier.projects.filter((project) => !importedProjects.some((item) => item.id === project.id)), ...importedProjects],
     education: [...dossier.education.filter((education) => !importedEducation.some((item) => item.id === education.id)), ...importedEducation],
     tools: compact([...dossier.tools, ...tools]),

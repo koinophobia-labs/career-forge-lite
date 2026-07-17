@@ -265,5 +265,62 @@ const largeDossier = { ...projectOnly, evidence: [...projectEvidence, ...largeEv
 check("large dossiers generate deterministically", generateResumePack(largeDossier, [lanes[0]], NOW).variants.length === 2 && generateResumePack(largeDossier, [lanes[0]], NOW).receipt.evidenceUsed.length <= 18);
 check("corrupt localStorage payload revives safely", parseState("{not json").dossier.evidence.length === 0);
 
+// --- Document-quality honesty (post-audit): what ships must be submittable ---
+
+const auditFiles = [{
+  filename: "history.txt",
+  text: [
+    "Operations Coordinator — Brightline Logistics | 2019–2026",
+    "I managed vendor contracts worth $2M annually until I was laid off in June 2026",
+    "Reduced onboarding time from 3 weeks to 9 days",
+    "Tools: Workday, Kronos, and some Excel from a class",
+    "City College — Associate degree in Business",
+  ].join("\n")
+}];
+const auditProposals = parseResumePackToProposals(auditFiles).map((item) => ({ ...item, status: "approved" }));
+const auditDossier = mergeImportProposals(emptyDossier(NOW), auditProposals, NOW);
+const auditRole = auditDossier.roles.find((role) => /Operations Coordinator/i.test(role.title));
+check("imported facts attach to their role", Boolean(auditRole) && auditRole.evidenceIds.length > 1, JSON.stringify(auditDossier.roles));
+
+const auditLane = {
+  id: "lane-audit", title: "Operations Manager", status: "active",
+  whyFit: "", resumeAngle: "Frame yourself as a translator: turn ops experience into leadership stories.",
+  proof: [], gaps: [], keywords: ["operations", "vendor", "onboarding"], source: "custom", createdAt: NOW
+};
+const auditPack = generateResumePack(auditDossier, [auditLane], NOW);
+const auditAts = auditPack.variants.find((variant) => variant.kind === "ats");
+const auditRoleEntry = auditAts.resume.experience.find((entry) => /Operations Coordinator/i.test(entry.title));
+check("imported roles render with real bullets", Boolean(auditRoleEntry) && auditRoleEntry.bullets.length >= 1, JSON.stringify(auditAts.resume.experience));
+const allDocText = [auditAts.resume.summary, ...auditAts.resume.coreSkills, ...auditAts.resume.experience.flatMap((entry) => [entry.title, ...entry.bullets]), auditAts.resume.education, auditAts.resume.linkedinHeadline, auditAts.resume.linkedinSummary, ...auditPack.masterProofBank, ...auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)].join("\n");
+check("termination reasons never ship in documents", !/laid off|terminated|fired/i.test(allDocText), allDocText);
+check("withheld termination reason is reported on the receipt", auditPack.receipt.unsupportedClaimsRefused.some((item) => /reason for leaving/i.test(item)));
+check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);
+check("tool lists atomize into individual skills", auditAts.resume.coreSkills.includes("Workday") && auditAts.resume.coreSkills.includes("Kronos"), JSON.stringify(auditAts.resume.coreSkills));
+check("skill fragments never ship", auditAts.resume.coreSkills.every((skill) => !/^and\s|^some\s|from a class/i.test(skill)), JSON.stringify(auditAts.resume.coreSkills));
+check("approved education renders on the document", /Associate degree|City College/i.test(auditAts.resume.education), auditAts.resume.education);
+check("lane pitches carry no second-person coaching", auditPack.lanePacks.every((lanePack) => !/frame yourself|position verified/i.test(lanePack.positioningPitch)), JSON.stringify(auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)));
+check("receipt framing uses the composed pitch, not coaching text", auditPack.receipt.laneFraming.every((framing) => !/frame yourself/i.test(framing.angle)));
+
+// Uncertainty statements must not become proof-bank content.
+const uncertainDossier = {
+  ...auditDossier,
+  evidence: [...auditDossier.evidence, add("metric", "I don't know my numbers")],
+  proofPoints: [...auditDossier.proofPoints, "I don't know my numbers"]
+};
+const uncertainPack = generateResumePack(uncertainDossier, [auditLane], NOW);
+check("uncertainty statements stay out of the proof bank", uncertainPack.masterProofBank.every((entry) => !/don'?t know/i.test(entry)), JSON.stringify(uncertainPack.masterProofBank));
+
+// A role with no usable approved detail is omitted, not rendered hollow.
+const hollowDossier = {
+  ...emptyDossier(NOW),
+  evidence: [add("role", "Shift Lead — Corner Cafe")],
+  roles: [{ id: "role-hollow", title: "Shift Lead", employer: "Corner Cafe", startDate: "", endDate: "", current: false, responsibilities: [], tools: [], outcomes: [], evidenceIds: [] }],
+  updatedAt: NOW
+};
+hollowDossier.roles[0].evidenceIds = [hollowDossier.evidence[0].id];
+const hollowPack = generateResumePack(hollowDossier, [auditLane], NOW);
+check("zero-bullet roles are omitted from documents", hollowPack.variants.every((variant) => variant.resume.experience.every((entry) => entry.bullets.length > 0)));
+check("omitted roles are reported honestly", hollowPack.receipt.unsupportedClaimsRefused.some((item) => /Shift Lead/i.test(item)), JSON.stringify(hollowPack.receipt.unsupportedClaimsRefused));
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

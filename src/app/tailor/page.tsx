@@ -195,6 +195,14 @@ export default function TailorPage() {
                 <option value="">Select a lane baseline</option>
                 {baselines.map((variant) => <option key={variant.id} value={variant.id}>{variant.kind === "ats" ? "ATS Submission" : "Recruiter / Networking"} · {variant.title}</option>)}
               </select>
+              {hydrated && baselines.length === 0 && (
+                <span className="mt-2 block rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs leading-5 text-paper/80">
+                  No baseline résumé exists yet — tailoring starts from one.{" "}
+                  <Link href="/targets" className="font-bold text-gold underline hover:text-cyan">
+                    Forge your résumé pack first →
+                  </Link>
+                </span>
+              )}
             </label>
           </div>
 
@@ -336,7 +344,12 @@ export default function TailorPage() {
               </div>
             </div>
 
-            {currentPack && <div className="trust-panel p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Optional application materials</h2><p className="mt-1 text-sm text-paper/55">Built from the same approved dossier foundation; review and personalize before sending.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-gold">Cover letter foundation</p><p className="mt-2 text-sm leading-6 text-paper/70">{currentPack.coverLetterFoundation}</p></div><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-cyan">Recruiter / hiring-manager message</p><p className="mt-2 text-sm leading-6 text-paper/70">I’m exploring {roleTitle || selectedLane?.title || "this role"}{company ? ` at ${company}` : ""}. {currentPack.lanePacks.find((item) => item.laneId === selectedLane?.id)?.positioningPitch || "My résumé is attached with the most relevant approved evidence."}</p></div></div></div>}
+            {currentPack && <div className="trust-panel p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Optional application materials</h2><p className="mt-1 text-sm text-paper/55">Built from the same approved dossier foundation; review and personalize before sending.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-gold">Cover letter foundation</p><p className="mt-2 text-sm leading-6 text-paper/70">{currentPack.coverLetterFoundation}</p></div><div className="rounded-lg border border-white/10 bg-white/5 p-4"><p className="lab-mono text-xs font-bold uppercase text-cyan">Recruiter / hiring-manager message</p><p className="mt-2 text-sm leading-6 text-paper/70">{(() => {
+                // Sendable first-person text only — never lane coaching copy.
+                const laneVariant = currentPack.variants.find((variant) => variant.laneId === selectedLane?.id && variant.kind === "ats");
+                const highlights = laneVariant?.resume.coreSkills.slice(0, 3).join(", ") ?? "";
+                return `I’m exploring ${roleTitle || selectedLane?.title || "this role"}${company ? ` at ${company}` : ""}.${highlights ? ` My background includes ${highlights}.` : ""} My résumé is attached with the most relevant verified experience — happy to share more detail.`;
+              })()}</p></div></div></div>}
 
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
               <p className="mr-auto text-sm text-paper/68">
