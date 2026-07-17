@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - audit/pr15-independent-preview-run3
+  pull_request:
+    branches:
+      - feature/paid-beta-surge
   workflow_dispatch:
 
 permissions:
