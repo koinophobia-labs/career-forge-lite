@@ -1,0 +1,7 @@
+SCENARIO: Post-interview thank you
+
+Hi Jordan Alvarez — thank you for the conversation today. your support team publishes unusually candid incident postmortems made me more confident this is the right kind of work for me.
+
+One point I want to reinforce with approved evidence: 40+ customers per shift.
+
+I appreciate your time and look forward to the next step.

@@ -1,0 +1,7 @@
+SCENARIO: Hiring manager (active posting)
+
+Hi Jordan Alvarez — I just applied for the Product Support Specialist opening on your team.
+
+One specific match I can substantiate: 40+ customers per shift.
+
+I'm especially interested in Northbeam Software because your support team publishes unusually candid incident postmortems. Thanks for taking a look.
