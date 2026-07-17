@@ -1,22 +1,15 @@
-// Career Forge paid packaging — the single source of truth for what is sold,
-// what it costs, and what each purchase unlocks. Server routes price from this
-// config; the client renders from it; entitlements grant from it. Nothing
-// about packaging should be decided anywhere else.
-//
-// Prices are PRODUCT HYPOTHESES, not validated commercial truth. No
-// willingness-to-pay evidence exists yet (docs/CAREER_FORGE_MARKET_MAP_2026.md
-// deliberately proposes no price). Change them here and they change everywhere.
+// Career Forge packaging configuration. Prices remain product hypotheses until
+// production re-audits and human willingness-to-pay evidence support them.
+// Server routes, client rendering, and entitlement grants read from this file.
 
 export type PackageTier = "reset" | "job-search" | "career-switch";
 
-// Machine-checkable grants. UI gates check these — never tier names — so
-// repackaging deliverables never requires touching gate logic.
 export type EntitledFeature =
-  | "export_baseline_pack" // PDF/DOCX/ZIP + full-text copy of baseline lane packs
-  | "tailored_resume_export" // job-specific tailored résumé generation + export
-  | "outreach_toolkit" // recruiter / hiring-manager message templates
-  | "interview_unlimited" // conversational interview mode beyond the free preview
-  | "career_switch_toolkit"; // transferable-skills, transition narrative, objection prep
+  | "export_baseline_pack"
+  | "tailored_resume_export"
+  | "outreach_toolkit"
+  | "interview_unlimited"
+  | "career_switch_toolkit";
 
 export type PackageDefinition = {
   tier: PackageTier;
@@ -36,13 +29,13 @@ export const PACKAGES: Record<PackageTier, PackageDefinition> = {
     priceUsd: 49,
     audience: "You need to clean up or restart your job search.",
     summary:
-      "Turn your real history into one approved, reusable foundation: a polished master résumé, LinkedIn positioning, and answers you can reuse on every application.",
+      "Build one reviewed, reusable career foundation with distinct résumé drafts, LinkedIn positioning drafts, and source-linked evidence you can inspect.",
     deliverables: [
-      "Polished master résumé (ATS and recruiter versions)",
-      "Professional summary grounded in your approved facts",
-      "LinkedIn headline and About section",
-      "Target-role recommendations with reasons",
-      "Reusable application answers",
+      "ATS and recruiter résumé drafts for one lane",
+      "Professional-summary draft grounded in reviewed evidence",
+      "LinkedIn headline and About drafts",
+      "Role-direction suggestions with reasons",
+      "Reusable application-answer drafts",
       "PDF, DOCX, and bundle export"
     ],
     features: ["export_baseline_pack"],
@@ -54,13 +47,13 @@ export const PACKAGES: Record<PackageTier, PackageDefinition> = {
     priceUsd: 79,
     audience: "You are actively applying to a specific kind of role.",
     summary:
-      "Everything in Career Reset, plus job-specific tailoring, outreach messages, and interview preparation for the lane you are actually pursuing.",
+      "Adds job-specific tailoring, evidence-backed outreach drafting, and interview practice to the reviewed Career Reset foundation.",
     deliverables: [
-      "Everything in Career Reset Pack",
-      "Tailored résumé for each job post you analyze",
-      "Cover letter foundation",
-      "Recruiter outreach message templates",
-      "Hiring-manager outreach message templates",
+      "Everything in the Career Reset scope",
+      "Job-specific résumé drafts for analyzed postings",
+      "Cover-letter evidence foundation",
+      "Recruiter outreach drafting workflow",
+      "Hiring-manager outreach drafting workflow",
       "Interview story bank and practice interview",
       "Second résumé lane for a backup direction"
     ],
@@ -73,14 +66,14 @@ export const PACKAGES: Record<PackageTier, PackageDefinition> = {
     priceUsd: 99,
     audience: "You are moving into a new industry or kind of work.",
     summary:
-      "Everything in Job Search, plus transferable-skills analysis, a transition narrative, and objection handling for up to three credible directions.",
+      "Adds transferable-skill analysis, transition-narrative drafting, and objection practice for up to three role directions.",
     deliverables: [
-      "Everything in Job Search Pack",
-      "Transferable-skills analysis",
-      "Transition narrative for interviews and outreach",
-      "Interview objection handling",
-      "Up to three résumé lanes with full packs",
-      "Career-switch positioning for LinkedIn"
+      "Everything in the Job Search scope",
+      "Transferable-skill analysis",
+      "Transition-narrative draft for interviews and outreach",
+      "Interview objection practice",
+      "Up to three résumé lanes with draft packs",
+      "Career-switch positioning drafts for LinkedIn"
     ],
     features: [
       "export_baseline_pack",
@@ -103,14 +96,12 @@ export function getPackage(tier: PackageTier): PackageDefinition {
   return PACKAGES[tier];
 }
 
-// Feature checks always go through the tier's package definition, so a
-// tampered tier string grants nothing and upgrades are pure config.
 export function tierHasFeature(tier: PackageTier | null, feature: EntitledFeature): boolean {
   if (!tier) return false;
   return PACKAGES[tier].features.includes(feature);
 }
 
 export function tierLaneLimit(tier: PackageTier | null): number {
-  if (!tier) return 1; // Free: build and preview one lane before buying.
+  if (!tier) return 1;
   return PACKAGES[tier].laneLimit;
 }

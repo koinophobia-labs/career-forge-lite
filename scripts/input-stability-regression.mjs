@@ -11,6 +11,7 @@ function startServer() {
     "npm",
     ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
     {
+      detached: process.platform !== "win32",
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -25,6 +26,24 @@ function startServer() {
   });
 
   return { child, getOutput: () => output };
+}
+
+async function stopServer(child) {
+  if (child.exitCode !== null) return;
+  const signal = (name) => {
+    try {
+      if (process.platform !== "win32" && child.pid) process.kill(-child.pid, name);
+      else child.kill(name);
+    } catch {
+      // The process may have exited between the exitCode check and the signal.
+    }
+  };
+  signal("SIGTERM");
+  await Promise.race([
+    once(child, "exit").catch(() => undefined),
+    delay(5_000)
+  ]);
+  if (child.exitCode === null) signal("SIGKILL");
 }
 
 async function waitForServer(getOutput) {
@@ -109,8 +128,6 @@ const sampleUsers = [
 ];
 
 async function startGuidedFlow(page) {
-  // The builder now lives inside the main product shell and lands directly on
-  // the choose-your-path panel (the separate marketing landing was removed).
   await page.goto(`${baseUrl}/resume-builder`, { waitUntil: "load" });
   await assertNoHorizontalOverflow(page, "guided-setup");
   await page.getByText("Choose how you want to start.").waitFor();
@@ -118,112 +135,119 @@ async function startGuidedFlow(page) {
   await page.getByRole("heading", { name: "What do you need help with?" }).waitFor();
 }
 
-async function runFastRecommendationFlow(viewport, sample, verifyActions = false) {
-  const browser = await chromium.launch({ headless: true });
+async function runFastRecommendationFlow(browser, viewport, sample, verifyActions = false) {
   const context = await browser.newContext({
     viewport,
     permissions: ["clipboard-read", "clipboard-write"]
   });
   const page = await context.newPage();
+  page.setDefaultTimeout(20_000);
 
-  await startGuidedFlow(page);
-  await clickContinue(page, "Start");
+  try {
+    console.log(`START ${sample.label} ${viewport.width}x${viewport.height}`);
+    await startGuidedFlow(page);
+    await clickContinue(page, "Start");
 
-  const targetInput = page.getByPlaceholder("Example: Customer Support");
-  await targetInput.fill(sample.target);
-  await assertValue(targetInput, sample.target, `${sample.label}: target typing`);
-  await targetInput.blur();
-  await clickContinue(page, "Next");
+    const targetInput = page.getByPlaceholder("Example: Customer Support");
+    await targetInput.fill(sample.target);
+    await assertValue(targetInput, sample.target, `${sample.label}: target typing`);
+    await targetInput.blur();
+    await clickContinue(page, "Next");
 
-  const currentRoleInput = page.getByLabel("What did you actually do in this role?");
-  await currentRoleInput.fill(sample.role);
-  await assertValue(currentRoleInput, sample.role, `${sample.label}: experience story typing`);
-  await page.getByText("We heard:").waitFor();
-  await page.getByText("Which of these are true?").waitFor();
-  if (!/software|tech|engineer/i.test(sample.label) && await page.getByText("Troubleshot technical issues").isVisible().catch(() => false)) {
-    throw new Error(`${sample.label}: unrelated technical chip appeared in adaptive experience step`);
-  }
-  await clickContinue(page, "See recommendations");
-
-  await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
-  await page.getByText(/Quick draft ready|Resume package ready/).waitFor();
-  await page.getByRole("button", { name: "+ Add another experience" }).waitFor();
-  await page.getByRole("button", { name: "+ Add tools used" }).waitFor();
-  await page.getByRole("button", { name: "+ Add certifications" }).waitFor();
-  await page.getByRole("button", { name: "+ Add projects" }).waitFor();
-  await page.getByRole("button", { name: "+ Add more details" }).waitFor();
-  if (sample.expectedRecommendation) {
-    await page.getByText("Evidence-backed next moves").waitFor();
-    await page.getByRole("heading", { name: "We found these strengths:" }).waitFor();
-    for (const evidence of sample.expectedEvidence ?? []) {
-      await page.getByText(evidence).waitFor();
+    const currentRoleInput = page.getByLabel("What did you actually do in this role?");
+    await currentRoleInput.fill(sample.role);
+    await assertValue(currentRoleInput, sample.role, `${sample.label}: experience story typing`);
+    await page.getByText("We heard:").waitFor();
+    await page.getByText("Which of these are true?").waitFor();
+    if (!/software|tech|engineer/i.test(sample.label) && await page.getByText("Troubleshot technical issues").isVisible().catch(() => false)) {
+      throw new Error(`${sample.label}: unrelated technical chip appeared in adaptive experience step`);
     }
-    await page.getByRole("heading", { name: sample.expectedRecommendation }).waitFor();
-    await page.getByText("Why this fits:").first().waitFor();
-    await page.getByText("Built repeat client relationships.").first().waitFor();
-    await page.getByText("Managed scheduling, appointments, or expectations.").first().waitFor();
-  }
-  await assertNoHorizontalOverflow(page, `${sample.label}: review`);
+    await clickContinue(page, "See recommendations");
 
-  if (verifyActions) {
-    await page.getByRole("button", { name: "+ Add tools used" }).click();
-    await page.getByRole("heading", { name: "What tools did you use?" }).waitFor();
-    await page.getByPlaceholder("Add another tool").fill("Excel");
-    await page.getByRole("button", { name: "Excel" }).first().click();
-    await clickContinue(page, "Save and review");
     await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
-  }
+    await page.getByText(/Quick draft ready|Resume package ready/).waitFor();
+    await page.getByRole("button", { name: "+ Add another experience" }).waitFor();
+    await page.getByRole("button", { name: "+ Add tools used" }).waitFor();
+    await page.getByRole("button", { name: "+ Add certifications" }).waitFor();
+    await page.getByRole("button", { name: "+ Add projects" }).waitFor();
+    await page.getByRole("button", { name: "+ Add more details" }).waitFor();
+    if (sample.expectedRecommendation) {
+      await page.getByText("Evidence-backed next moves").waitFor();
+      await page.getByRole("heading", { name: "We found these strengths:" }).waitFor();
+      for (const evidence of sample.expectedEvidence ?? []) {
+        await page.getByText(evidence).waitFor();
+      }
+      await page.getByRole("heading", { name: sample.expectedRecommendation }).waitFor();
+      await page.getByText("Why this fits:").first().waitFor();
+      await page.getByText("Built repeat client relationships.").first().waitFor();
+      await page.getByText("Managed scheduling, appointments, or expectations.").first().waitFor();
+    }
+    await assertNoHorizontalOverflow(page, `${sample.label}: review`);
 
-  await clickContinue(page, "Generate draft");
-
-  await page.getByRole("heading", { name: "Review your resume before you apply." }).waitFor({ timeout: 15_000 });
-  await assertNoHorizontalOverflow(page, `${sample.label}: resume preview`);
-  await page.locator(`input[value="${sample.expected}"]`).waitFor({ timeout: 15_000 });
-
-  if (verifyActions) {
-    await page.getByRole("button", { name: "Copy full resume" }).click();
-    await page.getByRole("button", { name: "Copied" }).first().waitFor();
-    const copiedResume = await page.evaluate(() => navigator.clipboard.readText());
-    if (!copiedResume.includes(sample.expected) || !copiedResume.includes(sample.target)) {
-      throw new Error("copy resume did not include the quick-flow career details");
+    if (verifyActions) {
+      await page.getByRole("button", { name: "+ Add tools used" }).click();
+      await page.getByRole("heading", { name: "What tools did you use?" }).waitFor();
+      await page.getByPlaceholder("Add another tool").fill("Excel");
+      await page.getByRole("button", { name: "Excel" }).first().click();
+      await clickContinue(page, "Save and review");
+      await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
     }
 
-    await page.evaluate(() => {
-      window.print = () => {
-        window.__printCalled = true;
-      };
-    });
-    await page.getByRole("button", { name: "Print resume" }).click();
-    const printCalled = await page.evaluate(() => Boolean(window.__printCalled));
-    if (!printCalled) {
-      throw new Error("print/export button did not call window.print");
-    }
-  }
+    await clickContinue(page, "Generate draft");
 
-  await context.close();
-  await browser.close();
+    await page.getByRole("heading", { name: "Review your resume before you apply." }).waitFor({ timeout: 15_000 });
+    await assertNoHorizontalOverflow(page, `${sample.label}: resume preview`);
+    await page.locator(`input[value="${sample.expected}"]`).waitFor({ timeout: 15_000 });
+
+    if (verifyActions) {
+      await page.getByRole("button", { name: "Copy full resume" }).click();
+      await page.getByRole("button", { name: "Copied" }).first().waitFor();
+      const copiedResume = await page.evaluate(() => navigator.clipboard.readText());
+      if (!copiedResume.includes(sample.expected) || !copiedResume.includes(sample.target)) {
+        throw new Error("copy resume did not include the quick-flow career details");
+      }
+
+      await page.evaluate(() => {
+        window.print = () => {
+          window.__printCalled = true;
+        };
+      });
+      await page.getByRole("button", { name: "Print resume" }).click();
+      const printCalled = await page.evaluate(() => Boolean(window.__printCalled));
+      if (!printCalled) {
+        throw new Error("print/export button did not call window.print");
+      }
+    }
+    console.log(`PASS ${sample.label} ${viewport.width}x${viewport.height}`);
+  } finally {
+    await context.close().catch(() => undefined);
+  }
 }
 
-async function runKnownCareerFlow(viewport) {
-  const browser = await chromium.launch({ headless: true });
+async function runKnownCareerFlow(browser, viewport) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
+  page.setDefaultTimeout(20_000);
 
-  await startGuidedFlow(page);
-  await clickContinue(page, "Start");
+  try {
+    console.log(`START known-career ${viewport.width}x${viewport.height}`);
+    await startGuidedFlow(page);
+    await clickContinue(page, "Start");
 
-  const targetInput = page.getByPlaceholder("Example: Customer Support");
-  await targetInput.fill("Help");
-  await page.getByRole("button", { name: "Help Desk Technician IT" }).click();
-  await assertValue(targetInput, "Help Desk Technician", "known career selection");
-  await page.getByText("IT Support").first().waitFor();
-  await assertNoHorizontalOverflow(page, "known career selected");
-
-  await context.close();
-  await browser.close();
+    const targetInput = page.getByPlaceholder("Example: Customer Support");
+    await targetInput.fill("Help");
+    await page.getByRole("button", { name: "Help Desk Technician IT" }).click();
+    await assertValue(targetInput, "Help Desk Technician", "known career selection");
+    await page.getByText("IT Support").first().waitFor();
+    await assertNoHorizontalOverflow(page, "known career selected");
+    console.log(`PASS known-career ${viewport.width}x${viewport.height}`);
+  } finally {
+    await context.close().catch(() => undefined);
+  }
 }
 
 const server = startServer();
+let browser;
 
 try {
   await Promise.race([
@@ -233,13 +257,15 @@ try {
     waitForServer(server.getOutput)
   ]);
 
-  await runKnownCareerFlow({ width: 1280, height: 900 });
-  await runKnownCareerFlow({ width: 390, height: 844 });
+  browser = await chromium.launch({ headless: true });
+  await runKnownCareerFlow(browser, { width: 1280, height: 900 });
+  await runKnownCareerFlow(browser, { width: 390, height: 844 });
   for (const [index, sample] of sampleUsers.entries()) {
-    await runFastRecommendationFlow({ width: 1280, height: 900 }, sample, index === 0);
-    await runFastRecommendationFlow({ width: 390, height: 844 }, sample, index === 0);
+    await runFastRecommendationFlow(browser, { width: 1280, height: 900 }, sample, index === 0);
+    await runFastRecommendationFlow(browser, { width: 390, height: 844 }, sample, index === 0);
   }
   console.log("Career Forge usability regression passed on desktop and mobile.");
 } finally {
-  server.child.kill("SIGTERM");
+  await browser?.close().catch(() => undefined);
+  await stopServer(server.child);
 }

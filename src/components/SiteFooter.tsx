@@ -17,8 +17,8 @@ export function SiteFooter() {
             </span>
           </div>
           <p className="mt-4 max-w-sm leading-6">
-            Built and shipped by Koinophobia Labs to translate real work into recruiter-ready language. Career Forge
-            stays local, editable, ATS-safe, and unbranded in every exported résumé.
+            Built by Koinophobia Labs to turn reviewed career evidence into reusable draft materials. Career Forge stays
+            local, editable, and review-first; every generated document still needs a human check before use.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
             <a
@@ -44,10 +44,10 @@ export function SiteFooter() {
           <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Product</h2>
           <div className="mt-4 grid gap-2.5">
             <Link href="/pricing" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
-              Packs &amp; pricing
+              Beta access &amp; future packaging
             </Link>
             <Link href="/unlock" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
-              Unlock a license key
+              Manage a license key
             </Link>
             <Link href="/settings" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
               Backup &amp; restore
@@ -62,13 +62,13 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Promises</h2>
+          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Current beta boundaries</h2>
           <div className="mt-4 grid gap-2 text-paper/66">
-            <span>No account, no login</span>
+            <span>No account or login required</span>
             <span>Career data stays on your device</span>
             <span>No fake ATS score</span>
-            <span>Nothing written without your approval</span>
-            <span>PDF, DOCX, and bundle export</span>
+            <span>Imported facts remain reviewable</span>
+            <span>Review every draft and export before use</span>
           </div>
         </div>
       </div>

@@ -143,12 +143,14 @@ check("defensibility receipt is visible per variant", source("src/app/versions/p
 check("incomplete provenance blocks variant and pack exports", source("src/app/versions/page.tsx").includes("disabled={exportBlocked}") && source("src/app/versions/page.tsx").includes("working || packExportBlocked"));
 
 const home = source("src/app/page.tsx");
-check("homepage explains evidence approval", home.includes("approved evidence system") && home.includes("Nothing trusted until you approve it"));
+check("homepage explains evidence approval", home.includes("reviewable evidence system") && home.includes("Imported facts stay proposals until you approve them"));
 check("category contrast precedes advanced workspace", home.indexOf("Not another AI résumé writer") < home.indexOf("Advanced workspace"));
 check("public contrast names no competitor", !/Teal|Huntr|Jobscan|Rezi|Simplify|Kickresume|Enhancv|TopResume/.test(home));
 check("local-first trust is visible", home.includes("Local-first career evidence compiler") && home.includes("Works locally without an account"));
-check("unsupported-claim refusal is visible", home.includes("what it refuses to invent") && home.includes("missing proof"));
-check("role-lane pack and provenance are visible", home.includes("every credible lane") && home.includes("Links each generated claim to its source"));
+check("context exclusion is visible", home.includes("keeps out of professional drafts") && home.includes("missing proof"));
+check("role-lane pack and provenance are visible", home.includes("each active lane") && home.includes("Links generated claims to their reviewed sources"));
+check("public beta does not hard-code paid pricing", !/One-time packs from \$49/i.test(home));
+check("mobile comparison is focusable and named", /tabIndex=\{0\}[\s\S]*role="region"[\s\S]*aria-label=/.test(home));
 
 const bigEvidence = Array.from({ length: 500 }, (_, index) => ({ ...dossierLib.evidenceRecord(index % 3 === 0 ? "proof" : "responsibility", `Evidence item ${index} delivered verified result ${index}`, "manual", true, NOW), id: `big-${index}` }));
 const bigState = { ...stateWithPack, dossier: { ...activeDossier, evidence: bigEvidence, roles: [], projects: [] } };

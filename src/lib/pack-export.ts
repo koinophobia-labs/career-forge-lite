@@ -22,23 +22,31 @@ export type ExportSection =
   | { key: "summary" | "skills" | "education"; heading: string; text: string }
   | { key: "experience"; heading: string; roles: ResumePackage["experience"] };
 
+function sourceContainsWithheldFact(resume: ResumePackage): boolean {
+  const values = [
+    resume.summary,
+    resume.linkedinSummary,
+    ...resume.experience.flatMap((role) => [role.title, role.company, ...role.bullets])
+  ];
+  return values.some((value) => stripTerminationReasons(value ?? "").withheld);
+}
+
 // One render plan for PDF, DOCX, and plain text. The resume is sanitized at the
 // export boundary as a final fail-closed check, even when the pack was created
-// before the evidence-admissibility migration.
+// before the evidence-admissibility migration. The receipt is derived from the
+// original source so a removed separation reason remains visibly accounted for.
 export function exportSections(
   resume: ResumePackage,
   sectionOrder?: SectionKey[],
   kind: ResumeVariant["kind"] = "ats"
 ): { sections: ExportSection[]; withheldFacts: string[] } {
+  const withheldFacts = sourceContainsWithheldFact(resume) ? ["reason for leaving"] : [];
   const safeResume = sanitizeResumeForProfessionalUse(resume);
   const order = sectionOrder?.length ? sectionOrder : DEFAULT_SECTION_ORDER;
-  const withheldFacts: string[] = [];
   const sections: ExportSection[] = [];
   for (const key of order) {
     if (key === "summary") {
-      const cleaned = stripTerminationReasons(safeResume.summary ?? "");
-      if (cleaned.withheld) withheldFacts.push("reason for leaving");
-      if (cleaned.text.trim()) sections.push({ key, heading: "Professional Summary", text: cleaned.text.trim() });
+      if (safeResume.summary.trim()) sections.push({ key, heading: "Professional Summary", text: safeResume.summary.trim() });
     } else if (key === "skills") {
       const skills = safeResume.coreSkills.filter((skill) => skill.trim());
       if (skills.length) sections.push({ key, heading: "Core Skills", text: skills.join(" | ") });
@@ -168,8 +176,6 @@ function pdfBlob(
     write(text.toUpperCase(), { bold: true, size: 10, after: 1 });
     const ruleY = y + 1;
     pdf.line(margin, ruleY, margin + width, ruleY);
-    // Keep the rule visually tied to the heading while giving the next text
-    // baseline enough room that it cannot cross the rule.
     y = ruleY + PDF_RULE_TO_CONTENT_GAP;
   };
   write(dossier.identity.fullName || "Résumé", { bold: true, size: kind === "recruiter" ? 18 : 16, after: 2 });
