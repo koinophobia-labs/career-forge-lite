@@ -237,7 +237,7 @@ export default function TargetsPage() {
                 <article key={lane.id} className="trust-panel p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-lg font-bold text-paper">{lane.title}</h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {lane.status !== "active" && (
                         <button
                           type="button"

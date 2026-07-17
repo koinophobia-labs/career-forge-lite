@@ -59,3 +59,66 @@ but unassisted; any founder intervention marks the session failed. Record time-t
 and the per-step stall points from the consent-based pilot summary. Until this test
 passes, the public claim remains: **ease of use 7.5/10, target 10/10** — and broad
 launch stays gated.
+
+---
+
+## Closure checks (pre-freeze record)
+
+Scope is frozen once all four pass. Product changes after the freeze require an observed
+pilot user breaking a gate criterion.
+
+### 1. Manual commerce smoke test — PENDING (founder ritual, blocked on Stripe test key)
+
+The headless suite exercises checkout to its product boundary (the issued license) —
+`acceptance:journey`, 9/9. The hosted Stripe test-mode checkout requires
+`STRIPE_SECRET_KEY` (sk_test_…), which is not present in any environment available to
+automation. **Five-minute ritual, record the result here:**
+
+1. Set `NEXT_PUBLIC_COMMERCE_MODE=test` + Stripe test keys, open /pricing, buy any tier
+   with card 4242 4242 4242 4242.
+2. Checkout completes → /unlock shows the license → it activates on the FIRST attempt.
+3. Refresh, then quit and reopen the browser → entitlement survives both.
+4. /versions → "Export complete pack" → ZIP downloads on the FIRST click.
+5. Open the ZIP: PDFs open, DOCX opens, README/LinkedIn text files read correctly.
+
+| Date | Commit | Browser | Device | Result |
+| --- | --- | --- | --- | --- |
+| _(pending)_ | | | | |
+
+### 2. Backup and recovery — PASSED 2026-07-17
+
+`npm run acceptance:recovery` (11/11, log at
+`docs/evidence/paid-beta-surge/clean-checkout/recovery-run.log`): dossier with approved
+AND rejected evidence → forge → license → export → backup → **all site data destroyed** →
+app honestly empty → restore (with contents preview + explicit confirmation) → approved
+7 / rejected 1 / lanes / packs / versions restored exactly → entitlement behaves as
+intended (license deliberately not in the backup; re-pasting the saved key re-unlocks;
+export succeeds first-click) → the "Save failed — back up now" warning was fired and its
+action lands directly on a working backup button. The warning does not point into fog.
+
+### 3. Journey test on the release path — DONE 2026-07-17
+
+`acceptance:journey` and `acceptance:recovery` are now **required steps in the CI quality
+gate** (`.github/workflows/quality-gate.yml`) on every pull request, with their outputs
+uploaded as the `journey-and-recovery-results` artifact. Local reference runs are
+committed at `docs/evidence/paid-beta-surge/clean-checkout/journey-run.log` and
+`recovery-run.log`. The 9/9 result is reproducible, not folklore.
+
+### 4. Device and accessibility sweep — PASSED 2026-07-17 (engine-level)
+
+`node scripts/device-sweep-browser.mjs`, 23/23: WebKit + iPhone 13 profile (closest
+headless stand-in for iPhone Safari), Chromium + Pixel 7 profile (Android Chrome),
+desktop keyboard-only (skip link first, Enter into main, visible focus on 10/10 sampled
+stops), 200%-zoom-equivalent viewport with no overflow on the four journey routes, save
+pill announced as `role=status`, export confirmation announced via
+`role=status aria-live=polite`. The sweep caught and fixed one real defect: the lane-card
+control row overflowed the page by 4px on WebKit at iPhone width (native `<select>`
+renders wider there) — now wraps. **Physical iPhone Safari and Android Chrome passes
+belong to the founder's release ritual alongside check 1.**
+
+## Freeze declaration
+
+As of the tagged beta release, scope is frozen: no analytics additions, sharing, team
+features, new templates, or speculative polish. The known-friction list above stands.
+The five-user pilot runs against the frozen tag. The product changes only when observed
+user behavior breaks a gate criterion — the pilot is the reason to leave the code alone.

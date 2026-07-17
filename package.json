@@ -25,6 +25,7 @@
     "acceptance:mobile-a11y": "node scripts/mobile-a11y-browser.mjs",
     "acceptance:outreach-interview": "node scripts/outreach-interview-browser.mjs",
     "acceptance:journey": "node scripts/journey-browser.mjs",
+    "acceptance:recovery": "node scripts/recovery-proof-browser.mjs",
     "playtest:cold": "node scripts/cold-user-activation-playtest.mjs",
     "acceptance:activation": "node scripts/intent-router-regression.mjs && node scripts/activation-regression.mjs && node scripts/cold-user-activation-playtest.mjs && node scripts/activation-browser.mjs",
     "acceptance:market-moat": "node scripts/market-moat-regression.mjs && node scripts/activation-browser.mjs"
