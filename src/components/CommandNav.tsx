@@ -15,6 +15,7 @@ const stations: Array<[string, string]> = [
   ["Guided Setup", "/resume-builder"],
   ["Interview Prep", "/interview"],
   ["Weekly", "/weekly"],
+  ["Pricing", "/pricing"],
   ["Data", "/settings"]
 ];
 

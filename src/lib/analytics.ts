@@ -42,7 +42,18 @@ export type CareerForgeEventName =
   | "differentiation_section_cta_clicked"
   | "intent_goal_selected"
   | "intent_goal_resumed"
-  | "activation_feedback_submitted";
+  | "activation_feedback_submitted"
+  // Commerce funnel — event names only, like everything above. Which package
+  // was viewed/bought is a product fact, not a person fact, so the tier rides
+  // in the event name itself rather than as a property.
+  | "pricing_viewed"
+  | "checkout_started_reset"
+  | "checkout_started_job_search"
+  | "checkout_started_career_switch"
+  | "checkout_completed"
+  | "license_activated"
+  | "license_invalid"
+  | "locked_feature_viewed";
 
 function cleanProperties(properties?: AnalyticsProperties) {
   if (!properties) return undefined;
