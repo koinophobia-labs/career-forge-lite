@@ -20,6 +20,7 @@ import {
   updateInterviewDraftFromUserAnswer
 } from "@/lib/interview-mode";
 import { trackCareerForgeCompletion, trackCareerForgeStart, trackResumeGeneration } from "@/lib/analytics";
+import { useEntitlement } from "@/lib/entitlement";
 import { getInterviewModeLimitState } from "@/lib/feature-access";
 import {
   getInterviewSessionServerSnapshot,
@@ -119,9 +120,11 @@ export function InterviewMode() {
   const [isThinking, setIsThinking] = useState(false);
   const [generatedPackage, setGeneratedPackage] = useState<InterviewGeneratedPackage | null>(null);
 
+  const { hasFeature } = useEntitlement();
+  const interviewUnlimited = hasFeature("interview_unlimited");
   const missingFields = useMemo(() => getMissingOrWeakFields(session), [session]);
   const canGenerate = canGenerateResumeFromInterview(session);
-  const limitState = useMemo(() => getInterviewModeLimitState(session), [session]);
+  const limitState = useMemo(() => getInterviewModeLimitState(session, interviewUnlimited), [session, interviewUnlimited]);
   const coachingMessages = useMemo(() => getInterviewCoachingMessages(session), [session]);
   const smartSummary = useMemo(() => getSmartInterviewSummary(session), [session]);
   const interviewFocus = useMemo(() => focusCopy(session.currentStage), [session.currentStage]);
@@ -445,7 +448,7 @@ export function InterviewMode() {
           </div>
 
           <aside className="trust-panel rounded-md p-5">
-            <PremiumPreviewMeter state={limitState} />
+            {limitState.isLimited && <PremiumPreviewMeter state={limitState} />}
             {limitState.isLocked && (
               <div className="mt-4">
                 <PremiumLockedPanel
@@ -455,9 +458,11 @@ export function InterviewMode() {
                 />
               </div>
             )}
-            <div className="mt-4">
-              <UpgradeCallout />
-            </div>
+            {limitState.isLimited && (
+              <div className="mt-4">
+                <UpgradeCallout />
+              </div>
+            )}
             <section className="mt-6 rounded-md border border-white/10 bg-white/5 p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-paper/45">Resume Readiness</p>
               <div className="mt-3 h-2 rounded-full bg-white/10">

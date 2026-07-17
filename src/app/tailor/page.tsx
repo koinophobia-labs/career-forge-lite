@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
+import { LockedActionPill } from "@/components/LockedFeature";
 import { SiteFooter } from "@/components/SiteFooter";
 import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
+import { useEntitlement } from "@/lib/entitlement";
 import { createId } from "@/lib/command-center-store";
 import { assessDossierReadiness } from "@/lib/dossier";
 import { assessJobPost } from "@/lib/input-guidance";
@@ -18,6 +20,7 @@ import { useCommandCenter } from "@/lib/use-command-center";
 
 export default function TailorPage() {
   const { state, update, hydrated } = useCommandCenter();
+  const { hasFeature } = useEntitlement();
   const [jobPost, setJobPost] = useState("");
   const [company, setCompany] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
@@ -107,7 +110,7 @@ export default function TailorPage() {
   }
 
   function startTailoredResume() {
-    if (!analysis || !selectedBaseline) return;
+    if (!analysis || !selectedBaseline || !hasFeature("tailored_resume_export")) return;
     saveHandoff(
       buildHandoff({
         analysis,
@@ -364,18 +367,22 @@ export default function TailorPage() {
                   Open applications →
                 </Link>
               )}
-              <button
-                type="button"
-                onClick={startTailoredResume}
-                title={
-                  savedApplication
-                    ? "Opens the resume builder with this analysis loaded and links the resulting version to this application."
-                    : "Opens the resume builder with this analysis loaded. Save the application first to also link the version to it."
-                }
-                className="rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
-              >
-                Build the resume for this shot →
-              </button>
+              {hasFeature("tailored_resume_export") ? (
+                <button
+                  type="button"
+                  onClick={startTailoredResume}
+                  title={
+                    savedApplication
+                      ? "Opens the resume builder with this analysis loaded and links the resulting version to this application."
+                      : "Opens the resume builder with this analysis loaded. Save the application first to also link the version to it."
+                  }
+                  className="rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
+                >
+                  Build the resume for this shot →
+                </button>
+              ) : (
+                <LockedActionPill feature="tailored_resume_export" label="Build the resume for this shot" />
+              )}
             </div>
           </div>
         )}

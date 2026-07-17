@@ -6,6 +6,7 @@ import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { createId } from "@/lib/command-center-store";
+import { useEntitlement } from "@/lib/entitlement";
 import { laneLibrary } from "@/lib/lane-library";
 import { generateResumePack } from "@/lib/resume-pack";
 import { assessDossierReadiness } from "@/lib/dossier";
@@ -42,10 +43,15 @@ function laneEvidenceView(blueprint: LaneBlueprint, approvedDetails: string[]) {
 
 export default function TargetsPage() {
   const { state, update, hydrated } = useCommandCenter();
+  const { laneLimit, commerceEnabled } = useEntitlement();
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const dossierReadiness = assessDossierReadiness(state.dossier);
+  // Exploring and activating lanes is free; the purchased pack decides how
+  // many active lanes the generated Résumé Pack covers.
+  const packLaneCap = laneLimit();
+  const activeLaneCount = state.lanes.filter((lane) => lane.status === "active").length;
 
   const adoptedKeys = new Set(
     state.lanes.map((lane) => laneLibrary.find((blueprint) => blueprint.title === lane.title)?.key).filter(Boolean)
@@ -131,7 +137,7 @@ export default function TargetsPage() {
   }
 
   function forgePack() {
-    const active = state.lanes.filter((lane) => lane.status === "active").slice(0, 3);
+    const active = state.lanes.filter((lane) => lane.status === "active").slice(0, packLaneCap);
     if (!active.length || dossierReadiness.level === "not-ready") return;
     trackCareerEvent("resume_pack_started");
     const now = new Date().toISOString();
@@ -346,7 +352,7 @@ export default function TargetsPage() {
         </div>
 
         <div id="forge-pack" className="mt-8 scroll-mt-28 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
-          <div><p className="text-sm font-bold text-paper">{state.lanes.filter((lane) => lane.status === "active").length} active lane(s) · {state.lanes.filter((lane) => lane.status === "active").length * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p></div>
+          <div><p className="text-sm font-bold text-paper">{activeLaneCount} active lane(s) · {Math.min(activeLaneCount, packLaneCap) * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p>{commerceEnabled && activeLaneCount > packLaneCap && <p className="mt-1 text-xs font-bold text-gold">Your pack covers {packLaneCap} lane{packLaneCap === 1 ? "" : "s"}, so the first {packLaneCap} active lane{packLaneCap === 1 ? "" : "s"} will be forged. Larger packs cover up to three.</p>}</div>
           <button type="button" onClick={forgePack} disabled={!state.lanes.some((lane) => lane.status === "active") || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
         </div>
       </section>
