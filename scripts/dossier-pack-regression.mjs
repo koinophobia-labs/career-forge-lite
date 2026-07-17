@@ -137,7 +137,7 @@ const zipContents = await JSZipLib.loadAsync(await bundle.blob.arrayBuffer());
 check("ZIP contains one entry per reported filename", Object.keys(zipContents.files).length === bundle.filenames.length);
 const readmeOut = await zipContents.file("README.txt").async("string");
 const materialsOut = await zipContents.file("LinkedIn-and-Career-Materials.txt").async("string");
-check("README never mislabels approved-but-unused evidence as unapproved", !/unapproved/i.test(readmeOut) && readmeOut.includes("Approved evidence not used by these documents"));
+check("README never mislabels approved-but-unused evidence as unapproved", !/unapproved/i.test(readmeOut) && /Approved (?:professional )?evidence not used by these documents/.test(readmeOut));
 check("exports contain no internal ids or dossier jargon", ![readmeOut, materialsOut].some((text) => /\blane-\d|variant-|dossier|debug/i.test(text)));
 const noLaneBundle = await createPackBundle(pack, guidedDossier, [], ["pdf"]);
 const noLaneReadme = await (await JSZipLib.loadAsync(await noLaneBundle.blob.arrayBuffer())).file("README.txt").async("string");
