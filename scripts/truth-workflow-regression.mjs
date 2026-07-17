@@ -322,5 +322,81 @@ const hollowPack = generateResumePack(hollowDossier, [auditLane], NOW);
 check("zero-bullet roles are omitted from documents", hollowPack.variants.every((variant) => variant.resume.experience.every((entry) => entry.bullets.length > 0)));
 check("omitted roles are reported honestly", hollowPack.receipt.unsupportedClaimsRefused.some((item) => /Shift Lead/i.test(item)), JSON.stringify(hollowPack.receipt.unsupportedClaimsRefused));
 
+// --- Release-candidate pack inspection fixes (2026-07-16 manual review) ------
+
+// The user's own name must never become document content.
+const namedImport = parseResumePackToProposals([{ filename: "n.txt", text: "Marcus Bell\nmarcus@example.com\nTicket Writer — BetRiver | 2021–2026\nTrained 6 new ticket writers on POS" }])
+  .map((item) => ({ ...item, status: "approved" }));
+const namedDossier = mergeImportProposals(emptyDossier(NOW), namedImport, NOW);
+check("bare name lines classify as identity", namedDossier.identity.fullName === "Marcus Bell", JSON.stringify(namedDossier.identity));
+const namedPack = generateResumePack(namedDossier, [auditLane], NOW);
+const namedDocText = JSON.stringify(namedPack.variants.map((variant) => variant.resume)) + JSON.stringify(namedPack.masterProofBank);
+check("the user's name is never a bullet or proof entry", !namedDocText.includes("Marcus Bell"), namedDocText.slice(0, 300));
+
+// Heading-shaped evidence heads sections; it never reprints as bullet/summary.
+check(
+  "role headings never appear as bullets or summary facts",
+  namedPack.variants.every((variant) =>
+    !variant.resume.summary.includes("BetRiver |") &&
+    variant.resume.experience.every((entry) => entry.bullets.every((bullet) => !/—.*\b(19|20)\d{2}\b|\|\s*(19|20)\d{2}/.test(bullet)))
+  )
+);
+
+// Facts attach to the heading they followed in the source text.
+const multiRole = parseResumePackToProposals([{
+  filename: "m.txt",
+  text: [
+    "Casey Tran",
+    "Substitute Teacher — Metro School District | 2023–2026",
+    "Covered K-8 classrooms on short notice",
+    "Line Cook — Pho Palace | 2021–2023",
+    "Worked the wok station during 200-cover dinner rushes"
+  ].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const multiDossier = mergeImportProposals(emptyDossier(NOW), multiRole, NOW);
+const multiPack = generateResumePack(multiDossier, [auditLane], NOW);
+const teacherEntry = multiPack.variants[0].resume.experience.find((entry) => /Substitute Teacher/.test(entry.title));
+const cookEntry = multiPack.variants[0].resume.experience.find((entry) => /Line Cook/.test(entry.title));
+check(
+  "facts attach to the role they followed in the source",
+  Boolean(teacherEntry?.bullets.some((bullet) => /classrooms/.test(bullet))) &&
+    Boolean(cookEntry?.bullets.some((bullet) => /wok station/.test(bullet))) &&
+    !teacherEntry?.bullets.some((bullet) => /wok station/.test(bullet)),
+  JSON.stringify(multiPack.variants[0].resume.experience)
+);
+
+// A dateless second role must not donate its facts to the first role.
+const datelessSecond = parseResumePackToProposals([{
+  filename: "d.txt",
+  text: ["Warehouse Associate — Fulfillment Co | 2020–2022", "Picked and packed 300+ orders daily", "Delivery Driver — QuickShip", "Delivered 80-100 packages per route"].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const datelessDossier = mergeImportProposals(emptyDossier(NOW), datelessSecond, NOW);
+const datelessPack = generateResumePack(datelessDossier, [auditLane], NOW);
+const warehouseEntry = datelessPack.variants[0].resume.experience.find((entry) => /Warehouse/.test(entry.title));
+check(
+  "a dateless second role keeps its own facts",
+  Boolean(warehouseEntry) && !warehouseEntry.bullets.some((bullet) => /packages per route/.test(bullet)),
+  JSON.stringify(datelessPack.variants[0].resume.experience)
+);
+
+// Education renders once, without a duplicated year.
+const eduImport = parseResumePackToProposals([{ filename: "e.txt", text: "State University — BS in Communications | 2019" }]).map((item) => ({ ...item, status: "approved" }));
+const eduDossier = mergeImportProposals(emptyDossier(NOW), eduImport, NOW);
+const eduEntry = eduDossier.education[0];
+check("education credential does not duplicate the year", Boolean(eduEntry) && !/(19|20)\d{2}/.test(eduEntry.credential) && eduEntry.dates === "2019", JSON.stringify(eduDossier.education));
+
+// Founder/project headings collect the facts that follow them.
+const founderImport = parseResumePackToProposals([{
+  filename: "f.txt",
+  text: ["Founder — Loomwork Studio | 2023–Present", "Built and shipped 4 client websites", "Set up automated intake workflows"].join("\n")
+}]).map((item) => ({ ...item, status: "approved" }));
+const founderDossier = mergeImportProposals(emptyDossier(NOW), founderImport, NOW);
+const founderProject = founderDossier.projects[0];
+check(
+  "project facts attach to the project heading they followed",
+  Boolean(founderProject) && founderProject.organization === "Loomwork Studio" && founderProject.evidenceIds.length >= 2,
+  JSON.stringify(founderDossier.projects)
+);
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

@@ -545,11 +545,16 @@ function normalizedImportKey(value: string): string {
 function classifyImportLine(line: string): { group: ImportProposalGroup; kind: EvidenceKind; label: string; confidence: ImportProposalRecord["confidence"] } {
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$|(?:https?:\/\/|linkedin\.com|github\.com)|\+?\d[\d ().-]{7,}/i.test(line))
     return { group: "identity", kind: "identity", label: "Identity or link", confidence: "high" };
+  // A short line of 2-3 capitalized words with no digits or separators is a
+  // person's name (résumés lead with it) — misfiling it as "proof" used to
+  // print the user's own name as a résumé bullet.
+  if (/^[A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){1,2}$/.test(line.trim()) && line.trim().length <= 40 && !/\d|—|·|\||,|:/.test(line))
+    return { group: "identity", kind: "identity", label: "Name", confidence: "medium" };
   if (/\b(university|college|bachelor|master|associate(?:'s)?\s+degree|degree|certificate|certification)\b/i.test(line))
     return { group: "education", kind: "education", label: "Education", confidence: "high" };
   if (/\b(project|founder|independent|freelance|open.source|volunteer|portfolio|labs?)\b/i.test(line))
     return { group: "projects", kind: "project", label: "Project or independent work", confidence: "medium" };
-  if (/\b(19|20)\d{2}\b.*(?:present|current|\b(19|20)\d{2}\b)|\b(?:present|current)\b/i.test(line) || /\s[-|@]\s/.test(line))
+  if (/\b(19|20)\d{2}\b.*(?:present|current|\b(19|20)\d{2}\b)|\b(?:present|current)\b/i.test(line) || /\s[-—–|@]\s/.test(line))
     return { group: "employment", kind: "role", label: "Employment", confidence: "medium" };
   if (/\b(skills?|competencies|strengths?)\s*:/i.test(line)) return { group: "skills", kind: "skill", label: "Skill", confidence: "medium" };
   if (/\b(tools?|technologies|platforms?|software)\s*:/i.test(line)) return { group: "tools", kind: "tool", label: "Tool", confidence: "medium" };
@@ -611,15 +616,22 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
   const importedProjects = accepted.filter((item) => item.group === "projects").flatMap((item): DossierProject[] => {
     const support = recordFor(item);
     if (!support) return [];
-    const name = item.detail.split(/\s+(?:—|–|\||project\b)/i)[0]?.trim() || item.detail;
-    return [{ id: stableId("project", normalizedImportKey(name)), name, organization: "", dates: "", description: item.detail, responsibilities: [], tools: [], outcomes: [], metrics: [], links: [], defaultPlacement: "projects", evidenceIds: [support.id] }];
+    const dates = item.detail.match(/(?:19|20)\d{2}\s*[–—-]\s*(?:present|current|(?:19|20)\d{2})/i)?.[0] ?? "";
+    const segments = item.detail.replace(dates, "").split(/\s+(?:—|–|\|)\s+/).map((value) => value.replace(/[|·,\s-]+$/, "").trim()).filter(Boolean);
+    const name = segments[0]?.replace(/\s+project\b.*$/i, "").trim() || item.detail;
+    return [{ id: stableId("project", normalizedImportKey(name)), name, organization: segments[1] ?? "", dates, description: item.detail, responsibilities: [], tools: [], outcomes: [], metrics: [], links: [], defaultPlacement: "projects", evidenceIds: [support.id] }];
   });
   const importedEducation = accepted.filter((item) => item.group === "education").flatMap((item): DossierEducation[] => {
     const support = recordFor(item);
     if (!support) return [];
     const parts = item.detail.split(/\s+(?:—|–|\|)\s+/).map((value) => value.trim()).filter(Boolean);
     const institutionFirst = /college|university|school/i.test(parts[0] ?? "");
-    return [{ id: stableId("education", normalizedImportKey(item.detail)), institution: institutionFirst ? parts[0] : parts[1] ?? "", credential: institutionFirst ? parts.slice(1).join(" · ") : parts[0] ?? item.detail, field: "", dates: item.detail.match(/(?:19|20)\d{2}(?:\s*[–—-]\s*(?:19|20)\d{2})?/)?.[0] ?? "", evidenceIds: [support.id] }];
+    const dates = item.detail.match(/(?:19|20)\d{2}(?:\s*[–—-]\s*(?:19|20)\d{2})?/)?.[0] ?? "";
+    const rawCredential = institutionFirst ? parts.slice(1).join(" · ") : parts[0] ?? item.detail;
+    // The year lives in its own field; leaving it inside the credential too
+    // prints "BS in Communications · 2019, State University, 2019".
+    const credential = dates ? rawCredential.replace(dates, "").replace(/[·|,\s-]+$/, "").trim() || rawCredential : rawCredential;
+    return [{ id: stableId("education", normalizedImportKey(item.detail)), institution: institutionFirst ? parts[0] : parts[1] ?? "", credential, field: "", dates, evidenceIds: [support.id] }];
   });
   const identity = { ...dossier.identity };
   accepted.filter((item) => item.group === "identity").forEach((item) => {
@@ -647,13 +659,61 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
       const record = recordFor(item);
       return record ? [record] : [];
     });
+  // Facts attach to the role whose heading they FOLLOWED in the source text —
+  // that is the résumé's own structure, not a guess. Mention-matching remains
+  // as a secondary signal; facts with neither signal stay unattached and the
+  // generator surfaces them under "Selected accomplishments".
+  const mergedProjects = [...dossier.projects.filter((project) => !importedProjects.some((item) => item.id === project.id)), ...importedProjects];
+  const roleIdForHeading = (detail: string): string | null => {
+    const dates = detail.match(/(?:19|20)\d{2}\s*[–—-]\s*(?:present|current|(?:19|20)\d{2})/i)?.[0] ?? "";
+    const heading = detail.replace(dates, "").replace(/[|·,\s-]+$/, "").trim();
+    const id = stableId("role", normalizedImportKey(heading));
+    return mergedRoles.some((role) => role.id === id) ? id : null;
+  };
+  const projectIdForHeading = (detail: string): string | null => {
+    const name = detail.split(/\s+(?:—|–|\||project\b)/i)[0]?.trim() || detail;
+    const id = stableId("project", normalizedImportKey(name));
+    return mergedProjects.some((project) => project.id === id) ? id : null;
+  };
+  const positionalTargetByRecordId = new Map<string, { kind: "role" | "project"; id: string }>();
+  let positionalTarget: { kind: "role" | "project"; id: string } | null = null;
+  for (const item of accepted) {
+    if (item.group === "employment") {
+      const roleId = roleIdForHeading(item.detail);
+      positionalTarget = roleId ? { kind: "role", id: roleId } : null;
+      continue;
+    }
+    if (item.group === "projects") {
+      const projectId = projectIdForHeading(item.detail);
+      positionalTarget = projectId ? { kind: "project", id: projectId } : null;
+      continue;
+    }
+    if (item.group === "education") {
+      positionalTarget = null; // a new section ends the run of facts
+      continue;
+    }
+    if (positionalTarget && attachableKinds.has(item.kind)) {
+      const record = recordFor(item);
+      if (record) positionalTargetByRecordId.set(record.id, positionalTarget);
+    }
+  }
   attachable.forEach((record) => {
+    const positional = positionalTargetByRecordId.get(record.id);
+    if (positional?.kind === "project") {
+      const project = mergedProjects.find((item) => item.id === positional.id);
+      if (project && !project.evidenceIds.includes(record.id)) project.evidenceIds = [...project.evidenceIds, record.id];
+      return;
+    }
     const detailLower = record.detail.toLowerCase();
     const mentioned = mergedRoles.filter((role) => {
       const anchors = [role.title, role.employer].filter((anchor) => anchor && anchor.length >= 4);
       return anchors.some((anchor) => detailLower.includes(anchor.toLowerCase()));
     });
-    const target = mentioned.length === 1 ? mentioned[0] : mergedRoles.length === 1 ? mergedRoles[0] : null;
+    const target = positional
+      ? mergedRoles.find((role) => role.id === positional.id) ?? null
+      : mentioned.length === 1
+        ? mentioned[0]
+        : null;
     if (target && !target.evidenceIds.includes(record.id)) target.evidenceIds = [...target.evidenceIds, record.id];
   });
 
@@ -661,7 +721,7 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
     ...dossier,
     identity,
     roles: mergedRoles,
-    projects: [...dossier.projects.filter((project) => !importedProjects.some((item) => item.id === project.id)), ...importedProjects],
+    projects: mergedProjects,
     education: [...dossier.education.filter((education) => !importedEducation.some((item) => item.id === education.id)), ...importedEducation],
     tools: compact([...dossier.tools, ...tools]),
     transferableSkills: compact([...dossier.transferableSkills, ...skills]),

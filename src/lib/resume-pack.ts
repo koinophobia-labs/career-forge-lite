@@ -43,7 +43,27 @@ function skillAtoms(detail: string): string[] {
   );
 }
 
-const bulletEvidenceKinds = new Set(["responsibility", "metric", "proof", "story", "project"]);
+const bulletEvidenceKinds = new Set(["responsibility", "metric", "proof", "story"]);
+
+// Heading-shaped evidence ("Founder — Loomwork Studio | 2023–Present") heads
+// a section; reprinting it as a bullet or summary fact reads as broken.
+function looksLikeHeading(detail: string): boolean {
+  return /—|·|\|/.test(detail) && /(19|20)\d{2}|present|current/i.test(detail) && detail.length < 90 && !/[.!?]$/.test(detail.trim());
+}
+
+// The user's own name/email/phone sometimes gets classified as generic proof
+// during import; identity values must never become document content.
+function identityValueSet(dossier: CareerDossier): Set<string> {
+  return new Set(
+    [dossier.identity.fullName, dossier.identity.email, dossier.identity.phone, ...dossier.identity.links]
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isIdentityFact(detail: string, identityValues: Set<string>): boolean {
+  return identityValues.has(detail.trim().toLowerCase());
+}
 
 // Turns one evidence record into at most a few résumé bullets: multi-line
 // details split per line, everything cleaned into résumé voice. Returns []
@@ -117,6 +137,9 @@ function buildLaneResume(
   const approved = approvedEvidence(dossier);
   const withheldFacts: string[] = [];
   const omittedRoles: string[] = [];
+  const identityValues = identityValueSet(dossier);
+  const isDocumentFact = (item: DossierEvidenceRecord) =>
+    !isIdentityFact(item.detail, identityValues) && !looksLikeHeading(item.detail);
   const ranked = [...approved].sort((a, b) => relevance(b, lane) - relevance(a, lane));
   const relevant = ranked.filter((item) => relevance(item, lane) > 0);
   const chosen = unique((relevant.length ? relevant : ranked).slice(0, kind === "ats" ? 18 : 10).map((item) => item.id));
@@ -145,7 +168,7 @@ function buildLaneResume(
       .flatMap((item) => skillAtoms(item.detail).map((atom) => { mapClaim(atom, [item.id]); return atom; }))
   ).slice(0, kind === "ats" ? 14 : 6);
 
-  const proof = ranked.filter((item) => chosenSet.has(item.id) && ["role", "project", "responsibility", "proof", "metric"].includes(item.kind));
+  const proof = ranked.filter((item) => chosenSet.has(item.id) && ["responsibility", "proof", "metric"].includes(item.kind) && isDocumentFact(item));
   const summaryEvidence = proof.slice(0, kind === "ats" ? 2 : 3);
   const summaryFacts = summaryEvidence.flatMap((item) => {
     const cleaned = cleanFact(item.detail.split(/\n/)[0]);
@@ -179,7 +202,7 @@ function buildLaneResume(
     });
     const headingKey = `${role.title} ${role.employer}`.toLowerCase();
     const evidenceBullets = support
-      .filter((item) => bulletEvidenceKinds.has(item.kind))
+      .filter((item) => bulletEvidenceKinds.has(item.kind) && isDocumentFact(item))
       .filter((item) => item.detail.toLowerCase() !== headingKey && !item.detail.toLowerCase().startsWith(role.title.toLowerCase() + " "))
       .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); return bullet; }));
     support.forEach((item) => usedByRoles.add(item.id));
@@ -201,7 +224,7 @@ function buildLaneResume(
     const structuredBullets = unique([project.description, ...project.outcomes, ...project.metrics, ...project.responsibilities])
       .flatMap((candidate) => candidate.split(/\n+/))
       .map((candidate) => candidate.trim())
-      .filter(Boolean)
+      .filter((candidate) => Boolean(candidate) && !looksLikeHeading(candidate))
       .flatMap((bullet) => {
         const exact = support.filter((item) => item.detail.toLowerCase().includes(bullet.toLowerCase()) || bullet.toLowerCase().includes(item.detail.toLowerCase()));
         if (!exact.length) return [];
@@ -211,7 +234,7 @@ function buildLaneResume(
         return [cleaned.text];
       });
     const evidenceBullets = support
-      .filter((item) => bulletEvidenceKinds.has(item.kind))
+      .filter((item) => bulletEvidenceKinds.has(item.kind) && isDocumentFact(item))
       .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); return bullet; }));
     support.forEach((item) => usedByRoles.add(item.id));
     const bullets = unique([...structuredBullets, ...evidenceBullets]).slice(0, kind === "ats" ? 5 : 4);
@@ -223,7 +246,7 @@ function buildLaneResume(
   // on the document — a "Selected accomplishments" block beats silently
   // wasting the user's strongest facts.
   const looseAccomplishments = ranked
-    .filter((item) => chosenSet.has(item.id) && !usedByRoles.has(item.id) && (item.kind === "metric" || item.kind === "proof"))
+    .filter((item) => chosenSet.has(item.id) && !usedByRoles.has(item.id) && (item.kind === "metric" || item.kind === "proof") && isDocumentFact(item))
     .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); return bullet; }))
     .slice(0, kind === "ats" ? 5 : 3);
   const accomplishmentEntries = looseAccomplishments.length
@@ -310,10 +333,11 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
   const first = variants[0]?.resume;
   // Proof-bank entries are user-facing document material: uncertainty
   // statements and termination reasons never belong in it.
+  const identityValues = identityValueSet(dossier);
   const proofBank = unique(
     dossier.proofPoints
       .concat(approved.filter((item) => item.kind === "proof" || item.kind === "metric").map((item) => item.detail))
-      .filter((entry) => !isUncertaintyStatement(entry))
+      .filter((entry) => !isUncertaintyStatement(entry) && !isIdentityFact(entry, identityValues) && !looksLikeHeading(entry))
       .flatMap((entry) => {
         const cleaned = cleanFact(entry);
         if (cleaned.withheld) withheld.push("Reason for leaving a role (never résumé content)");

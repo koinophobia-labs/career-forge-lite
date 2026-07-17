@@ -182,6 +182,10 @@ const TRANSFER_RULES: Array<{ requirement: RegExp; evidence: RegExp }> = [
   {
     requirement: /\b(community|moderation|content review|social media)\b/i,
     evidence: /community|moderat|forum|social media|discord|engagement|event (?:planning|coordination)|outreach/
+  },
+  {
+    requirement: /\b(de-?escalation|conflict resolution|difficult (?:customers?|conversations?|situations?))\b/i,
+    evidence: /de-?escalat|escalation|dispute|conflict|complaint|upset|calm|resolution|resolved/
   }
 ];
 
@@ -412,8 +416,21 @@ export function matchRequirement(requirement: string, profile: CareerProfile, do
     };
   }
 
+  // Tool/skill evidence often arrives as one record ("Tools: Salesforce,
+  // Zendesk, Gainsight") — match its individual atoms against the
+  // requirement, or "Salesforce" reads as a gap while sitting in evidence.
+  const evidenceAtoms = (detail: string): string[] =>
+    normalize(detail)
+      .replace(/^[a-z &/-]{2,24}:\s*/, "")
+      .split(/[,;|/]/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 3 && !REQUIREMENT_STOPWORDS.has(part));
   const skillHits = records.length
-    ? records.filter((item) => (item.kind === "skill" || item.kind === "tool") && reqNorm.includes(normalize(item.detail)))
+    ? records.filter(
+        (item) =>
+          (item.kind === "skill" || item.kind === "tool") &&
+          (reqNorm.includes(normalize(item.detail)) || evidenceAtoms(item.detail).some((atom) => reqNorm.includes(atom)))
+      )
     : profile.transferableSkills.filter((skill) => skill.trim() && reqNorm.includes(normalize(skill))).map((detail) => ({ id: "", detail }));
   const meaningfulWords = requirementTerms(requirement);
   const overlap = meaningfulWords.filter((word) => corpus.includes(word));
