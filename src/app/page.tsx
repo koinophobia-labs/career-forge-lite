@@ -58,6 +58,7 @@ export default function Dashboard() {
   const showBackupNudge = hydrated && backupChecked && shouldNudgeBackup(state, lastBackupAt, nowIso);
   const showMomentumNudge = hydrated && isMomentumLow(state, nowIso);
   const currentPack = [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const commerceMode = getCommerceMode();
 
   const statCards: Array<[string, number | string, string, string]> = [
     ["Target lanes", stats.activeLanes, "active role lanes", "/targets"],
@@ -84,24 +85,24 @@ export default function Dashboard() {
                   Your career is bigger than your last résumé.
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/72 sm:text-base">
-                  Career Forge turns scattered jobs, projects, and old résumés into an approved evidence system, then
-                  compiles truthful application packs for every credible direction.
+                  Career Forge organizes scattered jobs, projects, and old résumés into a reviewable evidence system,
+                  then drafts role-specific application materials from the professional evidence you approve.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link href="/profile#import" onClick={() => trackCareerEvent("landing_primary_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black transition">
                     Import my résumés
                   </Link>
                   <a href="#pack-preview" className="inline-flex min-h-11 items-center rounded-md border border-cyan/40 bg-cyan/10 px-5 py-2.5 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">
-                    See what the pack includes
+                    See what the draft pack includes
                   </a>
                 </div>
-                <p className="mt-3 text-xs font-semibold leading-5 text-paper/62">No account · Files processed locally · Raw files never stored · Nothing trusted until you approve it</p>
+                <p className="mt-3 text-xs font-semibold leading-5 text-paper/62">No account · Files processed locally · Raw files never stored · Imported facts stay proposals until you approve them</p>
               </div>
               <div id="pack-preview" className="rounded-xl border border-gold/30 bg-gold/10 p-4 sm:p-5">
-                <p className="trust-kicker text-xs font-bold uppercase">What you get</p>
+                <p className="trust-kicker text-xs font-bold uppercase">Draft outputs</p>
                 <h2 className="mt-2 text-lg font-bold text-paper">A reusable dossier, not one generic document</h2>
                 <ul className="mt-3 grid grid-cols-2 gap-2 text-xs leading-5 text-paper/72">
-                  {["Career Dossier", "Up to 3 role lanes", "ATS résumé per lane", "Recruiter résumé per lane", "LinkedIn positioning", "Evidence receipt", "Job-specific tailoring", "PDF + DOCX bundle"].map((item) => <li key={item} className="rounded-md border border-white/10 bg-obsidian/25 px-2.5 py-2">✓ {item}</li>)}
+                  {["Career Dossier", "Up to 3 role lanes", "ATS résumé draft per lane", "Recruiter résumé draft per lane", "LinkedIn positioning drafts", "Evidence receipt", "Job-specific tailoring", "PDF + DOCX bundle"].map((item) => <li key={item} className="rounded-md border border-white/10 bg-obsidian/25 px-2.5 py-2">✓ {item}</li>)}
                 </ul>
               </div>
             </div>
@@ -120,11 +121,11 @@ export default function Dashboard() {
       {(!hydrated || isFirstRun) && <><section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="how-title">
         <div className="trust-panel p-5 sm:p-6">
           <p className="trust-kicker text-xs font-bold uppercase">How it works</p>
-          <h2 id="how-title" className="mt-2 text-2xl font-bold text-paper">From scattered history to application-ready baselines</h2>
+          <h2 id="how-title" className="mt-2 text-2xl font-bold text-paper">From scattered history to reviewable role-specific baselines</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {[["1", "Bring your history — files or your own words", "Import old résumés (PDF, DOCX, text — parsed in this browser) or simply describe your work. Multiple versions help surface repeated facts and conflicts."], ["2", "Approve facts and choose lanes", "You decide what is true. A lane is a family of related roles that can share one positioning strategy and baseline résumé."], ["3", "Receive your résumé pack", "Every lane you activate gets an ATS version and a recruiter version, plus LinkedIn materials, a bundle, and a direct bridge to job-specific tailoring."]].map(([number, title, detail]) => <article key={number} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><span className="lab-mono text-xs font-bold text-gold">{number}</span><h3 className="mt-2 font-bold text-paper">{title}</h3><p className="mt-1 text-sm leading-6 text-paper/58">{detail}</p></article>)}
+            {[["1", "Bring your history, files or your own words", "Import old résumés (PDF, DOCX, text, parsed in this browser) or simply describe your work. Multiple versions help surface repeated facts and conflicts."], ["2", "Approve facts and choose lanes", "You decide what is true. Career Forge separates professional evidence from preferences, constraints, uncertainty, and gaps before drafting."], ["3", "Generate a draft résumé pack", "Every lane you activate gets an ATS draft and a recruiter draft, plus LinkedIn materials, an evidence receipt, and a bridge to job-specific tailoring."]].map(([number, title, detail]) => <article key={number} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><span className="lab-mono text-xs font-bold text-gold">{number}</span><h3 className="mt-2 font-bold text-paper">{title}</h3><p className="mt-1 text-sm leading-6 text-paper/58">{detail}</p></article>)}
           </div>
-          <p className="mt-5 text-sm leading-6 text-paper/65"><strong className="text-cyan">Why multiple résumés?</strong> One generic résumé forces unrelated roles to compete for space. Career Forge creates a truthful baseline for each credible direction, then tailors from the right foundation.</p>
+          <p className="mt-5 text-sm leading-6 text-paper/65"><strong className="text-cyan">Why multiple résumés?</strong> One generic résumé forces unrelated roles to compete for space. Career Forge creates a reviewable baseline for each credible direction, then tailors from the right foundation.</p>
         </div>
       </section>
 
@@ -134,28 +135,31 @@ export default function Dashboard() {
         <div className="rounded-xl border border-gold/25 bg-gold/5 p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="trust-kicker text-xs font-bold uppercase">Simple to buy</p>
+              <p className="trust-kicker text-xs font-bold uppercase">{commerceMode === "off" ? "Public beta" : "One-time access"}</p>
               <h2 id="pricing-strip-title" className="mt-2 text-xl font-bold text-paper">
-                Build and review everything free. Pay once when you&apos;re ready to use it.
+                {commerceMode === "off"
+                  ? "All features are open while the workflow and paid outcome are being validated."
+                  : "Build and review everything free, then unlock the package you need."}
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-paper/65">
-                One-time packs from $49 — no subscription, no account, and your career data never leaves this device.
-                {getCommerceMode() === "off" ? " Everything is free while Career Forge is in beta." : ""}
+                {commerceMode === "off"
+                  ? "No paid pack is being marketed or sold during this validation period. Future packaging and pricing remain provisional until production re-audits and human use support them."
+                  : "No subscription or account is required, and your career data remains on this device."}
               </p>
             </div>
             <Link href="/pricing" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">
-              See the packs →
+              {commerceMode === "off" ? "Read the beta boundary →" : "See available packages →"}
             </Link>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="trust-title">
-        <div className="rounded-xl border border-white/12 bg-white/5 p-5 sm:p-6"><h2 id="trust-title" className="text-xl font-bold text-paper">What Career Forge trusts—and what it refuses to invent</h2><div className="mt-4 grid gap-3 text-sm leading-6 text-paper/65 md:grid-cols-3"><p><strong className="text-mint">Local by default.</strong> No account is required. Files are processed in your browser, and raw résumé files are not retained.</p><p><strong className="text-mint">Approval-gated.</strong> Imported facts remain proposals until you approve them; source excerpts stay attached for review.</p><p><strong className="text-mint">Honest outputs.</strong> Missing credentials, duration, and experience stay gaps. Review every exported application document before sending.</p></div></div>
+        <div className="rounded-xl border border-white/12 bg-white/5 p-5 sm:p-6"><h2 id="trust-title" className="text-xl font-bold text-paper">What Career Forge trusts, and what it keeps out of professional drafts</h2><div className="mt-4 grid gap-3 text-sm leading-6 text-paper/65 md:grid-cols-3"><p><strong className="text-mint">Local by default.</strong> No account is required. Files are processed in your browser, and raw résumé files are not retained.</p><p><strong className="text-mint">Reviewable imports.</strong> Imported facts remain proposals until you approve them; source excerpts stay attached for review.</p><p><strong className="text-mint">Fail-closed drafts.</strong> Preferences, constraints, uncertainty, separation reasons, and unsupported gaps stay outside professional materials. Review every generated document before use.</p></div></div>
       </section>
 
       <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="different-title" id="different">
-        <div className="trust-panel p-5 sm:p-6"><p className="trust-kicker text-xs font-bold uppercase">The category difference</p><h2 id="different-title" className="mt-2 text-3xl font-bold text-paper">Not another AI résumé writer.</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Writing is the output. Career Forge’s job is to compile approved proof, keep transfer claims honest, and show why every claim appeared.</p><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[38rem] border-collapse text-left text-sm"><thead><tr className="border-b border-white/15 text-paper/45"><th className="px-3 py-3">Typical tool</th><th className="px-3 py-3 text-cyan">Career Forge</th></tr></thead><tbody>{[["Starts from one résumé", "Builds a longitudinal Career Dossier"], ["Generates plausible copy", "Uses evidence you explicitly approved"], ["Gives a match score", "Shows direct, transferred, and missing proof"], ["Makes one tailored document", "Builds an ATS and recruiter baseline for every credible lane"], ["Stores files in an account", "Works locally without an account"], ["Hides why a claim appeared", "Links each generated claim to its source"]].map(([typical, forge]) => <tr key={typical} className="border-b border-white/10"><td className="px-3 py-3 text-paper/55">{typical}</td><td className="px-3 py-3 font-bold text-paper">{forge}</td></tr>)}</tbody></table></div><div className="mt-5 flex flex-wrap gap-3"><Link href="/profile#import" onClick={() => trackCareerEvent("differentiation_section_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Build my approved dossier →</Link><Link href="/truth-map" onClick={() => trackCareerEvent("truth_map_opened")} className="inline-flex min-h-11 items-center rounded border border-cyan/40 px-5 py-2.5 text-sm font-bold text-cyan">See the Truth Map</Link></div></div>
+        <div className="trust-panel p-5 sm:p-6"><p className="trust-kicker text-xs font-bold uppercase">The category difference</p><h2 id="different-title" className="mt-2 text-3xl font-bold text-paper">Not another AI résumé writer.</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Writing is the output. Career Forge’s job is to preserve reviewed evidence, separate context from professional claims, and show which sources support each draft.</p><div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label="Career Forge comparison table. Scroll horizontally to view both columns on small screens."><table className="w-full min-w-[38rem] border-collapse text-left text-sm"><thead><tr className="border-b border-white/15 text-paper/45"><th className="px-3 py-3">Typical tool</th><th className="px-3 py-3 text-cyan">Career Forge</th></tr></thead><tbody>{[["Starts from one résumé", "Builds a longitudinal Career Dossier"], ["Generates plausible copy", "Drafts from reviewed professional evidence"], ["Gives a match score", "Shows direct, transferred, and missing proof"], ["Makes one tailored document", "Builds distinct ATS and recruiter baselines for each active lane"], ["Stores files in an account", "Works locally without an account"], ["Hides why a claim appeared", "Links generated claims to their reviewed sources"]].map(([typical, forge]) => <tr key={typical} className="border-b border-white/10"><td className="px-3 py-3 text-paper/55">{typical}</td><td className="px-3 py-3 font-bold text-paper">{forge}</td></tr>)}</tbody></table></div><div className="mt-5 flex flex-wrap gap-3"><Link href="/profile#import" onClick={() => trackCareerEvent("differentiation_section_cta_clicked")} className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Build my reviewed dossier →</Link><Link href="/truth-map" onClick={() => trackCareerEvent("truth_map_opened")} className="inline-flex min-h-11 items-center rounded border border-cyan/40 px-5 py-2.5 text-sm font-bold text-cyan">See the Truth Map</Link></div></div>
       </section>
       </>}
 
@@ -224,7 +228,7 @@ export default function Dashboard() {
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-coral/30 bg-coral/10 px-5 py-4 transition hover:border-coral"
           >
             <span>
-              <span className="block text-sm font-bold text-paper">Quiet week — almost no activity in the last 7 days.</span>
+              <span className="block text-sm font-bold text-paper">Quiet week, almost no activity in the last 7 days.</span>
               <span className="mt-0.5 block text-[0.78rem] leading-5 text-paper/60">
                 Searches die from stalls, not rejections. The weekly review has three small moves to restart the rhythm.
               </span>
@@ -243,7 +247,7 @@ export default function Dashboard() {
             <span>
               <span className="block text-sm font-bold text-paper">Your career data has no recent backup.</span>
               <span className="mt-0.5 block text-[0.78rem] leading-5 text-paper/60">
-                Everything lives on this device — one cleared browser erases it. Download a backup file; it takes ten
+                Everything lives on this device. One cleared browser erases it. Download a backup file; it takes ten
                 seconds.
               </span>
             </span>
@@ -261,8 +265,8 @@ export default function Dashboard() {
               tailored resume
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-paper/60">
-              A resume built for the specific posting beats a generic one. Run each through the tailoring engine and
-              generate its version.
+              A résumé built for the specific posting can be more focused than a generic one. Run each application
+              through the tailoring workflow, then review the resulting draft before use.
             </p>
             <ul className="mt-4 grid gap-2">
               {untailoredApplications.slice(0, 4).map((app) => (
