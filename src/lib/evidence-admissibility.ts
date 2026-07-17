@@ -319,7 +319,11 @@ export function sanitizeResumeForProfessionalUse(resume: ResumePackage): ResumeP
   });
   const summary = sanitizeProfessionalParagraph(resume.summary);
   const linkedinSummary = sanitizeProfessionalParagraph(resume.linkedinSummary);
-  const headline = sanitizeProfessionalLine(resume.linkedinHeadline) || coreSkills.slice(0, 3).join(" | ");
+  // Sentence-level, not line-level: a mixed headline like "Operations
+  // Coordinator. Target roles: X; Y" must lose the preference sentence while
+  // keeping the professional one — line-level classification let the whole
+  // line through because its first sentence is a legitimate claim.
+  const headline = sanitizeProfessionalParagraph(resume.linkedinHeadline) || coreSkills.slice(0, 3).join(" | ");
   return {
     summary,
     coreSkills,

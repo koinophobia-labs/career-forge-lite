@@ -1,0 +1,327 @@
+{
+  "version": 2,
+  "profile": {
+    "currentSituation": "",
+    "targetRoles": "",
+    "transferableSkills": [],
+    "experienceSummary": "",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "",
+    "updatedAt": null
+  },
+  "dossier": {
+    "id": "dossier-local",
+    "identity": {
+      "fullName": "Casey Contaminated",
+      "email": "casey@example.com",
+      "phone": "",
+      "location": "",
+      "links": []
+    },
+    "roles": [],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [
+      "No reliable numerical performance metrics",
+      "Resolved customer escalations and documented the outcome"
+    ],
+    "interviewStories": [],
+    "constraints": [],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [],
+    "approvedClaims": [
+      "No reliable numerical performance metrics",
+      "Target roles: Product Operations Specialist; Implementation Specialist",
+      "Resolved customer escalations and documented the outcome"
+    ],
+    "evidence": [
+      {
+        "id": "evidence-jwkcu3",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "No reliable numerical performance metrics",
+        "source": "manual",
+        "sourceText": "No reliable numerical performance metrics",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "No reliable numerical performance metrics"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-1vsz9oa",
+        "kind": "metric",
+        "label": "Metric",
+        "detail": "I don't know my exact ticket numbers",
+        "source": "manual",
+        "sourceText": "I don't know my exact ticket numbers",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "I don't know my exact ticket numbers"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-16ap2l7",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "Target roles: Product Operations Specialist; Implementation Specialist",
+        "source": "manual",
+        "sourceText": "Target roles: Product Operations Specialist; Implementation Specialist",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Target roles: Product Operations Specialist; Implementation Specialist"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-n8nyk1",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "Resolved customer escalations and documented the outcome",
+        "source": "manual",
+        "sourceText": "Resolved customer escalations and documented the outcome",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Resolved customer escalations and documented the outcome"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-1b2w07",
+        "kind": "role",
+        "label": "Role",
+        "detail": "Operations Coordinator — Meridian Logistics (2020–2026)",
+        "source": "manual",
+        "sourceText": "Operations Coordinator — Meridian Logistics (2020–2026)",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Operations Coordinator — Meridian Logistics (2020–2026)"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [],
+    "createdAt": "2026-07-16T18:00:00.000Z",
+    "updatedAt": "2026-07-16T18:00:00.000Z"
+  },
+  "lanes": [
+    {
+      "id": "lane-old",
+      "title": "Product Operations",
+      "status": "active",
+      "whyFit": "",
+      "resumeAngle": "",
+      "proof": [],
+      "gaps": [],
+      "keywords": [],
+      "source": "custom",
+      "createdAt": "2026-07-16T18:00:00.000Z"
+    }
+  ],
+  "applications": [],
+  "outreach": [],
+  "resumeVersions": [
+    {
+      "id": "version-snapshot",
+      "label": "Contaminated snapshot",
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "source": "tailor",
+      "resumeText": "Managed vendor contracts worth $2M annually until I was laid off in June 2026\nResolved customer escalations and documented the outcome",
+      "notes": "",
+      "applicationId": null,
+      "laneId": "lane-old",
+      "targetTitle": "",
+      "targetCompany": "",
+      "keywordsUsed": [],
+      "influenceSummary": "",
+      "resumeSnapshot": {
+        "fullName": "Casey Contaminated",
+        "email": "casey@example.com",
+        "phone": "",
+        "website": "",
+        "template": "Modern ATS",
+        "resume": {
+          "summary": "Operations professional. Managed vendor contracts worth $2M annually until I was laid off in June 2026. Target roles: Product Operations Specialist; Implementation Specialist.",
+          "coreSkills": [
+            "Vendor Management",
+            "No reliable numerical performance metrics"
+          ],
+          "experience": [
+            {
+              "title": "Operations Coordinator",
+              "company": "Meridian Logistics",
+              "time": "2020–2026",
+              "bullets": [
+                "Managed vendor contracts worth $2M annually until I was laid off in June 2026",
+                "Resolved customer escalations and documented the outcome",
+                "Rewrote onboarding documentation for new hires",
+                "I don't know my exact ticket numbers"
+              ]
+            }
+          ],
+          "education": "",
+          "linkedinHeadline": "Operations Coordinator. Target roles: Product Operations Specialist; Implementation Specialist",
+          "linkedinSummary": "Managed vendor contracts worth $2M annually until I was laid off in June 2026. Resolved customer escalations and documented the outcome."
+        }
+      }
+    },
+    {
+      "id": "version-text-only",
+      "label": "Contaminated text-only",
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "source": "plain",
+      "resumeText": "- Managed vendor contracts worth $2M annually until I was laid off in June 2026\n- Resolved customer escalations and documented the outcome\n- Target roles: Product Operations Specialist; Implementation Specialist",
+      "notes": "",
+      "applicationId": null,
+      "laneId": null,
+      "targetTitle": "",
+      "targetCompany": "",
+      "keywordsUsed": [],
+      "influenceSummary": "",
+      "resumeSnapshot": null
+    }
+  ],
+  "resumePacks": [
+    {
+      "id": "pack-old",
+      "dossierId": "dossier-local",
+      "status": "current",
+      "lanePacks": [
+        {
+          "laneId": "lane-old",
+          "positioningPitch": "Target roles: Product Operations Specialist; Implementation Specialist",
+          "variantIds": [
+            "variant-1"
+          ],
+          "evidenceUsed": [
+            "evidence-jwkcu3"
+          ],
+          "evidenceOmitted": [],
+          "gapsAvoided": []
+        }
+      ],
+      "variants": [
+        {
+          "id": "variant-1",
+          "laneId": "lane-old",
+          "kind": "ats",
+          "title": "ATS",
+          "status": "current",
+          "canonical": true,
+          "userEdited": true,
+          "resume": {
+            "summary": "Operations professional. Managed vendor contracts worth $2M annually until I was laid off in June 2026. Target roles: Product Operations Specialist; Implementation Specialist.",
+            "coreSkills": [
+              "Vendor Management",
+              "No reliable numerical performance metrics"
+            ],
+            "experience": [
+              {
+                "title": "Operations Coordinator",
+                "company": "Meridian Logistics",
+                "time": "2020–2026",
+                "bullets": [
+                  "Managed vendor contracts worth $2M annually until I was laid off in June 2026",
+                  "Resolved customer escalations and documented the outcome",
+                  "Rewrote onboarding documentation for new hires",
+                  "I don't know my exact ticket numbers"
+                ]
+              }
+            ],
+            "education": "",
+            "linkedinHeadline": "Operations Coordinator. Target roles: Product Operations Specialist; Implementation Specialist",
+            "linkedinSummary": "Managed vendor contracts worth $2M annually until I was laid off in June 2026. Resolved customer escalations and documented the outcome."
+          },
+          "template": "Modern ATS",
+          "evidenceReferences": [],
+          "userAuthoredPaths": [
+            "experience.0.bullets"
+          ],
+          "sectionOrder": [
+            "summary",
+            "skills",
+            "experience",
+            "projects",
+            "education"
+          ],
+          "sourceDossierUpdatedAt": "2026-07-16T18:00:00.000Z",
+          "baselineVariantId": null,
+          "applicationId": null,
+          "createdAt": "2026-07-16T18:00:00.000Z",
+          "updatedAt": "2026-07-16T18:00:00.000Z"
+        }
+      ],
+      "linkedinHeadlines": [
+        "Target roles: Product Operations Specialist; Implementation Specialist",
+        "Resolved customer escalations and documented the outcome"
+      ],
+      "linkedinAbout": "Managed vendor contracts worth $2M annually until I was laid off in June 2026. Target roles: Product Operations Specialist; Implementation Specialist.",
+      "linkedinSkills": [
+        "Vendor Management"
+      ],
+      "masterProofBank": [
+        "Target roles: Product Operations Specialist; Implementation Specialist",
+        "No reliable numerical performance metrics",
+        "Resolved customer escalations and documented the outcome"
+      ],
+      "coverLetterFoundation": "Managed vendor contracts worth $2M annually until I was laid off in June 2026",
+      "receipt": {
+        "id": "receipt-old",
+        "generatedAt": "2026-07-16T18:00:00.000Z",
+        "evidenceUsed": [
+          "evidence-jwkcu3"
+        ],
+        "evidenceOmitted": [],
+        "laneFraming": [
+          {
+            "laneId": "lane-old",
+            "angle": "Target roles: Product Operations Specialist; Implementation Specialist"
+          }
+        ],
+        "keywordsIncluded": [],
+        "gapsAvoided": [],
+        "unsupportedClaimsRefused": [],
+        "transferredClaims": [
+          "Target roles: Product Operations Specialist; Implementation Specialist",
+          "Resolved customer escalations and documented the outcome"
+        ],
+        "gapsLeftUnclaimed": []
+      },
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "updatedAt": "2026-07-16T18:00:00.000Z"
+    }
+  ],
+  "exports": [],
+  "pendingImportReviews": [],
+  "activeGoal": null
+}
