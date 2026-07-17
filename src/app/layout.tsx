@@ -4,7 +4,7 @@ import { AnalyticsProvider } from "@/components/AnalyticsProvider";
 import { BetaSafetyBanner } from "@/components/BetaSafetyBanner";
 import { SaveHealthBanner } from "@/components/SaveHealthBanner";
 import "./globals.css";
-import "./koinophobia-ecosystem.css";
+import "./career-forge-visual-system.css";
 
 const sora = Sora({
   variable: "--font-sora",
