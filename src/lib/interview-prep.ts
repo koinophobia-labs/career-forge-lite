@@ -2,7 +2,7 @@ import { matchRequirement } from "@/lib/job-post-analyzer";
 import type { ApplicationRecord, CareerProfile, TargetLane } from "@/types/command-center";
 import type { CareerDossier, DossierEvidenceRecord } from "@/types/dossier";
 
-export type PrepCategory = "role" | "behavioral" | "gap_defense" | "transition";
+export type PrepCategory = "role" | "behavioral" | "gap_defense" | "transition" | "discovery";
 
 export type PrepQuestion = {
   id: string;
@@ -379,6 +379,40 @@ function truncateClaim(text: string, max = 110): string {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
+// A bare fact ("Reduced churn 20%") is not a story: prepping someone to
+// "walk me through it" invites them to invent the situation and action on
+// the spot. Evidence only counts as story-ready when it's long enough to
+// plausibly hold more than one fact AND shows a real signal of structure —
+// a metric, or multiple clauses (situation/action/outcome tend to land as
+// separate sentences or comma-joined phrases), or was explicitly captured
+// as a "story" kind of evidence record.
+const MIN_STORY_LENGTH = 40;
+function hasStorySubstance(detail: string, kind?: string): boolean {
+  const text = detail.trim();
+  if (text.length < MIN_STORY_LENGTH) return false;
+  if (kind === "story") return true;
+  if (QUANTIFIED.test(text)) return true;
+  const clauses = text.split(/[,.;]|(?:\band\b)|(?:\bwhich\b)/i).map((part) => part.trim()).filter((part) => part.length >= 8);
+  return clauses.length >= 2;
+}
+
+// The honest substitute for a fabricated STAR story: tell the user exactly
+// what's missing instead of prompting them to improvise a situation/action/
+// outcome they never recorded.
+function discoveryQuestion(id: string, claim: string, basedOn: string): PrepQuestion {
+  return {
+    id,
+    category: "discovery",
+    question: `Discovery question: you have not recorded enough detail about "${truncateClaim(claim, 90)}" to build a defensible interview story about it yet.`,
+    why: "A one-line claim isn't a story. Interviewers ask for the situation, your specific action, and the result — answering from thin air risks a claim you can't defend under a follow-up.",
+    coaching: [
+      "Go back to this item and add what actually happened: the situation, what you specifically did, and what changed.",
+      "If you can't recall enough to make it defensible, it's fine to leave it out of interview prep — do not invent detail to fill the gap."
+    ],
+    basedOn
+  };
+}
+
 // Matcher fallback when a caller has a dossier but no profile: matchRequirement
 // only consults the profile when the dossier has no approved records.
 const EMPTY_PREP_PROFILE: CareerProfile = {
@@ -480,6 +514,10 @@ function buildBehavioralQuestions(profile: CareerProfile, dossier?: CareerDossie
     const claim = truncateClaim(record.detail);
     if (seen.has(claimKey(claim))) continue;
     seen.add(claimKey(claim));
+    if (!hasStorySubstance(record.detail, record.kind)) {
+      questions.push(discoveryQuestion(makeId("behavioral", index++), claim, `Approved evidence (${record.kind}) — too thin for a defensible story yet`));
+      continue;
+    }
     questions.push({
       id: makeId("behavioral", index++),
       category: "behavioral",
@@ -498,6 +536,10 @@ function buildBehavioralQuestions(profile: CareerProfile, dossier?: CareerDossie
   for (const proof of splitProofPoints(profile.proofPoints).slice(0, 3)) {
     if (seen.has(claimKey(proof))) continue;
     seen.add(claimKey(proof));
+    if (!hasStorySubstance(proof)) {
+      questions.push(discoveryQuestion(makeId("behavioral", index++), proof, "Profile proof point — too thin for a defensible story yet"));
+      continue;
+    }
     questions.push({
       id: makeId("behavioral", index++),
       category: "behavioral",
@@ -511,31 +553,37 @@ function buildBehavioralQuestions(profile: CareerProfile, dossier?: CareerDossie
     });
   }
 
+  // Strengths and transferable skills are self-reported labels, not evidence
+  // — there is no dossier record behind "resilient" or "leadership" to check
+  // for story substance. Framing these as "give me a time" invites the user
+  // to invent a story on the spot, so they stay a discovery prompt: a
+  // reminder to go find (or admit they lack) a real example, never an
+  // implied accomplishment.
   for (const strength of profile.strengths.filter((item) => item.trim()).slice(0, 2)) {
     questions.push({
       id: makeId("behavioral", index++),
-      category: "behavioral",
-      question: `You'd describe yourself as "${strength}". Give me a specific time that was tested.`,
-      why: "Claimed strengths invite counter-probing. A strength without a story reads as filler.",
+      category: "discovery",
+      question: `Discovery question: "${strength}" is a self-reported strength with no linked evidence yet. Do you have a specific, real example where it was tested?`,
+      why: "A claimed strength without a real story reads as filler — and inventing one on the spot risks a claim you can't defend under a follow-up.",
       coaching: [
-        "Pick a moment where the strength was hard to maintain — that's what 'tested' means.",
-        "Keep it under 90 seconds and end with the outcome."
+        "If a real example exists, add it to your dossier as evidence before the interview, not just to this prep session.",
+        "If nothing concrete comes to mind, it's fine to drop this strength from your talking points rather than manufacture a story."
       ],
-      basedOn: `Profile strength: "${strength}"`
+      basedOn: `Profile strength: "${strength}" (self-reported, no linked evidence)`
     });
   }
 
   for (const skill of profile.transferableSkills.filter((item) => item.trim()).slice(0, 2)) {
     questions.push({
       id: makeId("behavioral", index++),
-      category: "behavioral",
-      question: `Tell me about a time your ${skill} directly changed an outcome.`,
-      why: `"${skill}" is a transferable skill you're selling — expect to be asked for evidence.`,
+      category: "discovery",
+      question: `Discovery question: "${skill}" is a self-reported transferable skill with no linked evidence yet. Do you have a specific, real example where it directly changed an outcome?`,
+      why: `"${skill}" is a skill you're selling without an attached story — expect to be asked for evidence, and inventing one on the spot risks a claim you can't defend.`,
       coaching: [
-        "Choose the example with a measurable or observable result, even a small one.",
-        "Name the skill explicitly in your answer so the interviewer checks the box."
+        "If a real example exists, add it to your dossier as evidence before the interview, not just to this prep session.",
+        "If nothing concrete comes to mind, it's fine to drop this skill from your talking points rather than manufacture a story."
       ],
-      basedOn: `Transferable skill: "${skill}"`
+      basedOn: `Transferable skill: "${skill}" (self-reported, no linked evidence)`
     });
   }
 

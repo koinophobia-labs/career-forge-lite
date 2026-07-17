@@ -34,10 +34,14 @@ const categoryMeta: Record<PrepCategory, { label: string; blurb: string }> = {
   gap_defense: {
     label: "Gap defense",
     blurb: "The uncomfortable questions about what you don't have yet. Rehearsed honesty beats improvised bluffing."
+  },
+  discovery: {
+    label: "Needs more evidence",
+    blurb: "Claims and self-reported strengths that aren't backed by enough recorded detail yet to defend in an interview. These are reminders to go add evidence, not questions to rehearse an answer for."
   }
 };
 
-const categoryOrder: PrepCategory[] = ["transition", "role", "behavioral", "gap_defense"];
+const categoryOrder: PrepCategory[] = ["transition", "role", "behavioral", "gap_defense", "discovery"];
 
 type QuestionCardProps = {
   question: PrepQuestion;
@@ -84,7 +88,11 @@ function QuestionCard({ question }: QuestionCardProps) {
 
           <div>
             <p className="lab-mono text-[0.68rem] font-bold uppercase text-cyan">
-              {question.category === "gap_defense" ? "Structure: acknowledge → situation → action → result → plan" : "Structure: situation → action → result"}
+              {question.category === "gap_defense"
+                ? "Structure: acknowledge → situation → action → result → plan"
+                : question.category === "discovery"
+                  ? "This isn't ready to rehearse — go find or record the real example first"
+                  : "Structure: situation → action → result"}
             </p>
             <ul className="mt-1.5 grid gap-1">
               {answerScaffold(question.category).map((line) => (

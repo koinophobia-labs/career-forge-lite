@@ -472,10 +472,21 @@ export function answerScaffold(category: PrepCategory): string[] {
   if (category === "transition") {
     return [...core, "Bridge — connect your old work to this lane explicitly"];
   }
+  if (category === "discovery") {
+    return [
+      "There is no answer to rehearse here yet — this is a reminder to go find one.",
+      "Recall — did this actually happen? What was the situation, your action, the result?",
+      "Record it as evidence on your dossier before interview day, not just in this box",
+      "If nothing concrete comes to mind, it's fine to leave this one out honestly"
+    ];
+  }
   return core;
 }
 
 export function scaffoldTemplate(category: PrepCategory): string {
+  if (category === "discovery") {
+    return ["What I actually remember happening: ", "My specific action, if any: ", "What changed, if I know: ", "Or: I don't have enough to make this defensible yet"].join("\n");
+  }
   const lines =
     category === "gap_defense"
       ? ["What I don't have yet (said plainly): ", "Closest real experience I do have: ", "What I did in that situation: ", "What came of it: ", "My concrete plan to close the gap: "]
