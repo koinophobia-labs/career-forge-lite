@@ -395,7 +395,7 @@ export default function DossierPage() {
     <main>
       <CommandNav active="/profile" />
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Step 1 · Canonical source of truth</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Steps 1–2 · Your career facts, reviewed</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Build your Career Dossier once.</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-paper/68">
           Every lane résumé, LinkedIn section, and application pack starts here. Facts stay on this device and are only used after you approve them.

@@ -393,7 +393,7 @@ export default function VersionsPage() {
       <CommandNav active="/versions" />
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Resume archive</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Step 4 · Résumé Pack</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Every version, and why it exists.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
           Each generated resume is saved here with its full text, the job it was built for, the keywords it used, and
