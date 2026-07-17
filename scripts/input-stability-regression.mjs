@@ -11,6 +11,7 @@ function startServer() {
     "npm",
     ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
     {
+      detached: process.platform !== "win32",
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -25,6 +26,24 @@ function startServer() {
   });
 
   return { child, getOutput: () => output };
+}
+
+async function stopServer(child) {
+  if (child.exitCode !== null) return;
+  const signal = (name) => {
+    try {
+      if (process.platform !== "win32" && child.pid) process.kill(-child.pid, name);
+      else child.kill(name);
+    } catch {
+      // The process may have exited between the exitCode check and the signal.
+    }
+  };
+  signal("SIGTERM");
+  await Promise.race([
+    once(child, "exit").catch(() => undefined),
+    delay(5_000)
+  ]);
+  if (child.exitCode === null) signal("SIGKILL");
 }
 
 async function waitForServer(getOutput) {
@@ -116,8 +135,7 @@ async function startGuidedFlow(page) {
   await page.getByRole("heading", { name: "What do you need help with?" }).waitFor();
 }
 
-async function runFastRecommendationFlow(viewport, sample, verifyActions = false) {
-  const browser = await chromium.launch({ headless: true });
+async function runFastRecommendationFlow(browser, viewport, sample, verifyActions = false) {
   const context = await browser.newContext({
     viewport,
     permissions: ["clipboard-read", "clipboard-write"]
@@ -126,6 +144,7 @@ async function runFastRecommendationFlow(viewport, sample, verifyActions = false
   page.setDefaultTimeout(20_000);
 
   try {
+    console.log(`START ${sample.label} ${viewport.width}x${viewport.height}`);
     await startGuidedFlow(page);
     await clickContinue(page, "Start");
 
@@ -199,19 +218,19 @@ async function runFastRecommendationFlow(viewport, sample, verifyActions = false
         throw new Error("print/export button did not call window.print");
       }
     }
+    console.log(`PASS ${sample.label} ${viewport.width}x${viewport.height}`);
   } finally {
     await context.close().catch(() => undefined);
-    await browser.close().catch(() => undefined);
   }
 }
 
-async function runKnownCareerFlow(viewport) {
-  const browser = await chromium.launch({ headless: true });
+async function runKnownCareerFlow(browser, viewport) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   page.setDefaultTimeout(20_000);
 
   try {
+    console.log(`START known-career ${viewport.width}x${viewport.height}`);
     await startGuidedFlow(page);
     await clickContinue(page, "Start");
 
@@ -221,13 +240,14 @@ async function runKnownCareerFlow(viewport) {
     await assertValue(targetInput, "Help Desk Technician", "known career selection");
     await page.getByText("IT Support").first().waitFor();
     await assertNoHorizontalOverflow(page, "known career selected");
+    console.log(`PASS known-career ${viewport.width}x${viewport.height}`);
   } finally {
     await context.close().catch(() => undefined);
-    await browser.close().catch(() => undefined);
   }
 }
 
 const server = startServer();
+let browser;
 
 try {
   await Promise.race([
@@ -237,13 +257,15 @@ try {
     waitForServer(server.getOutput)
   ]);
 
-  await runKnownCareerFlow({ width: 1280, height: 900 });
-  await runKnownCareerFlow({ width: 390, height: 844 });
+  browser = await chromium.launch({ headless: true });
+  await runKnownCareerFlow(browser, { width: 1280, height: 900 });
+  await runKnownCareerFlow(browser, { width: 390, height: 844 });
   for (const [index, sample] of sampleUsers.entries()) {
-    await runFastRecommendationFlow({ width: 1280, height: 900 }, sample, index === 0);
-    await runFastRecommendationFlow({ width: 390, height: 844 }, sample, index === 0);
+    await runFastRecommendationFlow(browser, { width: 1280, height: 900 }, sample, index === 0);
+    await runFastRecommendationFlow(browser, { width: 390, height: 844 }, sample, index === 0);
   }
   console.log("Career Forge usability regression passed on desktop and mobile.");
 } finally {
-  server.child.kill("SIGTERM");
+  await browser?.close().catch(() => undefined);
+  await stopServer(server.child);
 }
