@@ -72,8 +72,10 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       if (!containsTerminationReason(sentence)) return sentence;
 
       // First: if the sentence already has comma/semicolon/dash-separated
-      // clauses, drop only the ones that carry the reason.
-      const punctuationClauses = sentence.split(/,|;|\s+—\s+|\s+-\s+/);
+      // clauses, drop only the ones that carry the reason. A comma between
+      // digits is a thousands separator ("4,000 tickets"), never a clause
+      // boundary — splitting there once mangled a summary to "Resolved 4".
+      const punctuationClauses = sentence.split(/(?<!\d),|,(?!\d)|;|\s+—\s+|\s+-\s+/);
       if (punctuationClauses.length > 1) {
         const kept = punctuationClauses.filter((clause) => !containsTerminationReason(clause));
         if (kept.length > 0) return finishClause(kept.join(", "));

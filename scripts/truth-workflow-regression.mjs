@@ -324,6 +324,8 @@ const restructuredCase = stripTerminationReasons("Grew regional sales 20% year o
 check("separation-reason sanitizer catches 'division was restructured' with an intervening adverb", restructuredCase.text === "Grew regional sales 20% year over year" && restructuredCase.withheld === true, JSON.stringify(restructuredCase));
 const legitRestructureBullet = stripTerminationReasons("Restructured the onboarding process to cut ramp time from six weeks to two");
 check("separation-reason sanitizer does not flag a legitimate 'restructured the process' achievement bullet", legitRestructureBullet.text === "Restructured the onboarding process to cut ramp time from six weeks to two" && legitRestructureBullet.withheld === false, JSON.stringify(legitRestructureBullet));
+const thousandsSeparatorCase = stripTerminationReasons("Resolved 4,000 support tickets across four years until the department reorganized in 2025");
+check("separation-reason sanitizer never treats a thousands-separator comma as a clause boundary", thousandsSeparatorCase.text === "Resolved 4,000 support tickets across four years" && thousandsSeparatorCase.withheld === true, JSON.stringify(thousandsSeparatorCase));
 const legitReorgBullet = stripTerminationReasons("Reorganized the file taxonomy to speed up asset retrieval by 30%");
 check("separation-reason sanitizer does not flag a legitimate 'reorganized the taxonomy' achievement bullet", legitReorgBullet.text === "Reorganized the file taxonomy to speed up asset retrieval by 30%" && legitReorgBullet.withheld === false, JSON.stringify(legitReorgBullet));
 check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);

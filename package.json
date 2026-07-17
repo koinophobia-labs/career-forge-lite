@@ -12,6 +12,7 @@
     "test:browser": "node scripts/input-stability-regression.mjs",
     "test:dossier": "node scripts/dossier-pack-regression.mjs",
     "test:usability": "node scripts/usability-hotfix-regression.mjs",
+    "test:render": "node scripts/rendered-export-stress.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke:generator": "node scripts/smoke-generator.mjs",
