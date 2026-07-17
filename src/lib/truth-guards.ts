@@ -43,6 +43,20 @@ export function containsTerminationReason(text: string): boolean {
   return terminationPatterns.some((pattern) => pattern.test(text));
 }
 
+const trailingConjunction = /\s+(until|after|when|because|since|though|although)\s*[.!?]?\s*$/i;
+
+// A trailing conjunction with its clause removed reads broken ("I managed
+// vendor contracts worth $2M annually until"); trim it along with any
+// leftover clause punctuation.
+function finishClause(value: string): string {
+  return value
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(trailingConjunction, "")
+    .replace(/[,;]\s*$/, "")
+    .trim();
+}
+
 // Removes termination-reason clauses from a sentence while keeping the rest
 // usable. Returns the cleaned text and whether anything was withheld.
 export function stripTerminationReasons(text: string): { text: string; withheld: boolean } {
@@ -52,13 +66,31 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => {
       if (!containsTerminationReason(sentence)) return sentence;
-      // Try dropping just the offending clause (comma- or "until"-separated).
-      const clauses = sentence.split(/,|;|\s+—\s+|\s+-\s+/);
-      const kept = clauses.filter((clause) => !containsTerminationReason(clause));
-      if (kept.length === 0) return "";
-      const rejoined = kept.join(", ").replace(/\s{2,}/g, " ").trim();
-      // A trailing "until" with its clause removed reads broken; trim it.
-      return rejoined.replace(/\s+(until|after|when|because)\s*[.!?]?\s*$/i, "").trim();
+
+      // First: if the sentence already has comma/semicolon/dash-separated
+      // clauses, drop only the ones that carry the reason.
+      const punctuationClauses = sentence.split(/,|;|\s+—\s+|\s+-\s+/);
+      if (punctuationClauses.length > 1) {
+        const kept = punctuationClauses.filter((clause) => !containsTerminationReason(clause));
+        if (kept.length > 0) return finishClause(kept.join(", "));
+      }
+
+      // Second: no punctuation isolated the reason (e.g. "I managed vendor
+      // contracts worth $2M annually until I was laid off in June 2026" is
+      // one clause with no comma) — a temporal/causal conjunction almost
+      // always introduces the reason as a trailing dependent clause, so
+      // split there instead of discarding safe content along with it.
+      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(?:until|because|since|when|after|though|although)\b\s+(.*)$/i);
+      if (conjunctionMatch) {
+        const [, before, after] = conjunctionMatch;
+        const beforeUnsafe = containsTerminationReason(before);
+        const afterUnsafe = containsTerminationReason(after);
+        if (!beforeUnsafe && afterUnsafe && before.trim()) return finishClause(before);
+        if (!afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
+      }
+
+      // Nothing in the sentence is independently safe from the reason.
+      return "";
     })
     .filter(Boolean);
 

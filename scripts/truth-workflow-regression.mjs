@@ -26,6 +26,7 @@ const { generateResumePack, updatePackVariant } = loadTsModule(path.join(root, "
 const { analyzeJobPost } = loadTsModule(path.join(root, "src/lib/job-post-analyzer.ts"));
 const { draftApplicationQuestion } = loadTsModule(path.join(root, "src/lib/application-questions.ts"));
 const { parseState, emptyProfile } = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
+const { stripTerminationReasons } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -296,6 +297,17 @@ check("imported roles render with real bullets", Boolean(auditRoleEntry) && audi
 const allDocText = [auditAts.resume.summary, ...auditAts.resume.coreSkills, ...auditAts.resume.experience.flatMap((entry) => [entry.title, ...entry.bullets]), auditAts.resume.education, auditAts.resume.linkedinHeadline, auditAts.resume.linkedinSummary, ...auditPack.masterProofBank, ...auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)].join("\n");
 check("termination reasons never ship in documents", !/laid off|terminated|fired/i.test(allDocText), allDocText);
 check("withheld termination reason is reported on the receipt", auditPack.receipt.unsupportedClaimsRefused.some((item) => /reason for leaving/i.test(item)));
+
+// Separation-reason sanitizer: strip only the unsafe clause, keep the safe
+// remainder from the same sentence when the reason has no comma to split on.
+const noSeparatorCase = stripTerminationReasons("I managed vendor contracts worth $2M annually until I was laid off in June 2026");
+check("separation-reason sanitizer preserves the safe remainder with no comma to split on", noSeparatorCase.text === "I managed vendor contracts worth $2M annually" && noSeparatorCase.withheld === true, JSON.stringify(noSeparatorCase));
+const commaCase = stripTerminationReasons("Managed vendor contracts, until I was laid off in June 2026.");
+check("separation-reason sanitizer still handles comma-separated clauses", commaCase.text === "Managed vendor contracts" && commaCase.withheld === true, JSON.stringify(commaCase));
+const pureReasonCase = stripTerminationReasons("I was laid off in June 2026.");
+check("separation-reason sanitizer drops a sentence with no safe remainder at all", pureReasonCase.text === "" && pureReasonCase.withheld === true, JSON.stringify(pureReasonCase));
+const safeCase = stripTerminationReasons("Reduced onboarding time from 3 weeks to 9 days");
+check("separation-reason sanitizer leaves safe sentences untouched", safeCase.text === "Reduced onboarding time from 3 weeks to 9 days" && safeCase.withheld === false, JSON.stringify(safeCase));
 check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);
 check("tool lists atomize into individual skills", auditAts.resume.coreSkills.includes("Workday") && auditAts.resume.coreSkills.includes("Kronos"), JSON.stringify(auditAts.resume.coreSkills));
 check("skill fragments never ship", auditAts.resume.coreSkills.every((skill) => !/^and\s|^some\s|from a class/i.test(skill)), JSON.stringify(auditAts.resume.coreSkills));

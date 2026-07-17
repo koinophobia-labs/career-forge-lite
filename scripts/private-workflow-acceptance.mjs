@@ -3,11 +3,15 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { ensurePrivateFixture } from "./lib/generate-private-fixture.mjs";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fixturePath = path.join(root, "fixtures/private/blake-redacted-resume-pack.json");
-if (!fs.existsSync(fixturePath)) throw new Error("Private redacted acceptance fixture is missing.");
+// fixtures/private/ is gitignored on purpose (never commit real personal
+// data) — a fresh checkout has no fixture file on disk, so this suite
+// deterministically generates one instead of failing with "fixture missing".
+// See scripts/lib/generate-private-fixture.mjs for the exact synthetic content.
+const fixturePath = ensurePrivateFixture(root);
 const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 if (/@gmail\.|@yahoo\.|\+?1?\s*\(?\d{3}\)?[-\s]\d{3}/i.test(JSON.stringify(fixture))) throw new Error("Fixture appears to contain unredacted personal contact data.");
 
