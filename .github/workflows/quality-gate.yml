@@ -30,8 +30,12 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run regression suite
-        run: npm test
+      - name: Run deterministic regression suite
+        run: npm run test:unit
+
+      - name: Run desktop and mobile browser regression
+        shell: bash
+        run: timeout 12m npm run test:browser
 
       - name: Run redacted private acceptance fixture
         run: npm run acceptance:private
