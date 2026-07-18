@@ -17,6 +17,7 @@ const stations: Array<[string, string]> = [
   ["Guided Setup", "/resume-builder"],
   ["Interview Prep", "/interview"],
   ["Weekly", "/weekly"],
+  ["Founding Cohort", "/founding-beta"],
   ["Pricing", "/pricing"],
   ["Data", "/settings"]
 ];
@@ -81,6 +82,12 @@ export function CommandNav({ active }: CommandNavProps) {
           >
             A Koinophobia Labs system ↗
           </a>
+          <Link
+            href="/founding-beta"
+            className="lab-mono hidden rounded-full border border-gold/45 bg-gold/10 px-3 py-2 text-[0.62rem] font-black uppercase tracking-[0.12em] text-gold transition hover:border-cyan hover:text-cyan sm:inline-flex"
+          >
+            5 founding seats · $49
+          </Link>
           <SaveStatusPill />
         </div>
 
@@ -100,7 +107,9 @@ export function CommandNav({ active }: CommandNavProps) {
               className={`flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-2 transition ${
                 active === href
                   ? "border-gold/50 bg-gold/10 text-gold"
-                  : "border-transparent hover:border-cyan/35 hover:bg-white/5 hover:text-cyan"
+                  : href === "/founding-beta"
+                    ? "border-gold/35 bg-gold/5 text-gold hover:border-cyan hover:text-cyan"
+                    : "border-transparent hover:border-cyan/35 hover:bg-white/5 hover:text-cyan"
               }`}
             >
               {label}
