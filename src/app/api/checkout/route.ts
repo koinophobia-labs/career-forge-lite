@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
+import { getFoundingPaymentLink } from "@/lib/server/founding-payment-link";
 import { createCheckoutSession, getStripeSecretKey } from "@/lib/server/stripe";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
@@ -35,6 +36,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   const paidBetaTier = configuredTier === "job-search" || configuredTier === "career-switch" ? configuredTier : "reset";
   if (process.env.NEXT_PUBLIC_COMMERCE_MODE === "live" && tier !== paidBetaTier) {
     return NextResponse.json({ error: "That package is not open in the founding paid beta yet." }, { status: 403 });
+  }
+
+  // The founding cohort uses a Stripe Payment Link capped at five completed
+  // sessions. Returning it from the normal checkout endpoint keeps every client
+  // surface on the same path while Stripe enforces the cohort capacity.
+  const foundingPaymentLink = process.env.NEXT_PUBLIC_COMMERCE_MODE === "live"
+    ? getFoundingPaymentLink()
+    : null;
+  if (foundingPaymentLink && tier === paidBetaTier) {
+    return NextResponse.json({ url: foundingPaymentLink });
   }
 
   const result = await createCheckoutSession(tier, requestOrigin(request), secretKey);
