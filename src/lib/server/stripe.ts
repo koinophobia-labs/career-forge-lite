@@ -13,6 +13,30 @@ export function getStripeSecretKey(): string | null {
   return configured && configured.trim() ? configured.trim() : null;
 }
 
+export function isStripePaymentLinkUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "buy.stripe.com" &&
+      url.port === "" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      /^\/[A-Za-z0-9]+$/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getLiveResetPaymentLinkUrl(): string | null {
+  const configured = process.env.STRIPE_LIVE_RESET_PAYMENT_LINK;
+  return isStripePaymentLinkUrl(configured) ? configured.trim() : null;
+}
+
 export type CheckoutSession = {
   id: string;
   url: string | null;

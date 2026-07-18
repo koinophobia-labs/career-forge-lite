@@ -35,7 +35,8 @@ Optional: Stripe webhook checkout.session.completed ──▶ /api/stripe-webhoo
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `STRIPE_SECRET_KEY` | server (secret) | `sk_test_…` or `sk_live_…`. Absent → checkout/license APIs return 503 and the UI never shows buy buttons (commerce mode should also be off). |
+| `STRIPE_SECRET_KEY` | server (secret) | `sk_test_…` or `sk_live_…`. Required by test checkout and all license fulfillment; absent → those paths return 503. Production checkout itself returns the separately configured capped Payment Link. |
+| `STRIPE_LIVE_RESET_PAYMENT_LINK` | server | Production-only `https://buy.stripe.com/...` URL for the capped Career Reset founding cohort. The live checkout route rejects every other host and any query/fragment. |
 | `STRIPE_WEBHOOK_SECRET` | server (secret) | `whsec_…` — only needed if the email-backup webhook is configured. |
 | `LICENSE_SIGNING_PRIVATE_KEY` | server (secret) | base64 PKCS8 ECDSA P-256 key. Generate with `node scripts/generate-license-keys.mjs`. |
 | `NEXT_PUBLIC_LICENSE_PUBLIC_KEY` | build-time (public) | Matching base64 SPKI public key — ships in the client bundle. |
@@ -54,7 +55,7 @@ keypairs, or test-mode purchases would unlock production.
 2. Set `STRIPE_SECRET_KEY` to your **test** key (`sk_test_…`).
 3. Set `NEXT_PUBLIC_COMMERCE_MODE=test`, `NEXT_PUBLIC_APP_URL` to the preview URL.
 4. Deploy. On `/pricing` you should see the "Test mode" banner.
-5. Buy each tier with card `4242 4242 4242 4242` (any future date/CVC):
+5. Buy the open `reset` tier with card `4242 4242 4242 4242` (any future date/CVC):
    - Confirm `/unlock` shows and auto-activates the key.
    - Confirm gated surfaces unlock (exports on Résumé Pack, tailor build
      button, outreach templates, interview limit removed).
@@ -64,6 +65,39 @@ keypairs, or test-mode purchases would unlock production.
 7. (Optional) Add a webhook endpoint in Stripe → `https://<host>/api/stripe-webhook`,
    event `checkout.session.completed`; set `STRIPE_WEBHOOK_SECRET` + Resend vars;
    confirm the key email arrives.
+
+## Safe launch command
+
+The repository launch command validates the linked Vercel project, keeps
+credentials out of arguments and logs, preserves or generates an ECDSA P-256
+signing pair, rejects reuse of the other environment's public key, configures
+the selected Vercel environment through stdin, deploys, and probes the public
+checkout/license boundary.
+
+Run the credential-free plan first:
+
+```bash
+npm run commerce:launch -- --dry-run --target preview --app-url https://<preview-host>
+npm run commerce:launch -- --dry-run --target production --app-url https://career-forge-lite.vercel.app
+```
+
+Then provide the mode-specific Stripe key only in the local process
+environment and run the same command without `--dry-run`:
+
+```bash
+STRIPE_TEST_SECRET_KEY=... npm run commerce:launch -- --target preview --app-url https://<preview-host> --signing-key-file /absolute/restricted/test-license.json
+STRIPE_LIVE_SECRET_KEY=... npm run commerce:launch -- --target production --app-url https://career-forge-lite.vercel.app --signing-key-file /absolute/restricted/live-license.json
+```
+
+Never paste either command with its populated value into chat, an issue, or a
+shell transcript. The two signing-key files must be different, outside the
+repository, and mode `0600`; retain them only through launch verification and
+delete them afterward. Production additionally refuses to proceed until Stripe
+reports live charges and payouts enabled and exposes a statement descriptor
+and business support email. It creates or reuses one `$49` `reset` Payment
+Link with `tier=reset`, the `/unlock?session_id={CHECKOUT_SESSION_ID}` redirect,
+and a five-completed-session restriction. Promotion codes are disabled so the
+founding price remains exactly `$49`.
 
 ## Go-live checklist
 
@@ -76,6 +110,8 @@ keypairs, or test-mode purchases would unlock production.
 - [ ] Fresh **production** license keypair generated and set (never the test pair).
 - [ ] `STRIPE_SECRET_KEY` = `sk_live_…`, `NEXT_PUBLIC_COMMERCE_MODE=live`,
       `NEXT_PUBLIC_APP_URL` = production URL.
+- [ ] `STRIPE_LIVE_RESET_PAYMENT_LINK` is the launch-command-managed `$49`
+      Career Reset link with a five-completed-session limit.
 - [ ] Stripe account activated for live payments (business details, bank payout).
 - [ ] One real live-mode purchase + refund executed as a smoke test.
 - [ ] Statement descriptor set in Stripe (what buyers see on their card).
