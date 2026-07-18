@@ -29,7 +29,15 @@ jobs:
           p = Path("scripts/apply-commercial-readiness-fixes.mjs")
           s = p.read_text()
           old = '  const inquiry = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=${encodeURIComponent("Hi Blake — I\'m interested in the Career Forge Résumé Rebuild.\\n\\nName:\\nCurrent role or background:\\nTarget roles:\\nWhat is not working in my current résumé:\\n")}`;'
-          new = '  const inquiry = \\`mailto:koinophobia999@gmail.com?subject=\\${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=\\${encodeURIComponent("Hi Blake — I\'m interested in the Career Forge Résumé Rebuild.\\\\n\\\\nName:\\nCurrent role or background:\\nTarget roles:\\nWhat is not working in my current résumé:\\n")}\\`;'
+          new = r'''  const inquiryBody = [
+            "Hi Blake — I'm interested in the Career Forge Résumé Rebuild.",
+            "",
+            "Name:",
+            "Current role or background:",
+            "Target roles:",
+            "What is not working in my current résumé:"
+          ].join(String.fromCharCode(10));
+          const inquiry = \`mailto:koinophobia999@gmail.com?subject=\${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=\${encodeURIComponent(inquiryBody)}\`;'''
           if old not in s:
               raise SystemExit("mailto template not found")
           s = s.replace(old, new)
