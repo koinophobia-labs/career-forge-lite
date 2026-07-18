@@ -5,52 +5,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 35
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_COMMERCE_MODE: "off"
     steps:
-      - name: Check out paid-beta branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: feature/paid-beta-surge
-          fetch-depth: 0
-
-      - name: Repair and apply Codex commercial-readiness patch
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path("scripts/apply-commercial-readiness-fixes.mjs")
-          s = p.read_text()
-          old = '  const inquiry = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=${encodeURIComponent("Hi Blake — I\'m interested in the Career Forge Résumé Rebuild.\\n\\nName:\\nCurrent role or background:\\nTarget roles:\\nWhat is not working in my current résumé:\\n")}`;'
-          new = r'''  const inquiryBody = [
-            "Hi Blake — I'm interested in the Career Forge Résumé Rebuild.",
-            "",
-            "Name:",
-            "Current role or background:",
-            "Target roles:",
-            "What is not working in my current résumé:"
-          ].join(String.fromCharCode(10));
-          const inquiry = \`mailto:koinophobia999@gmail.com?subject=\${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=\${encodeURIComponent(inquiryBody)}\`;'''
-          if old not in s:
-              raise SystemExit("mailto template not found")
-          s = s.replace(old, new)
-          s = s.replace('counts and timestamps only (`career-forge-pilot-summary-v1`)', 'counts and timestamps only (career-forge-pilot-summary-v1)')
-          s = s.replace('use `node scripts/build-recruiter-packet.mjs` to randomize:', 'use node scripts/build-recruiter-packet.mjs to randomize:')
-          s = s.replace('(\\d+) context-only imported item\\(s\\)', '(\\\\d+) context-only imported item\\\\(s\\\\)')
-          block = '''replaceOnce(\n  "src/components/InterviewPrep.tsx",\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`,\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`\n);\n\n'''
-          if block not in s:
-              raise SystemExit("bogus no-op block not found")
-          p.write_text(s.replace(block, ""))
-          PY
-          node --check scripts/apply-commercial-readiness-fixes.mjs
-          node scripts/apply-commercial-readiness-fixes.mjs
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -82,6 +48,16 @@ jobs:
         shell: bash
         run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
 
+      - name: Preserve journey and recovery results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-and-recovery-results
+          path: |
+            journey-output.log
+            recovery-output.log
+          if-no-files-found: warn
+
       - name: Lint
         run: npm run lint
 
@@ -90,16 +66,3 @@ jobs:
 
       - name: Production build
         run: npm run build
-
-      - name: Publish tested repaired source to PR branch
-        shell: bash
-        run: |
-          git checkout -- scripts/apply-commercial-readiness-fixes.mjs
-          git checkout -- .github/workflows/quality-gate.yml
-          git checkout -- .github/workflows/apply-commercial-readiness-fixes.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --stat
-          git commit -m "Fix paid beta release blockers"
-          git push origin HEAD:feature/paid-beta-surge
