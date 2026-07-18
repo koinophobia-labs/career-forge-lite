@@ -94,78 +94,9 @@ jobs:
       - name: Publish tested repaired source to PR branch
         shell: bash
         run: |
-          rm -f scripts/apply-commercial-readiness-fixes.mjs
-          rm -f .github/workflows/apply-commercial-readiness-fixes.yml
-          cat > .github/workflows/quality-gate.yml <<'YAML'
-          name: Product quality gate
-
-          on:
-            pull_request:
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            verify:
-              runs-on: ubuntu-24.04
-              timeout-minutes: 35
-              env:
-                NEXT_TELEMETRY_DISABLED: "1"
-                NEXT_PUBLIC_COMMERCE_MODE: "off"
-              steps:
-                - name: Check out repository
-                  uses: actions/checkout@v4
-
-                - name: Set up Node
-                  uses: actions/setup-node@v4
-                  with:
-                    node-version: "24"
-                    cache: npm
-
-                - name: Install dependencies
-                  run: npm ci
-
-                - name: Install Chromium
-                  run: npx playwright install --with-deps chromium
-
-                - name: Run deterministic regression suite
-                  run: npm run test:unit
-
-                - name: Run desktop and mobile browser regression
-                  shell: bash
-                  run: timeout 12m npm run test:browser
-
-                - name: Run redacted private acceptance fixture
-                  run: npm run acceptance:private
-
-                - name: Run full first-time-user journey (test-mode commerce)
-                  shell: bash
-                  run: timeout 8m npm run acceptance:journey | tee journey-output.log
-
-                - name: Run backup and recovery proof
-                  shell: bash
-                  run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
-
-                - name: Preserve journey and recovery results
-                  if: always()
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: journey-and-recovery-results
-                    path: |
-                      journey-output.log
-                      recovery-output.log
-                    if-no-files-found: warn
-
-                - name: Lint
-                  run: npm run lint
-
-                - name: Typecheck
-                  run: npm run typecheck
-
-                - name: Production build
-                  run: npm run build
-          YAML
+          git checkout -- scripts/apply-commercial-readiness-fixes.mjs
+          git checkout -- .github/workflows/quality-gate.yml
+          git checkout -- .github/workflows/apply-commercial-readiness-fixes.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
