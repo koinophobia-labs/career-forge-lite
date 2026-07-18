@@ -39,7 +39,7 @@ export default function FoundingBetaPage() {
 
   return (
     <main>
-      <CommandNav active="/pricing" />
+      <CommandNav active="/founding-beta" />
 
       <section className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="trust-panel overflow-hidden">
