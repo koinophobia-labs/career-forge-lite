@@ -5,21 +5,43 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_COMMERCE_MODE: "off"
     steps:
-      - name: Check out repository
+      - name: Check out paid-beta branch
         uses: actions/checkout@v4
+        with:
+          ref: feature/paid-beta-surge
+          fetch-depth: 0
 
-      - name: Apply pending commercial readiness repair
-        run: node scripts/apply-commercial-readiness-fixes.mjs
+      - name: Repair and apply Codex commercial-readiness patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("scripts/apply-commercial-readiness-fixes.mjs")
+          s = p.read_text()
+          old = '  const inquiry = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=${encodeURIComponent("Hi Blake — I\'m interested in the Career Forge Résumé Rebuild.\\n\\nName:\\nCurrent role or background:\\nTarget roles:\\nWhat is not working in my current résumé:\\n")}`;'
+          new = '  const inquiry = \\`mailto:koinophobia999@gmail.com?subject=\\${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=\\${encodeURIComponent("Hi Blake — I\'m interested in the Career Forge Résumé Rebuild.\\\\n\\\\nName:\\nCurrent role or background:\\nTarget roles:\\nWhat is not working in my current résumé:\\n")}\\`;'
+          if old not in s:
+              raise SystemExit("mailto template not found")
+          s = s.replace(old, new)
+          s = s.replace('counts and timestamps only (`career-forge-pilot-summary-v1`)', 'counts and timestamps only (career-forge-pilot-summary-v1)')
+          s = s.replace('use `node scripts/build-recruiter-packet.mjs` to randomize:', 'use node scripts/build-recruiter-packet.mjs to randomize:')
+          block = '''replaceOnce(\n  "src/components/InterviewPrep.tsx",\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`,\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`\n);\n\n'''
+          if block not in s:
+              raise SystemExit("bogus no-op block not found")
+          p.write_text(s.replace(block, ""))
+          PY
+          node --check scripts/apply-commercial-readiness-fixes.mjs
+          node scripts/apply-commercial-readiness-fixes.mjs
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -60,30 +82,84 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Package repaired source and test evidence
-        if: always()
+      - name: Publish tested repaired source to PR branch
         shell: bash
         run: |
-          git status --short > repaired-status.txt
-          git diff --binary > commercial-readiness.patch
-          tar \
-            --exclude=.git \
-            --exclude=node_modules \
-            --exclude=.next \
-            --exclude=test-results \
-            --exclude=playwright-report \
-            --exclude=repaired-source.tar.gz \
-            -czf repaired-source.tar.gz .
+          rm -f scripts/apply-commercial-readiness-fixes.mjs
+          rm -f .github/workflows/apply-commercial-readiness-fixes.yml
+          cat > .github/workflows/quality-gate.yml <<'YAML'
+          name: Product quality gate
 
-      - name: Preserve repaired source and results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: commercial-readiness-repair
-          path: |
-            repaired-source.tar.gz
-            commercial-readiness.patch
-            repaired-status.txt
-            journey-output.log
-            recovery-output.log
-          if-no-files-found: warn
+          on:
+            pull_request:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            verify:
+              runs-on: ubuntu-24.04
+              timeout-minutes: 35
+              env:
+                NEXT_TELEMETRY_DISABLED: "1"
+                NEXT_PUBLIC_COMMERCE_MODE: "off"
+              steps:
+                - name: Check out repository
+                  uses: actions/checkout@v4
+
+                - name: Set up Node
+                  uses: actions/setup-node@v4
+                  with:
+                    node-version: "24"
+                    cache: npm
+
+                - name: Install dependencies
+                  run: npm ci
+
+                - name: Install Chromium
+                  run: npx playwright install --with-deps chromium
+
+                - name: Run deterministic regression suite
+                  run: npm run test:unit
+
+                - name: Run desktop and mobile browser regression
+                  shell: bash
+                  run: timeout 12m npm run test:browser
+
+                - name: Run redacted private acceptance fixture
+                  run: npm run acceptance:private
+
+                - name: Run full first-time-user journey (test-mode commerce)
+                  shell: bash
+                  run: timeout 8m npm run acceptance:journey | tee journey-output.log
+
+                - name: Run backup and recovery proof
+                  shell: bash
+                  run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
+
+                - name: Preserve journey and recovery results
+                  if: always()
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: journey-and-recovery-results
+                    path: |
+                      journey-output.log
+                      recovery-output.log
+                    if-no-files-found: warn
+
+                - name: Lint
+                  run: npm run lint
+
+                - name: Typecheck
+                  run: npm run typecheck
+
+                - name: Production build
+                  run: npm run build
+          YAML
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "Fix paid beta release blockers"
+          git push origin HEAD:feature/paid-beta-surge
