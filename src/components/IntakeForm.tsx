@@ -8,6 +8,7 @@ import {
   type CareerTarget,
   outcomeSuggestionsByFamily,
   roleFamilies,
+  roleIntelligence,
   templates,
   allToolOptions,
   toolSuggestionsByFamily
@@ -87,7 +88,15 @@ type RoleSlotConfig = {
 };
 
 const requiredKeys: Array<keyof IntakeData> = ["targetJobTitle", "currentTitle"];
-const defaultQuestionIds: Question["id"][] = ["quick_start", "target", "current_role", "review"];
+const defaultQuestionIds: Question["id"][] = [
+  "quick_start",
+  "target",
+  "current_role",
+  "responsibilities",
+  "tools",
+  "outcomes",
+  "review"
+];
 const optionalQuestionIds = new Set<Question["id"]>([
   "name",
   "email",
@@ -95,10 +104,7 @@ const optionalQuestionIds = new Set<Question["id"]>([
   "current_company",
   "previous_role",
   "additional_role",
-  "tools",
-  "responsibilities",
   "scope",
-  "outcomes",
   "education",
   "template"
 ]);
@@ -166,8 +172,8 @@ const questions: Question[] = [
   },
   {
     id: "responsibilities",
-    title: "Add more details",
-    helper: "Optional.",
+    title: "Which skills and responsibilities match your work?",
+    helper: "Pick what is true. Add your own only if needed.",
     validate: []
   },
   {
@@ -178,8 +184,8 @@ const questions: Question[] = [
   },
   {
     id: "outcomes",
-    title: "Add results",
-    helper: "Optional.",
+    title: "What did your work improve?",
+    helper: "Pick any result that is true. Skip anything you cannot defend.",
     validate: []
   },
   {
@@ -543,6 +549,9 @@ export function IntakeForm({
     ...aiWorkflowOptions.filter((workflow) => !aiWorkflowSuggestionsByFamily[data.roleFamily].includes(workflow))
   ].slice(0, 6);
   const roleAwareToolOptions = toolSuggestionsByFamily[data.roleFamily];
+  const roleQuickResponsibilities = roleIntelligence[data.roleFamily].responsibilities;
+  const roleQuickSkills = roleIntelligence[data.roleFamily].skills;
+  const visibleToolChips = Array.from(new Set([...roleAwareToolOptions.slice(0, 6), ...commonToolChips])).slice(0, 10);
   const toolMatches = filterOptions(toolSearch.trim() ? allToolOptions : roleAwareToolOptions, toolSearch, 6);
   const normalizedTargetQuery = data.targetJobTitle.trim().toLowerCase();
   const exactTargetMatch = careerTargets.find((target) => target.title.toLowerCase() === normalizedTargetQuery);
@@ -668,7 +677,10 @@ export function IntakeForm({
   function getContinueLabel() {
     if (question.id === "quick_start") return "Start";
     if (question.id === "target") return "Next";
-    if (question.id === "current_role") return "See recommendations";
+    if (question.id === "current_role") return "Next: skills";
+    if (question.id === "responsibilities") return "Next: tools";
+    if (question.id === "tools") return "Next: results";
+    if (question.id === "outcomes") return "Review choices";
     if (question.id === "review") return "Generate draft";
     if (isOptionalQuestion) return "Save and review";
     return "Next";
@@ -788,6 +800,13 @@ export function IntakeForm({
       ? data.selectedResponsibilities.filter((value) => value !== item)
       : [...data.selectedResponsibilities, item];
     update("selectedResponsibilities", selected);
+  }
+
+  function toggleTransferableSkill(item: string) {
+    const selected = data.customRoleTransferableSkills.includes(item)
+      ? data.customRoleTransferableSkills.filter((value) => value !== item)
+      : [...data.customRoleTransferableSkills, item];
+    update("customRoleTransferableSkills", selected);
   }
 
   function toggleAdaptiveTool(item: string) {
@@ -1370,7 +1389,7 @@ export function IntakeForm({
         return (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {commonToolChips.map((tool) => {
+              {visibleToolChips.map((tool) => {
                 const selected = selectedTools.some((item) => item.toLowerCase() === tool.toLowerCase());
                 return (
                   <button
@@ -1496,8 +1515,50 @@ export function IntakeForm({
       case "responsibilities":
         return (
           <div className="space-y-4">
+            <div className="rounded-md border border-cyan/20 bg-white p-3">
+              <p className="text-sm font-bold text-ink">Pick responsibilities that are true</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {roleQuickResponsibilities.map((item) => {
+                  const selected = data.selectedResponsibilities.includes(item);
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => toggleResponsibility(item)}
+                      className={selected
+                        ? "rounded-full border border-gold bg-gold/25 px-3 py-2 text-sm font-semibold text-ink"
+                        : "rounded-full border border-ink/10 bg-paper px-3 py-2 text-sm font-semibold text-ink/80 transition hover:border-spruce"}
+                    >
+                      {item}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-gold/20 bg-paper p-3">
+              <p className="text-sm font-bold text-ink">Pick skills you actually used</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {roleQuickSkills.map((item) => {
+                  const selected = data.customRoleTransferableSkills.includes(item);
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => toggleTransferableSkill(item)}
+                      className={selected
+                        ? "rounded-full border border-gold bg-gold/25 px-3 py-2 text-sm font-semibold text-ink"
+                        : "rounded-full border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink/80 transition hover:border-spruce"}
+                    >
+                      {item}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <label className="block">
-              <span className="sr-only">What else should Career Forge know?</span>
+              <span className="mb-2 block text-sm font-bold text-ink">Add anything missing (optional)</span>
               <textarea
                 value={data.responsibilities}
                 onChange={(event) => updateExperienceStory(event.target.value)}
@@ -1597,9 +1658,9 @@ export function IntakeForm({
                 That&apos;s fine — the draft will skip results claims instead of turning this into one.
               </p>
             )}
-            {data.outcomes.trim().length >= 4 && (
+            {visibleOutcomes.length > 0 && (
               <div className="rounded-md bg-white p-3">
-                <p className="text-sm font-bold text-ink">Possible outcome labels</p>
+                <p className="text-sm font-bold text-ink">Pick any results that are true</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {visibleOutcomes.slice(0, 6).map((item) => (
                     <button
