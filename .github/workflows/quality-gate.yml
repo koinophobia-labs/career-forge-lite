@@ -18,6 +18,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Apply pending commercial readiness repair
+        run: node scripts/apply-commercial-readiness-fixes.mjs
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -48,16 +51,6 @@ jobs:
         shell: bash
         run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
 
-      - name: Preserve journey and recovery results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: journey-and-recovery-results
-          path: |
-            journey-output.log
-            recovery-output.log
-          if-no-files-found: warn
-
       - name: Lint
         run: npm run lint
 
@@ -66,3 +59,31 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Package repaired source and test evidence
+        if: always()
+        shell: bash
+        run: |
+          git status --short > repaired-status.txt
+          git diff --binary > commercial-readiness.patch
+          tar \
+            --exclude=.git \
+            --exclude=node_modules \
+            --exclude=.next \
+            --exclude=test-results \
+            --exclude=playwright-report \
+            --exclude=repaired-source.tar.gz \
+            -czf repaired-source.tar.gz .
+
+      - name: Preserve repaired source and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-readiness-repair
+          path: |
+            repaired-source.tar.gz
+            commercial-readiness.patch
+            repaired-status.txt
+            journey-output.log
+            recovery-output.log
+          if-no-files-found: warn
