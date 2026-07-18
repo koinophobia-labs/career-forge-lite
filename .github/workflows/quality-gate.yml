@@ -35,6 +35,7 @@ jobs:
           s = s.replace(old, new)
           s = s.replace('counts and timestamps only (`career-forge-pilot-summary-v1`)', 'counts and timestamps only (career-forge-pilot-summary-v1)')
           s = s.replace('use `node scripts/build-recruiter-packet.mjs` to randomize:', 'use node scripts/build-recruiter-packet.mjs to randomize:')
+          s = s.replace('(\\d+) context-only imported item\\(s\\)', '(\\\\d+) context-only imported item\\\\(s\\\\)')
           block = '''replaceOnce(\n  "src/components/InterviewPrep.tsx",\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`,\n  `{pendingTier === tier ? "Opening secure checkout…" : \\`Get the \\${pack.name}\\`}`\n);\n\n'''
           if block not in s:
               raise SystemExit("bogus no-op block not found")
