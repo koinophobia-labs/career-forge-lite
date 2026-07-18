@@ -1,6 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import { createVariantFile, downloadBlob } from "@/lib/pack-export";
+import type { ResumeVariant } from "@/types/dossier";
+
+// A complete, finished sample document built by the REAL export engine from
+// synthetic data — pre-purchase (and pre-any-data-entry) visibility into the
+// actual output quality, not a description of it.
+const sampleDossier = {
+  id: "sample", identity: { fullName: "Sample Candidate", email: "sample@example.com", phone: "(555) 010-0000", location: "Portland, OR", links: [] },
+  roles: [], projects: [], education: [], responsibilities: [], tools: [], transferableSkills: [], outcomes: [], metrics: [],
+  proofPoints: [], interviewStories: [], constraints: [], preferredWorkStyle: [], careerGoals: [], targetRoleInterests: [],
+  approvedClaims: [], evidence: [], unstructuredNotes: [], migrationReview: [],
+  createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+};
+const sampleVariant = {
+  id: "sample-variant", laneId: "sample-lane", kind: "ats", title: "Sample", status: "current", canonical: true, userEdited: false,
+  resume: {
+    summary: "Product Support candidate. Resolved 3,800 support tickets across four years with a 96% satisfaction rating. Wrote 45 knowledge-base articles adopted as team canon.",
+    coreSkills: ["Ticket Triage", "Customer Communication", "Knowledge Base Writing", "Zendesk"],
+    experience: [
+      { title: "Customer Support Specialist", company: "HelpDesk Co", time: "2021–2025", bullets: ["Resolved 3,800 tickets with a 96% satisfaction rating", "Wrote 45 knowledge-base articles adopted as team canon", "Trained 6 new support agents through onboarding"], kind: "role" as const },
+      { title: "Searchable Knowledge Base Rebuild", company: "", time: "2024", bullets: ["Reorganized 300 articles into a searchable taxonomy, cutting time-to-answer 40%"], kind: "project" as const }
+    ],
+    education: "B.A. Communications — State University | 2020",
+    linkedinHeadline: "Product Support Specialist", linkedinSummary: ""
+  },
+  template: "Modern ATS", evidenceReferences: [], userAuthoredPaths: [],
+  sectionOrder: ["summary", "skills", "experience", "projects", "education"],
+  sourceDossierUpdatedAt: "2026-01-01T00:00:00.000Z", baselineVariantId: null, applicationId: null,
+  createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+} as unknown as ResumeVariant;
 
 const sample = {
   evidence: [
@@ -44,7 +74,18 @@ export function SampleExperience() {
               {(["ats", "recruiter"] as const).map((kind) => <button key={kind} type="button" aria-pressed={variant === kind} onClick={() => setVariant(kind)} className={`min-h-11 rounded-md border px-4 py-2 text-sm font-bold ${variant === kind ? "border-gold bg-gold/10 text-gold" : "border-white/15 text-paper/65"}`}>{kind === "ats" ? "ATS Submission" : "Recruiter / Networking"}</button>)}
             </div>
             <p className="mt-4 rounded-lg border border-gold/25 bg-gold/10 p-4 text-sm leading-6 text-paper/75">{sample.variants[variant]}</p>
-            <p className="mt-3 text-xs leading-5 text-paper/50">Sample next action: paste a real Product Support posting, select the ATS baseline, generate a job-specific variant, and save the application.</p>
+            <button
+              type="button"
+              onClick={() => {
+                void createVariantFile(sampleVariant, sampleDossier, "Product Support", "pdf").then((file) =>
+                  downloadBlob(file.blob, "Career-Forge-Sample-Resume.pdf")
+                );
+              }}
+              className="mt-3 inline-flex min-h-11 items-center rounded-md border border-mint/40 bg-mint/10 px-4 py-2 text-sm font-bold text-mint transition hover:bg-mint hover:text-ink"
+            >
+              Download the finished sample PDF (synthetic data) ↓
+            </button>
+            <p className="mt-3 text-xs leading-5 text-paper/50">The PDF is generated right now by the same engine that will build yours — nothing is mocked. Sample next action: paste a real Product Support posting, select the ATS baseline, generate a job-specific variant, and save the application.</p>
           </div>
         </div>
       )}

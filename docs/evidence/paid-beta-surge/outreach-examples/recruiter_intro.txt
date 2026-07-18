@@ -1,0 +1,7 @@
+SCENARIO: Recruiter intro
+
+Hi Jordan Alvarez — I'm targeting Product Support Specialist roles, and Northbeam Software is on my shortlist because your support team publishes unusually candid incident postmortems.
+
+One piece of approved experience relevant to this work: 40+ customers per shift.
+
+If you have Product Support Specialist openings now or soon, I'd be glad to send a résumé tailored to a specific requisition.

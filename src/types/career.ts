@@ -58,6 +58,12 @@ export type ExperienceRole = {
   company: string;
   time: string;
   bullets: string[];
+  // Absent/"role" renders under Experience as before (full backward
+  // compatibility with every existing consumer). "project" marks an entry
+  // that must render under a distinct Projects/Selected Projects section
+  // instead of being flattened into an employer-shaped Experience row —
+  // see resume-pack.ts and ResumePreview.tsx/pack-export.ts for the split.
+  kind?: "role" | "project";
 };
 
 export type ResumePackage = {

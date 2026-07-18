@@ -73,6 +73,8 @@ export default function PricingPage() {
   const [pendingTier, setPendingTier] = useState<PackageTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const isPublicBeta = commerceMode === "off";
+  const configuredPaidBetaTier = process.env.NEXT_PUBLIC_PAID_BETA_TIER;
+  const paidBetaTier: PackageTier = configuredPaidBetaTier === "job-search" || configuredPaidBetaTier === "career-switch" ? configuredPaidBetaTier : "reset";
   const faqs = isPublicBeta ? betaFaqs : purchaseFaqs;
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export default function PricingPage() {
   }, []);
 
   async function startCheckout(tier: PackageTier) {
-    if (pendingTier || !commerceEnabled) return;
+    if (pendingTier || !commerceEnabled || (commerceMode === "live" && tier !== paidBetaTier)) return;
     setPendingTier(tier);
     setCheckoutError(null);
     trackCareerEvent(checkoutEventByTier[tier]);
@@ -108,7 +110,7 @@ export default function PricingPage() {
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <p className="trust-kicker text-sm font-bold uppercase">
-          {isPublicBeta ? "Public beta · No purchases enabled" : "One-time purchase · No account · No subscription"}
+          {isPublicBeta ? "Public beta · No purchases enabled" : commerceMode === "live" ? "Founding paid beta · Career Reset only" : "One-time purchase · No account · No subscription"}
         </p>
         <h1 className="mt-3 max-w-3xl text-3xl font-bold text-paper sm:text-5xl">
           {isPublicBeta
@@ -126,6 +128,15 @@ export default function PricingPage() {
             <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Release boundary</p>
             <p className="mt-2 text-sm leading-6 text-paper/75">
               Production re-audits and human use must independently support artifact quality, workflow value, and pricing before paid access opens. Every feature is included free during this period.
+            </p>
+            <p className="mt-3 border-t border-white/10 pt-3 text-sm leading-6 text-paper/75">
+              Available now, separately: a{" "}
+              <Link href="/reviewed-service" className="font-bold text-gold underline">
+                $149 human-reviewed résumé service
+              </Link>{" "}
+              where a person reviews your dossier, lanes, résumé, LinkedIn positioning, and final files before
+              delivery. It is a different offer from the automated beta — automated outputs do not receive that
+              review.
             </p>
           </div>
         )}
@@ -150,7 +161,8 @@ export default function PricingPage() {
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
           {PACKAGE_ORDER.map((tier) => {
             const pack = PACKAGES[tier];
-            const highlighted = tier === "job-search";
+            const tierAvailable = commerceMode !== "live" || tier === paidBetaTier;
+            const highlighted = commerceMode === "live" ? tier === paidBetaTier : tier === "job-search";
             const owned = entitlement.status === "valid" && entitlement.tier === tier;
             return (
               <article
@@ -180,7 +192,11 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 {commerceEnabled ? (
-                  owned ? (
+                  !tierAvailable ? (
+                    <p className="mt-6 rounded-md border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-bold text-paper/60">
+                      Not in the founding paid beta yet
+                    </p>
+                  ) : owned ? (
                     <p className="mt-6 rounded-md border border-cyan/30 bg-cyan/10 px-4 py-3 text-center text-sm font-black text-cyan">
                       Active on this device
                     </p>

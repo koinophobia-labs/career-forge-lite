@@ -1,0 +1,17 @@
+
+> career-forge-lite@0.1.0 acceptance:recovery
+> node scripts/recovery-proof-browser.mjs
+
+PASS dossier holds both approved (7) and rejected (1) evidence before the disaster
+PASS backup file downloaded (career-forge-backup-2026-07-18.json)
+PASS after clearing site data the app is honestly empty — fresh empty state, no ghost user data
+PASS restore shows a contents preview and an explicit confirmation before writing anything
+PASS restore brings back approved+rejected evidence, lanes, packs, and versions exactly ({"approved":7,"rejected":1,"lanes":1,"packs":1,"versions":2})
+PASS the generated pack renders after restore
+PASS after restore on a clean profile, exports are gated again (license intentionally not in the backup)
+PASS re-pasting the saved key re-unlocks and export succeeds first-click after full recovery
+PASS save-failure banner appears with a concrete explanation
+PASS the nav save pill flips to the failure state
+PASS the warning's action lands directly on a working backup button — not fog
+
+11 passed, 0 failed

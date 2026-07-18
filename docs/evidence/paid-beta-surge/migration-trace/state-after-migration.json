@@ -1,0 +1,267 @@
+{
+  "version": 2,
+  "profile": {
+    "currentSituation": "",
+    "targetRoles": "Product Operations Specialist, Implementation Specialist",
+    "transferableSkills": [],
+    "experienceSummary": "",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "Resolved customer escalations and documented the outcome",
+    "updatedAt": "2026-07-16T18:00:00.000Z"
+  },
+  "dossier": {
+    "id": "dossier-local",
+    "identity": {
+      "fullName": "Casey Contaminated",
+      "email": "casey@example.com",
+      "phone": "",
+      "location": "",
+      "links": []
+    },
+    "roles": [],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [
+      "Resolved customer escalations and documented the outcome"
+    ],
+    "interviewStories": [],
+    "constraints": [
+      "No reliable numerical performance metrics",
+      "I don't know my exact ticket numbers"
+    ],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [
+      "Product Operations Specialist",
+      "Implementation Specialist"
+    ],
+    "approvedClaims": [
+      "Resolved customer escalations and documented the outcome",
+      "Operations Coordinator — Meridian Logistics (2020–2026)"
+    ],
+    "evidence": [
+      {
+        "id": "evidence-n8nyk1",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "Resolved customer escalations and documented the outcome",
+        "source": "manual",
+        "sourceText": "Resolved customer escalations and documented the outcome",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Resolved customer escalations and documented the outcome"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-1b2w07",
+        "kind": "role",
+        "label": "Role",
+        "detail": "Operations Coordinator — Meridian Logistics (2020–2026)",
+        "source": "manual",
+        "sourceText": "Operations Coordinator — Meridian Logistics (2020–2026)",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Operations Coordinator — Meridian Logistics (2020–2026)"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [
+      "Context-only import items were separated from professional evidence and cannot enter generated career materials."
+    ],
+    "createdAt": "2026-07-16T18:00:00.000Z",
+    "updatedAt": "2026-07-16T18:00:00.000Z"
+  },
+  "lanes": [
+    {
+      "id": "lane-old",
+      "title": "Product Operations",
+      "status": "active",
+      "whyFit": "",
+      "resumeAngle": "",
+      "proof": [],
+      "gaps": [],
+      "keywords": [],
+      "source": "custom",
+      "createdAt": "2026-07-16T18:00:00.000Z"
+    }
+  ],
+  "applications": [],
+  "outreach": [],
+  "resumeVersions": [
+    {
+      "id": "version-snapshot",
+      "label": "Contaminated snapshot",
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "source": "tailor",
+      "resumeText": "Operations professional. Managed vendor contracts worth $2M annually\nVendor Management\nOperations Coordinator | Meridian Logistics | 2020–2026\n- Managed vendor contracts worth $2M annually\n- Resolved customer escalations and documented the outcome\n- Rewrote onboarding documentation for new hires",
+      "notes": "Needs review after evidence-safety update.",
+      "applicationId": null,
+      "laneId": "lane-old",
+      "targetTitle": "",
+      "targetCompany": "",
+      "keywordsUsed": [],
+      "influenceSummary": "",
+      "resumeSnapshot": {
+        "fullName": "Casey Contaminated",
+        "email": "casey@example.com",
+        "phone": "",
+        "website": "",
+        "template": "Modern ATS",
+        "resume": {
+          "summary": "Operations professional. Managed vendor contracts worth $2M annually",
+          "coreSkills": [
+            "Vendor Management"
+          ],
+          "experience": [
+            {
+              "title": "Operations Coordinator",
+              "company": "Meridian Logistics",
+              "time": "2020–2026",
+              "bullets": [
+                "Managed vendor contracts worth $2M annually",
+                "Resolved customer escalations and documented the outcome",
+                "Rewrote onboarding documentation for new hires"
+              ]
+            }
+          ],
+          "education": "",
+          "linkedinHeadline": "Operations Coordinator.",
+          "linkedinSummary": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome."
+        }
+      }
+    },
+    {
+      "id": "version-text-only",
+      "label": "Contaminated text-only",
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "source": "plain",
+      "resumeText": "- Managed vendor contracts worth $2M annually\n- Resolved customer escalations and documented the outcome",
+      "notes": "Needs review after evidence-safety update.",
+      "applicationId": null,
+      "laneId": null,
+      "targetTitle": "",
+      "targetCompany": "",
+      "keywordsUsed": [],
+      "influenceSummary": "",
+      "resumeSnapshot": null
+    }
+  ],
+  "resumePacks": [
+    {
+      "id": "pack-old",
+      "dossierId": "dossier-local",
+      "status": "needs-review",
+      "lanePacks": [
+        {
+          "laneId": "lane-old",
+          "positioningPitch": "",
+          "variantIds": [
+            "variant-1"
+          ],
+          "evidenceUsed": [],
+          "evidenceOmitted": [],
+          "gapsAvoided": []
+        }
+      ],
+      "variants": [
+        {
+          "id": "variant-1",
+          "laneId": "lane-old",
+          "kind": "ats",
+          "title": "ATS",
+          "status": "needs-review",
+          "canonical": true,
+          "userEdited": true,
+          "resume": {
+            "summary": "Operations professional. Managed vendor contracts worth $2M annually",
+            "coreSkills": [
+              "Vendor Management"
+            ],
+            "experience": [
+              {
+                "title": "Operations Coordinator",
+                "company": "Meridian Logistics",
+                "time": "2020–2026",
+                "bullets": [
+                  "Managed vendor contracts worth $2M annually",
+                  "Resolved customer escalations and documented the outcome",
+                  "Rewrote onboarding documentation for new hires"
+                ]
+              }
+            ],
+            "education": "",
+            "linkedinHeadline": "Operations Coordinator.",
+            "linkedinSummary": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome."
+          },
+          "template": "Modern ATS",
+          "evidenceReferences": [],
+          "userAuthoredPaths": [
+            "experience.0.bullets"
+          ],
+          "sectionOrder": [
+            "summary",
+            "skills",
+            "experience",
+            "projects",
+            "education"
+          ],
+          "sourceDossierUpdatedAt": "2026-07-16T18:00:00.000Z",
+          "baselineVariantId": null,
+          "applicationId": null,
+          "createdAt": "2026-07-16T18:00:00.000Z",
+          "updatedAt": "2026-07-16T18:00:00.000Z"
+        }
+      ],
+      "linkedinHeadlines": [
+        "Operations Coordinator."
+      ],
+      "linkedinAbout": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome.",
+      "linkedinSkills": [
+        "Vendor Management"
+      ],
+      "masterProofBank": [
+        "Resolved customer escalations and documented the outcome"
+      ],
+      "coverLetterFoundation": "Approved evidence to draw from: Resolved customer escalations and documented the outcome; Operations Coordinator — Meridian Logistics (2020–2026)",
+      "receipt": {
+        "id": "receipt-old",
+        "generatedAt": "2026-07-16T18:00:00.000Z",
+        "evidenceUsed": [],
+        "evidenceOmitted": [],
+        "laneFraming": [],
+        "keywordsIncluded": [],
+        "gapsAvoided": [],
+        "unsupportedClaimsRefused": [
+          "Context-only items withheld after evidence-safety review"
+        ],
+        "transferredClaims": [
+          "Resolved customer escalations and documented the outcome"
+        ],
+        "gapsLeftUnclaimed": []
+      },
+      "createdAt": "2026-07-16T18:00:00.000Z",
+      "updatedAt": "2026-07-16T18:00:00.000Z"
+    }
+  ],
+  "exports": [],
+  "pendingImportReviews": [],
+  "activeGoal": null
+}

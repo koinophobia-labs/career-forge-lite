@@ -20,7 +20,7 @@ export const PDF_RULE_TO_CONTENT_GAP = 13;
 
 export type ExportSection =
   | { key: "summary" | "skills" | "education"; heading: string; text: string }
-  | { key: "experience"; heading: string; roles: ResumePackage["experience"] };
+  | { key: "experience" | "projects"; heading: string; roles: ResumePackage["experience"] };
 
 function sourceContainsWithheldFact(resume: ResumePackage): boolean {
   const values = [
@@ -43,7 +43,15 @@ export function exportSections(
   const withheldFacts = sourceContainsWithheldFact(resume) ? ["reason for leaving"] : [];
   const safeResume = sanitizeResumeForProfessionalUse(resume);
   const order = sectionOrder?.length ? sectionOrder : DEFAULT_SECTION_ORDER;
+  // A project is not an employer: split by kind so it renders under its own
+  // Projects/Selected Projects heading instead of being flattened into
+  // employer-shaped Experience rows.
+  const hasContent = (role: ResumePackage["experience"][number]) => [role.title, role.company, role.time, ...role.bullets].some((value) => value?.trim());
+  const allRoles = safeResume.experience.filter(hasContent).filter((role) => role.kind !== "project");
+  const allProjects = safeResume.experience.filter(hasContent).filter((role) => role.kind === "project");
+  const projectsHeading = allRoles.length ? "Selected Projects" : "Projects";
   const sections: ExportSection[] = [];
+  const pushedKeys = new Set<SectionKey>();
   for (const key of order) {
     if (key === "summary") {
       if (safeResume.summary.trim()) sections.push({ key, heading: "Professional Summary", text: safeResume.summary.trim() });
@@ -51,12 +59,24 @@ export function exportSections(
       const skills = safeResume.coreSkills.filter((skill) => skill.trim());
       if (skills.length) sections.push({ key, heading: "Core Skills", text: skills.join(" | ") });
     } else if (key === "experience") {
-      const roles = safeResume.experience.filter((role) => [role.title, role.company, role.time, ...role.bullets].some((value) => value?.trim()));
-      if (roles.length) sections.push({ key, heading: kind === "recruiter" ? "Selected Experience & Projects" : "Experience", roles });
+      if (allRoles.length) sections.push({ key, heading: kind === "recruiter" ? "Selected Experience" : "Experience", roles: allRoles });
+    } else if (key === "projects") {
+      if (allProjects.length) sections.push({ key, heading: projectsHeading, roles: allProjects });
     } else if (key === "education") {
       const education = (safeResume.education ?? "").trim();
       if (education && !isPlaceholderEducation(education)) sections.push({ key, heading: "Education", text: education });
     }
+    pushedKeys.add(key);
+  }
+  // A stored variant's sectionOrder may predate the projects/experience
+  // split (older saved packs never included a "projects" key at all) — never
+  // silently drop project content because of a stale order array. Append it
+  // right after Experience so it still appears somewhere sensible.
+  if (allProjects.length && !pushedKeys.has("projects")) {
+    const experienceIndex = sections.findIndex((section) => section.key === "experience");
+    const projectSection: ExportSection = { key: "projects", heading: projectsHeading, roles: allProjects };
+    if (experienceIndex >= 0) sections.splice(experienceIndex + 1, 0, projectSection);
+    else sections.push(projectSection);
   }
   return { sections, withheldFacts };
 }
@@ -77,7 +97,7 @@ export function variantPlainText(
   const { sections } = exportSections(resume, sectionOrder, kind);
   const parts: string[] = header ? [header] : [];
   for (const section of sections) {
-    if (section.key === "experience") {
+    if ("roles" in section) {
       const roles = section.roles
         .map((role) => {
           const headline = [role.title, role.company, role.time].filter((value) => value?.trim()).join(" | ");
@@ -128,7 +148,7 @@ async function docxBlob(
   if (contact) children.push(new Paragraph({ text: contact, alignment: AlignmentType.CENTER, spacing: { after: 180 } }));
   for (const section of exportSections(resume, sectionOrder, kind).sections) {
     children.push(new Paragraph({ text: section.heading, heading: HeadingLevel.HEADING_1, keepNext: true }));
-    if (section.key === "experience") {
+    if ("roles" in section) {
       section.roles.forEach((role) => {
         children.push(new Paragraph({ keepNext: role.bullets.length > 0, spacing: { before: 120, after: 40 }, children: [new TextRun({ text: [role.title, role.company, role.time].filter(Boolean).join(" | "), bold: true })] }));
         role.bullets.filter((bullet) => bullet.trim()).forEach((bullet) => children.push(new Paragraph({ text: bullet, bullet: { level: 0 } })));
@@ -183,7 +203,7 @@ function pdfBlob(
   if (contact) write(contact, { size: 9, after: 5 });
   for (const section of exportSections(resume, sectionOrder, kind).sections) {
     heading(section.heading);
-    if (section.key === "experience") {
+    if ("roles" in section) {
       section.roles.forEach((role) => {
         ensure(42);
         write([role.title, role.company, role.time].filter(Boolean).join(" | "), { bold: true, after: 2 });

@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ActivationFeedback } from "@/components/ActivationFeedback";
 import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
+import { EditConflictDialog } from "@/components/EditConflictDialog";
 import { SiteFooter } from "@/components/SiteFooter";
-import { deleteResumeVersion } from "@/lib/command-center-store";
+import { deleteResumeVersion, loadState } from "@/lib/command-center-store";
+import { fieldLabel, fieldValueAtPath, isFieldConflict, resumeWithFieldValue, type FieldConflict } from "@/lib/edit-conflicts";
 import { LockedActionPill, LockedFeaturePanel } from "@/components/LockedFeature";
 import { useEntitlement } from "@/lib/entitlement";
 import { createPackBundle, createVariantFile, downloadBlob, exportSections, variantPlainText } from "@/lib/pack-export";
 import { updatePackVariant } from "@/lib/resume-pack";
+import { syncBuilderVersionsWithPack } from "@/lib/version-sync";
 import { trackCareerEvent } from "@/lib/analytics";
 import { variantPurpose } from "@/lib/activation";
 import { deriveDefensibilityReceipt, uniqueUnclaimedReceiptItems } from "@/lib/defensibility";
@@ -22,10 +25,6 @@ import type { ResumePack, ResumeVariant } from "@/types/dossier";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function valuesForEditor(value: string): string[] {
-  return [...new Set(value.split(/\n+/).map((item) => item.trim()).filter(Boolean))];
 }
 
 type VersionCardProps = {
@@ -299,7 +298,67 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
 
   function editVariant(variant: ResumeVariant, resume: ResumeVariant["resume"], path: string) {
     setUndoByVariant((current) => current[variant.id] ? current : { ...current, [variant.id]: variant.resume });
-    onUpdate(updatePackVariant(pack, variant.id, resume, new Date().toISOString(), [path]));
+    // Rebase on the freshest stored pack so a commit from this tab never
+    // clobbers another tab's concurrent edits to other variants or fields.
+    const freshPack = loadState().resumePacks.find((item) => item.id === pack.id) ?? pack;
+    onUpdate(updatePackVariant(freshPack, variant.id, resume, new Date().toISOString(), [path]));
+  }
+
+  // --- Same-field multi-tab conflict handling -------------------------------
+  // Editor fields are uncontrolled drafts committed on blur, so a tab that
+  // started from an older stored value could silently overwrite a newer edit
+  // from another tab. captureBase records what this tab started from;
+  // commitFieldEdit compares base vs current stored vs proposed at commit time
+  // and opens an explicit keep-mine / keep-stored / merge dialog on conflict.
+  // Unrelated-field edits still merge automatically through the store rebase.
+  const editBaseRef = useRef<Record<string, string>>({});
+  const [conflict, setConflict] = useState<FieldConflict | null>(null);
+  const [editorEpoch, setEditorEpoch] = useState(0);
+
+  // The freshest stored variant, read straight from localStorage rather than
+  // React state: a storage event from another tab may not have re-rendered
+  // this component yet at the moment a blur commits.
+  function freshestVariant(variantId: string): ResumeVariant | null {
+    const stored = loadState().resumePacks.find((item) => item.id === pack.id);
+    return stored?.variants.find((item) => item.id === variantId) ?? null;
+  }
+
+  function captureBase(variant: ResumeVariant, path: string, domValue: string) {
+    const key = `${variant.id}:${path}`;
+    // The DOM's value at first focus is what this tab's edit actually starts
+    // from (canonicalized through the same serializer used at commit time).
+    if (!(key in editBaseRef.current)) {
+      editBaseRef.current[key] = fieldValueAtPath(resumeWithFieldValue(variant.resume, path, domValue), path);
+    }
+  }
+
+  function commitFieldEdit(variant: ResumeVariant, path: string, rawValue: string) {
+    const key = `${variant.id}:${path}`;
+    const latest = freshestVariant(variant.id) ?? variant;
+    const stored = fieldValueAtPath(latest.resume, path);
+    const base = editBaseRef.current[key] ?? stored;
+    delete editBaseRef.current[key];
+    // Build on the freshest resume so committing one field can never
+    // resurrect stale values in sibling fields.
+    const nextResume = resumeWithFieldValue(latest.resume, path, rawValue);
+    const proposed = fieldValueAtPath(nextResume, path);
+    if (proposed === stored) return;
+    if (isFieldConflict(base, stored, proposed)) {
+      setConflict({ variantId: variant.id, path, label: fieldLabel(path), base, mine: proposed, stored });
+      return;
+    }
+    editVariant(latest, nextResume, path);
+  }
+
+  function resolveConflict(chosen: string | null) {
+    if (!conflict) return;
+    if (chosen !== null) {
+      const latest = freshestVariant(conflict.variantId) ?? pack.variants.find((item) => item.id === conflict.variantId);
+      if (latest) editVariant(latest, resumeWithFieldValue(latest.resume, conflict.path, chosen), conflict.path);
+    }
+    setConflict(null);
+    // Remount the editor so uncontrolled fields re-read the committed value.
+    setEditorEpoch((epoch) => epoch + 1);
   }
 
   function undoLatest(variant: ResumeVariant) {
@@ -337,7 +396,7 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
               const tracedClaimCount = defensibility.directlySupported + defensibility.combinedEvidence + defensibility.transferred;
               const withheldFacts = exportSections(variant.resume, variant.sectionOrder, variant.kind).withheldFacts;
               return <article key={variant.id} className="rounded-lg border border-white/10 bg-white/5 p-4"><div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="font-bold text-paper">{purpose.label} · {lane?.title ?? "Lane"}</p><p className="lab-mono mt-1 text-[0.62rem] font-bold uppercase text-paper/45">{variant.status.replace("-", " ")} · {tracedClaimCount} fully traced claims{variant.userEdited ? " · user edited" : ""}</p></div><button type="button" onClick={() => { setEditingId(editingId === variant.id ? null : variant.id); if (editingId !== variant.id) trackCareerEvent("resume_variant_opened"); }} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">{editingId === variant.id ? "Close" : "View / edit"}</button>{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Copy / PDF / DOCX" /> : identityMissing ? <IdentityGatePrompt compact /> : <><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before copying." : undefined} onClick={() => void copyVariant(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70 disabled:cursor-not-allowed disabled:opacity-40">Copy</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "pdf")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">Print / PDF</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "docx")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">DOCX</button></>}<button type="button" onClick={() => duplicate(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Duplicate</button><button type="button" onClick={() => rename(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Rename</button><button type="button" onClick={() => markCanonical(variant)} className="min-h-11 rounded-full border border-gold/30 px-3 py-1.5 text-xs text-gold">{variant.canonical ? "Baseline" : "Make baseline"}</button>{previous && <button type="button" onClick={() => setCompareId(compareId === variant.id ? null : variant.id)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Compare</button>}<button type="button" onClick={() => remove(variant)} className="min-h-11 rounded-full border border-coral/25 px-3 py-1.5 text-xs text-coral">Delete</button></div><div className="mt-3 grid gap-2 rounded-lg border border-cyan/20 bg-cyan/5 p-3 text-xs leading-5 text-paper/65"><p><strong className="text-cyan">Use this for:</strong> {purpose.purpose}</p><p><strong className="text-gold">Why it differs:</strong> {purpose.difference}</p>{withheldFacts.length > 0 && <p className="font-bold text-gold">{withheldFacts.length} fact{withheldFacts.length === 1 ? "" : "s"} withheld ({withheldFacts.join(", ")}) — deliberately kept out of every copy and export.</p>}</div><details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-3 rounded-lg border border-white/12 bg-obsidian/35 p-3"><summary className="cursor-pointer text-xs font-bold text-paper"><span className={defensibility.status.includes("review") || defensibility.status.includes("recheck") ? "text-coral" : "text-mint"}>{defensibility.status}</span> · Open Defensibility Receipt</summary><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-paper/60 sm:grid-cols-3"><p>Total claims: {defensibility.totalClaims}</p><p>Direct: {defensibility.directlySupported}</p><p>Combined: {defensibility.combinedEvidence}</p><p>Transferred: {defensibility.transferred}</p><p>Missing provenance: {defensibility.missingProvenance}</p><p>Incomplete cited sources: {defensibility.incompleteProvenance}</p><p>Verified durations: {defensibility.verifiedDurations}</p><p>Unverified durations: {defensibility.unverifiedDurations}</p><p>User edits to recheck: {defensibility.userEditedClaimsNeedingReview}</p></div></details>
-                {editingId === variant.id && <div className="mt-3 grid gap-4 border-t border-white/10 pt-3"><div className="flex items-center justify-between"><p className="lab-mono text-[0.65rem] font-bold uppercase text-gold">Full document editor</p>{undoByVariant[variant.id] && <button type="button" onClick={() => undoLatest(variant)} className="rounded border border-gold/40 px-3 py-1 text-xs font-bold text-gold">Undo latest edit</button>}</div><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Summary<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={5} defaultValue={variant.resume.summary} onBlur={(event) => { if (event.target.value !== variant.resume.summary) editVariant(variant, { ...variant.resume, summary: event.target.value }, "summary"); }} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Skills<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={4} defaultValue={variant.resume.coreSkills.join("\n")} onBlur={(event) => editVariant(variant, { ...variant.resume, coreSkills: valuesForEditor(event.target.value) }, "coreSkills")} /></label>{variant.resume.experience.map((role, roleIndex) => <fieldset key={`${variant.id}-role-${roleIndex}`} className="rounded-lg border border-white/10 p-3"><legend className="px-2 text-xs font-bold uppercase text-paper/50">Role or project {roleIndex + 1}</legend><div className="grid gap-2 sm:grid-cols-3"><input aria-label={`Edit heading ${roleIndex + 1}`} defaultValue={role.title} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, title: event.target.value } : item) }, `experience.${roleIndex}.title`)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit company ${roleIndex + 1}`} defaultValue={role.company} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, company: event.target.value } : item) }, `experience.${roleIndex}.company`)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit dates ${roleIndex + 1}`} defaultValue={role.time} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, time: event.target.value } : item) }, `experience.${roleIndex}.time`)} className="trust-input border p-2 text-sm text-ink"/></div><textarea aria-label={`Edit bullets ${roleIndex + 1}`} defaultValue={role.bullets.join("\n")} onBlur={(event) => editVariant(variant, { ...variant.resume, experience: variant.resume.experience.map((item, index) => index === roleIndex ? { ...item, bullets: valuesForEditor(event.target.value) } : item) }, `experience.${roleIndex}.bullets`)} rows={5} className="trust-input mt-2 w-full border p-2 text-sm text-ink"/></fieldset>)}<label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Education<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={3} defaultValue={variant.resume.education} onBlur={(event) => editVariant(variant, { ...variant.resume, education: event.target.value }, "education")} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Section order<select value={variant.sectionOrder.join(",")} onChange={(event) => onUpdate({ ...pack, variants: pack.variants.map((item) => item.id === variant.id ? { ...item, sectionOrder: event.target.value.split(",") as ResumeVariant["sectionOrder"], userEdited: true } : item) })} className="trust-input mt-1.5 w-full border p-2 text-sm text-ink"><option value="summary,skills,experience,projects,education">ATS: summary, skills, experience, projects, education</option><option value="summary,projects,experience,skills,education">Recruiter: summary, projects, experience, skills, education</option><option value="summary,experience,projects,education,skills">Narrative: summary, experience, projects, education, skills</option></select></label><div className="mt-1 grid gap-2">{variant.evidenceReferences.map((ref) => <details key={`${variant.id}-${ref.claimPath}`} className="rounded border border-white/10 p-2 text-xs leading-5 text-paper/50"><summary><strong className="text-paper/70">{ref.claimPath}</strong> · {ref.supportType} · {ref.evidenceIds.length} source(s)</summary><p className="mt-1 text-paper/70">{ref.claimText}</p>{ref.evidenceIds.map((id) => <p key={id} className="mt-1 border-l-2 border-cyan/30 pl-2">{state.dossier.evidence.find((item) => item.id === id)?.detail ?? "Missing evidence"}</p>)}</details>)}</div></div>}
+                {editingId === variant.id && <div key={`editor-${variant.id}-${editorEpoch}`} className="mt-3 grid gap-4 border-t border-white/10 pt-3"><div className="flex items-center justify-between"><p className="lab-mono text-[0.65rem] font-bold uppercase text-gold">Full document editor</p>{undoByVariant[variant.id] && <button type="button" onClick={() => undoLatest(variant)} className="rounded border border-gold/40 px-3 py-1 text-xs font-bold text-gold">Undo latest edit</button>}</div><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Summary<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={5} defaultValue={variant.resume.summary} onFocus={(event) => captureBase(variant, "summary", event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, "summary", event.target.value)} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Skills<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={4} defaultValue={variant.resume.coreSkills.join("\n")} onFocus={(event) => captureBase(variant, "coreSkills", event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, "coreSkills", event.target.value)} /></label>{variant.resume.experience.map((role, roleIndex) => <fieldset key={`${variant.id}-role-${roleIndex}`} className="rounded-lg border border-white/10 p-3"><legend className="px-2 text-xs font-bold uppercase text-paper/50">Role or project {roleIndex + 1}</legend><div className="grid gap-2 sm:grid-cols-3"><input aria-label={`Edit heading ${roleIndex + 1}`} defaultValue={role.title} onFocus={(event) => captureBase(variant, `experience.${roleIndex}.title`, event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, `experience.${roleIndex}.title`, event.target.value)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit company ${roleIndex + 1}`} defaultValue={role.company} onFocus={(event) => captureBase(variant, `experience.${roleIndex}.company`, event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, `experience.${roleIndex}.company`, event.target.value)} className="trust-input border p-2 text-sm text-ink"/><input aria-label={`Edit dates ${roleIndex + 1}`} defaultValue={role.time} onFocus={(event) => captureBase(variant, `experience.${roleIndex}.time`, event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, `experience.${roleIndex}.time`, event.target.value)} className="trust-input border p-2 text-sm text-ink"/></div><textarea aria-label={`Edit bullets ${roleIndex + 1}`} defaultValue={role.bullets.join("\n")} onFocus={(event) => captureBase(variant, `experience.${roleIndex}.bullets`, event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, `experience.${roleIndex}.bullets`, event.target.value)} rows={5} className="trust-input mt-2 w-full border p-2 text-sm text-ink"/></fieldset>)}<label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Education<textarea className="trust-input mt-1.5 w-full border p-3 text-sm text-ink" rows={3} defaultValue={variant.resume.education} onFocus={(event) => captureBase(variant, "education", event.currentTarget.value)} onBlur={(event) => commitFieldEdit(variant, "education", event.target.value)} /></label><label className="lab-mono text-[0.65rem] font-bold uppercase text-paper/60">Section order<select value={variant.sectionOrder.join(",")} onChange={(event) => onUpdate({ ...pack, variants: pack.variants.map((item) => item.id === variant.id ? { ...item, sectionOrder: event.target.value.split(",") as ResumeVariant["sectionOrder"], userEdited: true } : item) })} className="trust-input mt-1.5 w-full border p-2 text-sm text-ink"><option value="summary,skills,experience,projects,education">ATS: summary, skills, experience, projects, education</option><option value="summary,projects,experience,skills,education">Recruiter: summary, projects, experience, skills, education</option><option value="summary,experience,projects,education,skills">Narrative: summary, experience, projects, education, skills</option></select></label><div className="mt-1 grid gap-2">{variant.evidenceReferences.map((ref) => <details key={`${variant.id}-${ref.claimPath}`} className="rounded border border-white/10 p-2 text-xs leading-5 text-paper/50"><summary><strong className="text-paper/70">{ref.claimPath}</strong> · {ref.supportType} · {ref.evidenceIds.length} source(s)</summary><p className="mt-1 text-paper/70">{ref.claimText}</p>{ref.evidenceIds.map((id) => <p key={id} className="mt-1 border-l-2 border-cyan/30 pl-2">{state.dossier.evidence.find((item) => item.id === id)?.detail ?? "Missing evidence"}</p>)}</details>)}</div></div>}
                 {compareId === variant.id && previous && <div className="mt-3 grid gap-3 border-t border-white/10 pt-3 md:grid-cols-2"><div><p className="lab-mono text-xs text-paper/45">Previous</p><p className="mt-1 text-sm text-paper/65">{previous.resume.summary}</p></div><div><p className="lab-mono text-xs text-gold">Current</p><p className="mt-1 text-sm text-paper/80">{variant.resume.summary}</p></div></div>}
               </article>;
             })}
@@ -345,6 +404,14 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
         })}
       </div>
       <details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4"><summary className="cursor-pointer text-sm font-bold text-paper">Open pack-level evidence receipt</summary><div className="mt-3 grid gap-4 text-sm text-paper/60 sm:grid-cols-2"><p>Evidence used: {pack.receipt.evidenceUsed.length}</p><p>Evidence omitted: {pack.receipt.evidenceOmitted.length}</p><p>Keywords included: {pack.receipt.keywordsIncluded.join(", ") || "None without evidence"}</p><p>Claims transferred from related experience: {pack.receipt.transferredClaims.length}</p><div><p className="font-bold text-gold">Known evidence gaps</p><p className="mt-1">{pack.receipt.gapsLeftUnclaimed.join(" · ") || "None"}</p></div>{pack.receipt.unsupportedClaimsRefused.length > 0 && <div><p className="font-bold text-coral">Claims Career Forge refused to generate</p><p className="mt-1">{pack.receipt.unsupportedClaimsRefused.join(" · ")}</p></div>}</div></details>
+      {conflict && (
+        <EditConflictDialog
+          conflict={conflict}
+          onKeepMine={() => resolveConflict(conflict.mine)}
+          onKeepStored={() => resolveConflict(null)}
+          onMerge={(merged) => resolveConflict(merged)}
+        />
+      )}
     </section>
   );
 }
@@ -381,7 +448,11 @@ export default function VersionsPage() {
   }
 
   function updatePack(next: ResumePack) {
-    update((current) => ({ ...current, resumePacks: current.resumePacks.map((pack) => pack.id === next.id ? next : pack) }));
+    update((current) => ({
+      ...current,
+      resumePacks: current.resumePacks.map((pack) => pack.id === next.id ? next : pack),
+      resumeVersions: syncBuilderVersionsWithPack(current, next)
+    }));
   }
 
   function recordPackExport(filenames: string[]) {

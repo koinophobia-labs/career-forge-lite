@@ -26,6 +26,7 @@ const { generateResumePack, updatePackVariant } = loadTsModule(path.join(root, "
 const { analyzeJobPost } = loadTsModule(path.join(root, "src/lib/job-post-analyzer.ts"));
 const { draftApplicationQuestion } = loadTsModule(path.join(root, "src/lib/application-questions.ts"));
 const { parseState, emptyProfile } = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
+const { stripTerminationReasons } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -260,6 +261,8 @@ check("legacy jobPostUrl migrates to discoveryUrl", legacyApp.discoveryUrl === "
 
 const projectOnly = { ...emptyDossier(NOW), evidence: projectEvidence, projects: dossier.projects, approvedClaims: projectEvidence.map((item) => item.detail), updatedAt: NOW };
 check("project-only candidates generate without fake employers", generateResumePack(projectOnly, [lanes[0]], NOW).variants.some((variant) => variant.resume.experience.some((item) => item.title === "Career Forge" && item.company === "Koinophobia Labs")));
+const projectOnlyPack = generateResumePack(projectOnly, [lanes[0]], NOW);
+check("project entries are tagged kind: 'project', not flattened into an untagged role shape", projectOnlyPack.variants.every((variant) => variant.resume.experience.every((item) => item.kind === "project")));
 const largeEvidence = Array.from({ length: 500 }, (_, index) => add("proof", `Verified support outcome ${index}`));
 const largeDossier = { ...projectOnly, evidence: [...projectEvidence, ...largeEvidence], approvedClaims: [...projectOnly.approvedClaims, ...largeEvidence.map((item) => item.detail)] };
 // Selection stays bounded on huge dossiers: 18 ranked picks plus the handful
@@ -296,6 +299,35 @@ check("imported roles render with real bullets", Boolean(auditRoleEntry) && audi
 const allDocText = [auditAts.resume.summary, ...auditAts.resume.coreSkills, ...auditAts.resume.experience.flatMap((entry) => [entry.title, ...entry.bullets]), auditAts.resume.education, auditAts.resume.linkedinHeadline, auditAts.resume.linkedinSummary, ...auditPack.masterProofBank, ...auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)].join("\n");
 check("termination reasons never ship in documents", !/laid off|terminated|fired/i.test(allDocText), allDocText);
 check("withheld termination reason is reported on the receipt", auditPack.receipt.unsupportedClaimsRefused.some((item) => /reason for leaving/i.test(item)));
+
+// Separation-reason sanitizer: strip only the unsafe clause, keep the safe
+// remainder from the same sentence when the reason has no comma to split on.
+const noSeparatorCase = stripTerminationReasons("I managed vendor contracts worth $2M annually until I was laid off in June 2026");
+check("separation-reason sanitizer preserves the safe remainder with no comma to split on", noSeparatorCase.text === "I managed vendor contracts worth $2M annually" && noSeparatorCase.withheld === true, JSON.stringify(noSeparatorCase));
+const commaCase = stripTerminationReasons("Managed vendor contracts, until I was laid off in June 2026.");
+check("separation-reason sanitizer still handles comma-separated clauses", commaCase.text === "Managed vendor contracts" && commaCase.withheld === true, JSON.stringify(commaCase));
+const pureReasonCase = stripTerminationReasons("I was laid off in June 2026.");
+check("separation-reason sanitizer drops a sentence with no safe remainder at all", pureReasonCase.text === "" && pureReasonCase.withheld === true, JSON.stringify(pureReasonCase));
+const safeCase = stripTerminationReasons("Reduced onboarding time from 3 weeks to 9 days");
+check("separation-reason sanitizer leaves safe sentences untouched", safeCase.text === "Reduced onboarding time from 3 weeks to 9 days" && safeCase.withheld === false, JSON.stringify(safeCase));
+
+// Common real-world separation phrasing beyond "laid off/fired/terminated" —
+// reorgs, restructures, and role eliminations are just as much a termination
+// reason and must not leak into résumé text unstripped.
+const reorgCase = stripTerminationReasons("Managed a team of five until the department reorganized in 2024");
+check("separation-reason sanitizer catches reorg phrasing introduced by 'until'", reorgCase.text === "Managed a team of five" && reorgCase.withheld === true, JSON.stringify(reorgCase));
+const eliminatedRoleCase = stripTerminationReasons("Led implementation projects for enterprise clients until leadership decided to eliminate the role");
+check("separation-reason sanitizer catches 'leadership eliminated the role' phrasing", eliminatedRoleCase.text === "Led implementation projects for enterprise clients" && eliminatedRoleCase.withheld === true, JSON.stringify(eliminatedRoleCase));
+const layoffsBeforeCase = stripTerminationReasons("Cut support ticket backlog 40% before the company underwent layoffs");
+check("separation-reason sanitizer catches 'underwent layoffs' introduced by 'before'", layoffsBeforeCase.text === "Cut support ticket backlog 40%" && layoffsBeforeCase.withheld === true, JSON.stringify(layoffsBeforeCase));
+const restructuredCase = stripTerminationReasons("Grew regional sales 20% year over year, though the division was later restructured");
+check("separation-reason sanitizer catches 'division was restructured' with an intervening adverb", restructuredCase.text === "Grew regional sales 20% year over year" && restructuredCase.withheld === true, JSON.stringify(restructuredCase));
+const legitRestructureBullet = stripTerminationReasons("Restructured the onboarding process to cut ramp time from six weeks to two");
+check("separation-reason sanitizer does not flag a legitimate 'restructured the process' achievement bullet", legitRestructureBullet.text === "Restructured the onboarding process to cut ramp time from six weeks to two" && legitRestructureBullet.withheld === false, JSON.stringify(legitRestructureBullet));
+const thousandsSeparatorCase = stripTerminationReasons("Resolved 4,000 support tickets across four years until the department reorganized in 2025");
+check("separation-reason sanitizer never treats a thousands-separator comma as a clause boundary", thousandsSeparatorCase.text === "Resolved 4,000 support tickets across four years" && thousandsSeparatorCase.withheld === true, JSON.stringify(thousandsSeparatorCase));
+const legitReorgBullet = stripTerminationReasons("Reorganized the file taxonomy to speed up asset retrieval by 30%");
+check("separation-reason sanitizer does not flag a legitimate 'reorganized the taxonomy' achievement bullet", legitReorgBullet.text === "Reorganized the file taxonomy to speed up asset retrieval by 30%" && legitReorgBullet.withheld === false, JSON.stringify(legitReorgBullet));
 check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);
 check("tool lists atomize into individual skills", auditAts.resume.coreSkills.includes("Workday") && auditAts.resume.coreSkills.includes("Kronos"), JSON.stringify(auditAts.resume.coreSkills));
 check("skill fragments never ship", auditAts.resume.coreSkills.every((skill) => !/^and\s|^some\s|from a class/i.test(skill)), JSON.stringify(auditAts.resume.coreSkills));

@@ -1,0 +1,174 @@
+Skip to content
+CF
+CAREER FORGE
+LEVERAGE FOR YOUR JOB SEARCH
+A KOINOPHOBIA LABS SYSTEM ↗
+Dashboard
+Career Dossier
+Truth Map
+Career Lanes
+Résumé Pack
+Tailor
+Applications
+Outreach
+Guided Setup
+Interview Prep
+Weekly
+Pricing
+Data
+
+STEP 06 · INTERVIEW PREP
+
+Practice the interview you’ll actually get.
+
+Questions generated from your lane, your profile’s proof points, and the gaps your job-post analysis found — with coaching that pushes you toward specific, honest answers. No invented credentials, ever.
+
+Build a résumé by conversation instead →
+
+Opens the capped résumé-building intake. This prep page is the uncapped practice tool.
+
+Lane
+No lane (generic prep)
+Product Support Specialist (active)
+Application (optional)
+No specific application
+Pick a saved application to get gap-defense questions built from its actual job post.
+
+ANSWER FRAMEWORK
+
+Situation — one sentence of context: where, when, what was at stake.
+Task — what you specifically were responsible for (say "I", not just "we").
+Action — the 2–3 concrete things you did, in order.
+Result — what changed, with a number or observable outcome if you have one.
+Bridge — one sentence connecting it to the role you're interviewing for.
+
+Questions are built from your profile, lanes, approved evidence, and job-post analyses where you've added them; the generic staples every interviewer asks are labeled as generic. Practice honest answers: name real gaps, use real numbers, and never claim credentials, titles, or metrics you don't have. Interviewers probe — a truthful "here's how I'd close that gap" outlasts a bluff.
+
+Transition framing
+
+The career-changer questions. Nail these two and every other answer gets easier.
+
+Why are you moving from your current background into Product Support Specialist?
+
+Practice
+
+Why they ask: The career-changer question. It's asked in nearly every interview and your answer sets the frame for everything after.
+
+What would keep you here two years from now?
+
+Practice
+
+Why they ask: The commitment probe — asked of nearly every career changer.
+
+Role-specific
+
+What interviewers for this lane actually ask, with coaching on how your background answers it.
+
+A customer reports something 'broken' but you can't reproduce it. Walk me through your next steps.
+
+Practice
+
+Why they ask: Methodical diagnosis under ambiguity is the core skill.
+
+How do you handle a queue when tickets are coming in faster than you can resolve them?
+
+Practice
+
+Why they ask: Volume management with quality is what support leads screen for.
+
+Tell me about a time you turned an angry customer into a satisfied one.
+
+Practice
+
+Why they ask: The universal support question — they want the mechanics, not the happy ending.
+
+How would you write a help-center article for a feature you just learned yourself?
+
+Practice
+
+Why they ask: Support is a writing job; fresh eyes are actually an asset.
+
+Behavioral — from your own claims
+
+Built from your approved evidence, proof points, strengths, and skills. If it's on your resume, expect the deep-dive.
+
+Your approved evidence says: "Cut repeat-contact rate 18% by rewriting the top 20 help macros after tagging 400 tickets by root cause". Walk me through the story behind it — what was your specific part, and what changed because of you?
+
+Practice
+
+Why they ask: Quantified claims draw the hardest probing — interviewers test whether the number survives a follow-up.
+
+Gap defense
+
+The uncomfortable questions about what you don't have yet. Rehearsed honesty beats improvised bluffing.
+
+Your lane plan says you're still closing this gap: "No formal QA certification". If it comes up, what's your honest answer?
+
+Practice
+
+Why they ask: You added this gap to your Product Support Specialist lane — better to rehearse the defense than improvise it.
+
+Needs more evidence
+
+Claims and self-reported strengths that aren't backed by enough recorded detail yet to defend in an interview. These are reminders to go add evidence, not questions to rehearse an answer for.
+
+Discovery question: you have not recorded enough detail about "40+ customers per shift" to build a defensible interview story about it yet.
+
+Practice
+
+Why they ask: A one-line claim isn't a story. Interviewers ask for the situation, your specific action, and the result — answering from thin air risks a claim you can't defend under a follow-up.
+
+Discovery question: you have not recorded enough detail about "Good with people" to build a defensible interview story about it yet.
+
+Practice
+
+Why they ask: A one-line claim isn't a story. Interviewers ask for the situation, your specific action, and the result — answering from thin air risks a claim you can't defend under a follow-up.
+
+Questions to ask the interviewer
+
+Interviews end with “any questions for us?” — bring these. Specific ones come from your saved posting and lane; the generic staples work anywhere.
+
+How is the Product Support Specialist team measured — which numbers matter most right now?
+
+Why it works: Metrics reveal what the job actually is, and asking signals you think in outcomes.
+
+BASED ON: PRODUCT SUPPORT SPECIALIST LANE
+
+What's the hardest part of this job that doesn't show up in the posting?
+
+Why it works: Invites honesty and shows you want the real job, not the brochure version.
+
+BASED ON: GENERIC — STRONG IN ANY INTERVIEW
+
+What separates the people who've thrived in this role from those who haven't?
+
+Why it works: Gives you the informal success profile and a preview of how performance is judged.
+
+BASED ON: GENERIC — STRONG IN ANY INTERVIEW
+
+What would the team most need from this hire in the first 90 days?
+
+Why it works: Turns the interview toward their problems — and gives your follow-up note its content.
+
+BASED ON: GENERIC — STRONG IN ANY INTERVIEW
+
+CF
+CAREER FORGE
+BY KOINOPHOBIA LABS
+
+Built by Koinophobia Labs to turn reviewed career evidence into reusable draft materials. Career Forge stays local, editable, and review-first; every generated document still needs a human check before use.
+
+Built by Koinophobia Labs ↗
+Meet the founder ↗
+PRODUCT
+Beta access & future packaging
+Manage a license key
+Backup & restore
+Terms of use
+Privacy
+CURRENT BETA BOUNDARIES
+No account or login required
+Career data stays on your device
+No fake ATS score
+Imported facts remain reviewable
+Review every draft and export before use

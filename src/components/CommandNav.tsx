@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { trackCareerEvent } from "@/lib/analytics";
+import { SaveStatusPill } from "@/components/SaveStatusPill";
 
 const stations: Array<[string, string]> = [
   ["Dashboard", "/"],
@@ -80,6 +81,7 @@ export function CommandNav({ active }: CommandNavProps) {
           >
             A Koinophobia Labs system ↗
           </a>
+          <SaveStatusPill />
         </div>
 
         <details ref={menuRef} className="relative md:hidden">

@@ -46,6 +46,7 @@ export default function TargetsPage() {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [customTitle, setCustomTitle] = useState("");
+  const [forging, setForging] = useState(false);
   const dossierReadiness = assessDossierReadiness(state.dossier);
   // Exploring and activating lanes is free; the purchased pack decides how
   // many active lanes the generated Résumé Pack covers.
@@ -145,7 +146,15 @@ export default function TargetsPage() {
 
   function forgePack() {
     const active = state.lanes.filter((lane) => lane.status === "active").slice(0, packLaneCap);
-    if (!active.length || dossierReadiness.level === "not-ready") return;
+    if (!active.length || dossierReadiness.level === "not-ready" || forging) return;
+    // Generation is synchronous, but on a slow device the click-to-navigation
+    // gap can read as "nothing happened" — show the working state immediately
+    // and yield one frame so it actually paints before the heavy work runs.
+    setForging(true);
+    window.setTimeout(() => runForge(active), 30);
+  }
+
+  function runForge(active: typeof state.lanes) {
     trackCareerEvent("resume_pack_started");
     const now = new Date().toISOString();
     const generated = generateResumePack(state.dossier, active, now);
@@ -228,7 +237,7 @@ export default function TargetsPage() {
                 <article key={lane.id} className="trust-panel p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-lg font-bold text-paper">{lane.title}</h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {lane.status !== "active" && (
                         <button
                           type="button"
@@ -392,7 +401,7 @@ export default function TargetsPage() {
         <div id="forge-pack" className="mt-8 scroll-mt-28 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
           <div><p className="text-sm font-bold text-paper">{activeLaneCount} active lane(s) · {Math.min(activeLaneCount, packLaneCap) * 2} baseline résumé(s)</p><p className="mt-1 text-xs text-paper/50">{dossierReadiness.level === "not-ready" ? "Add enough approved role or project evidence before forging; a vague sentence should not become a résumé." : "One operation creates ATS and Recruiter / Networking variants for each active lane."}</p>{commerceEnabled && activeLaneCount > packLaneCap && <p className="mt-1 text-xs font-bold text-gold">Your pack covers {packLaneCap} lane{packLaneCap === 1 ? "" : "s"}, so the first {packLaneCap} active lane{packLaneCap === 1 ? "" : "s"} will be forged. Larger packs cover up to three.</p>}</div>
           <div className="flex flex-col items-end gap-2">
-            <button type="button" onClick={forgePack} disabled={activeLaneCount === 0 || dossierReadiness.level === "not-ready"} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Forge complete résumé pack →</button>
+            <button type="button" onClick={forgePack} disabled={activeLaneCount === 0 || dossierReadiness.level === "not-ready" || forging} aria-busy={forging} className="lab-pill-button px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">{forging ? "Forging your pack…" : "Forge complete résumé pack →"}</button>
             {activeLaneCount === 0 && state.lanes.length > 0 && (
               <p className="max-w-xs text-right text-xs font-bold text-gold">
                 {state.lanes.length} lane{state.lanes.length === 1 ? "" : "s"} added, none active yet — use “Make this lane active” above to include one.

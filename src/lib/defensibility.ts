@@ -32,8 +32,23 @@ function claimsForVariant(variant: ResumeVariant): Claim[] {
   return claims;
 }
 
+function isUserAuthoredClaim(variant: ResumeVariant, claimPath: string): boolean {
+  if (!variant.userEdited) return false;
+  return variant.userAuthoredPaths.some((editedPath) => {
+    if (editedPath === "document") return true;
+    if (editedPath === claimPath) return true;
+    if (editedPath === "coreSkills") return claimPath.startsWith("coreSkills.");
+    const match = editedPath.match(/^experience.(d+).(title|company|time|bullets)$/);
+    if (!match) return false;
+    const prefix = `experience.${match[1]}.`;
+    return match[2] === "bullets"
+      ? claimPath.startsWith(`${prefix}bullets.`)
+      : claimPath === `${prefix}heading`;
+  });
+}
+
 function yearTokens(value: string): string[] {
-  return value.match(/(?:19|20)\d{2}|present|current/gi)?.map((item) => item.toLowerCase()) ?? [];
+  return value.match(/(?:19|20)d{2}|present|current/gi)?.map((item) => item.toLowerCase()) ?? [];
 }
 
 export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: CareerDossier): DefensibilityReceipt {
@@ -46,31 +61,36 @@ export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: Care
     !incompletePaths.has(reference.claimPath) && reference.evidenceIds.length > 0 && reference.evidenceIds.every((id) => approved.has(id))
   );
   const validByPath = new Map(validReferences.map((reference) => [reference.claimPath, reference]));
-  const missing = claims.filter((claim) => !validByPath.has(claim.path));
+  const userAuthoredClaims = claims.filter((claim) => isUserAuthoredClaim(variant, claim.path));
+  const userAuthoredPaths = new Set(userAuthoredClaims.map((claim) => claim.path));
+  // A user-authored field is intentionally not described as evidence-backed,
+  // but it is also not a broken citation. It remains exportable with a visible
+  // human-recheck status. Only untouched generated claims require provenance.
+  const missing = claims.filter((claim) => !validByPath.has(claim.path) && !userAuthoredPaths.has(claim.path));
   const incompleteProvenance = missing.filter((claim) => incompletePaths.has(claim.path)).length;
+  const evidenceBackedReferences = validReferences.filter((reference) => !userAuthoredPaths.has(reference.claimPath));
   const durationClaims = claims.filter((claim) => yearTokens(claim.text).length > 0);
   const verifiedDurations = durationClaims.filter((claim) => {
+    if (userAuthoredPaths.has(claim.path)) return false;
     const reference = validByPath.get(claim.path);
     if (!reference) return false;
     const wanted = yearTokens(claim.text);
     const source = reference.evidenceIds.flatMap((id) => yearTokens(approved.get(id)?.detail ?? ""));
     return wanted.every((token) => source.includes(token));
   }).length;
-  const userEditedClaimsNeedingReview = variant.userEdited
-    ? Math.max(1, variant.userAuthoredPaths.filter((path) => path !== "undo").length)
-    : 0;
+  const userEditedClaimsNeedingReview = userAuthoredClaims.length;
   const status: DefensibilityStatus = missing.length
     ? "Needs evidence review"
     : userEditedClaimsNeedingReview
       ? "User-edited, recheck required"
-      : validReferences.some((reference) => reference.supportType === "transferred")
+      : evidenceBackedReferences.some((reference) => reference.supportType === "transferred")
         ? "Traced with transfers"
         : "Fully traced";
   return {
     totalClaims: claims.length,
-    directlySupported: validReferences.filter((reference) => reference.supportType === "direct").length,
-    combinedEvidence: validReferences.filter((reference) => reference.supportType === "combined").length,
-    transferred: validReferences.filter((reference) => reference.supportType === "transferred").length,
+    directlySupported: evidenceBackedReferences.filter((reference) => reference.supportType === "direct").length,
+    combinedEvidence: evidenceBackedReferences.filter((reference) => reference.supportType === "combined").length,
+    transferred: evidenceBackedReferences.filter((reference) => reference.supportType === "transferred").length,
     missingProvenance: missing.length,
     incompleteProvenance,
     verifiedDurations,

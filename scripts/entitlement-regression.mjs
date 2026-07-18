@@ -101,8 +101,15 @@ const foreign = mintLicenseKey("career-switch", "ref-2", NOW, wrongPrivateB64);
 const foreignResult = await verifyLicenseKey(foreign, publicB64);
 check("license from a different signing key is rejected", foreignResult.ok === false);
 
-// Signature bit-flip.
-const flipped = genuine.slice(0, -2) + (genuine.endsWith("A") ? "BB" : "AA");
+// Signature bit-flip. Flip a real bit in the DECODED signature bytes and
+// re-encode: mutating the base64url string's trailing characters was flaky,
+// because the final character only carries 2 significant bits — a signature
+// ending in "BA" mutated to "BB" decodes to byte-identical signature bytes
+// (A and B share the same top 2 bits), which then correctly verified.
+const flippedSigBytes = Buffer.from(genuineParts.signatureB64.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+flippedSigBytes[10] ^= 0x01;
+const flippedSigB64 = flippedSigBytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const flipped = `CF1.${genuineParts.payloadB64}.${flippedSigB64}`;
 check("bit-flipped signature is rejected", (await verifyLicenseKey(flipped, publicB64)).ok === false);
 
 // Structural garbage.

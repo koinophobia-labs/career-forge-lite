@@ -40,6 +40,24 @@ jobs:
       - name: Run redacted private acceptance fixture
         run: npm run acceptance:private
 
+      - name: Run full first-time-user journey (test-mode commerce)
+        shell: bash
+        run: timeout 8m npm run acceptance:journey | tee journey-output.log
+
+      - name: Run backup and recovery proof
+        shell: bash
+        run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
+
+      - name: Preserve journey and recovery results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-and-recovery-results
+          path: |
+            journey-output.log
+            recovery-output.log
+          if-no-files-found: warn
+
       - name: Lint
         run: npm run lint
 

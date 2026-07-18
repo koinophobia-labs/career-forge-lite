@@ -32,15 +32,33 @@ export function isUncertaintyStatement(text: string): boolean {
 const terminationPatterns: RegExp[] = [
   /\b(was|were|got|getting|been)\s+(laid\s+off|let\s+go|terminated|fired|downsized|made\s+redundant)\b/i,
   /\blaid\s+off\b/i,
-  /\b(company|employer|org(anization)?)\s+(closed|shut\s+down|folded|went\s+under|downsized)\b/i,
-  /\bposition\s+(was\s+)?eliminated\b/i,
+  /\b(company|employer|org(anization)?|department|team|division)\s+(closed|shut\s+down|folded|went\s+under|downsized|reorganized|restructured)\b/i,
+  /\b(role|position|job|department|team)\s+(was\s+)?eliminated\b/i,
   /\buntil\s+(i\s+was\s+)?(laid\s+off|let\s+go|terminated|fired)\b/i,
   /\breduction\s+in\s+force\b/i,
-  /\bRIF'?(ed|d)?\b/
+  /\bRIF'?(ed|d)?\b/,
+  /\b(underwent|went\s+through|had|announced)\s+(a\s+)?(round\s+of\s+)?layoffs?\b/i,
+  /\b(company|employer|org(anization)?|department|team)\s+(was\s+)?reorganiz(ed|ation)\b/i,
+  /\b(department|team|role|position|division|group|unit)\s+(was|were)\s+(\w+\s+)?(reorganiz(ed)|restructur(ed)|eliminated|dissolved|downsized)\b/i,
+  /\bleadership\s+(decided\s+to\s+)?eliminat(ed?|ing)\s+(the\s+)?(role|position|team|department)\b/i
 ];
 
 export function containsTerminationReason(text: string): boolean {
   return terminationPatterns.some((pattern) => pattern.test(text));
+}
+
+const trailingConjunction = /\s+(until|after|when|because|since|though|although)\s*[.!?]?\s*$/i;
+
+// A trailing conjunction with its clause removed reads broken ("I managed
+// vendor contracts worth $2M annually until"); trim it along with any
+// leftover clause punctuation.
+function finishClause(value: string): string {
+  return value
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(trailingConjunction, "")
+    .replace(/[,;]\s*$/, "")
+    .trim();
 }
 
 // Removes termination-reason clauses from a sentence while keeping the rest
@@ -52,13 +70,33 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => {
       if (!containsTerminationReason(sentence)) return sentence;
-      // Try dropping just the offending clause (comma- or "until"-separated).
-      const clauses = sentence.split(/,|;|\s+—\s+|\s+-\s+/);
-      const kept = clauses.filter((clause) => !containsTerminationReason(clause));
-      if (kept.length === 0) return "";
-      const rejoined = kept.join(", ").replace(/\s{2,}/g, " ").trim();
-      // A trailing "until" with its clause removed reads broken; trim it.
-      return rejoined.replace(/\s+(until|after|when|because)\s*[.!?]?\s*$/i, "").trim();
+
+      // First: if the sentence already has comma/semicolon/dash-separated
+      // clauses, drop only the ones that carry the reason. A comma between
+      // digits is a thousands separator ("4,000 tickets"), never a clause
+      // boundary — splitting there once mangled a summary to "Resolved 4".
+      const punctuationClauses = sentence.split(/(?<!\d),|,(?!\d)|;|\s+—\s+|\s+-\s+/);
+      if (punctuationClauses.length > 1) {
+        const kept = punctuationClauses.filter((clause) => !containsTerminationReason(clause));
+        if (kept.length > 0) return finishClause(kept.join(", "));
+      }
+
+      // Second: no punctuation isolated the reason (e.g. "I managed vendor
+      // contracts worth $2M annually until I was laid off in June 2026" is
+      // one clause with no comma) — a temporal/causal conjunction almost
+      // always introduces the reason as a trailing dependent clause, so
+      // split there instead of discarding safe content along with it.
+      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(?:until|because|since|when|after|though|although|before)\b\s+(.*)$/i);
+      if (conjunctionMatch) {
+        const [, before, after] = conjunctionMatch;
+        const beforeUnsafe = containsTerminationReason(before);
+        const afterUnsafe = containsTerminationReason(after);
+        if (!beforeUnsafe && afterUnsafe && before.trim()) return finishClause(before);
+        if (!afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
+      }
+
+      // Nothing in the sentence is independently safe from the reason.
+      return "";
     })
     .filter(Boolean);
 

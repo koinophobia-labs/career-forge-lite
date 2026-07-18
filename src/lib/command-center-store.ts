@@ -10,6 +10,7 @@ import type {
 } from "@/types/command-center";
 import { emptyDossier, mergeLegacyResumeSnapshots, migrateLegacyProfile, reviveDossier } from "@/lib/dossier";
 import type { ExportMetadata, ImportProposalRecord, PendingImportReview, ResumePack, ResumeVariant } from "@/types/dossier";
+import type { ExperienceRole } from "@/types/career";
 
 export const STORAGE_KEY = "career-forge-command-center-v1";
 // Where an unreadable stored blob is quarantined instead of being destroyed.
@@ -259,11 +260,12 @@ export function reviveResumeSnapshot(raw: unknown): ResumeSnapshot | null {
 
   const experience = resume.experience
     .filter((role): role is Record<string, unknown> => Boolean(role) && typeof role === "object")
-    .map((role) => ({
+    .map((role): ExperienceRole => ({
       title: asString(role.title),
       company: asString(role.company),
       time: asString(role.time),
-      bullets: asStringArray(role.bullets)
+      bullets: asStringArray(role.bullets),
+      kind: role.kind === "project" ? "project" : role.kind === "role" ? "role" : undefined
     }));
 
   return {

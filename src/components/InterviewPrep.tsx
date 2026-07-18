@@ -34,10 +34,14 @@ const categoryMeta: Record<PrepCategory, { label: string; blurb: string }> = {
   gap_defense: {
     label: "Gap defense",
     blurb: "The uncomfortable questions about what you don't have yet. Rehearsed honesty beats improvised bluffing."
+  },
+  discovery: {
+    label: "Needs more evidence",
+    blurb: "Claims and self-reported strengths that aren't backed by enough recorded detail yet to defend in an interview. These are reminders to go add evidence, not questions to rehearse an answer for."
   }
 };
 
-const categoryOrder: PrepCategory[] = ["transition", "role", "behavioral", "gap_defense"];
+const categoryOrder: PrepCategory[] = ["transition", "role", "behavioral", "gap_defense", "discovery"];
 
 type QuestionCardProps = {
   question: PrepQuestion;
@@ -60,7 +64,7 @@ function QuestionCard({ question }: QuestionCardProps) {
           onClick={() => setOpen(!open)}
           className="rounded-full border border-white/15 px-3 py-1 text-xs font-bold text-paper/60 transition hover:border-cyan hover:text-cyan"
         >
-          {open ? "Collapse" : "Practice"}
+          {open ? "Collapse" : question.category === "discovery" ? "Add evidence" : "Practice"}
         </button>
       </div>
       <p className="mt-2 text-[0.78rem] leading-5 text-paper/55">
@@ -84,7 +88,11 @@ function QuestionCard({ question }: QuestionCardProps) {
 
           <div>
             <p className="lab-mono text-[0.68rem] font-bold uppercase text-cyan">
-              {question.category === "gap_defense" ? "Structure: acknowledge → situation → action → result → plan" : "Structure: situation → action → result"}
+              {question.category === "gap_defense"
+                ? "Structure: acknowledge → situation → action → result → plan"
+                : question.category === "discovery"
+                  ? "This isn't ready to rehearse — go find or record the real example first"
+                  : "Structure: situation → action → result"}
             </p>
             <ul className="mt-1.5 grid gap-1">
               {answerScaffold(question.category).map((line) => (
@@ -94,11 +102,11 @@ function QuestionCard({ question }: QuestionCardProps) {
               ))}
             </ul>
             <label className="mt-3 block">
-              <span className="text-sm font-bold text-paper">Draft your answer</span>
+              <span className="text-sm font-bold text-paper">{question.category === "discovery" ? "Record the real example or missing evidence" : "Draft your answer"}</span>
               <textarea
                 value={answer}
                 rows={6}
-                placeholder="Write it the way you'd say it out loud — or insert the structure below and fill in each line."
+                placeholder={question.category === "discovery" ? "Write the real situation, action, result, source, or detail you still need to verify." : "Write it the way you'd say it out loud — or insert the structure below and fill in each line."}
                 onChange={(event) => {
                   setAnswer(event.target.value);
                   savePrepDraft(question.question, event.target.value);

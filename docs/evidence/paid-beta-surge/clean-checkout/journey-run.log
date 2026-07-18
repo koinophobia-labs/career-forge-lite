@@ -1,0 +1,11 @@
+PASS a real finished sample PDF is downloadable before any data entry (built by the production export engine)
+PASS import → structured review → approval works without manual re-typing of the source résumé
+PASS save-status pill is visible and affirmative ("✓Saved on this device · 05:29 PM")
+PASS dashboard shows the five-step path with the current next action ("Next: Choose role lanes")
+PASS forge shows a working state and lands on an unambiguous 'pack is ready' confirmation
+PASS with commerce in test mode, export is gated — no dead button, a priced unlock path instead
+PASS pasting the purchase-issued license key activates on the first attempt with clear confirmation
+PASS full-pack export succeeds on the FIRST attempt (Jamie-Journey-Resume-Pack.zip)
+PASS everything — evidence, pack, entitlement — survives a reload with no hidden state
+
+9 passed, 0 failed

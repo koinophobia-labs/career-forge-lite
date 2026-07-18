@@ -151,22 +151,56 @@ check(
 // --- Behavioral questions from profile claims ----------------------------------
 const pack = generateInterviewPrep(profile, makeLane("Product Support Specialist"), application);
 const behavioral = pack.questions.filter((question) => question.category === "behavioral");
-check("behavioral questions generated", behavioral.length >= 5);
+const discovery = pack.questions.filter((question) => question.category === "discovery");
+check("behavioral questions generated", behavioral.length >= 1);
 check(
   "behavioral questions quote proof points",
   behavioral.some((question) => question.question.includes("96% satisfaction"))
 );
+// Strengths and transferable skills are self-reported labels with no linked
+// evidence — presenting them as ready-to-answer "behavioral" questions
+// invited the user to invent a story on the spot. They now surface as
+// discovery prompts (go find or record real evidence) instead.
 check(
-  "behavioral questions cover strengths",
-  behavioral.some((question) => question.question.includes("calm under pressure"))
+  "self-reported strengths surface as discovery prompts, not fabricated behavioral questions",
+  discovery.some((question) => question.question.includes("calm under pressure")) &&
+    !behavioral.some((question) => question.question.includes("calm under pressure"))
 );
 check(
-  "behavioral questions cover transferable skills",
-  behavioral.some((question) => question.question.includes("de-escalation"))
+  "self-reported transferable skills surface as discovery prompts, not fabricated behavioral questions",
+  discovery.some((question) => question.question.includes("de-escalation")) &&
+    !behavioral.some((question) => question.question.includes("de-escalation"))
 );
 check(
-  "empty profile produces no fabricated behavioral questions",
-  generateInterviewPrep(emptyProfile(), null, null).questions.filter((q) => q.category === "behavioral").length === 0
+  "empty profile produces no fabricated behavioral or discovery questions",
+  generateInterviewPrep(emptyProfile(), null, null).questions.filter((q) => q.category === "behavioral" || q.category === "discovery").length === 0
+);
+
+// A bare one-line metric with no situation/action detail behind it must not
+// be presented as a ready "walk me through it" story — that invites the
+// user to invent the missing context under interview pressure.
+const thinProof = {
+  ...profile,
+  proofPoints: "Improved things",
+  strengths: [],
+  transferableSkills: []
+};
+const thinPack = generateInterviewPrep(thinProof, makeLane("Product Support Specialist"), null);
+check(
+  "a bare one-line proof point without story substance never generates a fabricated behavioral question",
+  !thinPack.questions.some((question) => question.category === "behavioral" && question.question.includes("Improved things"))
+);
+
+const substantialProof = {
+  ...profile,
+  proofPoints: "Rebuilt the onboarding flow after churn complaints, cutting time-to-first-value from 12 days to 3.",
+  strengths: [],
+  transferableSkills: []
+};
+const substantialPack = generateInterviewPrep(substantialProof, makeLane("Product Support Specialist"), null);
+check(
+  "a proof point with real story substance still generates a real behavioral question",
+  substantialPack.questions.some((question) => question.category === "behavioral" && question.question.includes("Rebuilt the onboarding flow"))
 );
 
 // --- Gap defense ---------------------------------------------------------------

@@ -1,0 +1,25 @@
+
+Priya Raman
+candidate@example.com | (555) 010-2000 | Portland, OR
+Professional Summary
+Community technologist pairing a day job in library services with six shipped civic-technology projects.
+Core Skills
+Python | Data Cleaning | Community Outreach | Grant Writing
+Experience
+Library Technology Assistant | City Public Library | 2021–2026
+Supported 200 weekly patrons across public computing and device-lending programs
+Selected Projects
+Transit Desert Mapping | Open Data Collective | 2025
+Mapped bus-access gaps for 40 neighborhoods using GTFS feeds
+Food Pantry Scheduler | Neighborhood Aid Network | 2024
+Built a volunteer-shift scheduler used by 11 pantries
+Ballot Measure Explainer | Civic Literacy Project | 2024
+Wrote plain-language explainers read by 90,000 voters
+Heat Map Sensor Network | Climate Resilience Lab | 2023
+Deployed 25 street-level temperature sensors and published weekly readings
+Library of Things Catalog | City Public Library | 2022
+Cataloged 700 non-book lendable items into the discovery layer
+Rental Inspection Tracker | Tenant Rights Coalition | 2022
+Digitized 5 years of paper inspection records into a searchable index
+Education
+B.S. Information Science — State University | 2020
