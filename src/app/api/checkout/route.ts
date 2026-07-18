@@ -31,6 +31,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isPackageTier(tier)) {
     return NextResponse.json({ error: "Unknown package." }, { status: 400 });
   }
+  const configuredTier = process.env.PAID_BETA_TIER;
+  const paidBetaTier = configuredTier === "job-search" || configuredTier === "career-switch" ? configuredTier : "reset";
+  if (process.env.NEXT_PUBLIC_COMMERCE_MODE === "live" && tier !== paidBetaTier) {
+    return NextResponse.json({ error: "That package is not open in the founding paid beta yet." }, { status: 403 });
+  }
 
   const result = await createCheckoutSession(tier, requestOrigin(request), secretKey);
   if (!result.ok) {

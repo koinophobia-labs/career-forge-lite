@@ -40,6 +40,15 @@ export type PilotSummary = {
   };
 };
 
+const MIN_REAL_TIMESTAMP = Date.UTC(2000, 0, 1);
+const INTEGRITY_MARKER = /^Career Forge integrity metric: imported ([^;]+); (\d+) context-only imported item\(s\)/;
+
+function validTimestamp(value: string | null | undefined): value is string {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time >= MIN_REAL_TIMESTAMP;
+}
+
 function minutesBetween(startIso: string | null, endIso: string | null): number | null {
   if (!startIso || !endIso) return null;
   const minutes = (new Date(endIso).getTime() - new Date(startIso).getTime()) / 60_000;
@@ -47,15 +56,46 @@ function minutesBetween(startIso: string | null, endIso: string | null): number 
 }
 
 function earliest(values: Array<string | null | undefined>): string | null {
-  const valid = values.filter((value): value is string => Boolean(value)).sort();
+  const valid = values.filter(validTimestamp).sort();
   return valid[0] ?? null;
+}
+
+function durableIntegrity(state: CommandCenterState): { importedAt: string[]; wrongCategoryItemsCaught: number } {
+  const markers = state.dossier.migrationReview.flatMap((item) => {
+    const match = item.match(INTEGRITY_MARKER);
+    return match ? [{ importedAt: match[1], count: Number(match[2]) }] : [];
+  });
+  const pendingCaught = state.pendingImportReviews.reduce(
+    (total, batch) => total + batch.proposals.filter((proposal) =>
+      proposal.status !== "proposed" && proposal.group === "other" && (proposal.kind === "goal" || proposal.kind === "constraint")
+    ).length,
+    0
+  );
+  return {
+    importedAt: markers.map((item) => item.importedAt),
+    wrongCategoryItemsCaught: markers.reduce((total, item) => total + item.count, 0) + pendingCaught
+  };
 }
 
 export function buildPilotSummary(state: CommandCenterState, nowIso: string): PilotSummary {
   const evidence = state.dossier.evidence;
   const approved = evidence.filter((item) => item.approved && !item.rejected);
-  const dossierStartedAt = earliest([state.dossier.createdAt, ...evidence.map((item) => item.createdAt)]);
-  const firstEvidenceApprovedAt = earliest(approved.map((item) => item.updatedAt || item.createdAt));
+  const integrity = durableIntegrity(state);
+  const dossierStartedAt = earliest([
+    state.dossier.createdAt,
+    ...integrity.importedAt,
+    ...evidence.map((item) => item.createdAt),
+    ...state.pendingImportReviews.map((item) => item.importedAt),
+    state.activeGoal?.selectedAt,
+    ...state.lanes.map((item) => item.createdAt),
+    ...state.resumePacks.map((item) => item.createdAt),
+    ...state.resumeVersions.map((item) => item.createdAt),
+    ...state.exports.map((item) => item.exportedAt)
+  ]);
+  // Evidence records are created when a Truth Inbox decision is committed or a
+  // manual fact is approved. createdAt is immutable; updatedAt is not, so a
+  // later edit can never rewrite the pilot's first-approval milestone.
+  const firstEvidenceApprovedAt = earliest(approved.map((item) => item.createdAt));
   const firstPackGeneratedAt = earliest(state.resumePacks.map((pack) => pack.createdAt));
   const firstExportAt = earliest(state.exports.map((item) => item.exportedAt));
   const variants = state.resumePacks.flatMap((pack) => pack.variants);
@@ -88,10 +128,7 @@ export function buildPilotSummary(state: CommandCenterState, nowIso: string): Pi
     integrity: {
       packsNeedingReview: state.resumePacks.filter((pack) => pack.status === "needs-review").length,
       claimsRefusedByGenerator: state.resumePacks.reduce((total, pack) => total + pack.receipt.unsupportedClaimsRefused.length, 0),
-      wrongCategoryItemsCaught: state.pendingImportReviews.reduce(
-        (total, batch) => total + batch.proposals.filter((proposal) => proposal.group === "other" && proposal.status !== "proposed").length,
-        0
-      )
+      wrongCategoryItemsCaught: integrity.wrongCategoryItemsCaught
     }
   };
 }

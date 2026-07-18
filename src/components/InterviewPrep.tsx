@@ -64,7 +64,7 @@ function QuestionCard({ question }: QuestionCardProps) {
           onClick={() => setOpen(!open)}
           className="rounded-full border border-white/15 px-3 py-1 text-xs font-bold text-paper/60 transition hover:border-cyan hover:text-cyan"
         >
-          {open ? "Collapse" : "Practice"}
+          {open ? "Collapse" : question.category === "discovery" ? "Add evidence" : "Practice"}
         </button>
       </div>
       <p className="mt-2 text-[0.78rem] leading-5 text-paper/55">
@@ -102,11 +102,11 @@ function QuestionCard({ question }: QuestionCardProps) {
               ))}
             </ul>
             <label className="mt-3 block">
-              <span className="text-sm font-bold text-paper">Draft your answer</span>
+              <span className="text-sm font-bold text-paper">{question.category === "discovery" ? "Record the real example or missing evidence" : "Draft your answer"}</span>
               <textarea
                 value={answer}
                 rows={6}
-                placeholder="Write it the way you'd say it out loud — or insert the structure below and fill in each line."
+                placeholder={question.category === "discovery" ? "Write the real situation, action, result, source, or detail you still need to verify." : "Write it the way you'd say it out loud — or insert the structure below and fill in each line."}
                 onChange={(event) => {
                   setAnswer(event.target.value);
                   savePrepDraft(question.question, event.target.value);

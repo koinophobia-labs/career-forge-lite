@@ -104,7 +104,19 @@ export function commitTruthInboxReview(
     return { state, approved: 0, rejected: 0, remaining: remaining.length, completed: false, changed: false };
   }
 
-  const dossier = mergeSafeImportProposals(state.dossier, decided, nowIso, batch.retainSourceFilenames);
+  const mergedDossier = mergeSafeImportProposals(state.dossier, decided, nowIso, batch.retainSourceFilenames);
+  const contextOnlyCaught = decided.filter((item) =>
+    item.group === "other" && (item.kind === "goal" || item.kind === "constraint")
+  ).length;
+  // The completed queue is removed, so preserve only a content-free aggregate
+  // and the import-start timestamp. This keeps pilot metrics durable without
+  // retaining résumé text or a shadow analytics database.
+  const integrityMarker = contextOnlyCaught > 0
+    ? `Career Forge integrity metric: imported ${batch.importedAt}; ${contextOnlyCaught} context-only imported item(s) separated from professional evidence in review ${batch.id}.`
+    : "";
+  const dossier = integrityMarker
+    ? { ...mergedDossier, migrationReview: unique([...mergedDossier.migrationReview, integrityMarker]) }
+    : mergedDossier;
   const nextWithDossier = withUpdatedDossier(state, dossier);
   const completed = remaining.length === 0;
   const pendingImportReviews = completed

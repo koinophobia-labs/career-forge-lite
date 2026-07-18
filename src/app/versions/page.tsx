@@ -14,6 +14,7 @@ import { LockedActionPill, LockedFeaturePanel } from "@/components/LockedFeature
 import { useEntitlement } from "@/lib/entitlement";
 import { createPackBundle, createVariantFile, downloadBlob, exportSections, variantPlainText } from "@/lib/pack-export";
 import { updatePackVariant } from "@/lib/resume-pack";
+import { syncBuilderVersionsWithPack } from "@/lib/version-sync";
 import { trackCareerEvent } from "@/lib/analytics";
 import { variantPurpose } from "@/lib/activation";
 import { deriveDefensibilityReceipt, uniqueUnclaimedReceiptItems } from "@/lib/defensibility";
@@ -447,7 +448,11 @@ export default function VersionsPage() {
   }
 
   function updatePack(next: ResumePack) {
-    update((current) => ({ ...current, resumePacks: current.resumePacks.map((pack) => pack.id === next.id ? next : pack) }));
+    update((current) => ({
+      ...current,
+      resumePacks: current.resumePacks.map((pack) => pack.id === next.id ? next : pack),
+      resumeVersions: syncBuilderVersionsWithPack(current, next)
+    }));
   }
 
   function recordPackExport(filenames: string[]) {

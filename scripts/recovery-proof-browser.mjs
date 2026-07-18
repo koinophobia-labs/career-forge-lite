@@ -55,6 +55,7 @@ const port = 3225;
 const baseUrl = `http://127.0.0.1:${port}`;
 const server = spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)], {
   cwd: root,
+  detached: process.platform !== "win32",
   env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "test", NEXT_PUBLIC_LICENSE_PUBLIC_KEY: publicB64 },
   stdio: ["ignore", "pipe", "pipe"]
 });
@@ -69,6 +70,24 @@ async function waitForServer() {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`Server did not start.\n${output}`);
+}
+
+async function stopServer() {
+  if (server.exitCode !== null) return;
+  const signal = (name) => {
+    try {
+      if (process.platform !== "win32" && server.pid) process.kill(-server.pid, name);
+      else server.kill(name);
+    } catch {
+      // The server may exit between the state check and the signal.
+    }
+  };
+  signal("SIGTERM");
+  await Promise.race([
+    once(server, "exit").catch(() => undefined),
+    new Promise((resolve) => setTimeout(resolve, 5_000))
+  ]);
+  if (server.exitCode === null) signal("SIGKILL");
 }
 
 const readState = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1") ?? "null"));
@@ -198,5 +217,5 @@ try {
   console.log(`\n${passes} passed, 0 failed`);
 } finally {
   await browser?.close();
-  server.kill();
+  await stopServer();
 }
