@@ -12,17 +12,24 @@ import { PACKAGES } from "@/lib/packages";
 type FulfillmentState =
   | { phase: "idle" }
   | { phase: "fetching" }
-  | { phase: "issued"; license: string; packageName: string }
+  | { phase: "issued"; license: string; packageName: string; source: "purchase" | "invite" }
   | { phase: "pending" }
   | { phase: "error"; message: string };
 
+type InviteState =
+  | { phase: "idle" }
+  | { phase: "redeeming" }
+  | { phase: "error"; message: string };
+
 // Exchanges a completed checkout for the license key and activates it.
-// Also the manual home for pasting a key on a new device.
+// Also the manual home for founder invites and keys used on a new device.
 function UnlockContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const { entitlement } = useEntitlement();
   const [fulfillment, setFulfillment] = useState<FulfillmentState>({ phase: "idle" });
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteState, setInviteState] = useState<InviteState>({ phase: "idle" });
   const [manualKey, setManualKey] = useState("");
   const [manualResult, setManualResult] = useState<"valid" | "invalid" | null>(null);
   const [copied, setCopied] = useState(false);
@@ -39,7 +46,12 @@ function UnlockContent() {
           trackCareerEvent("checkout_completed");
           const outcome = await activateLicenseKey(data.license);
           trackCareerEvent(outcome.status === "valid" ? "license_activated" : "license_invalid");
-          setFulfillment({ phase: "issued", license: data.license, packageName: data.packageName ?? "your pack" });
+          setFulfillment({
+            phase: "issued",
+            license: data.license,
+            packageName: data.packageName ?? "your pack",
+            source: "purchase"
+          });
           return;
         }
         if (data.pending) {
@@ -48,8 +60,45 @@ function UnlockContent() {
         }
         setFulfillment({ phase: "error", message: data.error ?? "Something went wrong issuing your key." });
       })
-      .catch(() => setFulfillment({ phase: "error", message: "Could not reach the license service — check your connection and reload this page." }));
+      .catch(() => setFulfillment({ phase: "error", message: "Could not reach the license service. Check your connection and reload this page." }));
   }, [sessionId]);
+
+  async function handleFounderInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!inviteCode.trim() || inviteState.phase === "redeeming") return;
+    setInviteState({ phase: "redeeming" });
+
+    try {
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: inviteCode })
+      });
+      const data = (await response.json()) as { license?: string; packageName?: string; error?: string };
+      if (!response.ok || !data.license) {
+        setInviteState({ phase: "error", message: data.error ?? "That founder code could not be redeemed." });
+        return;
+      }
+
+      const outcome = await activateLicenseKey(data.license);
+      trackCareerEvent(outcome.status === "valid" ? "license_activated" : "license_invalid");
+      if (outcome.status !== "valid") {
+        setInviteState({ phase: "error", message: "The invite was accepted, but the issued license could not be activated." });
+        return;
+      }
+
+      setInviteCode("");
+      setInviteState({ phase: "idle" });
+      setFulfillment({
+        phase: "issued",
+        license: data.license,
+        packageName: data.packageName ?? "your pack",
+        source: "invite"
+      });
+    } catch {
+      setInviteState({ phase: "error", message: "Could not reach the founder invite service. Check your connection and try again." });
+    }
+  }
 
   async function handleManualActivate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,12 +134,14 @@ function UnlockContent() {
 
         {fulfillment.phase === "issued" && (
           <div className="mt-6 rounded-xl border border-cyan/30 bg-cyan/5 p-6">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Purchase confirmed</p>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">
+              {fulfillment.source === "invite" ? "Founder invite accepted" : "Purchase confirmed"}
+            </p>
             <h2 className="mt-2 text-xl font-bold text-paper">Your {fulfillment.packageName} is unlocked.</h2>
             <p className="mt-3 text-sm leading-6 text-paper/70">
-              This is your license key. It is already active in this browser —{" "}
-              <span className="font-bold text-paper">save it somewhere safe</span> so you can unlock any other device.
-              Your Stripe receipt links back to this page if you ever lose it.
+              This is your unique license key. It is already active in this browser.{" "}
+              <span className="font-bold text-paper">Save it somewhere safe</span> so you can unlock any other device.
+              {fulfillment.source === "purchase" && " Your Stripe receipt links back to this page if you ever lose it."}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <code
@@ -118,8 +169,8 @@ function UnlockContent() {
         {fulfillment.phase === "pending" && (
           <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-6">
             <p className="text-sm leading-6 text-paper/80">
-              Your payment is still processing (some payment methods take a few minutes). Reload this page shortly —
-              your Stripe receipt email also links back here.
+              Your payment is still processing (some payment methods take a few minutes). Reload this page shortly. Your
+              Stripe receipt email also links back here.
             </p>
           </div>
         )}
@@ -129,16 +180,55 @@ function UnlockContent() {
             <p className="text-sm font-bold text-ember">{fulfillment.message}</p>
             <p className="mt-2 text-sm leading-6 text-paper/70">
               If you completed a purchase, use the link in your Stripe receipt email to return here, or reply to the
-              receipt to reach support. Your purchase is safe — this page can always re-issue your key.
+              receipt to reach support. Your purchase is safe. This page can always re-issue your key.
             </p>
           </div>
         )}
+
+        <div className="mt-8 rounded-xl border border-cyan/25 bg-cyan/[0.04] p-6">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Founder access</p>
+          <h2 className="mt-2 text-lg font-bold text-paper">Have a founder code?</h2>
+          <p className="mt-2 text-sm leading-6 text-paper/60">
+            Redeem it here for your own Career Forge license. No checkout or account is required.
+          </p>
+          <form onSubmit={handleFounderInvite} className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <label htmlFor="founder-code" className="sr-only">
+              Founder code
+            </label>
+            <input
+              id="founder-code"
+              type="text"
+              value={inviteCode}
+              onChange={(event) => {
+                setInviteCode(event.target.value);
+                setInviteState({ phase: "idle" });
+              }}
+              placeholder="Founder code"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="lab-mono min-h-11 flex-1 rounded-md border border-white/15 bg-obsidian px-4 py-2 text-sm text-paper placeholder:text-paper/30 focus:border-cyan focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!inviteCode.trim() || inviteState.phase === "redeeming"}
+              className="min-h-11 rounded-md bg-cyan px-5 py-2 text-sm font-black text-ink transition hover:bg-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {inviteState.phase === "redeeming" ? "Redeeming…" : "Redeem code"}
+            </button>
+          </form>
+          {inviteState.phase === "error" && (
+            <p role="alert" className="mt-3 text-sm font-bold text-ember">
+              {inviteState.message}
+            </p>
+          )}
+        </div>
 
         <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-lg font-bold text-paper">Have a license key? Paste it here.</h2>
           <p className="mt-2 text-sm leading-6 text-paper/60">
             Keys look like <span className="lab-mono text-xs">CF1.xxxx.xxxx</span> and work on any device. Nothing else
-            is needed — no account, no sign-in.
+            is needed. No account, no sign-in.
           </p>
           <form onSubmit={handleManualActivate} className="mt-4 flex flex-col gap-3 sm:flex-row">
             <label htmlFor="license-key" className="sr-only">
@@ -167,7 +257,7 @@ function UnlockContent() {
           </form>
           {manualResult === "valid" && (
             <p className="mt-3 text-sm font-bold text-cyan">
-              Key activated — your pack is unlocked on this device.
+              Key activated. Your pack is unlocked on this device.
             </p>
           )}
           {manualResult === "invalid" && (
