@@ -74,7 +74,12 @@ export default function PricingPage() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const isPublicBeta = commerceMode === "off";
   const configuredPaidBetaTier = process.env.NEXT_PUBLIC_PAID_BETA_TIER;
-  const paidBetaTier: PackageTier = configuredPaidBetaTier === "job-search" || configuredPaidBetaTier === "career-switch" ? configuredPaidBetaTier : "reset";
+  const paidBetaTier: PackageTier =
+    commerceMode === "live"
+      ? "reset"
+      : configuredPaidBetaTier === "job-search" || configuredPaidBetaTier === "career-switch"
+        ? configuredPaidBetaTier
+        : "reset";
   const faqs = isPublicBeta ? betaFaqs : purchaseFaqs;
 
   useEffect(() => {

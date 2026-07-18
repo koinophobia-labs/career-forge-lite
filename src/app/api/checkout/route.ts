@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
-import { createCheckoutSession, getStripeSecretKey } from "@/lib/server/stripe";
+import { createCheckoutSession, getLiveResetPaymentLinkUrl, getStripeSecretKey } from "@/lib/server/stripe";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
 // input is the tier name; the price comes from the server-side package config.
@@ -13,14 +13,6 @@ function requestOrigin(request: Request): string {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const secretKey = getStripeSecretKey();
-  if (!secretKey) {
-    return NextResponse.json(
-      { error: "Payments are not configured on this deployment." },
-      { status: 503 }
-    );
-  }
-
   let tier: unknown;
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -31,10 +23,31 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isPackageTier(tier)) {
     return NextResponse.json({ error: "Unknown package." }, { status: 400 });
   }
-  const configuredTier = process.env.PAID_BETA_TIER;
-  const paidBetaTier = configuredTier === "job-search" || configuredTier === "career-switch" ? configuredTier : "reset";
-  if (process.env.NEXT_PUBLIC_COMMERCE_MODE === "live" && tier !== paidBetaTier) {
+  const liveMode = process.env.NEXT_PUBLIC_COMMERCE_MODE === "live";
+  if (liveMode && process.env.PAID_BETA_TIER !== "reset") {
+    return NextResponse.json({ error: "Live commerce is not safely configured." }, { status: 503 });
+  }
+  if (liveMode && tier !== "reset") {
     return NextResponse.json({ error: "That package is not open in the founding paid beta yet." }, { status: 403 });
+  }
+
+  if (liveMode) {
+    const paymentLink = getLiveResetPaymentLinkUrl();
+    if (!paymentLink) {
+      return NextResponse.json(
+        { error: "Payments are not configured on this deployment." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ url: paymentLink });
+  }
+
+  const secretKey = getStripeSecretKey();
+  if (!secretKey) {
+    return NextResponse.json(
+      { error: "Payments are not configured on this deployment." },
+      { status: 503 }
+    );
   }
 
   const result = await createCheckoutSession(tier, requestOrigin(request), secretKey);
