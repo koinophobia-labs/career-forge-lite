@@ -129,10 +129,14 @@ const sampleUsers = [
 
 async function startGuidedFlow(page) {
   await page.goto(`${baseUrl}/resume-builder`, { waitUntil: "load" });
+  await page.getByRole("heading", { name: "What job do you want next?" }).waitFor();
   await assertNoHorizontalOverflow(page, "guided-setup");
-  await page.getByText("Choose how you want to start.").waitFor();
-  await page.getByText("Start guided build").click();
-  await page.getByRole("heading", { name: "What do you need help with?" }).waitFor();
+  if (await page.getByText("Choose how you want to start.").count()) {
+    throw new Error("guided setup still exposes the duplicate mode router");
+  }
+  if (await page.getByRole("heading", { name: "What do you need help with?" }).count()) {
+    throw new Error("guided setup still exposes the duplicate quick-start router");
+  }
 }
 
 async function runFastRecommendationFlow(browser, viewport, sample, verifyActions = false) {
@@ -146,7 +150,6 @@ async function runFastRecommendationFlow(browser, viewport, sample, verifyAction
   try {
     console.log(`START ${sample.label} ${viewport.width}x${viewport.height}`);
     await startGuidedFlow(page);
-    await clickContinue(page, "Start");
 
     const targetInput = page.getByPlaceholder("Example: Customer Support");
     await targetInput.fill(sample.target);
@@ -237,7 +240,6 @@ async function runKnownCareerFlow(browser, viewport) {
   try {
     console.log(`START known-career ${viewport.width}x${viewport.height}`);
     await startGuidedFlow(page);
-    await clickContinue(page, "Start");
 
     const targetInput = page.getByPlaceholder("Example: Customer Support");
     await targetInput.fill("Help");
