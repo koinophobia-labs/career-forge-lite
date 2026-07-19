@@ -27,8 +27,6 @@ const moreStations: Station[] = [
   ["Data & Backup", "/settings"]
 ];
 
-const allStations = [...primaryStations, ...moreStations];
-
 type CommandNavProps = { active: string };
 
 export function CommandNav({ active }: CommandNavProps) {
