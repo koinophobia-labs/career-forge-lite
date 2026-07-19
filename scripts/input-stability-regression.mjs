@@ -192,7 +192,8 @@ async function runFastRecommendationFlow(browser, viewport, sample, verifyAction
       await page.getByRole("heading", { name: "What tools did you use?" }).waitFor();
       await page.getByPlaceholder("Add another tool").fill("Excel");
       await page.getByRole("button", { name: "Excel" }).first().click();
-      await clickContinue(page, "Save and review");
+      await clickContinue(page, "Next: results");
+      await clickContinue(page, "Review choices");
       await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
     }
 
