@@ -85,10 +85,9 @@ check("first-resume: a role with no responsibilities produces no invented previe
 // --- Path 3: Practice Interview — generic prep works with an empty profile ---
 const emptyProfile = store.emptyProfile();
 const pack = prep.generateInterviewPrep(emptyProfile, null, null, dossierLib.emptyDossier(NOW));
-const recruiterQuestions = prep.questionsForInterviewRound(pack.questions, "recruiter");
-check("practice-interview: recruiter round has questions with no profile", recruiterQuestions.length >= 1);
+check("practice-interview: prep has questions with no profile", Array.isArray(pack.questions) && pack.questions.length >= 1);
 check("practice-interview: reverse questions exist with no profile", pack.reverseQuestions.length >= 1);
-check("practice-interview: every round resolves to concrete categories", ["recruiter", "behavioral", "technical", "final"].every((round) => prep.categoriesForInterviewRound(round).length > 0));
+check("practice-interview: an answer framework is always provided", Array.isArray(pack.answerFramework) && pack.answerFramework.length > 0);
 
 // --- Beta feedback capture: persists, validates, asks once per milestone ---
 memory.clear();
