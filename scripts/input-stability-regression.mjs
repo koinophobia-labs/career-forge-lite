@@ -162,7 +162,10 @@ async function runFastRecommendationFlow(browser, viewport, sample, verifyAction
     if (!/software|tech|engineer/i.test(sample.label) && await page.getByText("Troubleshot technical issues").isVisible().catch(() => false)) {
       throw new Error(`${sample.label}: unrelated technical chip appeared in adaptive experience step`);
     }
-    await clickContinue(page, "See recommendations");
+    await clickContinue(page, "Next: skills");
+    await clickContinue(page, "Next: tools");
+    await clickContinue(page, "Next: results");
+    await clickContinue(page, "Review choices");
 
     await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
     await page.getByText(/Quick draft ready|Resume package ready/).waitFor();
@@ -218,6 +221,7 @@ async function runFastRecommendationFlow(browser, viewport, sample, verifyAction
         throw new Error("print/export button did not call window.print");
       }
     }
+
     console.log(`PASS ${sample.label} ${viewport.width}x${viewport.height}`);
   } finally {
     await context.close().catch(() => undefined);
