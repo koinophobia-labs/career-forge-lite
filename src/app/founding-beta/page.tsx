@@ -5,38 +5,26 @@ import { PACKAGES } from "@/lib/packages";
 
 export const metadata = {
   title: "Founding Career Reset Cohort — Career Forge",
-  description: "Apply for one of five founding Career Reset seats: a one-time, one-lane Career Forge pack with guided onboarding and priority support."
+  description: "Join one of five founding Career Reset purchases: a one-time, one-lane Career Forge pack with guided onboarding and priority support."
 };
 
 const reset = PACKAGES.reset;
 
 const fitSignals = [
   "You are actively restarting, cleaning up, or refocusing a real job search.",
-  "You can complete the dossier-to-export workflow within seven days of acceptance.",
-  "You will review every claim and use at least one artifact in a real application.",
+  "You can complete the work-history-to-export workflow within seven days of purchase.",
+  "You will review every claim and use at least one résumé or job-search artifact in a real application.",
   "You are willing to share honest feedback and the optional content-free pilot summary."
 ];
 
 const foundingExtras = [
-  "Guided onboarding into the Career Dossier and Truth Inbox",
-  "Priority support while you build the first one-lane pack",
+  "Guided onboarding through work-history import and fact review",
+  "Priority support while you build your first one-lane résumé pack",
   "A direct channel for reporting friction and shaping the paid product",
-  "Founding-seat recognition in the cohort record, with no public attribution unless you approve it"
+  "Founding-cohort recognition, with no public attribution unless you approve it"
 ];
 
 export default function FoundingBetaPage() {
-  const applicationBody = [
-    "Hi Blake — I want to apply for a Career Forge founding seat.",
-    "",
-    "Name:",
-    "Current role or background:",
-    "Role direction I am pursuing:",
-    "What is not working in my current job search:",
-    "Can I complete the workflow within seven days? (yes/no):",
-    "Anything Career Forge should handle carefully:"
-  ].join("\n");
-  const applicationHref = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("Career Forge founding cohort — application")}&body=${encodeURIComponent(applicationBody)}`;
-
   return (
     <main>
       <CommandNav active="/founding-beta" />
@@ -44,27 +32,27 @@ export default function FoundingBetaPage() {
       <section className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="trust-panel overflow-hidden">
           <div className="p-6 sm:p-9">
-            <p className="trust-kicker text-sm font-bold uppercase">Founding paid beta · Five seats</p>
+            <p className="trust-kicker text-sm font-bold uppercase">Founding paid beta · Five purchases</p>
             <div className="mt-3 grid gap-7 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
               <div>
                 <h1 className="max-w-3xl text-4xl font-bold leading-tight text-paper sm:text-6xl">
                   Reset one job-search direction without rebuilding your career from scratch.
                 </h1>
                 <p className="mt-5 max-w-2xl text-base leading-7 text-paper/72">
-                  The founding Career Reset cohort is for five people who need one credible role direction and a reusable,
-                  evidence-backed foundation. You review the facts. Career Forge turns those approved facts into distinct ATS
-                  and recruiter drafts, LinkedIn positioning, and exportable files.
+                  Career Reset is for people who need one credible role direction and a reusable, evidence-backed foundation.
+                  You review the facts. Career Forge turns those approved facts into ATS and recruiter résumé drafts, LinkedIn
+                  positioning, and exportable files.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <a href={applicationHref} className="lab-pill-button inline-flex min-h-11 items-center px-6 py-3 text-sm font-black">
-                    Apply for a founding seat →
-                  </a>
+                  <Link href="/pricing" className="lab-pill-button inline-flex min-h-11 items-center px-6 py-3 text-sm font-black">
+                    Start Career Reset →
+                  </Link>
                   <Link href="/" className="inline-flex min-h-11 items-center rounded-md border border-cyan/40 bg-cyan/10 px-6 py-3 text-sm font-bold text-cyan">
-                    Try the public beta first
+                    Build and review free first
                   </Link>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-paper/55">
-                  Applying does not charge you. Payment is requested only after fit and scope are confirmed in writing.
+                  Secure checkout charges ${reset.priceUsd} once. Career Reset is the only paid tier in the founding beta, and checkout closes after five completed purchases.
                 </p>
               </div>
 
@@ -73,10 +61,10 @@ export default function FoundingBetaPage() {
                 <p className="mt-2 text-5xl font-black text-paper">${reset.priceUsd}</p>
                 <p className="mt-1 text-sm font-bold text-paper/65">one time · no subscription</p>
                 <p className="mt-4 text-sm leading-6 text-paper/72">
-                  One active role lane, the complete Career Reset deliverables, and founding-cohort support. Higher tiers remain closed until their own outcomes are validated.
+                  One active role direction, the complete Career Reset deliverables, and founding-cohort support. Higher tiers remain closed until their own outcomes are validated.
                 </p>
                 <div className="mt-5 rounded-lg border border-cyan/25 bg-cyan/5 p-3 text-xs leading-5 text-paper/65">
-                  Automated checkout is being finalized. Accepted participants receive the payment and onboarding instructions directly.
+                  Secure checkout is live. After payment, your license appears on the confirmation page and unlocks Career Reset on this device.
                 </div>
               </aside>
             </div>
