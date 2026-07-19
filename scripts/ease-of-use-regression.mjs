@@ -57,7 +57,7 @@ const routerLogic = source("src/lib/intent-router.ts");
 const founding = source("src/app/founding-beta/page.tsx");
 
 check("desktop navigation exposes four plain primary destinations", ["Today", "My Résumé", "Applications", "Interview"].every((label) => nav.includes(`[\"${label}\"`) || nav.includes(`["${label}"`)));
-check("advanced workflow tools are grouped behind More", nav.includes("const moreStations") && nav.includes(">More<") && nav.includes("Data & Backup"));
+check("advanced workflow tools are grouped behind More", nav.includes("const moreStations") && /<summary[\s\S]*?>\s*More\s*<\/summary>/.test(nav) && nav.includes("Data & Backup"));
 check("first-run router promises one clear next step", routerComponent.includes("One choice. One clear next step.") && routerComponent.includes("take you directly to the right starting point"));
 check("returning progress uses plain-language milestones", ["Work history added", "Facts reviewed", "Target role chosen", "Résumé ready"].every((label) => routerLogic.includes(label)));
 check("founding cohort routes to live pricing checkout", founding.includes('href="/pricing"') && founding.includes("Secure checkout is live"));
