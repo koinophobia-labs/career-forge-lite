@@ -7,6 +7,37 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function normalized(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const clearPreselectKinds = new Set<ImportProposalRecord["kind"]>([
+  "identity",
+  "role",
+  "project",
+  "education",
+  "responsibility",
+  "tool",
+  "skill"
+]);
+
+export function isClearImportProposal(proposal: ImportProposalRecord): boolean {
+  return proposal.status === "proposed" &&
+    proposal.confidence === "high" &&
+    proposal.group !== "other" &&
+    clearPreselectKinds.has(proposal.kind) &&
+    !proposal.edited &&
+    !proposal.likelyDuplicateOf &&
+    proposal.detail.trim().length >= 2 &&
+    proposal.sourceExcerpts.some((excerpt) => excerpt.trim().length > 0);
+}
+
+export function preselectClearImportProposals(proposals: ImportProposalRecord[]): ImportProposalRecord[] {
+  return proposals.map((proposal) => isClearImportProposal(proposal)
+    ? { ...proposal, status: "approved" as const }
+    : proposal);
+}
+
 export type TruthInboxCounts = {
   approved: number;
   rejected: number;
@@ -29,9 +60,9 @@ export function createPendingImportReview(
   nowIso: string,
   retainSourceFilenames: boolean
 ): PendingImportReview {
-  const normalized = proposals.map(normalizeImportProposal);
-  const sourceFileCount = unique(normalized.flatMap((item) => item.sourceFilenames)).length;
-  const storedProposals = normalized.map((proposal) => retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
+  const normalizedProposals = preselectClearImportProposals(proposals.map(normalizeImportProposal));
+  const sourceFileCount = unique(normalizedProposals.flatMap((item) => item.sourceFilenames)).length;
+  const storedProposals = normalizedProposals.map((proposal) => retainSourceFilenames ? proposal : { ...proposal, sourceFilenames: [] });
   return {
     version: 1,
     id,
@@ -42,10 +73,6 @@ export function createPendingImportReview(
     importedAt: nowIso,
     updatedAt: nowIso
   };
-}
-
-function normalized(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export function addProposalsToReview(
@@ -70,7 +97,7 @@ export function addProposalsToReview(
       byKey.set(key, addition);
     }
   }
-  const proposals = [...byKey.values()];
+  const proposals = preselectClearImportProposals([...byKey.values()]);
   return {
     ...batch,
     proposals,
