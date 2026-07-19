@@ -71,7 +71,7 @@ const restored = validateBackup(JSON.stringify(createBackup(stateWithPack, NOW))
 check("backup and restore preserve activation stage", restored.ok && currentActivationStage(restored.state).id === "application");
 const legacy = parseState(JSON.stringify({ ...stateWithPack, version: 1 }));
 check("legacy users skip completed first-run stages", activationStages(legacy).filter((item) => item.complete).length >= 4);
-check("mobile navigation is a single compact menu", nav.includes("Career Forge mobile stations") && nav.includes("md:hidden") && nav.includes("hidden flex-wrap"));
+check("navigation keeps one compact mobile menu and groups desktop tools", nav.includes("Career Forge mobile stations") && nav.includes("md:hidden") && nav.includes("primaryStations") && nav.includes("moreStations") && nav.includes(">More<"));
 check("touch targets are explicit on primary workflow", [home, profile, versions].every((text) => text.includes("min-h-11")));
 check("empty users receive honest guidance", profile.includes("Start with one real role or project") && profile.includes("Missing credentials and unverified duration remain visible gaps"));
 check("variant distinction is semantic, not cosmetic", variantPurpose("ats").difference !== variantPurpose("recruiter").difference && variantPurpose("ats").purpose !== variantPurpose("recruiter").purpose);
