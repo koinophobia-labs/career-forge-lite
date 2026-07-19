@@ -24,6 +24,7 @@ import {
   truthInboxCounts
 } from "@/lib/truth-inbox";
 import { isUncertaintyStatement } from "@/lib/truth-guards";
+import { earlyWinBullets } from "@/lib/early-win";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
 
@@ -126,6 +127,9 @@ export default function DossierPage() {
   // so the callout never renders before the stored dismissal is known.
   const [identityCalloutDismissed, setIdentityCalloutDismissed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(IDENTITY_CALLOUT_DISMISSED_KEY) === "1");
   const [retainSourceFilenames, setRetainSourceFilenames] = useState(false);
+  // Optional supporting-evidence block is collapsed for first-timers so the page
+  // never opens as a wall of empty textareas; expanded once anything is in it.
+  const [showMoreEvidence, setShowMoreEvidence] = useState(false);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [stagedImport, setStagedImport] = useState<{ proposals: ImportProposalRecord[]; message: string } | null>(null);
   const activeBatch = state.pendingImportReviews.find((item) => item.id === selectedBatchId) ?? state.pendingImportReviews[0] ?? null;
@@ -390,6 +394,18 @@ export default function DossierPage() {
   const rejected = dossier.evidence.filter((item) => item.rejected);
   const approvedEvidence = dossier.evidence.filter((item) => item.approved && !item.rejected);
   const importGroups: Array<[ImportProposalGroup, string]> = [["identity", "Identity"], ["employment", "Employment"], ["projects", "Projects"], ["education", "Education"], ["tools", "Tools"], ["skills", "Skills"], ["metrics-outcomes", "Metrics and outcomes"], ["other", "Other proposed evidence"]];
+  // The optional supporting-evidence block starts open only for returning users
+  // who have already filled some of it; first-timers see it collapsed so the
+  // page never opens as a wall of empty textareas.
+  const hasSupportingEvidence =
+    dossier.tools.length > 0 || dossier.transferableSkills.length > 0 || dossier.proofPoints.length > 0 ||
+    dossier.metrics.length > 0 || dossier.constraints.length > 0 || dossier.targetRoleInterests.length > 0 ||
+    dossier.careerGoals.length > 0 || dossier.preferredWorkStyle.length > 0 || dossier.interviewStories.length > 0;
+  const evidenceOpen = showMoreEvidence || hasSupportingEvidence;
+  // Early win: the moment any experience is approved, show the user their own
+  // strongest bullets cleaned into résumé voice — proof of value before the
+  // lane/pack steps, generated only from approved input (nothing invented).
+  const previewBullets = earlyWinBullets(dossier);
 
   return (
     <main>
@@ -460,6 +476,23 @@ export default function DossierPage() {
               </ul>
             </section>
 
+            {previewBullets && (
+              <section className="trust-panel mt-6 border-mint/40 p-5 sm:p-6" id="early-win" aria-labelledby="early-win-title">
+                <p className="trust-kicker text-xs font-bold uppercase text-mint">Your first résumé bullets — ready now</p>
+                <h2 id="early-win-title" className="mt-2 text-2xl font-bold text-paper">A preview from {previewBullets.source}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-paper/65">Cleaned into résumé voice from the experience you just approved. Nothing here was invented — you can refine every line when you build the full pack.</p>
+                <ul className="mt-4 grid gap-2">
+                  {previewBullets.bullets.map((bullet) => (
+                    <li key={bullet} className="flex gap-2 rounded-lg border border-mint/25 bg-mint/5 px-3 py-2 text-sm leading-6 text-paper/85">
+                      <span aria-hidden className="text-mint">▸</span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs leading-5 text-paper/45">This is a taste, not your finished pack. Choose a job direction next to generate the full ATS and recruiter résumés with traced evidence.</p>
+              </section>
+            )}
+
             {approvedEvidence.length > 0 && <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.72fr]" id="unlocks"><div className="rounded-xl border border-mint/35 bg-mint/10 p-5"><p className="trust-kicker text-xs font-bold uppercase">What your approvals unlock</p><h2 className="mt-2 text-xl font-bold text-paper">{readiness.level === "not-ready" ? "A truthful foundation is taking shape" : readiness.level === "foundation" ? "You can begin testing credible role lanes" : "You have enough proof to forge lane résumés"}</h2><ul className="mt-3 grid gap-2 text-sm leading-6 text-paper/70"><li>• Roles and projects can become traced experience sections and bullets.</li><li>• Tools and skills can support matching only when the underlying work is approved.</li><li>• Missing credentials and unverified duration remain visible gaps—not generated claims.</li></ul><Link href="/targets" className="mt-4 inline-flex min-h-11 items-center rounded-md bg-mint px-4 py-2 text-sm font-black text-ink">See dossier-backed role lanes →</Link></div><ActivationFeedback milestone="dossier" question="Did the review make it clear what Career Forge now trusts?" /></section>}
 
             <section className="mt-8 grid gap-6 lg:grid-cols-2" id="manual-history">
@@ -502,8 +535,15 @@ export default function DossierPage() {
             </section>
 
             <section className="trust-panel mt-6 p-5 sm:p-6">
-              <h2 className="text-xl font-bold text-paper">Evidence that powers every output</h2>
-              <p className="mt-1 text-sm leading-6 text-paper/55">Use one item per line. These claims become reusable only after they are saved as approved dossier evidence.</p>
+              <button type="button" onClick={() => setShowMoreEvidence((open) => !open)} aria-expanded={evidenceOpen} aria-controls="more-evidence" className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                <span>
+                  <span className="block text-xl font-bold text-paper">Add more supporting evidence <span className="text-sm font-bold text-paper/45">(optional)</span></span>
+                  <span className="mt-1 block text-sm leading-6 text-paper/55">Skills, metrics, proof points, and interview stories sharpen every output. Skip this until you want stronger bullets — one role or import is already enough to continue.</span>
+                </span>
+                <span className="lab-mono shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs font-bold uppercase text-paper/45">{evidenceOpen ? "Hide" : "Optional +"}</span>
+              </button>
+              {evidenceOpen && (<div id="more-evidence">
+              <p className="mt-4 text-sm leading-6 text-paper/55">Use one item per line. These claims become reusable only after they are saved as approved dossier evidence.</p>
               <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                 <TextListEditor label="Tools & workflows" value={dossier.tools} hint="Unlocks accurate keyword matching." onSave={(items) => save({ ...dossier, tools: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "tool" || item.source !== "manual"), ...items.map((item) => evidenceRecord("tool", item, "manual", true, new Date().toISOString()))] })} />
                 <TextListEditor label="Transferable skills" value={dossier.transferableSkills} hint="Supports lane positioning without invented credentials." onSave={(items) => save({ ...dossier, transferableSkills: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "skill" || item.source !== "manual"), ...items.map((item) => evidenceRecord("skill", item, "manual", true, new Date().toISOString()))] })} />
@@ -515,6 +555,7 @@ export default function DossierPage() {
                 <TextListEditor label="Preferred work style" value={dossier.preferredWorkStyle} hint="Shapes recommendations without entering résumé claims." onSave={(items) => save({ ...dossier, preferredWorkStyle: items })} />
                 <TextListEditor label="Interview stories" value={dossier.interviewStories} hint="Unlocks evidence-backed interview preparation." onSave={(items) => save({ ...dossier, interviewStories: items, evidence: [...dossier.evidence.filter((item) => item.kind !== "story" || item.source !== "manual"), ...items.map((item) => evidenceRecord("story", item, "manual", true, new Date().toISOString()))] })} />
               </div>
+              </div>)}
             </section>
 
             {(proposed.length > 0 || dossier.migrationReview.length > 0) && (
