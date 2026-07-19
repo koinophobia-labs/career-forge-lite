@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { ActivationFeedback } from "@/components/ActivationFeedback";
+import { BetaFeedbackCard } from "@/components/BetaFeedbackCard";
 import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
 import { EditConflictDialog } from "@/components/EditConflictDialog";
@@ -474,7 +474,7 @@ export default function VersionsPage() {
         {hydrated && <div className="mt-8"><ActivationPath state={state} compact /></div>}
 
         {hydrated && currentPack && <PackDashboard pack={currentPack} state={state} onUpdate={updatePack} onRecordExport={recordPackExport} />}
-        {hydrated && currentPack && <div className="mt-4"><ActivationFeedback milestone="pack" question="Did the ATS and recruiter versions feel meaningfully different?" /></div>}
+        {hydrated && currentPack && currentPack.variants.length > 0 && <div className="mt-4"><BetaFeedbackCard milestone="pack" /></div>}
 
         {deletedLabel && (
           <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-paper/80">

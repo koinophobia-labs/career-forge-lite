@@ -43,6 +43,7 @@ export type CareerForgeEventName =
   | "intent_goal_selected"
   | "intent_goal_resumed"
   | "activation_feedback_submitted"
+  | "beta_feedback_submitted"
   // Commerce funnel — event names only, like everything above. Which package
   // was viewed/bought is a product fact, not a person fact, so the tier rides
   // in the event name itself rather than as a property.
