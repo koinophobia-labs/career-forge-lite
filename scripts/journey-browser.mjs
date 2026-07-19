@@ -167,7 +167,7 @@ try {
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("License key").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Key activated — your pack is unlocked on this device.").waitFor();
+  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
   verify(true, "pasting the purchase-issued license key activates on the first attempt with clear confirmation");
 
   // --- 8. Export succeeds on the first attempt ------------------------------
