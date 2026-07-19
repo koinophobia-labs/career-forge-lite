@@ -33,19 +33,25 @@ const NOW = "2026-07-15T12:00:00.000Z";
 
 const parsed = dossierLib.parseResumePackToProposals([{ filename: "history.txt", text: "Product Support Specialist — Northstar | 2021–2026\nResolved complex customer issues\nDocumented repeatable fixes\nMaintained 40 troubleshooting articles\nTools: Zendesk, Jira\nname@example.com" }]);
 const batch = inbox.createPendingImportReview("inbox-1", parsed, NOW, true);
-let state = { ...store.emptyState(), pendingImportReviews: [batch] };
+const preselectedState = { ...store.emptyState(), pendingImportReviews: [batch] };
 check("Truth Inbox reports represented files", batch.sourceFileCount === 1 && batch.sourceFilenames[0] === "history.txt");
 const privateBatch = inbox.createPendingImportReview("inbox-private", parsed, NOW, false);
 check("filename privacy keeps count without retaining names", privateBatch.sourceFileCount === 1 && privateBatch.sourceFilenames.length === 0 && privateBatch.proposals.every((item) => item.sourceFilenames.length === 0));
 
-const untouched = inbox.commitTruthInboxReview(state, batch.id, NOW);
-check("all-proposed queue cannot vanish after save", !untouched.changed && untouched.state.pendingImportReviews[0].proposals.length === parsed.length);
+const preselectedCount = batch.proposals.filter((item) => item.status === "approved").length;
+const attentionCount = batch.proposals.filter((item) => item.status === "proposed").length;
+check("clear facts are preselected while uncertain claims still require review", preselectedCount > 0 && attentionCount > 0);
+check("preselection alone never changes the trusted dossier", preselectedState.dossier.evidence.length === 0 && !activation.hasReachedDossierActivation(preselectedState));
+const savedPreselected = inbox.commitTruthInboxReview(preselectedState, batch.id, NOW);
+check("one explicit save commits only preselected facts", savedPreselected.changed && savedPreselected.approved === preselectedCount && savedPreselected.remaining === attentionCount && savedPreselected.state.pendingImportReviews[0].proposals.every((item) => item.status === "proposed"));
 
+const manualBatch = { ...batch, proposals: batch.proposals.map((item) => ({ ...item, status: "proposed" })) };
+let state = { ...store.emptyState(), pendingImportReviews: [manualBatch] };
 const role = parsed.find((item) => item.kind === "role");
 const tool = parsed.find((item) => item.kind === "tool" || item.kind === "skill");
 const proofs = parsed.filter((item) => item.kind === "proof" || item.kind === "metric").slice(0, 2);
 const decidedIds = new Set([role?.id, tool?.id, ...proofs.map((item) => item.id)].filter(Boolean));
-state = { ...state, pendingImportReviews: [{ ...batch, proposals: batch.proposals.map((item) => item.id === tool?.id ? { ...item, status: "rejected" } : decidedIds.has(item.id) ? { ...item, status: "approved" } : item) }] };
+state = { ...state, pendingImportReviews: [{ ...manualBatch, proposals: manualBatch.proposals.map((item) => item.id === tool?.id ? { ...item, status: "rejected" } : decidedIds.has(item.id) ? { ...item, status: "approved" } : item) }] };
 const partial = inbox.commitTruthInboxReview(state, batch.id, "2026-07-15T12:01:00.000Z");
 check("partial decisions persist across serialization", store.parseState(JSON.stringify(partial.state)).pendingImportReviews[0].proposals.length === partial.remaining);
 check("approved decisions enter dossier", partial.state.dossier.evidence.some((item) => item.approved && !item.rejected));

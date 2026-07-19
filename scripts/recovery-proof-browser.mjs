@@ -129,7 +129,7 @@ try {
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("License key").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Key activated — your pack is unlocked on this device.").waitFor();
+  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
   await page.goto(`${baseUrl}/versions`);
   const firstExport = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export complete pack" }).click();
@@ -192,7 +192,7 @@ try {
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("License key").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Key activated — your pack is unlocked on this device.").waitFor();
+  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
   await page.goto(`${baseUrl}/versions`);
   const secondExport = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export complete pack" }).click();

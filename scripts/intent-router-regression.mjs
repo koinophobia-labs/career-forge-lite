@@ -34,23 +34,25 @@ const selected = { ...empty, activeGoal: { kind: "career-change", selectedAt: NO
 check("valid goal persists across serialization", store.parseState(JSON.stringify(selected)).activeGoal.kind === "career-change");
 check("router offers five distinct meaningful goals", router.CAREER_GOALS.length === 5 && new Set(router.CAREER_GOALS.map((item) => item.kind)).size === 5 && router.CAREER_GOALS.every((item) => item.description.length > 20));
 check("goal choices materially change workflow entry", router.goalEntryAction(empty, "practice-interview").href === "/interview" && router.goalEntryAction(empty, "first-resume").href === "/profile#manual-history");
-check("evidence is explained before import", router.goalEntryAction(empty, "new-job").detail.includes("explain") && router.goalEntryAction(empty, "new-job").href === "/profile#import");
+check("import entry explains the work before asking for it", router.goalEntryAction(empty, "new-job").detail.includes("pull out the facts") && router.goalEntryAction(empty, "new-job").detail.includes("need your attention") && router.goalEntryAction(empty, "new-job").href === "/profile#import");
 
 const evidence = [dossier.evidenceRecord("role", "Support Specialist — Northstar · 2021–2026", "manual", true, NOW), dossier.evidenceRecord("responsibility", "Resolved difficult customer issues", "manual", true, NOW), dossier.evidenceRecord("metric", "Maintained 40 troubleshooting articles", "manual", true, NOW)];
 const ready = { ...selected, dossier: { ...empty.dossier, evidence, approvedClaims: evidence.map((item) => item.detail), responsibilities: [evidence[1].detail], metrics: [evidence[2].detail], proofPoints: [evidence[2].detail], updatedAt: NOW } };
-const pending = { ...ready, pendingImportReviews: [{ id: "review", version: 1, proposals: [], sourceFileCount: 1, sourceFilenames: [], retainSourceFilenames: false, createdAt: NOW, updatedAt: NOW }] };
-check("pending Truth Inbox dominates the next move", router.intentNextMove(pending).href === "/profile#review");
+const pending = { ...ready, pendingImportReviews: [{ id: "review", version: 1, proposals: [], sourceFileCount: 1, sourceFilenames: [], retainSourceFilenames: false, importedAt: NOW, updatedAt: NOW }] };
+check("pending fact review dominates the next move", router.intentNextMove(pending).href === "/profile#review" && router.intentNextMove(pending).detail.includes("preselected"));
 check("career change routes approved evidence to target selection", router.goalEntryAction(ready, "career-change").href === "/targets");
 check("legacy activity infers a useful continuation", router.inferCareerGoal({ ...ready, activeGoal: null }) === "new-job" && router.careerGoalLabel({ ...ready, activeGoal: null }).includes("Job Search"));
 check("milestones expose audited booleans only", router.intentMilestones(ready).every((item) => typeof item.complete === "boolean"));
+check("milestones use plain user language", ["Work history added", "Facts reviewed", "Target role chosen", "Résumé ready"].every((label) => router.intentMilestones(ready).some((item) => item.label === label)));
 const restored = backup.validateBackup(JSON.stringify(backup.createBackup(selected, NOW)));
 check("backup and restore preserve active goal", restored.ok && restored.state.activeGoal.kind === "career-change");
 
 const ui = source("src/components/IntentRouter.tsx");
 const home = source("src/app/page.tsx");
 const analytics = source("src/lib/analytics.ts");
-check("first-run UI renders every one-tap goal", ui.includes("CAREER_GOALS.map") && ui.includes("option.label") && ui.includes("option.description") && ui.includes("What are you working toward?"));
-check("returning UI has one dominant next move and recent work", ui.includes("Your next move") && ui.includes("Recent") && ui.includes("Other actions"));
+check("first-run UI renders every one-tap goal", ui.includes("CAREER_GOALS.map") && ui.includes("option.label") && ui.includes("option.description") && ui.includes("What do you need help with today?"));
+check("returning UI has one dominant next move and recent work", ui.includes("Do this next") && ui.includes("Recent") && ui.includes("Change goal"));
+check("first-run promise is one choice and one next step", ui.includes("One choice. One clear next step.") && ui.includes("take you directly to the right starting point"));
 check("router uses no theatrical percentage", !/%|progress-bar|progressBar/.test(ui));
 check("homepage places intent before marketing and hides workspace on first run", home.indexOf("<IntentRouter") < home.indexOf('id="landing"') && home.includes("hydrated && !isFirstRun"));
 check("manual first-résumé entry anchor exists", source("src/app/profile/page.tsx").includes('id="manual-history"'));
