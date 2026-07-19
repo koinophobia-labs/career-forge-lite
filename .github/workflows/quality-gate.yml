@@ -31,7 +31,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run deterministic regression suite
-        run: npm run test:unit
+        shell: bash
+        run: npm run test:unit 2>&1 | tee unit-output.log
 
       - name: Run desktop and mobile browser regression
         shell: bash
@@ -48,12 +49,13 @@ jobs:
         shell: bash
         run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
 
-      - name: Preserve journey and recovery results
+      - name: Preserve quality-gate results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: journey-and-recovery-results
+          name: quality-gate-results
           path: |
+            unit-output.log
             journey-output.log
             recovery-output.log
           if-no-files-found: warn
