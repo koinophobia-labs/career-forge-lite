@@ -32,22 +32,22 @@ jobs:
 
       - name: Run deterministic regression suite
         shell: bash
-        run: npm run test:unit 2>&1 | tee unit-output.log
+        run: set -o pipefail; npm run test:unit 2>&1 | tee unit-output.log
 
       - name: Run desktop and mobile browser regression
         shell: bash
-        run: timeout 12m npm run test:browser
+        run: set -o pipefail; timeout 12m npm run test:browser 2>&1 | tee browser-output.log
 
       - name: Run redacted private acceptance fixture
         run: npm run acceptance:private
 
       - name: Run full first-time-user journey (test-mode commerce)
         shell: bash
-        run: timeout 8m npm run acceptance:journey | tee journey-output.log
+        run: set -o pipefail; timeout 8m npm run acceptance:journey 2>&1 | tee journey-output.log
 
       - name: Run backup and recovery proof
         shell: bash
-        run: timeout 8m npm run acceptance:recovery | tee recovery-output.log
+        run: set -o pipefail; timeout 8m npm run acceptance:recovery 2>&1 | tee recovery-output.log
 
       - name: Preserve quality-gate results
         if: always()
@@ -56,6 +56,7 @@ jobs:
           name: quality-gate-results
           path: |
             unit-output.log
+            browser-output.log
             journey-output.log
             recovery-output.log
           if-no-files-found: warn
