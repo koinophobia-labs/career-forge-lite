@@ -312,6 +312,15 @@ await withEnv(
 // --- Durable idempotency ------------------------------------------------------------------------
 
 {
+  const source = read("src/lib/server/fulfillment-store.ts");
+  check(
+    "Postgres readiness uses fulfillment facts, not an unwritten status value",
+    source.includes("license_minted IS NOT TRUE OR email_sent IS NOT TRUE") &&
+      !source.includes("status <> 'fulfilled'")
+  );
+}
+
+{
   const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
   const store = new MemoryFulfillmentStore();
 

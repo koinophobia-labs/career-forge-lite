@@ -412,7 +412,8 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     const sql = await this.sql();
     const rows = await sql`
       SELECT * FROM cf_fulfillment
-       WHERE payment_status = 'paid' AND status <> 'fulfilled'
+       WHERE payment_status = 'paid'
+         AND (license_minted IS NOT TRUE OR email_sent IS NOT TRUE)
        ORDER BY created_at DESC LIMIT 500`;
     return rows.map((row) => this.toRecord(row));
   }
