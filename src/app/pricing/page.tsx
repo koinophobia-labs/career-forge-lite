@@ -138,7 +138,13 @@ export default function PricingPage() {
 
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <p className="trust-kicker text-sm font-bold uppercase">
-          {isPublicBeta ? "Public beta · No purchases enabled" : commerceMode === "live" ? "Founding paid beta · Career Reset only" : "One-time purchase · No account · No subscription"}
+          {isPublicBeta
+            ? "Public beta · No purchases enabled"
+            : commerceMode === "live"
+              ? checkoutClosed
+                ? "Paid beta paused · Checkout closed while I verify delivery"
+                : "Founding paid beta · Career Reset only"
+              : "One-time purchase · No account · No subscription"}
         </p>
         <h1 className="mt-3 max-w-3xl text-3xl font-bold text-paper sm:text-5xl">
           {isPublicBeta

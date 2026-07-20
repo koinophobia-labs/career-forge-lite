@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
-import { fulfillmentReadiness } from "@/lib/server/fulfillment-readiness";
+import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { createCheckoutSession, getLiveResetPaymentLinkUrl, getStripeSecretKey } from "@/lib/server/stripe";
 
@@ -37,11 +37,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     // A deployment may not take money unless it can deliver without depending
     // on the customer's browser surviving the round trip. See
     // lib/server/fulfillment-readiness.ts for why this gate exists.
-    const readiness = fulfillmentReadiness();
-    if (!readiness.ready) {
+    const verdict = await sellVerdict();
+    if (!verdict.canSellSafely) {
       logCommerceEvent("checkout_blocked_unsafe", {
         reason: "fulfillment_not_ready",
-        missing: readiness.missing,
+        blockers: verdict.blockers,
         tier,
       });
       return NextResponse.json(
