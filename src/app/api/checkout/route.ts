@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
 import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
-import { createCheckoutSession, getLiveResetPaymentLinkUrl, getStripeSecretKey } from "@/lib/server/stripe";
+import { createCheckoutSession, getStripeSecretKey } from "@/lib/server/stripe";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
 // input is the tier name; the price comes from the server-side package config.
@@ -54,15 +54,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    const paymentLink = getLiveResetPaymentLinkUrl();
-    if (!paymentLink) {
+    // Live mode now creates a real Checkout Session rather than handing out a
+    // static Payment Link. The Payment Link was fire-and-forget: the server
+    // never learned the session id, so it could not verify payment, record it,
+    // or notice a purchase that was never delivered.
+    const liveSecret = getStripeSecretKey();
+    if (!liveSecret) {
       return NextResponse.json(
         { error: "Payments are not configured on this deployment." },
         { status: 503 }
       );
     }
-    logCommerceEvent("checkout_opened", { tier, mode: "live" });
-    return NextResponse.json({ url: paymentLink });
+    const created = await createCheckoutSession(tier, requestOrigin(request), liveSecret);
+    if (!created.ok) {
+      logCommerceEvent("checkout_blocked_unsafe", { reason: "stripe_rejected", tier });
+      return NextResponse.json({ error: created.error }, { status: created.status });
+    }
+    logCommerceEvent("checkout_opened", { tier, mode: "live", sessionId: created.session.id });
+    return NextResponse.json({ url: created.session.url });
   }
 
   const secretKey = getStripeSecretKey();

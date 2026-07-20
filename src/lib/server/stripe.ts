@@ -65,19 +65,41 @@ async function stripeRequest(path: string, secretKey: string, body?: URLSearchPa
   });
 }
 
+/** Configured Stripe price id for a tier, if one exists. */
+export const configuredPriceId = (tier: PackageTier): string | null => {
+  const key = {
+    reset: "STRIPE_PRICE_RESET",
+    "job-search": "STRIPE_PRICE_JOB_SEARCH",
+    "career-switch": "STRIPE_PRICE_CAREER_SWITCH",
+  }[tier];
+  return key ? process.env[key]?.trim() || null : null;
+};
+
 export async function createCheckoutSession(
   tier: PackageTier,
   origin: string,
   secretKey: string
 ): Promise<{ ok: true; session: CheckoutSession } | { ok: false; status: number; error: string }> {
   const pack = getPackage(tier);
+  const priceId = configuredPriceId(tier);
+
+  // A configured price id is strongly preferred: fulfillment derives the tier
+  // from the price on the paid session, and an inline price_data line has no
+  // stable id to derive from. Inline pricing stays only as a local-dev
+  // fallback, and live readiness requires the id to be set.
+  const lineItem: Record<string, string> = priceId
+    ? { "line_items[0][price]": priceId }
+    : {
+        "line_items[0][price_data][currency]": "usd",
+        "line_items[0][price_data][unit_amount]": String(pack.priceUsd * 100),
+        "line_items[0][price_data][product_data][name]": `Career Forge — ${pack.name}`,
+        "line_items[0][price_data][product_data][description]": pack.summary,
+      };
+
   const params = new URLSearchParams({
     mode: "payment",
     "line_items[0][quantity]": "1",
-    "line_items[0][price_data][currency]": "usd",
-    "line_items[0][price_data][unit_amount]": String(pack.priceUsd * 100),
-    "line_items[0][price_data][product_data][name]": `Career Forge — ${pack.name}`,
-    "line_items[0][price_data][product_data][description]": pack.summary,
+    ...lineItem,
     "metadata[tier]": tier,
     success_url: `${origin}/unlock?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/pricing?checkout=cancelled`,

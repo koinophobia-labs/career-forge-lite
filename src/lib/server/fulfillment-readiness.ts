@@ -43,8 +43,8 @@
  */
 
 import {
+  durableStoreConfigured,
   getFulfillmentStore,
-  kvConfigured,
   type FulfillmentStore,
 } from "@/lib/server/fulfillment-store";
 import {
@@ -104,9 +104,10 @@ export function configurationReadiness(): ConfigurationReadiness {
       present: present("LICENSE_SIGNING_PRIVATE_KEY"),
     },
     {
-      name: "STRIPE_LIVE_RESET_PAYMENT_LINK",
-      consequence: "There is no checkout to send the customer to.",
-      present: present("STRIPE_LIVE_RESET_PAYMENT_LINK"),
+      name: "STRIPE_PRICE_RESET",
+      consequence:
+        "Checkout falls back to an inline price with no stable id, so fulfillment cannot derive which package was bought from the paid session.",
+      present: present("STRIPE_PRICE_RESET"),
     },
     {
       name: "STRIPE_WEBHOOK_SECRET",
@@ -125,10 +126,10 @@ export function configurationReadiness(): ConfigurationReadiness {
       present: present("LICENSE_EMAIL_FROM"),
     },
     {
-      name: "KV_REST_API_URL / KV_REST_API_TOKEN",
+      name: "DATABASE_URL (or KV_REST_API_URL / KV_REST_API_TOKEN)",
       consequence:
         "No durable fulfillment state. Duplicate webhooks cannot be deduplicated across instances or retries, and a paid-but-unfulfilled purchase cannot be reconciled.",
-      present: kvConfigured(),
+      present: durableStoreConfigured(),
     },
   ];
 
@@ -162,7 +163,7 @@ export async function operationalReadiness(
           detail: "No durable fulfillment store is provisioned.",
         },
       ],
-      blockers: ["No durable fulfillment store (Vercel KV) is provisioned."],
+      blockers: ["No durable fulfillment store is provisioned (DATABASE_URL or Vercel KV)."],
     };
   }
 

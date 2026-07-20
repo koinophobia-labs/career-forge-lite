@@ -272,6 +272,182 @@ export class KvFulfillmentStore implements FulfillmentStore {
 
 /* ----------------------------------------------------------------- factory */
 
+
+/* ------------------------------------------------------------- postgres */
+
+const PG_URL = () =>
+  process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
+
+export const postgresConfigured = () => Boolean(PG_URL());
+
+/**
+ * Neon Postgres — the database already provisioned on this project.
+ *
+ * Chosen over Vercel KV because it is already here. The readiness gate used to
+ * demand KV specifically, which made "provision another storage product" a
+ * blocker to selling when durable storage had been sitting in the project's own
+ * environment for ten days. Any durable store satisfies the guarantee; the
+ * guarantee was never "KV".
+ *
+ * `claim` uses INSERT ... ON CONFLICT DO NOTHING and reports whether a row was
+ * actually inserted. That is atomic server-side, so two concurrent webhook
+ * deliveries cannot both win — the property in-memory dedupe could never give.
+ *
+ * The schema is created lazily on first use so there is no migration step to
+ * forget and no credential to materialize locally.
+ */
+export class PostgresFulfillmentStore implements FulfillmentStore {
+  readonly kind = "neon-postgres";
+  private ready: Promise<void> | null = null;
+
+  private async sql() {
+    const { neon } = await import("@neondatabase/serverless");
+    return neon(PG_URL()!);
+  }
+
+  private async ensure(): Promise<void> {
+    if (!this.ready) {
+      this.ready = (async () => {
+        const sql = await this.sql();
+        await sql`CREATE TABLE IF NOT EXISTS cf_fulfillment (
+          session_id     TEXT PRIMARY KEY,
+          last_event_id  TEXT,
+          payment_status TEXT NOT NULL DEFAULT 'unknown',
+          tier           TEXT,
+          status         TEXT NOT NULL,
+          license_minted BOOLEAN NOT NULL DEFAULT FALSE,
+          email_sent     BOOLEAN NOT NULL DEFAULT FALSE,
+          attempts       INTEGER NOT NULL DEFAULT 1,
+          last_error     TEXT NOT NULL DEFAULT 'none',
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`;
+        await sql`CREATE TABLE IF NOT EXISTS cf_docs (
+          id         TEXT PRIMARY KEY,
+          doc        JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`;
+      })().catch((error) => {
+        // Reset so a transient failure doesn't poison every later call.
+        this.ready = null;
+        throw error;
+      });
+    }
+    return this.ready;
+  }
+
+  /** No customer identity is stored — only what reconciliation needs. */
+  private toRecord(row: Record<string, unknown>): FulfillmentRecord {
+    return {
+      sessionId: String(row.session_id),
+      lastEventId: row.last_event_id ? String(row.last_event_id) : null,
+      paymentStatus: String(row.payment_status),
+      tier: row.tier ? String(row.tier) : null,
+      status: String(row.status) as FulfillmentStatus,
+      licenseMinted: Boolean(row.license_minted),
+      emailSent: Boolean(row.email_sent),
+      attempts: Number(row.attempts),
+      lastError: String(row.last_error) as ErrorCategory,
+      createdAt: new Date(String(row.created_at)).toISOString(),
+      updatedAt: new Date(String(row.updated_at)).toISOString(),
+    };
+  }
+
+  async claim(sessionId: string, eventId: string | null, seed: Partial<FulfillmentRecord>) {
+    await this.ensure();
+    const sql = await this.sql();
+    const fresh = seedRecord(sessionId, eventId, seed);
+
+    const inserted = await sql`
+      INSERT INTO cf_fulfillment
+        (session_id, last_event_id, payment_status, tier, status)
+      VALUES
+        (${sessionId}, ${eventId}, ${fresh.paymentStatus}, ${fresh.tier}, ${fresh.status})
+      ON CONFLICT (session_id) DO NOTHING
+      RETURNING *`;
+
+    if (inserted.length > 0) {
+      return { record: this.toRecord(inserted[0]), won: true };
+    }
+
+    // Someone else holds the claim. Count the retry so reconciliation can see
+    // how many times Stripe re-delivered, then hand back the existing state.
+    const existing = await sql`
+      UPDATE cf_fulfillment
+         SET attempts = attempts + 1,
+             last_event_id = COALESCE(${eventId}, last_event_id),
+             updated_at = NOW()
+       WHERE session_id = ${sessionId}
+      RETURNING *`;
+    return { record: this.toRecord(existing[0]), won: false };
+  }
+
+  async get(sessionId: string): Promise<FulfillmentRecord | null> {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_fulfillment WHERE session_id = ${sessionId}`;
+    return rows.length ? this.toRecord(rows[0]) : null;
+  }
+
+  async update(sessionId: string, patch: Partial<FulfillmentRecord>): Promise<FulfillmentRecord | null> {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`
+      UPDATE cf_fulfillment SET
+        payment_status = COALESCE(${patch.paymentStatus ?? null}, payment_status),
+        tier           = COALESCE(${patch.tier ?? null}, tier),
+        status         = COALESCE(${patch.status ?? null}, status),
+        license_minted = COALESCE(${patch.licenseMinted ?? null}, license_minted),
+        email_sent     = COALESCE(${patch.emailSent ?? null}, email_sent),
+        last_error     = COALESCE(${patch.lastError ?? null}, last_error),
+        last_event_id  = COALESCE(${patch.lastEventId ?? null}, last_event_id),
+        updated_at     = NOW()
+      WHERE session_id = ${sessionId}
+      RETURNING *`;
+    return rows.length ? this.toRecord(rows[0]) : null;
+  }
+
+  async listUnfulfilled(): Promise<FulfillmentRecord[]> {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`
+      SELECT * FROM cf_fulfillment
+       WHERE payment_status = 'paid' AND status <> 'fulfilled'
+       ORDER BY created_at DESC LIMIT 500`;
+    return rows.map((row) => this.toRecord(row));
+  }
+
+  async getDoc<T>(id: string): Promise<T | null> {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT doc FROM cf_docs WHERE id = ${id}`;
+    return rows.length ? (rows[0].doc as T) : null;
+  }
+
+  async putDoc<T>(id: string, doc: T): Promise<void> {
+    await this.ensure();
+    const sql = await this.sql();
+    await sql`
+      INSERT INTO cf_docs (id, doc) VALUES (${id}, ${JSON.stringify(doc)}::jsonb)
+      ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = NOW()`;
+  }
+
+  async healthy(): Promise<boolean> {
+    try {
+      await this.ensure();
+      const sql = await this.sql();
+      const probe = `__probe_${Math.random().toString(36).slice(2)}`;
+      await sql`INSERT INTO cf_docs (id, doc) VALUES (${probe}, '{"probe":true}'::jsonb)
+                ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`;
+      const read = await sql`SELECT doc FROM cf_docs WHERE id = ${probe}`;
+      await sql`DELETE FROM cf_docs WHERE id = ${probe}`;
+      return read.length === 1;
+    } catch {
+      return false;
+    }
+  }
+}
+
 let cached: FulfillmentStore | null = null;
 
 /**
@@ -283,12 +459,21 @@ let cached: FulfillmentStore | null = null;
  */
 export function getFulfillmentStore(): FulfillmentStore | null {
   if (cached) return cached;
+  // Postgres first: it is already provisioned on this project. KV remains
+  // supported so an existing deployment configured that way keeps working.
+  if (postgresConfigured()) {
+    cached = new PostgresFulfillmentStore();
+    return cached;
+  }
   if (kvConfigured()) {
     cached = new KvFulfillmentStore();
     return cached;
   }
   return null;
 }
+
+/** Any durable store satisfies the guarantee. The guarantee was never "KV". */
+export const durableStoreConfigured = () => postgresConfigured() || kvConfigured();
 
 /** Test seam. */
 export function __setFulfillmentStoreForTests(store: FulfillmentStore | null): void {
