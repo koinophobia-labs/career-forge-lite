@@ -97,9 +97,9 @@ const verdict = evaluateEvidence(
 if (!verdict.valid) fail(`Certification is not valid: ${verdict.reasons.join(" ")}`);
 
 const approval = {
-  commitSha,
-  environment,
-  actor,
+  approvedCommitSha: commitSha,
+  approvedEnvironment: environment,
+  approvalActor: actor,
   evidenceId: evidenceId(evidence),
   surfaceHash: CERTIFIED_SURFACE_HASH,
   approvedAt: new Date().toISOString(),
@@ -110,9 +110,9 @@ const approval = {
 await store.putDoc(APPROVAL_RECORD_ID, approval);
 
 console.log("\n✓ Live commerce approved.\n");
-console.log(`  commit      ${approval.commitSha}`);
-console.log(`  environment ${approval.environment}`);
-console.log(`  actor       ${approval.actor}`);
+console.log(`  commit      ${approval.approvedCommitSha}`);
+console.log(`  environment ${approval.approvedEnvironment}`);
+console.log(`  actor       ${approval.approvalActor}`);
 console.log(`  evidence    ${approval.evidenceId}`);
 console.log(`  surface     ${approval.surfaceHash}`);
 console.log("\nVerify: curl -s https://career-forge-lite.vercel.app/api/commerce-health\n");

@@ -321,6 +321,16 @@ await withEnv(
 }
 
 {
+  const source = read("scripts/approve-live-commerce.mjs");
+  check(
+    "approval recorder writes the field names consumed by the runtime gate",
+    source.includes("approvedCommitSha: commitSha") &&
+      source.includes("approvedEnvironment: environment") &&
+      source.includes("approvalActor: actor")
+  );
+}
+
+{
   const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
   const store = new MemoryFulfillmentStore();
 
