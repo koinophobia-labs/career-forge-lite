@@ -433,6 +433,11 @@ check("fulfillment email uses a monitored reply-to", /reply_to: replyToAddress/.
 check("fulfillment email contains a direct session unlock", /unlock\?session_id=/.test(webhookRoute));
 check("fulfillment email uses provider idempotency", /Idempotency-Key/.test(webhookRoute) && /career-forge-license\//.test(webhookRoute));
 check(
+  "fulfillment email subject is transactional and unique per checkout",
+  webhookRoute.includes("subject: `Career Forge purchase confirmed — ${pack.name} — ${session.id.slice(-8)}`") &&
+    !webhookRoute.includes("Your Career Forge license key")
+);
+check(
   "webhook returns 500 on email failure so Stripe retries",
   /fulfillment_email_failed[\s\S]{0,700}status:\s*500/.test(webhookRoute)
 );
