@@ -13,6 +13,36 @@ export function getStripeSecretKey(): string | null {
   return configured && configured.trim() ? configured.trim() : null;
 }
 
+export type CertificationStripeConfig = {
+  secretKey: string;
+  priceReset: string;
+  webhookSecret: string;
+  operatorToken: string;
+};
+
+/**
+ * Short-lived Stripe test configuration used to certify the production host
+ * while its live checkout remains behind the human-authorization gate.
+ *
+ * All four values are required. Removing any one disables the operator route,
+ * the test webhook verifier, and test-session license exchange together.
+ */
+export function getCertificationStripeConfig(): CertificationStripeConfig | null {
+  const secretKey = process.env.CERTIFICATION_STRIPE_SECRET_KEY?.trim();
+  const priceReset = process.env.CERTIFICATION_STRIPE_PRICE_RESET?.trim();
+  const webhookSecret = process.env.CERTIFICATION_STRIPE_WEBHOOK_SECRET?.trim();
+  const operatorToken = process.env.CERTIFICATION_OPERATOR_TOKEN?.trim();
+  if (!secretKey || !priceReset || !webhookSecret || !operatorToken) return null;
+  if (!/^sk_test_|^rk_test_/.test(secretKey)) return null;
+  return { secretKey, priceReset, webhookSecret, operatorToken };
+}
+
+export function stripeKeyMode(secretKey: string): "test" | "live" | "unknown" {
+  if (/^(?:sk|rk)_test_/.test(secretKey)) return "test";
+  if (/^(?:sk|rk)_live_/.test(secretKey)) return "live";
+  return "unknown";
+}
+
 export function isStripePaymentLinkUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value.trim()) return false;
   try {
@@ -78,10 +108,13 @@ export const configuredPriceId = (tier: PackageTier): string | null => {
 export async function createCheckoutSession(
   tier: PackageTier,
   origin: string,
-  secretKey: string
+  secretKey: string,
+  explicitPriceId?: string,
+  extraMetadata: Record<string, string> = {},
+  customerEmail?: string
 ): Promise<{ ok: true; session: CheckoutSession } | { ok: false; status: number; error: string }> {
   const pack = getPackage(tier);
-  const priceId = configuredPriceId(tier);
+  const priceId = explicitPriceId?.trim() || configuredPriceId(tier);
 
   // A configured price id is strongly preferred: fulfillment derives the tier
   // from the price on the paid session, and an inline price_data line has no
@@ -103,8 +136,13 @@ export async function createCheckoutSession(
     "metadata[tier]": tier,
     success_url: `${origin}/unlock?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/pricing?checkout=cancelled`,
-    allow_promotion_codes: "true"
+    allow_promotion_codes: "false"
   });
+  for (const [key, value] of Object.entries(extraMetadata)) {
+    if (key === "tier" || !/^[a-zA-Z0-9_]+$/.test(key)) continue;
+    params.set(`metadata[${key}]`, value);
+  }
+  if (customerEmail?.trim()) params.set("customer_email", customerEmail.trim());
 
   const response = await stripeRequest("/checkout/sessions", secretKey, params);
   if (!response.ok) {

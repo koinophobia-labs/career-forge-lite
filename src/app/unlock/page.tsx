@@ -34,7 +34,6 @@ function UnlockContent() {
   const [manualResult, setManualResult] = useState<"valid" | "invalid" | null>(null);
   const [copied, setCopied] = useState(false);
   const fetchedForSession = useRef<string | null>(null);
-
   useEffect(() => {
     if (!sessionId || fetchedForSession.current === sessionId) return;
     fetchedForSession.current = sessionId;
@@ -141,7 +140,7 @@ function UnlockContent() {
             <p className="mt-3 text-sm leading-6 text-paper/70">
               This is your unique license key. It is already active in this browser.{" "}
               <span className="font-bold text-paper">Save it somewhere safe</span> so you can unlock any other device.
-              {fulfillment.source === "purchase" && " Your Stripe receipt links back to this page if you ever lose it."}
+              {fulfillment.source === "purchase" && " A backup copy is also sent to the email used at Checkout."}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <code
@@ -170,7 +169,7 @@ function UnlockContent() {
           <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-6">
             <p className="text-sm leading-6 text-paper/80">
               Your payment is still processing (some payment methods take a few minutes). Reload this page shortly. Your
-              Stripe receipt email also links back here.
+              Career Forge license email will arrive after Stripe confirms payment.
             </p>
           </div>
         )}
@@ -179,8 +178,8 @@ function UnlockContent() {
           <div role="alert" className="mt-6 rounded-xl border border-ember/40 bg-ember/10 p-6">
             <p className="text-sm font-bold text-ember">{fulfillment.message}</p>
             <p className="mt-2 text-sm leading-6 text-paper/70">
-              If you completed a purchase, use the link in your Stripe receipt email to return here, or reply to the
-              receipt to reach support. Your purchase is safe. This page can always re-issue your key.
+              If you completed a purchase, use the direct unlock link in your Career Forge license email. If it did not
+              arrive, contact koinophobia999@gmail.com with your Stripe receipt reference so support can verify the purchase.
             </p>
           </div>
         )}

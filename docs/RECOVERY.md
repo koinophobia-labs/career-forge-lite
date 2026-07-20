@@ -1,9 +1,8 @@
 # Recovery: someone paid and didn't get their key
 
-This product has no database on purpose — career data never touches a server.
-The cost of that choice is that Stripe is the only system that knows a purchase
-happened, so reconciliation is manual. At a five-seat founding cohort that is a
-five-minute job. Do it after every sale until the webhook path is proven.
+Career data never touches a server. Operational payment state is stored in a
+PII-free durable fulfillment table so Stripe payments can be reconciled without
+copying customer names, email addresses, or card data into Career Forge.
 
 ## 1. Find out whether anyone was lost
 
@@ -43,9 +42,11 @@ an unfulfilled customer.
 node scripts/mint-license.mjs --tier reset --session <checkout_session_id>
 ```
 
-Minting is deterministic: the same session id always produces the same key, so
-re-running this is safe and cannot create a second entitlement. Email the key to
-the address on the Stripe payment with a short apology and the unlock link.
+The entitlement payload is deterministic: the same session id, tier, and issue
+time always represent the same grant. P-256 ECDSA signatures may produce
+different valid bytes when re-minted; both keys activate the same package. A
+manual recovery must not be sent until the durable record and provider history
+confirm that it will not duplicate an earlier fulfillment email.
 
 ## 3. If you can't deliver, refund
 
@@ -53,31 +54,24 @@ Refund from the Stripe dashboard (full, `requested_by_customer`). Tell them it
 was on your side. A refunded customer who was told what happened is recoverable;
 a silent one is not.
 
-## 4. Known gaps this runbook exists because of
+## 4. Recovery facts
 
-Two things were true in production as of 2026-07-20 and should be re-checked
-before checkout reopens:
-
-- **The receipt-link promise may be false.** The unlock page tells buyers "Your
-  Stripe receipt links back to this page if you ever lose it." Stripe receipt
-  emails link to Stripe's hosted receipt, not to the `after_completion` redirect.
-  Verify against a real receipt; if it's wrong, fix the copy and point people at
-  the support address instead.
-- **Payment Link → Session metadata propagation is unverified.** Both fulfillment
-  paths require `session.metadata.tier`. The launch script sets it on the Payment
-  Link and assumes Stripe copies it onto the Session. If it doesn't, every live
-  purchase fails at the tier check while the money is still collected. One
-  sandbox purchase proves it either way.
+- Stripe receipts prove payment; they are not Career Forge recovery links.
+- The dedicated license email contains a direct unlock link that verifies the
+  Stripe Session and issues a valid license for the same entitlement.
+- The paid Stripe Price ID, not metadata, is the authoritative package signal.
+- Duplicate webhook delivery must leave `email_sent` and the provider message ID
+  unchanged; if it does not, stop and fix idempotency before manual recovery.
 
 ## 5. Reopening checkout
 
 `/api/commerce-health` reports whether this deployment may sell. It returns
-`canSellSafely: true` only when live mode is on **and** every fulfillment
-setting is present — Stripe key, signing key, payment link, **webhook secret,
-Resend key, sender address**. Until then the pricing page shows a contact CTA
+`canSellSafely: true` only when live mode is on, configuration and operational
+certification pass, and Blake's approval record matches the exact commit and
+evidence. Until then the pricing page shows a contact CTA
 instead of a buy button and `/api/checkout` refuses with 503.
 
-To reopen: register the webhook endpoint in Stripe, add the three missing
-settings to Vercel production, add them to `scripts/commerce-launch.mjs` so they
-can't be forgotten again, then confirm `/api/commerce-health` reports
-`canSellSafely: true`.
+The operator must configure the live Stripe key, Price ID, webhook secret,
+Resend key, verified sender, monitored reply address, and durable store; complete
+production-host test-mode certification; reconcile all live successes; and then
+wait for Blake's separate approval command.

@@ -1,8 +1,8 @@
 // License keys: how a one-time purchase unlocks Career Forge without an
 // account. A key is a signed statement — "this tier was purchased" — minted
 // server-side at checkout and verified OFFLINE here with the public key.
-// No career data, email, or identity is inside a key; losing the key and
-// re-fetching it from the purchase receipt link are both harmless.
+// No career data, email, or identity is inside a key. A buyer can restore it
+// from the dedicated Career Forge license email or through verified support.
 //
 // Format: CF1.<base64url payload JSON>.<base64url ECDSA-P256-SHA256 signature>
 // ECDSA P-256 is used (not Ed25519) because it has been universally supported

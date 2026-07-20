@@ -27,7 +27,7 @@
 import { createHash } from "node:crypto";
 
 /** Bump when the certification procedure changes shape. */
-export const DRILL_VERSION = "2.0.0";
+export const DRILL_VERSION = "3.0.0";
 
 export const CERTIFICATION_RECORD_ID = "certification:operational";
 export const APPROVAL_RECORD_ID = "approval:live-commerce";
@@ -39,6 +39,7 @@ export const APPROVAL_RECORD_ID = "approval:live-commerce";
  */
 export const CERTIFIED_SURFACE = [
   "src/app/api/checkout/route.ts",
+  "src/app/api/internal/commerce-certification/route.ts",
   "src/app/api/stripe-webhook/route.ts",
   "src/app/api/license/route.ts",
   "src/lib/server/stripe.ts",
@@ -65,6 +66,14 @@ export type CertificationEvidence = {
   tier: string;
   /** Provider-side id proving the email was accepted. Never the address. */
   emailProviderMessageId: string;
+  /** Durable store observed by the deployment recorder. */
+  fulfillmentStoreKind: string;
+  /** At least two claims proves a duplicate delivery crossed durable dedupe. */
+  fulfillmentAttempts: number;
+  /** The deployment verified the issued license grants this tier. */
+  licenseTierVerified: string;
+  successRouteStatus: number;
+  cancellationRouteStatus: number;
   completedAt: string;
 };
 
@@ -83,13 +92,27 @@ export function deploymentIdentity(): {
   environment: string;
   host: string;
 } {
+  const environment = process.env.VERCEL_ENV?.trim() || process.env.NODE_ENV || "unknown";
+  const stableProductionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  let configuredAppHost: string | null = null;
+  try {
+    configuredAppHost = process.env.NEXT_PUBLIC_APP_URL
+      ? new URL(process.env.NEXT_PUBLIC_APP_URL).host
+      : null;
+  } catch {
+    configuredAppHost = null;
+  }
   return {
     commitSha:
       process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
       process.env.GIT_COMMIT_SHA?.trim() ||
       "unknown",
-    environment: process.env.VERCEL_ENV?.trim() || process.env.NODE_ENV || "unknown",
-    host: process.env.VERCEL_URL?.trim() || process.env.APP_HOST?.trim() || "unknown",
+    environment,
+    host:
+      (environment === "production" ? stableProductionHost || configuredAppHost : null) ||
+      process.env.VERCEL_URL?.trim() ||
+      process.env.APP_HOST?.trim() ||
+      "unknown",
   };
 }
 
@@ -177,6 +200,22 @@ export function evaluateEvidence(
 
   if (!evidence.emailProviderMessageId) {
     reasons.push("Evidence does not prove the email provider accepted the fulfillment message.");
+  }
+
+  if (!evidence.fulfillmentStoreKind || evidence.fulfillmentStoreKind === "memory") {
+    reasons.push("Evidence does not name a durable fulfillment store.");
+  }
+
+  if (!Number.isInteger(evidence.fulfillmentAttempts) || evidence.fulfillmentAttempts < 2) {
+    reasons.push("Evidence does not prove a duplicate webhook was durably suppressed.");
+  }
+
+  if (evidence.licenseTierVerified !== evidence.tier) {
+    reasons.push("Evidence does not prove the issued license activates the purchased package.");
+  }
+
+  if (evidence.successRouteStatus !== 200 || evidence.cancellationRouteStatus !== 200) {
+    reasons.push("Evidence does not prove both Checkout return routes are reachable.");
   }
 
   return { valid: reasons.length === 0, reasons };

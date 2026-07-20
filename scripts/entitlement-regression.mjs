@@ -81,6 +81,32 @@ for (const tier of PACKAGE_ORDER) {
   check(`${tier} license carries the purchase ref`, verified.ok && verified.payload.ref === "test-ref");
 }
 
+// P-256 ECDSA signatures are not promised to be byte-deterministic. The
+// entitlement payload is. Two independently minted keys for the same purchase
+// must therefore both verify and activate the same package even when their
+// signature bytes differ.
+const entitlementKeyA = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
+let entitlementKeyB = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
+for (let attempt = 0; attempt < 8 && entitlementKeyB === entitlementKeyA; attempt += 1) {
+  entitlementKeyB = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
+}
+const entitlementPartsA = parseLicenseKey(entitlementKeyA);
+const entitlementPartsB = parseLicenseKey(entitlementKeyB);
+const entitlementA = await verifyLicenseKey(entitlementKeyA, publicB64);
+const entitlementB = await verifyLicenseKey(entitlementKeyB, publicB64);
+check(
+  "same purchase produces one deterministic entitlement payload",
+  entitlementPartsA.payloadB64 === entitlementPartsB.payloadB64
+);
+check(
+  "two distinct P-256 signatures for that entitlement both verify",
+  entitlementPartsA.signatureB64 !== entitlementPartsB.signatureB64 && entitlementA.ok && entitlementB.ok
+);
+check(
+  "both valid signatures activate the same reset package",
+  entitlementA.ok && entitlementB.ok && entitlementA.payload.tier === "reset" && entitlementB.payload.tier === "reset"
+);
+
 // --- Tampering and forgery --------------------------------------------------------------------------
 
 const genuine = mintLicenseKey("reset", "ref-1", NOW, privateB64);

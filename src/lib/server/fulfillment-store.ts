@@ -52,6 +52,8 @@ export type FulfillmentRecord = {
   status: FulfillmentStatus;
   licenseMinted: boolean;
   emailSent: boolean;
+  /** Resend's provider-side acceptance id. It contains no customer identity. */
+  emailProviderMessageId: string | null;
   attempts: number;
   lastError: ErrorCategory;
   createdAt: string;
@@ -95,6 +97,7 @@ const seedRecord = (
   status: "claimed",
   licenseMinted: false,
   emailSent: false,
+  emailProviderMessageId: null,
   attempts: 1,
   lastError: "none",
   createdAt: now(),
@@ -317,11 +320,14 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
           status         TEXT NOT NULL,
           license_minted BOOLEAN NOT NULL DEFAULT FALSE,
           email_sent     BOOLEAN NOT NULL DEFAULT FALSE,
+          email_provider_message_id TEXT,
           attempts       INTEGER NOT NULL DEFAULT 1,
           last_error     TEXT NOT NULL DEFAULT 'none',
           created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`;
+        await sql`ALTER TABLE cf_fulfillment
+          ADD COLUMN IF NOT EXISTS email_provider_message_id TEXT`;
         await sql`CREATE TABLE IF NOT EXISTS cf_docs (
           id         TEXT PRIMARY KEY,
           doc        JSONB NOT NULL,
@@ -346,6 +352,9 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
       status: String(row.status) as FulfillmentStatus,
       licenseMinted: Boolean(row.license_minted),
       emailSent: Boolean(row.email_sent),
+      emailProviderMessageId: row.email_provider_message_id
+        ? String(row.email_provider_message_id)
+        : null,
       attempts: Number(row.attempts),
       lastError: String(row.last_error) as ErrorCategory,
       createdAt: new Date(String(row.created_at)).toISOString(),
@@ -399,6 +408,10 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
         status         = COALESCE(${patch.status ?? null}, status),
         license_minted = COALESCE(${patch.licenseMinted ?? null}, license_minted),
         email_sent     = COALESCE(${patch.emailSent ?? null}, email_sent),
+        email_provider_message_id = COALESCE(
+          ${patch.emailProviderMessageId ?? null},
+          email_provider_message_id
+        ),
         last_error     = COALESCE(${patch.lastError ?? null}, last_error),
         last_event_id  = COALESCE(${patch.lastEventId ?? null}, last_event_id),
         updated_at     = NOW()

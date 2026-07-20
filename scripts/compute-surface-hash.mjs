@@ -22,6 +22,7 @@ const OUT = path.join(root, "src/lib/server/certified-surface-hash.ts");
 // Kept in sync with CERTIFIED_SURFACE in src/lib/server/certification.ts.
 const SURFACE = [
   "src/app/api/checkout/route.ts",
+  "src/app/api/internal/commerce-certification/route.ts",
   "src/app/api/stripe-webhook/route.ts",
   "src/app/api/license/route.ts",
   "src/lib/server/stripe.ts",

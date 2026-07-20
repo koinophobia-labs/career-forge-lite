@@ -101,7 +101,8 @@ export async function verifyPaidSession(
   claimedSessionId: string,
   fetchSession: (id: string) => Promise<
     { ok: true; session: unknown; accountId?: string | null } | { ok: false; status: number }
-  >
+  >,
+  authoritativePrices: Map<string, PackageTier> = priceTierMap()
 ): Promise<VerificationResult> {
   let looked;
   try {
@@ -137,7 +138,7 @@ export async function verifyPaidSession(
   }
 
   const priceId = session.line_items?.data?.[0]?.price?.id ?? null;
-  const tier = tierForPriceId(priceId);
+  const tier = priceId ? authoritativePrices.get(priceId) ?? null : null;
   if (!tier) {
     return {
       ok: false,
