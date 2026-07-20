@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
+import { fulfillmentReadiness } from "@/lib/server/fulfillment-readiness";
+import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { createCheckoutSession, getLiveResetPaymentLinkUrl, getStripeSecretKey } from "@/lib/server/stripe";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
@@ -32,6 +34,26 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   if (liveMode) {
+    // A deployment may not take money unless it can deliver without depending
+    // on the customer's browser surviving the round trip. See
+    // lib/server/fulfillment-readiness.ts for why this gate exists.
+    const readiness = fulfillmentReadiness();
+    if (!readiness.ready) {
+      logCommerceEvent("checkout_blocked_unsafe", {
+        reason: "fulfillment_not_ready",
+        missing: readiness.missing,
+        tier,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Checkout is temporarily closed. This deployment cannot guarantee delivery of a purchase yet, so it will not take payment.",
+          code: "fulfillment_not_ready",
+        },
+        { status: 503 }
+      );
+    }
+
     const paymentLink = getLiveResetPaymentLinkUrl();
     if (!paymentLink) {
       return NextResponse.json(
@@ -39,6 +61,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 503 }
       );
     }
+    logCommerceEvent("checkout_opened", { tier, mode: "live" });
     return NextResponse.json({ url: paymentLink });
   }
 
