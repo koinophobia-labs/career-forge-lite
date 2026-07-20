@@ -70,6 +70,10 @@ const purchaseFaqs: Array<[string, string]> = [
 
 export default function PricingPage() {
   const { entitlement, commerceMode, commerceEnabled } = useEntitlement();
+  // Whether this deployment can actually DELIVER a purchase, not just take one.
+  // Starts null (unknown) and the CTA stays closed until proven — a checkout
+  // that opens when it shouldn't is the failure worth defaulting against.
+  const [canSellSafely, setCanSellSafely] = useState<boolean | null>(null);
   const [pendingTier, setPendingTier] = useState<PackageTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const isPublicBeta = commerceMode === "off";
@@ -80,6 +84,24 @@ export default function PricingPage() {
       : configuredPaidBetaTier === "job-search" || configuredPaidBetaTier === "career-switch"
         ? configuredPaidBetaTier
         : "reset";
+  useEffect(() => {
+    if (commerceMode !== "live") return;
+    let active = true;
+    fetch("/api/commerce-health")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active) setCanSellSafely(Boolean(data?.canSellSafely));
+      })
+      .catch(() => {
+        if (active) setCanSellSafely(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [commerceMode]);
+
+  const checkoutClosed = commerceMode === "live" && canSellSafely !== true;
+
   const faqs = isPublicBeta ? betaFaqs : purchaseFaqs;
 
   useEffect(() => {
@@ -88,6 +110,7 @@ export default function PricingPage() {
 
   async function startCheckout(tier: PackageTier) {
     if (pendingTier || !commerceEnabled || (commerceMode === "live" && tier !== paidBetaTier)) return;
+    if (checkoutClosed) return;
     setPendingTier(tier);
     setCheckoutError(null);
     trackCareerEvent(checkoutEventByTier[tier]);
@@ -205,6 +228,24 @@ export default function PricingPage() {
                     <p className="mt-6 rounded-md border border-cyan/30 bg-cyan/10 px-4 py-3 text-center text-sm font-black text-cyan">
                       Active on this device
                     </p>
+                  ) : checkoutClosed ? (
+                    // Not a warning over a live button — the purchase route is
+                    // gone until the deployment can prove it delivers.
+                    <div className="mt-6 space-y-3">
+                      <p className="rounded-md border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-bold text-paper/70">
+                        {canSellSafely === null
+                          ? "Checking availability…"
+                          : "Checkout is closed while I finish verifying delivery."}
+                      </p>
+                      {canSellSafely === false && (
+                        <a
+                          href="mailto:koinophobia999@gmail.com?subject=Career%20Forge%20—%20tell%20me%20when%20the%20Career%20Reset%20reopens"
+                          className="block rounded-md bg-cyan px-4 py-3 text-center text-sm font-black text-ink transition hover:bg-gold"
+                        >
+                          Email me when it reopens
+                        </a>
+                      )}
+                    </div>
                   ) : (
                     <button
                       type="button"
