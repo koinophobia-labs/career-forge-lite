@@ -212,7 +212,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       from: fromAddress.trim(),
       to: [email],
       reply_to: replyToAddress.trim(),
-      subject: `Your Career Forge license key — ${pack.name}`,
+      // Include the checkout reference so Gmail does not fold a new purchase
+      // into an older conversation whose spam classification may be inherited.
+      subject: `Career Forge purchase confirmed — ${pack.name} — ${session.id.slice(-8)}`,
       text: [
         `Thanks for purchasing the ${pack.name}.`,
         ``,
