@@ -130,51 +130,159 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
   );
 });
 
-// A store that claims durability but has no recorded drill must still refuse.
-await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => {
-  const { sellVerdict, DRILL_RECORD_ID } = loadTs("src/lib/server/fulfillment-readiness.ts");
-  const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
+// --- THE SELF-CERTIFICATION LOOPHOLE ------------------------------------------------------------
+// A fabricated event, a chosen session id, or a leaked webhook secret must never
+// be able to certify a deployment.
 
-  // Delegate rather than subclass: `kind` is a readonly field on the class, so
-  // a subclass cannot override it. This wrapper stands in for a real durable
-  // backend without pretending to be one in production code.
-  const inner = new MemoryFulfillmentStore();
-  const store = {
+await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => {
+  const { sellVerdict } = loadTs("src/lib/server/fulfillment-readiness.ts");
+  const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
+  const {
+    CERTIFICATION_RECORD_ID,
+    APPROVAL_RECORD_ID,
+    DRILL_VERSION,
+    evidenceId,
+  } = loadTs("src/lib/server/certification.ts");
+  const { CERTIFIED_SURFACE_HASH } = loadTs("src/lib/server/certified-surface-hash.ts");
+
+  const durable = (inner) => ({
     kind: "fake-durable",
     claim: (...a) => inner.claim(...a),
     get: (...a) => inner.get(...a),
     update: (...a) => inner.update(...a),
     listUnfulfilled: (...a) => inner.listUnfulfilled(...a),
+    getDoc: (...a) => inner.getDoc(...a),
+    putDoc: (...a) => inner.putDoc(...a),
     healthy: (...a) => inner.healthy(...a),
-  };
-  const noDrill = await sellVerdict(store);
-  check("durable store without a recorded drill => cannot sell", noDrill.canSellSafely === false);
-  check(
-    "the blocker names the missing end-to-end demonstration",
-    noDrill.blockers.some((b) => /test-mode journey|demonstrated/i.test(b))
-  );
-
-  // Record a completed drill: now, and only now, may it sell.
-  await store.claim(DRILL_RECORD_ID, "evt_drill", { paymentStatus: "paid", tier: "reset" });
-  await store.update(DRILL_RECORD_ID, {
-    status: "email_sent",
-    licenseMinted: true,
-    emailSent: true,
   });
-  const withDrill = await sellVerdict(store);
-  check("durable store + recorded drill + full config => may sell", withDrill.canSellSafely === true);
 
-  // An outstanding unfulfilled purchase re-closes it.
-  await store.claim("cs_test_unfulfilled", "evt_x", { paymentStatus: "paid", tier: "reset" });
-  const withOutstanding = await sellVerdict(store);
-  check(
-    "an unresolved paid-but-unfulfilled session re-closes checkout",
-    withOutstanding.canSellSafely === false
-  );
-  check(
-    "the blocker names the outstanding purchase",
-    withOutstanding.blockers.some((b) => /unfulfilled/i.test(b))
-  );
+  const identity = { commitSha: "abc123def456", environment: "preview", host: "preview.example" };
+  process.env.VERCEL_GIT_COMMIT_SHA = identity.commitSha;
+  process.env.VERCEL_ENV = identity.environment;
+  process.env.VERCEL_URL = identity.host;
+
+  const goodEvidence = {
+    drillVersion: DRILL_VERSION,
+    commitSha: identity.commitSha,
+    surfaceHash: CERTIFIED_SURFACE_HASH,
+    environment: identity.environment,
+    host: identity.host,
+    stripeMode: "test",
+    stripeAccountId: "acct_test",
+    checkoutSessionId: "cs_test_real_123",
+    stripeEventId: "evt_real_123",
+    priceId: "price_reset",
+    tier: "reset",
+    emailProviderMessageId: "msg_123",
+    completedAt: "2026-07-20T12:00:00.000Z",
+  };
+
+  // 1. The old loophole: a session id the caller chose.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.claim("cs_test_drill_anything", "evt_forged", { paymentStatus: "paid", tier: "reset" });
+    await store.update("cs_test_drill_anything", { status: "email_sent", licenseMinted: true, emailSent: true });
+    const v = await sellVerdict(store);
+    check("a caller-chosen cs_test_drill_* id has no certifying authority", v.canSellSafely === false);
+    check(
+      "the blocker names missing certification, not the fake session",
+      v.blockers.some((b) => /certification evidence/i.test(b))
+    );
+  }
+
+  // 2. Certification present but no human approval.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    const v = await sellVerdict(store);
+    check("technical readiness without approval keeps checkout closed", v.canSellSafely === false);
+    check(
+      "the blocker says a human must authorize",
+      v.blockers.some((b) => /has not been authorized/i.test(b))
+    );
+  }
+
+  // 3. Evidence + approval for the CURRENT commit: the only passing case.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await store.putDoc(APPROVAL_RECORD_ID, {
+      approvedCommitSha: identity.commitSha,
+      approvedEnvironment: identity.environment,
+      approvalActor: "blake",
+      evidenceId: evidenceId(goodEvidence),
+      approvedAt: "2026-07-20T12:05:00.000Z",
+    });
+    const v = await sellVerdict(store);
+    check("Stripe-verified evidence + matching approval may sell", v.canSellSafely === true);
+  }
+
+  // 4. Every way evidence can be stale or foreign.
+  const approvalFor = (ev) => ({
+    approvedCommitSha: identity.commitSha,
+    approvedEnvironment: identity.environment,
+    approvalActor: "blake",
+    evidenceId: evidenceId(ev),
+    approvedAt: "2026-07-20T12:05:00.000Z",
+  });
+
+  const mutations = [
+    ["evidence from an older commit fails", { commitSha: "999999999999" }, /certifies commit/i],
+    ["evidence from a different host fails", { host: "other.example" }, /not "preview.example"/i],
+    ["evidence from an unapproved environment fails", { environment: "rogue" }, /not approved to certify/i],
+    ["live-mode evidence fails test certification", { stripeMode: "live" }, /test mode/i],
+    ["evidence with a changed code surface fails", { surfaceHash: "deadbeef" }, /code changed since certification/i],
+    ["evidence without a real Stripe session fails", { checkoutSessionId: "fabricated_1" }, /real Stripe Checkout Session/i],
+    ["evidence without a Stripe-originated event fails", { stripeEventId: "forged_1" }, /Stripe-originated event/i],
+    ["evidence without a known price fails", { priceId: "" }, /price that was actually paid/i],
+    ["evidence without provider acceptance fails", { emailProviderMessageId: "" }, /email provider accepted/i],
+    ["evidence from an older drill version fails", { drillVersion: "1.0.0" }, /drill 1\.0\.0/i],
+  ];
+
+  for (const [label, patch, pattern] of mutations) {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    const ev = { ...goodEvidence, ...patch };
+    await store.putDoc(CERTIFICATION_RECORD_ID, ev);
+    await store.putDoc(APPROVAL_RECORD_ID, approvalFor(ev));
+    const v = await sellVerdict(store);
+    check(label, v.canSellSafely === false);
+    check(`${label} — blocker explains why`, v.blockers.some((b) => pattern.test(b)));
+  }
+
+  // 5. Approval scoping.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), approvedCommitSha: "oldcommit0000" });
+    const v = await sellVerdict(store);
+    check("approval for a previous commit keeps checkout closed", v.canSellSafely === false);
+    check("the blocker names the commit mismatch", v.blockers.some((b) => /Approval covers commit/i.test(b)));
+  }
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), evidenceId: "0".repeat(32) });
+    const v = await sellVerdict(store);
+    check("approval granted against different evidence fails", v.canSellSafely === false);
+  }
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), approvedEnvironment: "production" });
+    const v = await sellVerdict(store);
+    check("a preview approval cannot authorize another environment", v.canSellSafely === false);
+  }
+
+  delete process.env.VERCEL_GIT_COMMIT_SHA;
+  delete process.env.VERCEL_ENV;
+  delete process.env.VERCEL_URL;
 });
 
 // Not live mode: never "unsafe", never sellable.
@@ -271,15 +379,40 @@ check(
 check("webhook no longer relies on in-memory dedupe", !webhookRoute.includes("markEventProcessed"));
 check("the in-memory dedupe module is gone", !fs.existsSync(path.join(root, "src/lib/server/event-dedupe.ts")));
 check("failures are categorised for reconciliation", /lastError:/.test(webhookRoute));
+// The loophole, at the source level.
 check(
-  "a completed drill session records the operational proof",
-  /cs_test_drill_[\s\S]{0,400}DRILL_RECORD_ID/.test(webhookRoute)
+  "the webhook cannot certify anything",
+  !webhookRoute.includes("cs_test_drill_") && !webhookRoute.includes("CERTIFICATION_RECORD_ID")
 );
-check("a drill script exists to produce that proof", fs.existsSync(path.join(root, "scripts/fulfillment-drill.mjs")));
+check("the webhook re-reads the session from Stripe", webhookRoute.includes("verifyPaidSession"));
 check(
-  "the drill names what it cannot prove",
-  /cannot prove/i.test(read("scripts/fulfillment-drill.mjs"))
+  "the webhook does not trust metadata for the tier",
+  !/const tier = session\??\.?\.metadata/.test(webhookRoute)
 );
+check("the self-signing drill is gone", !fs.existsSync(path.join(root, "scripts/fulfillment-drill.mjs")));
+
+// Two tools, hard runtime guards — not comments.
+const synthetic = read("scripts/synthetic-webhook-regression.mjs");
+check("synthetic tool refuses non-localhost targets", /REFUSED[\s\S]{0,200}localhost/.test(synthetic));
+check("synthetic tool refuses live keys at runtime", /sk_live[\s\S]{0,200}process\.exit\(2\)/.test(synthetic));
+check("synthetic tool never writes certification", !synthetic.includes("CERTIFICATION_RECORD_ID"));
+
+const certify = read("scripts/certify-fulfillment.mjs");
+check("certification tool refuses the production host", /PRODUCTION_HOSTS[\s\S]{0,400}die\(/.test(certify));
+check("certification tool refuses non-test keys", /sk_test_[\s\S]{0,120}die\(/.test(certify));
+check("certification tool rejects livemode sessions", /livemode === false/.test(certify));
+check("certification tool verifies price against the authoritative id", /STRIPE_PRICE_RESET/.test(certify));
+check("certification tool states it does not authorize live checkout", /not permission|explicit approval/i.test(certify));
+
+// Session verification derives tier from price, never metadata.
+const verification = read("src/lib/server/session-verification.ts");
+check("tier comes from an authoritative price map", /tierForPriceId/.test(verification));
+check("metadata disagreeing with the price is rejected", /tier_mismatch/.test(verification));
+check("amount and currency are checked against the package", /amount_mismatch/.test(verification) && /currency_mismatch/.test(verification));
+check("a signature alone is documented as insufficient", /signature proves only/i.test(verification));
+
+// Surface fingerprint keeps proof tied to the code it vouched for.
+check("the certified surface hash is generated", fs.existsSync(path.join(root, "src/lib/server/certified-surface-hash.ts")));
 
 const licenseRoute = read("src/app/api/license/route.ts");
 check("license route records successful mints", licenseRoute.includes('logCommerceEvent("license_minted"'));

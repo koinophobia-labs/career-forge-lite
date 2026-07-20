@@ -70,6 +70,13 @@ export interface FulfillmentStore {
   update(sessionId: string, patch: Partial<FulfillmentRecord>): Promise<FulfillmentRecord | null>;
   /** Sessions that took money but never completed. Drives reconciliation. */
   listUnfulfilled(): Promise<FulfillmentRecord[]>;
+  /**
+   * Small JSON documents that are not fulfillment records — certification
+   * evidence and the live-commerce approval. Kept separate from the session
+   * namespace so nothing in the payment path can write them by accident.
+   */
+  getDoc<T>(id: string): Promise<T | null>;
+  putDoc<T>(id: string, doc: T): Promise<void>;
   /** Round-trip probe. Operational readiness depends on this passing. */
   healthy(): Promise<boolean>;
 }
@@ -103,6 +110,7 @@ const seedRecord = (
 export class MemoryFulfillmentStore implements FulfillmentStore {
   readonly kind = "memory";
   private records = new Map<string, FulfillmentRecord>();
+  private docs = new Map<string, string>();
 
   async claim(sessionId: string, eventId: string | null, seed: Partial<FulfillmentRecord>) {
     const existing = this.records.get(sessionId);
@@ -133,6 +141,15 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     return [...this.records.values()].filter((r) => !r.emailSent || !r.licenseMinted);
   }
 
+  async getDoc<T>(id: string): Promise<T | null> {
+    const raw = this.docs.get(id);
+    return raw === undefined ? null : (JSON.parse(raw) as T);
+  }
+
+  async putDoc<T>(id: string, doc: T): Promise<void> {
+    this.docs.set(id, JSON.stringify(doc));
+  }
+
   async healthy() {
     return true;
   }
@@ -140,6 +157,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   /** Test seam. */
   reset() {
     this.records.clear();
+    this.docs.clear();
   }
 }
 
@@ -223,6 +241,20 @@ export class KvFulfillmentStore implements FulfillmentStore {
     return records.filter(
       (r): r is FulfillmentRecord => Boolean(r) && (!r!.emailSent || !r!.licenseMinted)
     );
+  }
+
+  async getDoc<T>(id: string): Promise<T | null> {
+    const raw = await this.command(["GET", `cf:doc:${id}`]);
+    if (typeof raw !== "string") return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async putDoc<T>(id: string, doc: T): Promise<void> {
+    await this.command(["SET", `cf:doc:${id}`, JSON.stringify(doc)]);
   }
 
   async healthy() {

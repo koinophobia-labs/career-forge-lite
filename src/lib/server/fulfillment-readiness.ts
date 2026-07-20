@@ -25,9 +25,21 @@
  *                             in this environment, and the proof is a durable
  *                             record, not a string someone typed.
  *
- * Checkout may open only when both pass. Because the operational proof lives in
- * the durable store and is written by the drill itself, `canSellSafely` cannot
- * be turned on by editing environment variables.
+ * Checkout may open only when both pass.
+ *
+ * THE SELF-CERTIFICATION FLAW, AND ITS FIX
+ * ----------------------------------------
+ * An earlier version let the WEBHOOK write the proof whenever a session id
+ * started with `cs_test_drill_`. The drill chose its own session ids, signed its
+ * own payloads with the endpoint secret, and declared its own `paid` status — so
+ * the system could certify a purchase journey that never happened, and a leaked
+ * webhook secret was enough to reopen sales.
+ *
+ * Now the webhook cannot write certification at all. Proof is written only by
+ * the certification tool, only after Stripe confirms a real test-mode session at
+ * a recognised price, and it is scoped to one commit, one host, one environment.
+ * On top of that, `canSellSafely` also requires an explicit approval record for
+ * the running commit. Technical readiness does not open a shop; Blake does.
  */
 
 import {
@@ -35,9 +47,25 @@ import {
   kvConfigured,
   type FulfillmentStore,
 } from "@/lib/server/fulfillment-store";
+import {
+  APPROVAL_RECORD_ID,
+  CERTIFICATION_RECORD_ID,
+  deploymentIdentity,
+  evaluateApproval,
+  evaluateEvidence,
+  type ApprovalRecord,
+  type CertificationEvidence,
+} from "@/lib/server/certification";
+import { CERTIFIED_SURFACE_HASH } from "@/lib/server/certified-surface-hash";
 
-/** Session id under which the end-to-end drill records its proof. */
-export const DRILL_RECORD_ID = "drill:test-mode-e2e";
+/**
+ * Environments whose certification may authorize this deployment.
+ *
+ * A preview proof is accepted only for that same preview host — evaluateEvidence
+ * pins the host too. Production requires its own certification; a green preview
+ * never opens the real shop.
+ */
+const ALLOWED_CERTIFYING_ENVIRONMENTS = ["preview", "production", "development"];
 
 export type ReadinessRequirement = {
   name: string;
@@ -113,10 +141,9 @@ export function configurationReadiness(): ConfigurationReadiness {
 /**
  * Has the complete journey actually been demonstrated here?
  *
- * The proof is a durable record written by the test-mode drill — signature
- * verified, tier resolved without guessing, license minted server-side, email
- * accepted by the provider, duplicate delivery suppressed. No environment
- * variable can fake it.
+ * Requires a durable store, a healthy probe, Stripe-verified certification for
+ * THIS commit on THIS host, no outstanding unfulfilled sessions, and explicit
+ * human authorization. Nothing a caller controls can satisfy these.
  */
 export async function operationalReadiness(
   storeOverride?: FulfillmentStore | null
@@ -162,23 +189,43 @@ export async function operationalReadiness(
   });
   if (!healthy) blockers.push("Durable store failed its round-trip probe.");
 
-  const drill = healthy ? await store.get(DRILL_RECORD_ID).catch(() => null) : null;
-  const drillPassed = Boolean(drill && drill.licenseMinted && drill.emailSent && drill.status === "email_sent");
+  // Certification evidence — written ONLY by the real certification tool after
+  // Stripe has confirmed a genuine test-mode purchase. The webhook cannot write
+  // it, so a fabricated event can never certify a deployment.
+  const identity = deploymentIdentity();
+  const evidence = healthy
+    ? await store.getDoc<CertificationEvidence>(CERTIFICATION_RECORD_ID).catch(() => null)
+    : null;
+  const evidenceVerdict = evaluateEvidence(
+    evidence,
+    { ...identity, surfaceHash: CERTIFIED_SURFACE_HASH },
+    { allowedEnvironments: ALLOWED_CERTIFYING_ENVIRONMENTS, requireTestMode: true }
+  );
   checks.push({
-    name: "end_to_end_drill",
-    passed: drillPassed,
-    detail: drillPassed
-      ? `Test-mode journey demonstrated and recorded (${drill!.updatedAt}).`
-      : "No recorded end-to-end fulfillment drill for this environment.",
+    name: "stripe_verified_certification",
+    passed: evidenceVerdict.valid,
+    detail: evidenceVerdict.valid
+      ? `Certified against Stripe test-mode session ${evidence!.checkoutSessionId} at ${evidence!.completedAt}.`
+      : evidenceVerdict.reasons.join(" "),
   });
-  if (!drillPassed) {
-    blockers.push(
-      "The complete test-mode journey (checkout → signed webhook → tier → license → accepted email → duplicate suppressed) has not been demonstrated and recorded here."
-    );
-  }
+  blockers.push(...evidenceVerdict.reasons);
+
+  // Human authorization. Technical readiness does not open a shop.
+  const approval = healthy
+    ? await store.getDoc<ApprovalRecord>(APPROVAL_RECORD_ID).catch(() => null)
+    : null;
+  const approvalVerdict = evaluateApproval(approval, evidence, identity);
+  checks.push({
+    name: "human_authorization",
+    passed: approvalVerdict.valid,
+    detail: approvalVerdict.valid
+      ? `Authorized by ${approval!.approvalActor} at ${approval!.approvedAt}.`
+      : approvalVerdict.reasons.join(" "),
+  });
+  blockers.push(...approvalVerdict.reasons);
 
   const unfulfilled = healthy ? await store.listUnfulfilled().catch(() => []) : [];
-  const outstanding = unfulfilled.filter((r) => r.sessionId !== DRILL_RECORD_ID);
+  const outstanding = unfulfilled;
   checks.push({
     name: "no_outstanding_unfulfilled",
     passed: outstanding.length === 0,

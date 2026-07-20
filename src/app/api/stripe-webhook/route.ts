@@ -4,7 +4,8 @@ import { getSigningKeyB64, mintLicenseKey } from "@/lib/server/license-mint";
 import { verifyStripeWebhookSignature, type CheckoutSession } from "@/lib/server/stripe";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
-import { DRILL_RECORD_ID } from "@/lib/server/fulfillment-readiness";
+import { getStripeSecretKey, retrieveCheckoutSession } from "@/lib/server/stripe";
+import { verifyPaidSession } from "@/lib/server/session-verification";
 
 // Optional fulfillment backup: emails the license key on completed checkout so
 // buyers who close the success tab still receive their key. Primary
@@ -46,13 +47,44 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const session = event.data?.object;
-  const tier = session?.metadata?.tier;
-  const email = session?.customer_details?.email;
-  if (!session || session.payment_status !== "paid") {
+  if (!session?.id) {
     return NextResponse.json({ received: true });
   }
 
-  logCommerceEvent("webhook_received", { eventId: event.id, sessionId: session.id, tier });
+  logCommerceEvent("webhook_received", { eventId: event.id, sessionId: session.id });
+
+  // A valid signature proves only that the sender holds the endpoint secret.
+  // It does not prove a Checkout Session exists, that it was paid, or that the
+  // tier named in metadata is the tier paid for. Ask Stripe.
+  const secretKey = getStripeSecretKey();
+  if (!secretKey) {
+    logCommerceEvent("PAID_BUT_UNFULFILLED", {
+      sessionId: session.id,
+      reason: "cannot_verify_session_no_stripe_key",
+    });
+    return NextResponse.json({ error: "Cannot verify session." }, { status: 503 });
+  }
+
+  const verification = await verifyPaidSession(session.id, async (id) => {
+    const looked = await retrieveCheckoutSession(id, secretKey);
+    return looked.ok
+      ? { ok: true as const, session: looked.session, accountId: null }
+      : { ok: false as const, status: looked.status };
+  });
+
+  if (!verification.ok) {
+    // Stripe disagrees with the payload. Never fulfill on the payload's word.
+    logCommerceEvent("webhook_rejected", {
+      eventId: event.id,
+      sessionId: session.id,
+      reason: verification.reason,
+    });
+    return NextResponse.json({ error: "Session verification failed." }, { status: 400 });
+  }
+
+  // Authoritative from here down: tier comes from the paid price, not metadata.
+  const tier = verification.session.tier;
+  const email = verification.session.customerEmail;
 
   if (!isPackageTier(tier)) {
     // Paid, but we cannot tell what was bought. Money took, nothing owed
@@ -200,21 +232,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     lastError: "none",
   });
 
-  // A completed drill session IS the operational proof. Mirroring it to the
-  // drill record means readiness can only become true by the real journey
-  // actually running end to end — there is no flag to flip instead.
-  if (session.id.startsWith("cs_test_drill_")) {
-    await store.claim(DRILL_RECORD_ID, event.id ?? null, {
-      paymentStatus: session.payment_status,
-      tier,
-    });
-    await store.update(DRILL_RECORD_ID, {
-      status: "email_sent",
-      licenseMinted: true,
-      emailSent: true,
-      lastError: "none",
-    });
-  }
 
   logCommerceEvent("fulfillment_email_sent", { sessionId: session.id, tier });
   return NextResponse.json({ received: true });

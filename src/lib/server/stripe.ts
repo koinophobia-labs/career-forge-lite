@@ -45,6 +45,13 @@ export type CheckoutSession = {
   created: number;
   metadata: Record<string, string>;
   customer_details?: { email?: string | null } | null;
+  // Needed to verify a session against Stripe rather than trusting a payload:
+  // the amount actually charged, the mode it was charged in, and the price id
+  // that identifies which package was bought.
+  amount_total?: number | null;
+  currency?: string | null;
+  livemode?: boolean;
+  line_items?: { data?: Array<{ price?: { id?: string; product?: string } | null }> } | null;
 };
 
 async function stripeRequest(path: string, secretKey: string, body?: URLSearchParams): Promise<Response> {
@@ -92,7 +99,12 @@ export async function retrieveCheckoutSession(
   if (!/^cs_[a-zA-Z0-9_]+$/.test(sessionId)) {
     return { ok: false, status: 400, error: "Invalid session id." };
   }
-  const response = await stripeRequest(`/checkout/sessions/${sessionId}`, secretKey);
+  // line_items must be expanded explicitly — without it Stripe omits the price
+  // id, which is the only authoritative signal of which package was paid for.
+  const response = await stripeRequest(
+    `/checkout/sessions/${sessionId}?expand[]=line_items`,
+    secretKey
+  );
   if (!response.ok) {
     return { ok: false, status: response.status === 404 ? 404 : 502, error: "Could not look up that checkout session." };
   }
