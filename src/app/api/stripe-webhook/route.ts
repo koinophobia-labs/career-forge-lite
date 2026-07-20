@@ -1,36 +1,55 @@
 import { NextResponse } from "next/server";
 import { getPackage, isPackageTier } from "@/lib/packages";
 import { getSigningKeyB64, mintLicenseKey } from "@/lib/server/license-mint";
-import { verifyStripeWebhookSignature, type CheckoutSession } from "@/lib/server/stripe";
+import {
+  getCertificationStripeConfig,
+  getStripeSecretKey,
+  retrieveCheckoutSession,
+  stripeKeyMode,
+  verifyStripeWebhookSignature,
+  type CheckoutSession,
+} from "@/lib/server/stripe";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
-import { getStripeSecretKey, retrieveCheckoutSession } from "@/lib/server/stripe";
 import { verifyPaidSession } from "@/lib/server/session-verification";
 
-// Optional fulfillment backup: emails the license key on completed checkout so
-// buyers who close the success tab still receive their key. Primary
-// fulfillment is the /unlock page exchanging the session id — this webhook is
-// belt-and-suspenders, and safe to leave unconfigured.
-//
-// Duplicate webhook deliveries re-send the same email; that is harmless and
-// deliberate (no database exists to dedupe against, and a duplicate receipt
-// email beats a missing key).
+// Durable fulfillment: emails the license key on completed checkout so buyers
+// who close the success tab still receive it. Duplicate delivery is claimed in
+// the durable store and acknowledged without sending a second message.
 
 type StripeEvent = {
   id?: string;
   type: string;
+  livemode?: boolean;
   data?: { object?: CheckoutSession };
 };
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]!);
+
 export async function POST(request: Request): Promise<NextResponse> {
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!endpointSecret || !endpointSecret.trim()) {
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || null;
+  const certification = getCertificationStripeConfig();
+  if (!endpointSecret && !certification) {
     return NextResponse.json({ error: "Webhook is not configured on this deployment." }, { status: 503 });
   }
 
   const rawBody = await request.text();
   const signature = request.headers.get("stripe-signature");
-  if (!verifyStripeWebhookSignature(rawBody, signature, endpointSecret.trim())) {
+  const primarySignatureValid = Boolean(
+    endpointSecret && verifyStripeWebhookSignature(rawBody, signature, endpointSecret)
+  );
+  const certificationSignatureValid = Boolean(
+    certification &&
+      verifyStripeWebhookSignature(rawBody, signature, certification.webhookSecret)
+  );
+  if (!primarySignatureValid && !certificationSignatureValid) {
     logCommerceEvent("webhook_rejected", { reason: "invalid_signature" });
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
@@ -40,6 +59,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     event = JSON.parse(rawBody) as StripeEvent;
   } catch {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+  }
+
+  const certificationEvent = certificationSignatureValid && !primarySignatureValid;
+  const secretKey = certificationEvent ? certification!.secretKey : getStripeSecretKey();
+  const keyMode = secretKey ? stripeKeyMode(secretKey) : "unknown";
+  const eventMode = event.livemode === true ? "live" : "test";
+  if (!secretKey || keyMode === "unknown" || keyMode !== eventMode) {
+    logCommerceEvent("webhook_rejected", {
+      eventId: event.id,
+      reason: "stripe_mode_mismatch",
+    });
+    return NextResponse.json({ error: "Webhook mode mismatch." }, { status: 400 });
   }
 
   if (event.type !== "checkout.session.completed") {
@@ -56,21 +87,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   // A valid signature proves only that the sender holds the endpoint secret.
   // It does not prove a Checkout Session exists, that it was paid, or that the
   // tier named in metadata is the tier paid for. Ask Stripe.
-  const secretKey = getStripeSecretKey();
-  if (!secretKey) {
-    logCommerceEvent("PAID_BUT_UNFULFILLED", {
-      sessionId: session.id,
-      reason: "cannot_verify_session_no_stripe_key",
-    });
-    return NextResponse.json({ error: "Cannot verify session." }, { status: 503 });
-  }
-
   const verification = await verifyPaidSession(session.id, async (id) => {
     const looked = await retrieveCheckoutSession(id, secretKey);
     return looked.ok
       ? { ok: true as const, session: looked.session, accountId: null }
       : { ok: false as const, status: looked.status };
-  });
+  }, certificationEvent ? new Map([[certification!.priceReset, "reset"]]) : undefined);
 
   if (!verification.ok) {
     // Stripe disagrees with the payload. Never fulfill on the payload's word.
@@ -126,8 +148,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const resendKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.LICENSE_EMAIL_FROM;
+  const replyToAddress = process.env.LICENSE_EMAIL_REPLY_TO;
   const signingKey = getSigningKeyB64();
-  if (!resendKey?.trim() || !fromAddress?.trim() || !signingKey || !email) {
+  if (!resendKey?.trim() || !fromAddress?.trim() || !replyToAddress?.trim() || !signingKey || !email) {
     // The customer paid and this deployment has no way to reach them. The
     // /unlock redirect may still have fulfilled it, but we cannot know that
     // from here — so this is recorded as a possible loss, not shrugged off.
@@ -139,6 +162,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       missing: [
         !resendKey?.trim() ? "RESEND_API_KEY" : null,
         !fromAddress?.trim() ? "LICENSE_EMAIL_FROM" : null,
+        !replyToAddress?.trim() ? "LICENSE_EMAIL_REPLY_TO" : null,
         !signingKey ? "LICENSE_SIGNING_PRIVATE_KEY" : null,
         !email ? "customer_email_absent_on_session" : null,
       ].filter(Boolean),
@@ -157,14 +181,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ received: true });
   }
 
-  // Minting is deterministic per session, so recording it before the email
-  // means a resumed retry re-derives the SAME key rather than a new one.
+  // The entitlement payload is deterministic per session. P-256 ECDSA may
+  // produce different valid signature bytes on a retry; both keys activate the
+  // same package. Durable emailSent state prevents a second fulfillment email.
   await store.update(session.id, { status: "license_minted", licenseMinted: true });
   logCommerceEvent("license_minted", { sessionId: session.id, tier, via: "webhook" });
 
   const pack = getPackage(tier);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
   const unlockUrl = appUrl ? `${appUrl}/unlock` : "the Unlock page";
+  const directUnlockUrl = appUrl
+    ? `${appUrl}/unlock?session_id=${encodeURIComponent(session.id)}`
+    : null;
+  const safePackName = escapeHtml(pack.name);
+  const safeUnlockUrl = directUnlockUrl ? escapeHtml(directUnlockUrl) : null;
 
   let response: Response;
   try {
@@ -172,24 +202,39 @@ export async function POST(request: Request): Promise<NextResponse> {
     method: "POST",
     headers: {
       Authorization: `Bearer ${resendKey.trim()}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      // The message body is stable for a Checkout Session even though a
+      // re-minted P-256 license signature need not be. Resend keeps this key
+      // for 24 hours and returns the original message id on a safe retry.
+      "Idempotency-Key": `career-forge-license/${session.id}`,
     },
     body: JSON.stringify({
       from: fromAddress.trim(),
       to: [email],
+      reply_to: replyToAddress.trim(),
       subject: `Your Career Forge license key — ${pack.name}`,
       text: [
         `Thanks for purchasing the ${pack.name}.`,
         ``,
-        `Your license key:`,
+        directUnlockUrl ? `Unlock Career Forge: ${directUnlockUrl}` : null,
+        directUnlockUrl ? `` : null,
+        `To unlock: open ${unlockUrl} and use the link above.`,
+        `Keep this email so you can unlock any browser or device again.`,
         ``,
-        license,
-        ``,
-        `To unlock: open ${unlockUrl}, paste the key, and you're set.`,
-        `The key works on any browser or device — keep this email so you can re-enter it anywhere.`,
-        ``,
-        `Your career data always stays on your own device. The key carries no personal information.`
-      ].join("\n")
+        `Your career data always stays on your own device. The key carries no personal information.`,
+        `Need help? Reply to this email.`
+      ].filter((line): line is string => line !== null).join("\n"),
+      html: [
+        `<h1>Your ${safePackName} is ready</h1>`,
+        `<p>Thanks for purchasing Career Forge.</p>`,
+        safeUnlockUrl
+          ? `<p><a href="${safeUnlockUrl}" style="display:inline-block;padding:12px 18px;background:#3ddbd9;color:#071013;text-decoration:none;font-weight:700;border-radius:6px">Unlock Career Forge</a></p>`
+          : "",
+        `<p>If the button does not work, copy the full unlock link from the plain-text version of this email into your browser, or open ${escapeHtml(unlockUrl)} and contact support with your Stripe receipt reference.</p>`,
+        `<p>Keep this email so you can unlock any browser or device again.</p>`,
+        `<p>Your career data stays on your device, and the key carries no personal information.</p>`,
+        `<p>Need help? Reply to this email.</p>`,
+      ].join(""),
     })
     });
   } catch {
@@ -226,13 +271,33 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Fulfillment email failed." }, { status: 500 });
   }
 
+  const providerResponse = (await response.json().catch(() => null)) as { id?: unknown } | null;
+  const providerMessageId =
+    typeof providerResponse?.id === "string" && providerResponse.id.trim()
+      ? providerResponse.id.trim()
+      : null;
+  if (!providerMessageId) {
+    await store.update(session.id, {
+      status: "failed",
+      lastError: "email_provider_rejected",
+    });
+    logCommerceEvent("fulfillment_email_failed", {
+      sessionId: session.id,
+      tier,
+      status: response.status,
+      reason: "provider_message_id_missing",
+    });
+    return NextResponse.json({ error: "Fulfillment email was not acknowledged." }, { status: 500 });
+  }
+
   await store.update(session.id, {
     status: "email_sent",
     emailSent: true,
+    emailProviderMessageId: providerMessageId,
     lastError: "none",
   });
 
 
-  logCommerceEvent("fulfillment_email_sent", { sessionId: session.id, tier });
+  logCommerceEvent("fulfillment_email_sent", { sessionId: session.id, tier, providerMessageId });
   return NextResponse.json({ received: true });
 }

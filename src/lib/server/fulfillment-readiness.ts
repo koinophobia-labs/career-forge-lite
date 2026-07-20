@@ -126,6 +126,11 @@ export function configurationReadiness(): ConfigurationReadiness {
       present: present("LICENSE_EMAIL_FROM"),
     },
     {
+      name: "LICENSE_EMAIL_REPLY_TO",
+      consequence: "A buyer who needs help cannot reply to a monitored support address.",
+      present: present("LICENSE_EMAIL_REPLY_TO"),
+    },
+    {
       name: "DATABASE_URL (or KV_REST_API_URL / KV_REST_API_TOKEN)",
       consequence:
         "No durable fulfillment state. Duplicate webhooks cannot be deduplicated across instances or retries, and a paid-but-unfulfilled purchase cannot be reconciled.",

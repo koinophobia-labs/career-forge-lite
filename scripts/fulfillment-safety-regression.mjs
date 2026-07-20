@@ -82,6 +82,7 @@ const ALL_CONFIG = {
   STRIPE_WEBHOOK_SECRET: "x",
   RESEND_API_KEY: "x",
   LICENSE_EMAIL_FROM: "x",
+  LICENSE_EMAIL_REPLY_TO: "x",
   KV_REST_API_URL: "https://kv.example",
   KV_REST_API_TOKEN: "x",
 };
@@ -174,6 +175,11 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     priceId: "price_reset",
     tier: "reset",
     emailProviderMessageId: "msg_123",
+    fulfillmentStoreKind: "neon-postgres",
+    fulfillmentAttempts: 2,
+    licenseTierVerified: "reset",
+    successRouteStatus: 200,
+    cancellationRouteStatus: 200,
     completedAt: "2026-07-20T12:00:00.000Z",
   };
 
@@ -239,6 +245,10 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     ["evidence without a Stripe-originated event fails", { stripeEventId: "forged_1" }, /Stripe-originated event/i],
     ["evidence without a known price fails", { priceId: "" }, /price that was actually paid/i],
     ["evidence without provider acceptance fails", { emailProviderMessageId: "" }, /email provider accepted/i],
+    ["evidence without durable duplicate suppression fails", { fulfillmentAttempts: 1 }, /duplicate webhook/i],
+    ["evidence without a durable store fails", { fulfillmentStoreKind: "memory" }, /durable fulfillment store/i],
+    ["evidence without license activation fails", { licenseTierVerified: "job-search" }, /issued license activates/i],
+    ["evidence without both return routes fails", { cancellationRouteStatus: 500 }, /return routes/i],
     ["evidence from an older drill version fails", { drillVersion: "1.0.0" }, /drill 1\.0\.0/i],
   ];
 
@@ -347,7 +357,11 @@ await withEnv(
   check("an interrupted fulfillment can be resumed", resumed.licenseMinted === true && resumed.emailSent === false);
   check("an incomplete session shows as unfulfilled", (await store.listUnfulfilled()).some((r) => r.sessionId === "cs_1"));
 
-  await store.update("cs_1", { status: "email_sent", emailSent: true });
+  await store.update("cs_1", {
+    status: "email_sent",
+    emailSent: true,
+    emailProviderMessageId: "msg_1",
+  });
   check("a completed session drops off the unfulfilled list", (await store.listUnfulfilled()).every((r) => r.sessionId !== "cs_1"));
 
   const afterComplete = await store.claim("cs_1", "evt_1_late_retry", {});
@@ -356,8 +370,30 @@ await withEnv(
 
   check("record carries the required operational fields", (() => {
     const r = afterComplete.record;
-    return ["sessionId","lastEventId","paymentStatus","tier","status","licenseMinted","emailSent","attempts","lastError","createdAt","updatedAt"].every((k) => k in r);
+    return ["sessionId","lastEventId","paymentStatus","tier","status","licenseMinted","emailSent","emailProviderMessageId","attempts","lastError","createdAt","updatedAt"].every((k) => k in r);
   })());
+
+  let fulfillmentEmails = 0;
+  const deliver = async (eventId) => {
+    const { record } = await store.claim("cs_same_entitlement", eventId, {
+      paymentStatus: "paid",
+      tier: "reset",
+    });
+    if (record.emailSent) return;
+    fulfillmentEmails += 1;
+    await store.update("cs_same_entitlement", {
+      status: "email_sent",
+      licenseMinted: true,
+      emailSent: true,
+      emailProviderMessageId: "msg_same_entitlement",
+    });
+  };
+  await deliver("evt_first");
+  await deliver("evt_duplicate");
+  check(
+    "the same entitlement is fulfilled by exactly one email across duplicate delivery",
+    fulfillmentEmails === 1
+  );
 }
 
 // The store must not become a second place to leak personal data.
@@ -391,6 +427,11 @@ check("webhook refuses when no durable store exists", /no_durable_fulfillment_st
 check("webhook suppresses a duplicate using durable state", /record\.emailSent[\s\S]{0,300}duplicate: true/.test(webhookRoute));
 check("webhook records the mint before emailing", /licenseMinted: true/.test(webhookRoute));
 check("webhook records successful delivery", /emailSent: true/.test(webhookRoute));
+check("webhook records the real provider message id", /emailProviderMessageId: providerMessageId/.test(webhookRoute));
+check("fulfillment email has text and HTML bodies", /text:[\s\S]{0,1800}html:/.test(webhookRoute));
+check("fulfillment email uses a monitored reply-to", /reply_to: replyToAddress/.test(webhookRoute));
+check("fulfillment email contains a direct session unlock", /unlock\?session_id=/.test(webhookRoute));
+check("fulfillment email uses provider idempotency", /Idempotency-Key/.test(webhookRoute) && /career-forge-license\//.test(webhookRoute));
 check(
   "webhook returns 500 on email failure so Stripe retries",
   /fulfillment_email_failed[\s\S]{0,700}status:\s*500/.test(webhookRoute)
@@ -410,18 +451,26 @@ check(
 );
 check("the self-signing drill is gone", !fs.existsSync(path.join(root, "scripts/fulfillment-drill.mjs")));
 
-// Two tools, hard runtime guards — not comments.
+// Synthetic tool has hard runtime guards.
 const synthetic = read("scripts/synthetic-webhook-regression.mjs");
 check("synthetic tool refuses non-localhost targets", /REFUSED[\s\S]{0,200}localhost/.test(synthetic));
 check("synthetic tool refuses live keys at runtime", /sk_live[\s\S]{0,200}process\.exit\(2\)/.test(synthetic));
 check("synthetic tool never writes certification", !synthetic.includes("CERTIFICATION_RECORD_ID"));
 
 const certify = read("scripts/certify-fulfillment.mjs");
-check("certification tool refuses the production host", /PRODUCTION_HOSTS[\s\S]{0,400}die\(/.test(certify));
-check("certification tool refuses non-test keys", /sk_test_[\s\S]{0,120}die\(/.test(certify));
-check("certification tool rejects livemode sessions", /livemode === false/.test(certify));
-check("certification tool verifies price against the authoritative id", /STRIPE_PRICE_RESET/.test(certify));
-check("certification tool states it does not authorize live checkout", /not permission|explicit approval/i.test(certify));
+check("certification client targets only the exact production host", /hostname !== "career-forge-lite\.vercel\.app"/.test(certify));
+check("certification client reads the operator token only from the environment", /process\.env\.CERTIFICATION_OPERATOR_TOKEN/.test(certify) && !/operator-token/.test(certify));
+check("certification client holds no Stripe key", !/STRIPE_TEST_SECRET_KEY|STRIPE_SECRET_KEY|sk_test_/.test(certify));
+check("certification client states it does not authorize live checkout", /evidence, not permission|No live-commerce approval/i.test(certify));
+
+const operatorRoute = read("src/app/api/internal/commerce-certification/route.ts");
+check("production-host recorder is disabled without all temporary credentials", /if \(!config\)[\s\S]{0,100}status: 404/.test(operatorRoute));
+check("production-host recorder requires a bearer token", /operatorAuthorized/.test(operatorRoute) && /Bearer /.test(operatorRoute));
+check("production-host recorder refuses a foreign host or stale commit", /requestHost !== identity\.host/.test(operatorRoute) && /certification_commit/.test(operatorRoute));
+check("production-host recorder retrieves the Stripe event directly", /\/events\//.test(operatorRoute) && /checkout\.session\.completed/.test(operatorRoute));
+check("production-host recorder requires a provider message id and duplicate claim", /emailProviderMessageId/.test(operatorRoute) && /record\.attempts < 2/.test(operatorRoute));
+check("production-host recorder never writes an approval record", !operatorRoute.includes("APPROVAL_RECORD_ID"));
+check("unsafe local certification recorder is removed", !fs.existsSync(path.join(root, "scripts/record-certification.mjs")));
 
 // Session verification derives tier from price, never metadata.
 const verification = read("src/lib/server/session-verification.ts");
