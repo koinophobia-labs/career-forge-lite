@@ -312,6 +312,25 @@ await withEnv(
 // --- Durable idempotency ------------------------------------------------------------------------
 
 {
+  const source = read("src/lib/server/fulfillment-store.ts");
+  check(
+    "Postgres readiness uses fulfillment facts, not an unwritten status value",
+    source.includes("license_minted IS NOT TRUE OR email_sent IS NOT TRUE") &&
+      !source.includes("status <> 'fulfilled'")
+  );
+}
+
+{
+  const source = read("scripts/approve-live-commerce.mjs");
+  check(
+    "approval recorder writes the field names consumed by the runtime gate",
+    source.includes("approvedCommitSha: commitSha") &&
+      source.includes("approvedEnvironment: environment") &&
+      source.includes("approvalActor: actor")
+  );
+}
+
+{
   const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
   const store = new MemoryFulfillmentStore();
 
