@@ -90,10 +90,17 @@ for (const target of ["preview", "production"]) {
 }
 
 const checkoutSource = fs.readFileSync(path.join(root, "src/app/api/checkout/route.ts"), "utf8");
-check("live checkout uses the capped Payment Link", checkoutSource.includes("getLiveResetPaymentLinkUrl"));
+// The Payment Link was fire-and-forget: the server never learned the session
+// id, so it could not verify payment, record it durably, or notice a purchase
+// that was never delivered. Live mode now creates a real Checkout Session.
+check("live checkout creates a real Stripe Checkout Session", checkoutSource.includes("createCheckoutSession"));
+check("live checkout no longer hands out a static Payment Link", !checkoutSource.includes("getLiveResetPaymentLinkUrl"));
 check("live checkout hard-codes the only paid tier to reset", checkoutSource.includes('liveMode && tier !== "reset"'));
 check("live checkout fails closed if PAID_BETA_TIER drifts", checkoutSource.includes('process.env.PAID_BETA_TIER !== "reset"'));
-check("live checkout rejects closed tiers before returning the link", checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("getLiveResetPaymentLinkUrl()"));
+check(
+  "live checkout rejects closed tiers before creating a session",
+  checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("createCheckoutSession(tier")
+);
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

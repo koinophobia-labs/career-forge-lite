@@ -78,7 +78,7 @@ async function withEnv(vars, fn) {
 const ALL_CONFIG = {
   STRIPE_SECRET_KEY: "x",
   LICENSE_SIGNING_PRIVATE_KEY: "x",
-  STRIPE_LIVE_RESET_PAYMENT_LINK: "https://buy.stripe.com/x",
+  STRIPE_PRICE_RESET: "price_test_reset",
   STRIPE_WEBHOOK_SECRET: "x",
   RESEND_API_KEY: "x",
   LICENSE_EMAIL_FROM: "x",
@@ -298,7 +298,7 @@ await withEnv(
     NEXT_PUBLIC_COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "x",
     LICENSE_SIGNING_PRIVATE_KEY: "x",
-    STRIPE_LIVE_RESET_PAYMENT_LINK: "https://buy.stripe.com/x",
+    STRIPE_PRICE_RESET: "price_test_reset",
   },
   async () => {
     const { liveCommerceUnsafe } = loadTs("src/lib/server/fulfillment-readiness.ts");
