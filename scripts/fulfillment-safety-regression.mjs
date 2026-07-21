@@ -428,13 +428,14 @@ check("webhook suppresses a duplicate using durable state", /record\.emailSent[\
 check("webhook records the mint before emailing", /licenseMinted: true/.test(webhookRoute));
 check("webhook records successful delivery", /emailSent: true/.test(webhookRoute));
 check("webhook records the real provider message id", /emailProviderMessageId: providerMessageId/.test(webhookRoute));
-check("fulfillment email has text and HTML bodies", /text:[\s\S]{0,1800}html:/.test(webhookRoute));
+check("fulfillment email is plain text only", /text:/.test(webhookRoute) && !/\n\s*html:/.test(webhookRoute));
 check("fulfillment email uses a monitored reply-to", /reply_to: replyToAddress/.test(webhookRoute));
-check("fulfillment email contains a direct session unlock", /unlock\?session_id=/.test(webhookRoute));
+check("fulfillment email contains the exact license key", /`License key:`[\s\S]{0,80}\blicense,/.test(webhookRoute));
+check("fulfillment email contains one direct unlock destination", /const unlockUrl = appUrl \? `\$\{appUrl\}\/unlock`/.test(webhookRoute));
 check("fulfillment email uses provider idempotency", /Idempotency-Key/.test(webhookRoute) && /career-forge-license\//.test(webhookRoute));
 check(
   "fulfillment email subject is transactional and unique per checkout",
-  webhookRoute.includes("subject: `Career Forge purchase confirmed — ${pack.name} — ${session.id.slice(-8)}`") &&
+  webhookRoute.includes("subject: `Career Forge license ${session.id.slice(-8)}`") &&
     !webhookRoute.includes("Your Career Forge license key")
 );
 check(

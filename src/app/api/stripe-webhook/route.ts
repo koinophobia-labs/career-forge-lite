@@ -24,15 +24,6 @@ type StripeEvent = {
   data?: { object?: CheckoutSession };
 };
 
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character]!);
-
 export async function POST(request: Request): Promise<NextResponse> {
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || null;
   const certification = getCertificationStripeConfig();
@@ -190,11 +181,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   const pack = getPackage(tier);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
   const unlockUrl = appUrl ? `${appUrl}/unlock` : "the Unlock page";
-  const directUnlockUrl = appUrl
-    ? `${appUrl}/unlock?session_id=${encodeURIComponent(session.id)}`
-    : null;
-  const safePackName = escapeHtml(pack.name);
-  const safeUnlockUrl = directUnlockUrl ? escapeHtml(directUnlockUrl) : null;
 
   let response: Response;
   try {
@@ -212,31 +198,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       from: fromAddress.trim(),
       to: [email],
       reply_to: replyToAddress.trim(),
-      // Include the checkout reference so Gmail does not fold a new purchase
-      // into an older conversation whose spam classification may be inherited.
-      subject: `Career Forge purchase confirmed — ${pack.name} — ${session.id.slice(-8)}`,
+      subject: `Career Forge license ${session.id.slice(-8)}`,
       text: [
-        `Thanks for purchasing the ${pack.name}.`,
+        `You received this email because a $${pack.priceUsd} Career Forge purchase was completed for this address.`,
         ``,
-        directUnlockUrl ? `Unlock Career Forge: ${directUnlockUrl}` : null,
-        directUnlockUrl ? `` : null,
-        `To unlock: open ${unlockUrl} and use the link above.`,
-        `Keep this email so you can unlock any browser or device again.`,
+        `License key:`,
+        license,
         ``,
-        `Your career data always stays on your own device. The key carries no personal information.`,
-        `Need help? Reply to this email.`
-      ].filter((line): line is string => line !== null).join("\n"),
-      html: [
-        `<h1>Your ${safePackName} is ready</h1>`,
-        `<p>Thanks for purchasing Career Forge.</p>`,
-        safeUnlockUrl
-          ? `<p><a href="${safeUnlockUrl}" style="display:inline-block;padding:12px 18px;background:#3ddbd9;color:#071013;text-decoration:none;font-weight:700;border-radius:6px">Unlock Career Forge</a></p>`
-          : "",
-        `<p>If the button does not work, copy the full unlock link from the plain-text version of this email into your browser, or open ${escapeHtml(unlockUrl)} and contact support with your Stripe receipt reference.</p>`,
-        `<p>Keep this email so you can unlock any browser or device again.</p>`,
-        `<p>Your career data stays on your device, and the key carries no personal information.</p>`,
-        `<p>Need help? Reply to this email.</p>`,
-      ].join(""),
+        `Unlock Career Forge:`,
+        unlockUrl,
+        ``,
+        `Enter the license key on that page.`,
+        ``,
+        `Questions? Reply to this email.`
+      ].join("\n"),
     })
     });
   } catch {
