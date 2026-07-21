@@ -17,7 +17,7 @@ import {
 } from "@/lib/server/redemption-code";
 import { verifyPaidSession } from "@/lib/server/session-verification";
 
-// Durable fulfillment: emails the license key on completed checkout so buyers
+// Durable fulfillment: emails a short access code on completed checkout so buyers
 // who close the success tab still receive it. Duplicate delivery is claimed in
 // the durable store and acknowledged without sending a second message.
 

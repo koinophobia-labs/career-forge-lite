@@ -44,7 +44,7 @@ const betaFaqs: Array<[string, string]> = [
 const purchaseFaqs: Array<[string, string]> = [
   [
     "What happens after I buy?",
-    "You get a license key on the confirmation page and by email when supplied at checkout. Paste it once on the Unlock page and the selected feature grants become active in this browser."
+    "Your purchase activates this browser automatically. We also email a short access code you can use to unlock another device."
   ],
   [
     "Is this a subscription?",
@@ -52,7 +52,7 @@ const purchaseFaqs: Array<[string, string]> = [
   ],
   [
     "Do I need an account?",
-    "No. The license key contains no career data, and your career information remains on your device."
+    "No. Your access code contains no career data, and your career information remains on your device."
   ],
   [
     "What can I do before buying?",
@@ -63,8 +63,8 @@ const purchaseFaqs: Array<[string, string]> = [
     "Treat every generated item as a draft. Check the evidence receipt, review all claims and dates, and inspect the rendered PDF or DOCX before sending it."
   ],
   [
-    "What if my payment goes through but I lose the key?",
-    "Use the link in the Stripe receipt to reopen the confirmation page, or contact support with the receipt reference."
+    "What if my payment goes through but I lose the access code?",
+    "Use the confirmation link in the Stripe receipt to activate the purchase again, or contact support with the receipt reference."
   ]
 ];
 
@@ -300,9 +300,9 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-10 text-sm text-paper/50">
-          Already have a license key?{" "}
+          Already have an access code?{" "}
           <Link href="/unlock" className="font-bold text-cyan underline hover:text-gold">
-            Manage your key
+            Manage your access code
           </Link>
           {" · "}
           <Link href="/terms" className="underline hover:text-cyan">Terms</Link>

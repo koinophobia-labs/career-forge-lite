@@ -141,6 +141,8 @@ const storeSource = fs.readFileSync(path.join(root, "src/lib/server/fulfillment-
 const webhookSource = fs.readFileSync(path.join(root, "src/app/api/stripe-webhook/route.ts"), "utf8");
 const redeemSource = fs.readFileSync(path.join(root, "src/app/api/redeem/route.ts"), "utf8");
 const unlockSource = fs.readFileSync(path.join(root, "src/app/unlock/page.tsx"), "utf8");
+const pricingSource = fs.readFileSync(path.join(root, "src/app/pricing/page.tsx"), "utf8");
+const premiumAccessSource = fs.readFileSync(path.join(root, "src/components/PremiumAccess.tsx"), "utf8");
 check("Neon schema stores hashed code and required lifecycle fields", ["code_hash", "session_id", "entitlement_reference", "purchase_timestamp", "last_redeemed_at", "redemption_count", "revoked", "revocation_reason"].every((field) => storeSource.includes(field)));
 check("Neon enforces one code per Checkout Session", /session_id\s+TEXT UNIQUE NOT NULL/.test(storeSource));
 check("email includes short code and excludes signed entitlement", webhookSource.includes("redemptionCode,") && !/License key:/.test(webhookSource));
@@ -151,6 +153,8 @@ check("unlock labels the customer field Access code", /htmlFor="access-code"[\s\
 check("unlock supports paste, auto-capitalization, and accessible status", unlockSource.includes("Paste code") && unlockSource.includes('autoCapitalize="characters"') && unlockSource.includes('role="status"'));
 check("unlock never renders a signed entitlement", !/\{fulfillment\.(license|signedEntitlement)\}/.test(unlockSource));
 check("mobile layout does not require a wide row", unlockSource.includes("min-w-0") && unlockSource.includes("flex-col"));
+check("pricing uses access-code language", !/license key/i.test(pricingSource));
+check("premium gate uses access-code language", !/license key/i.test(premiumAccessSource));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);
