@@ -60,6 +60,22 @@ export type FulfillmentRecord = {
   updatedAt: string;
 };
 
+export type RedemptionRecord = {
+  /** HMAC-SHA256 of the normalized customer-facing redemption code. */
+  codeHash: string;
+  sessionId: string;
+  tier: string;
+  entitlementReference: string;
+  purchaseTimestamp: string;
+  createdAt: string;
+  lastRedeemedAt: string | null;
+  redemptionCount: number;
+  revoked: boolean;
+  revocationReason: string | null;
+  /** AES-GCM retry material, erased immediately after delivery is recorded. */
+  pendingCodeCiphertext: string | null;
+};
+
 export interface FulfillmentStore {
   readonly kind: string;
   /**
@@ -70,6 +86,12 @@ export interface FulfillmentStore {
   claim(sessionId: string, eventId: string | null, seed: Partial<FulfillmentRecord>): Promise<{ record: FulfillmentRecord; won: boolean }>;
   get(sessionId: string): Promise<FulfillmentRecord | null>;
   update(sessionId: string, patch: Partial<FulfillmentRecord>): Promise<FulfillmentRecord | null>;
+  createRedemption(record: RedemptionRecord): Promise<{ record: RedemptionRecord; created: boolean }>;
+  getRedemptionByHash(codeHash: string): Promise<RedemptionRecord | null>;
+  getRedemptionBySession(sessionId: string): Promise<RedemptionRecord | null>;
+  markRedemptionDelivered(sessionId: string): Promise<void>;
+  markRedemptionRedeemed(codeHash: string): Promise<RedemptionRecord | null>;
+  revokeRedemption(codeHash: string, reason: string): Promise<RedemptionRecord | null>;
   /** Sessions that took money but never completed. Drives reconciliation. */
   listUnfulfilled(): Promise<FulfillmentRecord[]>;
   /**
@@ -114,6 +136,8 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   readonly kind = "memory";
   private records = new Map<string, FulfillmentRecord>();
   private docs = new Map<string, string>();
+  private redemptionsByHash = new Map<string, RedemptionRecord>();
+  private redemptionHashBySession = new Map<string, string>();
 
   async claim(sessionId: string, eventId: string | null, seed: Partial<FulfillmentRecord>) {
     const existing = this.records.get(sessionId);
@@ -144,6 +168,53 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     return [...this.records.values()].filter((r) => !r.emailSent || !r.licenseMinted);
   }
 
+  async createRedemption(record: RedemptionRecord) {
+    const existingHash = this.redemptionHashBySession.get(record.sessionId);
+    if (existingHash) {
+      return { record: this.redemptionsByHash.get(existingHash)!, created: false };
+    }
+    if (this.redemptionsByHash.has(record.codeHash)) throw new Error("redemption_code_collision");
+    const stored = { ...record };
+    this.redemptionsByHash.set(record.codeHash, stored);
+    this.redemptionHashBySession.set(record.sessionId, record.codeHash);
+    return { record: { ...stored }, created: true };
+  }
+
+  async getRedemptionByHash(codeHash: string) {
+    const record = this.redemptionsByHash.get(codeHash);
+    return record ? { ...record } : null;
+  }
+
+  async getRedemptionBySession(sessionId: string) {
+    const hash = this.redemptionHashBySession.get(sessionId);
+    return hash ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async markRedemptionDelivered(sessionId: string) {
+    const record = await this.getRedemptionBySession(sessionId);
+    if (!record) return;
+    record.pendingCodeCiphertext = null;
+    this.redemptionsByHash.set(record.codeHash, record);
+  }
+
+  async markRedemptionRedeemed(codeHash: string) {
+    const record = await this.getRedemptionByHash(codeHash);
+    if (!record) return null;
+    record.lastRedeemedAt = now();
+    record.redemptionCount += 1;
+    this.redemptionsByHash.set(codeHash, record);
+    return { ...record };
+  }
+
+  async revokeRedemption(codeHash: string, reason: string) {
+    const record = await this.getRedemptionByHash(codeHash);
+    if (!record) return null;
+    record.revoked = true;
+    record.revocationReason = reason;
+    this.redemptionsByHash.set(codeHash, record);
+    return { ...record };
+  }
+
   async getDoc<T>(id: string): Promise<T | null> {
     const raw = this.docs.get(id);
     return raw === undefined ? null : (JSON.parse(raw) as T);
@@ -161,6 +232,8 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   reset() {
     this.records.clear();
     this.docs.clear();
+    this.redemptionsByHash.clear();
+    this.redemptionHashBySession.clear();
   }
 }
 
@@ -182,6 +255,8 @@ export class KvFulfillmentStore implements FulfillmentStore {
   readonly kind = "vercel-kv";
   private key = (sessionId: string) => `cf:fulfillment:${sessionId}`;
   private indexKey = "cf:fulfillment:index";
+  private redemptionKey = (codeHash: string) => `cf:redemption:${codeHash}`;
+  private redemptionSessionKey = (sessionId: string) => `cf:redemption-session:${sessionId}`;
 
   private async command(body: unknown[]): Promise<unknown> {
     const res = await fetch(KV_URL()!, {
@@ -244,6 +319,76 @@ export class KvFulfillmentStore implements FulfillmentStore {
     return records.filter(
       (r): r is FulfillmentRecord => Boolean(r) && (!r!.emailSent || !r!.licenseMinted)
     );
+  }
+
+  async createRedemption(record: RedemptionRecord) {
+    const existing = await this.getRedemptionBySession(record.sessionId);
+    if (existing) return { record: existing, created: false };
+    const inserted = await this.command([
+      "SET",
+      this.redemptionKey(record.codeHash),
+      JSON.stringify(record),
+      "NX",
+    ]);
+    if (inserted !== "OK") throw new Error("redemption_code_collision");
+    const linked = await this.command([
+      "SET",
+      this.redemptionSessionKey(record.sessionId),
+      record.codeHash,
+      "NX",
+    ]);
+    if (linked !== "OK") {
+      await this.command(["DEL", this.redemptionKey(record.codeHash)]);
+      const raced = await this.getRedemptionBySession(record.sessionId);
+      if (raced) return { record: raced, created: false };
+      throw new Error("redemption_session_link_failed");
+    }
+    return { record, created: true };
+  }
+
+  async getRedemptionByHash(codeHash: string) {
+    const raw = await this.command(["GET", this.redemptionKey(codeHash)]);
+    if (typeof raw !== "string") return null;
+    try {
+      return JSON.parse(raw) as RedemptionRecord;
+    } catch {
+      return null;
+    }
+  }
+
+  async getRedemptionBySession(sessionId: string) {
+    const hash = await this.command(["GET", this.redemptionSessionKey(sessionId)]);
+    return typeof hash === "string" ? this.getRedemptionByHash(hash) : null;
+  }
+
+  private async putRedemption(record: RedemptionRecord) {
+    await this.command(["SET", this.redemptionKey(record.codeHash), JSON.stringify(record)]);
+  }
+
+  async markRedemptionDelivered(sessionId: string) {
+    const record = await this.getRedemptionBySession(sessionId);
+    if (!record) return;
+    await this.putRedemption({ ...record, pendingCodeCiphertext: null });
+  }
+
+  async markRedemptionRedeemed(codeHash: string) {
+    const record = await this.getRedemptionByHash(codeHash);
+    if (!record) return null;
+    const updated = {
+      ...record,
+      lastRedeemedAt: now(),
+      redemptionCount: record.redemptionCount + 1,
+    };
+    await this.putRedemption(updated);
+    return updated;
+  }
+
+  async revokeRedemption(codeHash: string, reason: string) {
+    const record = await this.getRedemptionByHash(codeHash);
+    if (!record) return null;
+    const updated = { ...record, revoked: true, revocationReason: reason };
+    await this.putRedemption(updated);
+    return updated;
   }
 
   async getDoc<T>(id: string): Promise<T | null> {
@@ -333,6 +478,21 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
           doc        JSONB NOT NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`;
+        await sql`CREATE TABLE IF NOT EXISTS cf_redemptions (
+          code_hash                TEXT PRIMARY KEY,
+          session_id               TEXT UNIQUE NOT NULL,
+          tier                     TEXT NOT NULL,
+          entitlement_reference    TEXT NOT NULL,
+          purchase_timestamp       TIMESTAMPTZ NOT NULL,
+          created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_redeemed_at         TIMESTAMPTZ,
+          redemption_count         INTEGER NOT NULL DEFAULT 0,
+          revoked                  BOOLEAN NOT NULL DEFAULT FALSE,
+          revocation_reason        TEXT,
+          pending_code_ciphertext  TEXT
+        )`;
+        await sql`CREATE INDEX IF NOT EXISTS cf_redemptions_session_idx
+          ON cf_redemptions (session_id)`;
       })().catch((error) => {
         // Reset so a transient failure doesn't poison every later call.
         this.ready = null;
@@ -359,6 +519,26 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
       lastError: String(row.last_error) as ErrorCategory,
       createdAt: new Date(String(row.created_at)).toISOString(),
       updatedAt: new Date(String(row.updated_at)).toISOString(),
+    };
+  }
+
+  private toRedemption(row: Record<string, unknown>): RedemptionRecord {
+    return {
+      codeHash: String(row.code_hash),
+      sessionId: String(row.session_id),
+      tier: String(row.tier),
+      entitlementReference: String(row.entitlement_reference),
+      purchaseTimestamp: new Date(String(row.purchase_timestamp)).toISOString(),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+      lastRedeemedAt: row.last_redeemed_at
+        ? new Date(String(row.last_redeemed_at)).toISOString()
+        : null,
+      redemptionCount: Number(row.redemption_count),
+      revoked: Boolean(row.revoked),
+      revocationReason: row.revocation_reason ? String(row.revocation_reason) : null,
+      pendingCodeCiphertext: row.pending_code_ciphertext
+        ? String(row.pending_code_ciphertext)
+        : null,
     };
   }
 
@@ -429,6 +609,75 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
          AND (license_minted IS NOT TRUE OR email_sent IS NOT TRUE)
        ORDER BY created_at DESC LIMIT 500`;
     return rows.map((row) => this.toRecord(row));
+  }
+
+  async createRedemption(record: RedemptionRecord) {
+    await this.ensure();
+    const sql = await this.sql();
+    const existing = await sql`SELECT * FROM cf_redemptions WHERE session_id = ${record.sessionId}`;
+    if (existing.length) return { record: this.toRedemption(existing[0]), created: false };
+
+    const inserted = await sql`
+      INSERT INTO cf_redemptions
+        (code_hash, session_id, tier, entitlement_reference, purchase_timestamp,
+         created_at, pending_code_ciphertext)
+      VALUES
+        (${record.codeHash}, ${record.sessionId}, ${record.tier},
+         ${record.entitlementReference}, ${record.purchaseTimestamp},
+         ${record.createdAt}, ${record.pendingCodeCiphertext})
+      ON CONFLICT DO NOTHING
+      RETURNING *`;
+    if (inserted.length) return { record: this.toRedemption(inserted[0]), created: true };
+
+    const raced = await sql`SELECT * FROM cf_redemptions WHERE session_id = ${record.sessionId}`;
+    if (raced.length) return { record: this.toRedemption(raced[0]), created: false };
+    throw new Error("redemption_code_collision");
+  }
+
+  async getRedemptionByHash(codeHash: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_redemptions WHERE code_hash = ${codeHash}`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async getRedemptionBySession(sessionId: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_redemptions WHERE session_id = ${sessionId}`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async markRedemptionDelivered(sessionId: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    await sql`UPDATE cf_redemptions
+                 SET pending_code_ciphertext = NULL
+               WHERE session_id = ${sessionId}`;
+  }
+
+  async markRedemptionRedeemed(codeHash: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`
+      UPDATE cf_redemptions
+         SET last_redeemed_at = NOW(),
+             redemption_count = redemption_count + 1
+       WHERE code_hash = ${codeHash}
+      RETURNING *`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async revokeRedemption(codeHash: string, reason: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`
+      UPDATE cf_redemptions
+         SET revoked = TRUE,
+             revocation_reason = ${reason}
+       WHERE code_hash = ${codeHash}
+      RETURNING *`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
   }
 
   async getDoc<T>(id: string): Promise<T | null> {

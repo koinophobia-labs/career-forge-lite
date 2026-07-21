@@ -47,7 +47,7 @@ export function SiteFooter() {
               Beta access &amp; future packaging
             </Link>
             <Link href="/unlock" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
-              Manage a license key
+              Manage an access code
             </Link>
             <Link href="/settings" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
               Backup &amp; restore

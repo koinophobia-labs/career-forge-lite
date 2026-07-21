@@ -127,9 +127,9 @@ try {
   await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
 
   await page.goto(`${baseUrl}/unlock`);
-  await page.getByLabel("License key").fill(licenseKey);
+  await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
+  await page.getByText("Career Switch Pack activated").waitFor();
   await page.goto(`${baseUrl}/versions`);
   const firstExport = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export complete pack" }).click();
@@ -190,9 +190,9 @@ try {
   // the SAME saved key must re-unlock without friction.
   verify((await page.getByRole("button", { name: "Export complete pack" }).count()) === 0, "after restore on a clean profile, exports are gated again (license intentionally not in the backup)");
   await page.goto(`${baseUrl}/unlock`);
-  await page.getByLabel("License key").fill(licenseKey);
+  await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
+  await page.getByText("Career Switch Pack activated").waitFor();
   await page.goto(`${baseUrl}/versions`);
   const secondExport = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export complete pack" }).click();

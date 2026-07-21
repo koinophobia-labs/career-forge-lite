@@ -24,10 +24,10 @@ export type EntitlementState = {
   // "checking" only while an actual stored key awaits verification.
   status: "none" | "checking" | "valid" | "invalid";
   tier: PackageTier | null;
-  licenseKey: string | null;
+  signedEntitlement: string | null;
 };
 
-const NONE: EntitlementState = { status: "none", tier: null, licenseKey: null };
+const NONE: EntitlementState = { status: "none", tier: null, signedEntitlement: null };
 
 const listeners = new Set<() => void>();
 let snapshot: EntitlementState | null = null;
@@ -40,10 +40,10 @@ function notify() {
 function beginVerification(key: string): void {
   void verifyLicenseKey(key).then((result) => {
     // Ignore stale verifications: the stored key may have changed meanwhile.
-    if (snapshot?.licenseKey !== key) return;
+    if (snapshot?.signedEntitlement !== key) return;
     snapshot = result.ok
-      ? { status: "valid", tier: result.payload.tier, licenseKey: key }
-      : { status: "invalid", tier: null, licenseKey: key };
+      ? { status: "valid", tier: result.payload.tier, signedEntitlement: key }
+      : { status: "invalid", tier: null, signedEntitlement: key };
     notify();
   });
 }
@@ -54,7 +54,7 @@ function getSnapshot(): EntitlementState {
     if (!stored) {
       snapshot = NONE;
     } else {
-      snapshot = { status: "checking", tier: null, licenseKey: stored };
+      snapshot = { status: "checking", tier: null, signedEntitlement: stored };
       beginVerification(stored);
     }
   }
@@ -68,7 +68,7 @@ function subscribe(listener: () => void): () => void {
 
 // Stores the key and starts async verification; resolves with the outcome so
 // unlock UI can show success/failure directly.
-export async function activateLicenseKey(key: string): Promise<EntitlementState> {
+export async function activateSignedEntitlement(key: string): Promise<EntitlementState> {
   const trimmed = key.trim();
   const result = await verifyLicenseKey(trimmed);
   if (result.ok) {
@@ -77,13 +77,16 @@ export async function activateLicenseKey(key: string): Promise<EntitlementState>
     } catch {
       // Storage full: the license still works for this tab session.
     }
-    snapshot = { status: "valid", tier: result.payload.tier, licenseKey: trimmed };
+    snapshot = { status: "valid", tier: result.payload.tier, signedEntitlement: trimmed };
   } else {
-    snapshot = { status: "invalid", tier: null, licenseKey: trimmed };
+    snapshot = { status: "invalid", tier: null, signedEntitlement: trimmed };
   }
   notify();
   return snapshot;
 }
+
+/** Legacy internal name retained for callers outside the redemption-code path. */
+export const activateLicenseKey = activateSignedEntitlement;
 
 export function removeLicense(): void {
   if (typeof window !== "undefined") window.localStorage.removeItem(LICENSE_STORAGE_KEY);

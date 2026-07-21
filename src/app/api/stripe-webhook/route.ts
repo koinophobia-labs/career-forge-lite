@@ -11,6 +11,10 @@ import {
 } from "@/lib/server/stripe";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
+import {
+  getRedemptionCodePepper,
+  issueRedemptionCode,
+} from "@/lib/server/redemption-code";
 import { verifyPaidSession } from "@/lib/server/session-verification";
 
 // Durable fulfillment: emails the license key on completed checkout so buyers
@@ -133,6 +137,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Already fulfilled: acknowledge and send nothing. This is the durable
   // duplicate-email guarantee the in-memory cache could not make.
   if (record.emailSent) {
+    // A prior response may have been interrupted after delivery was committed
+    // but before temporary retry material was erased. Cleanup is idempotent.
+    await store.markRedemptionDelivered(session.id).catch(() => undefined);
     logCommerceEvent("webhook_duplicate_ignored", { eventId: event.id, sessionId: session.id });
     return NextResponse.json({ received: true, duplicate: true });
   }
@@ -141,7 +148,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   const fromAddress = process.env.LICENSE_EMAIL_FROM;
   const replyToAddress = process.env.LICENSE_EMAIL_REPLY_TO;
   const signingKey = getSigningKeyB64();
-  if (!resendKey?.trim() || !fromAddress?.trim() || !replyToAddress?.trim() || !signingKey || !email) {
+  const redemptionPepper = getRedemptionCodePepper();
+  if (!resendKey?.trim() || !fromAddress?.trim() || !replyToAddress?.trim() || !signingKey || !redemptionPepper || !email) {
     // The customer paid and this deployment has no way to reach them. The
     // /unlock redirect may still have fulfilled it, but we cannot know that
     // from here — so this is recorded as a possible loss, not shrugged off.
@@ -155,14 +163,16 @@ export async function POST(request: Request): Promise<NextResponse> {
         !fromAddress?.trim() ? "LICENSE_EMAIL_FROM" : null,
         !replyToAddress?.trim() ? "LICENSE_EMAIL_REPLY_TO" : null,
         !signingKey ? "LICENSE_SIGNING_PRIVATE_KEY" : null,
+        !redemptionPepper ? "REDEMPTION_CODE_PEPPER" : null,
         !email ? "customer_email_absent_on_session" : null,
       ].filter(Boolean),
     });
     return NextResponse.json({ received: true });
   }
 
-  const license = mintLicenseKey(tier, session.id.slice(-10), session.created, signingKey);
-  if (!license) {
+  const entitlementReference = session.id.slice(-10);
+  const signedEntitlement = mintLicenseKey(tier, entitlementReference, session.created, signingKey);
+  if (!signedEntitlement) {
     await store.update(session.id, { status: "failed", lastError: "license_mint_failed" });
     logCommerceEvent("PAID_BUT_UNFULFILLED", {
       sessionId: session.id,
@@ -178,6 +188,29 @@ export async function POST(request: Request): Promise<NextResponse> {
   await store.update(session.id, { status: "license_minted", licenseMinted: true });
   logCommerceEvent("license_minted", { sessionId: session.id, tier, via: "webhook" });
 
+  let redemptionCode: string;
+  try {
+    const issued = await issueRedemptionCode(
+      store,
+      {
+        sessionId: session.id,
+        tier,
+        entitlementReference,
+        purchaseTimestamp: new Date(session.created * 1000).toISOString(),
+      },
+      redemptionPepper
+    );
+    redemptionCode = issued.redemptionCode;
+  } catch {
+    await store.update(session.id, { status: "failed", lastError: "unknown" });
+    logCommerceEvent("PAID_BUT_UNFULFILLED", {
+      sessionId: session.id,
+      reason: "redemption_code_issue_failed",
+      tier,
+    });
+    return NextResponse.json({ error: "Fulfillment code creation failed." }, { status: 500 });
+  }
+
   const pack = getPackage(tier);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
   const unlockUrl = appUrl ? `${appUrl}/unlock` : "the Unlock page";
@@ -189,29 +222,35 @@ export async function POST(request: Request): Promise<NextResponse> {
     headers: {
       Authorization: `Bearer ${resendKey.trim()}`,
       "Content-Type": "application/json",
-      // The message body is stable for a Checkout Session even though a
-      // re-minted P-256 license signature need not be. Resend keeps this key
-      // for 24 hours and returns the original message id on a safe retry.
+      // Pending code ciphertext makes the message body stable across retries.
+      // Resend also returns the original message id for this idempotency key.
       "Idempotency-Key": `career-forge-license/${session.id}`,
     },
     body: JSON.stringify({
       from: fromAddress.trim(),
       to: [email],
       reply_to: replyToAddress.trim(),
-      subject: `Career Forge license ${session.id.slice(-8)}`,
+      subject: `Career Forge access ${session.id.slice(-8)}`,
       text: [
         `You received this email because a $${pack.priceUsd} Career Forge purchase was completed for this address.`,
         ``,
-        `License key:`,
-        license,
+        `Your access code:`,
+        redemptionCode,
         ``,
-        `Unlock Career Forge:`,
+        `Paste this code to unlock Career Forge:`,
         unlockUrl,
-        ``,
-        `Enter the license key on that page.`,
         ``,
         `Questions? Reply to this email.`
       ].join("\n"),
+      html: [
+        `<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;max-width:560px">`,
+        `<p>You received this email because a $${pack.priceUsd} Career Forge purchase was completed for this address.</p>`,
+        `<p style="margin-bottom:8px"><strong>Your access code</strong></p>`,
+        `<p style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;font-weight:700;letter-spacing:2px;margin:0 0 24px">${redemptionCode}</p>`,
+        `<p><a href="${unlockUrl}">Paste this code to unlock Career Forge</a></p>`,
+        `<p>Questions? Reply to this email.</p>`,
+        `</div>`,
+      ].join(""),
     })
     });
   } catch {
@@ -273,6 +312,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     emailProviderMessageId: providerMessageId,
     lastError: "none",
   });
+  // Permanent state keeps only the HMAC hash. The encrypted retry copy is no
+  // longer needed once provider acceptance and fulfillment are durable.
+  await store.markRedemptionDelivered(session.id);
 
 
   logCommerceEvent("fulfillment_email_sent", { sessionId: session.id, tier, providerMessageId });

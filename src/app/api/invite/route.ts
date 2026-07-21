@@ -36,13 +36,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     return json({ error: "Founder invites are not configured on this deployment." }, 503);
   }
 
-  const license = mintFounderInviteLicense(signingKey);
-  if (!license) {
+  const signedEntitlement = mintFounderInviteLicense(signingKey);
+  if (!signedEntitlement) {
     return json({ error: "Could not issue the founder license." }, 500);
   }
 
   return json({
-    license,
+    signedEntitlement,
     tier: FOUNDER_INVITE_TIER,
     packageName: getPackage(FOUNDER_INVITE_TIER).name
   });

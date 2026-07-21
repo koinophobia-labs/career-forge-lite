@@ -25,6 +25,7 @@ type OperatorRequest = {
   email?: unknown;
   sessionId?: unknown;
   eventId?: unknown;
+  redemptionCode?: unknown;
 };
 
 function sameSecret(left: string, right: string): boolean {
@@ -56,12 +57,13 @@ async function stripeGet(path: string, secretKey: string): Promise<unknown | nul
  */
 async function fetchDeployment(
   request: Request,
-  path: string
+  path: string,
+  init: RequestInit = {}
 ): Promise<Response> {
   const target = new URL(path, request.url);
   const bypass = new URL(request.url).searchParams.get("x-vercel-protection-bypass");
   if (bypass) target.searchParams.set("x-vercel-protection-bypass", bypass);
-  return fetch(target, { cache: "no-store", redirect: "manual" });
+  return fetch(target, { ...init, cache: "no-store", redirect: "manual" });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -123,6 +125,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
   const eventId = typeof body.eventId === "string" ? body.eventId : "";
+  const redemptionCode = typeof body.redemptionCode === "string" ? body.redemptionCode : "";
   if (!/^cs_test_[a-zA-Z0-9_]+$/.test(sessionId) || !/^evt_[a-zA-Z0-9_]+$/.test(eventId)) {
     return NextResponse.json({ error: "A Stripe test session and event are required." }, { status: 400 });
   }
@@ -184,32 +187,50 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "A healthy durable fulfillment store is required." }, { status: 503 });
   }
   const record = await store.get(sessionId);
+  const redemptionRecord = await store.getRedemptionBySession(sessionId);
   if (
     !record?.licenseMinted ||
     !record.emailSent ||
     !record.emailProviderMessageId ||
     record.lastEventId !== eventId ||
-    record.attempts < 2
+    record.attempts < 2 ||
+    !redemptionRecord ||
+    redemptionRecord.pendingCodeCiphertext !== null ||
+    redemptionRecord.revoked
   ) {
     return NextResponse.json(
-      { error: "Durable fulfillment, provider acceptance, and duplicate suppression are not all proven." },
+      { error: "Durable fulfillment, hashed-code storage, provider acceptance, and duplicate suppression are not all proven." },
       { status: 409 }
     );
   }
 
-  const [licenseResponse, successResponse, cancellationResponse] = await Promise.all([
+  const [licenseResponse, redemptionResponse, successResponse, cancellationResponse] = await Promise.all([
     fetchDeployment(request, `/api/license?session_id=${encodeURIComponent(sessionId)}`),
+    fetchDeployment(request, "/api/redeem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: redemptionCode }),
+    }),
     fetchDeployment(request, `/unlock?session_id=${encodeURIComponent(sessionId)}`),
     fetchDeployment(request, "/pricing?checkout=cancelled"),
   ]);
-  const licenseBody = (await licenseResponse.json().catch(() => null)) as { license?: string } | null;
-  const verifiedLicense = licenseBody?.license
-    ? await verifyLicenseKey(licenseBody.license)
+  const licenseBody = (await licenseResponse.json().catch(() => null)) as { signedEntitlement?: string } | null;
+  const verifiedLicense = licenseBody?.signedEntitlement
+    ? await verifyLicenseKey(licenseBody.signedEntitlement)
+    : { ok: false as const };
+  const redemptionBody = (await redemptionResponse.json().catch(() => null)) as {
+    signedEntitlement?: string;
+  } | null;
+  const verifiedRedemption = redemptionBody?.signedEntitlement
+    ? await verifyLicenseKey(redemptionBody.signedEntitlement)
     : { ok: false as const };
   if (
     !licenseResponse.ok ||
     !verifiedLicense.ok ||
     verifiedLicense.payload.tier !== verification.session.tier ||
+    !redemptionResponse.ok ||
+    !verifiedRedemption.ok ||
+    verifiedRedemption.payload.tier !== verification.session.tier ||
     successResponse.status !== 200 ||
     cancellationResponse.status !== 200
   ) {
@@ -232,6 +253,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     fulfillmentStoreKind: store.kind,
     fulfillmentAttempts: record.attempts,
     licenseTierVerified: verifiedLicense.payload.tier,
+    redemptionTierVerified: verifiedRedemption.payload.tier,
     successRouteStatus: successResponse.status,
     cancellationRouteStatus: cancellationResponse.status,
     completedAt: new Date().toISOString(),

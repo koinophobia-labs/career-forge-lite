@@ -165,9 +165,9 @@ try {
 
   // --- 7. License activation works without explanation ----------------------
   await page.goto(`${baseUrl}/unlock`);
-  await page.getByLabel("License key").fill(licenseKey);
+  await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText(/Key activated.*Your pack is unlocked on this device\./).waitFor();
+  await page.getByText("Career Switch Pack activated").waitFor();
   verify(true, "pasting the purchase-issued license key activates on the first attempt with clear confirmation");
 
   // --- 8. Export succeeds on the first attempt ------------------------------
