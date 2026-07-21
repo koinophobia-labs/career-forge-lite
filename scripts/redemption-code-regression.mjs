@@ -60,29 +60,36 @@ const { mintLicenseKey } = loadTs(path.join(root, "src/lib/server/license-mint.t
 const { verifyLicenseKey } = loadTs(path.join(root, "src/lib/license.ts"));
 
 const pepper = "regression-only-pepper-with-at-least-32-bytes";
-const fixedA = "CF-7K9M-P4TX-W8Q2";
-const fixedB = "CF-A2BC-D3EF-G4HJ";
+const fixedA = "CF-7K9M-P4TX-W8Q2R";
+const fixedB = "CF-A2BC-D3EF-G4HJK";
 
-check("short-code alphabet has exactly 32 symbols", pure.REDEMPTION_CODE_ALPHABET.length === 32);
-check("short-code entropy is 60 bits", pure.REDEMPTION_CODE_ENTROPY_BITS === 60);
-check("generated code has the required grouped format", /^CF-[A-HJ-KM-NP-Z2-9*]{4}(?:-[A-HJ-KM-NP-Z2-9*]{4}){2}$/.test(cryptoCode.generateRedemptionCode()));
+check("short-code alphabet has exactly 31 symbols", pure.REDEMPTION_CODE_ALPHABET.length === 31);
+check("short-code entropy remains above 60 bits", pure.REDEMPTION_CODE_ENTROPY_BITS >= 60);
+check("short-code entropy is approximately 64.4 bits", Math.abs(pure.REDEMPTION_CODE_ENTROPY_BITS - 64.4) < 0.01);
+check("generated code has the required grouped format", /^CF-[A-HJ-KM-NP-Z2-9]{4}-[A-HJ-KM-NP-Z2-9]{4}-[A-HJ-KM-NP-Z2-9]{5}$/.test(cryptoCode.generateRedemptionCode()));
 check("ambiguous characters are excluded", !/[01OIL]/.test(pure.REDEMPTION_CODE_ALPHABET));
+check("symbols are excluded", /^[A-Z2-9]+$/.test(pure.REDEMPTION_CODE_ALPHABET));
+check(
+  "generation rejects biased byte values",
+  cryptoCode.generateRedemptionCode(Uint8Array.from([248, 249, 250, 251, 252, 253, 254, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])) === "CF-ABCD-EFGH-JKMNP"
+);
 
 const generated = new Set(Array.from({ length: 256 }, () => cryptoCode.generateRedemptionCode()));
 check("independent generation does not collide in the regression sample", generated.size === 256);
 
 for (const candidate of [
   fixedA,
-  "cf-7k9m-p4tx-w8q2",
-  "CF 7K9M P4TX W8Q2",
-  "cf7k9mp4txw8q2",
+  "cf-7k9m-p4tx-w8q2r",
+  "CF 7K9M P4TX W8Q2R",
+  "cf7k9mp4txw8q2r",
 ]) {
-  check(`normalizes ${candidate}`, pure.normalizeRedemptionCode(candidate) === "CF7K9MP4TXW8Q2");
+  check(`normalizes ${candidate}`, pure.normalizeRedemptionCode(candidate) === "CF7K9MP4TXW8Q2R");
 }
-for (const candidate of ["CF-7K9M-P4TX-W8Q", "CF-7K9M-P4TX-W8Q0", "CF-7K9M-P4TX-W8QI", "nope"]) {
+for (const candidate of ["CF-7K9M-P4TX-W8Q2", "CF-7K9M-P4TX-W8Q20", "CF-7K9M-P4TX-W8Q2I", "CF-7K9M-P4TX-W8Q2*", "nope"]) {
   check(`rejects malformed ${candidate}`, pure.normalizeRedemptionCode(candidate) === null);
 }
-check("typing auto-formats short codes", pure.formatAccessCodeInput("cf7k9mp4txw8q2") === fixedA);
+check("typing auto-formats short codes", pure.formatAccessCodeInput("cf7k9mp4txw8q2r") === fixedA);
+check("spaces and hyphens remain optional", pure.formatAccessCodeInput("cf 7k9m-p4tx w8q2r") === fixedA);
 check("legacy signed keys are preserved by input formatting", pure.formatAccessCodeInput("CF1.payload.signature") === "CF1.payload.signature");
 
 const store = new MemoryFulfillmentStore();
@@ -96,7 +103,7 @@ const first = await cryptoCode.issueRedemptionCode(store, purchase, pepper, () =
 const duplicate = await cryptoCode.issueRedemptionCode(store, purchase, pepper, () => fixedB);
 check("a duplicate fulfillment reuses one customer-facing code", first.redemptionCode === duplicate.redemptionCode);
 check("one checkout session has exactly one redemption record", (await store.getRedemptionBySession(purchase.sessionId)).codeHash === first.record.codeHash);
-check("normalized code hash is stable and peppered", first.record.codeHash === cryptoCode.hashRedemptionCode("CF7K9MP4TXW8Q2", pepper));
+check("normalized code hash is stable and peppered", first.record.codeHash === cryptoCode.hashRedemptionCode("CF7K9MP4TXW8Q2R", pepper));
 check("stored record does not contain plaintext code", !JSON.stringify(first.record).includes(fixedA));
 
 const secondPurchase = { ...purchase, sessionId: "cs_test_short_code_two", entitlementReference: "code-two" };
@@ -110,7 +117,7 @@ check("delivery erases encrypted retry material", delivered.pendingCodeCiphertex
 check("permanent redemption state still contains no plaintext", !JSON.stringify(delivered).includes(fixedA));
 
 const foundFromFreshServiceInstance = await store.getRedemptionByHash(
-  cryptoCode.hashRedemptionCode(pure.normalizeRedemptionCode("cf 7k9m p4tx w8q2"), pepper)
+  cryptoCode.hashRedemptionCode(pure.normalizeRedemptionCode("cf 7k9m p4tx w8q2r"), pepper)
 );
 check("fresh-instance lookup finds the durable hashed mapping", foundFromFreshServiceInstance?.sessionId === purchase.sessionId);
 const redeemed = await store.markRedemptionRedeemed(foundFromFreshServiceInstance.codeHash);

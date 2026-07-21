@@ -23,13 +23,24 @@ export function getRedemptionCodePepper(): string | null {
   return configured?.trim() || null;
 }
 
-export function generateRedemptionCode(bytes: Uint8Array = randomBytes(REDEMPTION_CODE_CHARACTERS)): string {
-  if (bytes.length < REDEMPTION_CODE_CHARACTERS) {
-    throw new Error("redemption_randomness_too_short");
-  }
+export function generateRedemptionCode(bytes?: Uint8Array): string {
+  // Rejection sampling avoids modulo bias with the 31-symbol alphabet. The
+  // largest evenly divisible byte range is 0..247 (eight values per symbol).
+  const acceptanceLimit = Math.floor(256 / REDEMPTION_CODE_ALPHABET.length)
+    * REDEMPTION_CODE_ALPHABET.length;
+  let pool = bytes ?? randomBytes(REDEMPTION_CODE_CHARACTERS * 2);
+  let poolIndex = 0;
   let body = "";
-  for (let index = 0; index < REDEMPTION_CODE_CHARACTERS; index += 1) {
-    body += REDEMPTION_CODE_ALPHABET[bytes[index] & 31];
+  while (body.length < REDEMPTION_CODE_CHARACTERS) {
+    if (poolIndex >= pool.length) {
+      if (bytes) throw new Error("redemption_randomness_too_short");
+      pool = randomBytes((REDEMPTION_CODE_CHARACTERS - body.length) * 2);
+      poolIndex = 0;
+    }
+    const value = pool[poolIndex];
+    poolIndex += 1;
+    if (value >= acceptanceLimit) continue;
+    body += REDEMPTION_CODE_ALPHABET[value % REDEMPTION_CODE_ALPHABET.length];
   }
   return formatNormalizedRedemptionCode(`${REDEMPTION_CODE_PREFIX}${body}`)!;
 }

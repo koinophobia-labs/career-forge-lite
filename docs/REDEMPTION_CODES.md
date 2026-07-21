@@ -1,6 +1,6 @@
 # Career Forge redemption codes
 
-Customers receive a short redemption code such as `CF-7K9M-P4TX-W8Q2`.
+Customers receive a short redemption code such as `CF-7K9M-P4TX-W8Q2R`.
 The code is a lookup credential, not the entitlement itself. A successful
 redemption returns a freshly signed `CF1.<payload>.<signature>` entitlement to
 the browser, where the existing public-key verifier checks and stores it for
@@ -8,10 +8,9 @@ offline use. The signed entitlement is never rendered or emailed.
 
 ## Security and storage
 
-- The 12-character body uses a 32-symbol alphabet and cryptographically secure
-  randomness: 12 × 5 = 60 bits.
-- `0`, `O`, `1`, `I`, and `L` are excluded. `*` is the 32nd symbol and is read
-  aloud as “star.”
+- The 13-character body uses a 31-symbol alphabet and cryptographically secure,
+  unbiased randomness: 13 × log2(31) is approximately 64.4 bits.
+- `0`, `O`, `1`, `I`, and `L` are excluded, and the code contains no symbols.
 - Entry is case-insensitive; spaces and hyphens are ignored.
 - Neon stores an HMAC-SHA256 hash using `REDEMPTION_CODE_PEPPER`, never the
   delivered plaintext code.

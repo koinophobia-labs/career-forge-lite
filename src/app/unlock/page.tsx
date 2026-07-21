@@ -269,7 +269,7 @@ function UnlockContent() {
                   setAccessCode(formatAccessCodeInput(event.target.value));
                   setManualState({ phase: "idle" });
                 }}
-                placeholder="CF-7K9M-P4TX-W8Q2"
+                placeholder="CF-7K9M-P4TX-W8Q2R"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -294,7 +294,7 @@ function UnlockContent() {
               </div>
             </div>
             <p id="access-code-help" className="mt-2 text-xs leading-5 text-paper/50">
-              Example: CF-7K9M-P4TX-W8Q2
+              Example: CF-7K9M-P4TX-W8Q2R
             </p>
           </form>
           {manualState.phase === "valid" && (
