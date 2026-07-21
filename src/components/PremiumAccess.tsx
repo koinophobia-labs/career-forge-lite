@@ -102,7 +102,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
         </Link>
       </div>
       <p className="mt-4 text-xs leading-5 text-paper/45">
-        No account needed — a one-time license key unlocks everything, and your career data stays on this device.
+        No account needed — a one-time access code unlocks your purchase, and your career data stays on this device.
       </p>
     </div>
   );

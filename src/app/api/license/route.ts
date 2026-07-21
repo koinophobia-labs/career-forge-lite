@@ -10,7 +10,7 @@ import {
 } from "@/lib/server/stripe";
 import { verifyPaidSession } from "@/lib/server/session-verification";
 
-// Exchanges a completed checkout session for a license key. The session id is
+// Exchanges a completed checkout session for a signed entitlement. The session id is
 // an unguessable secret that only the buyer's browser receives from Stripe, so
 // possessing it proves the purchase — no account or database needed. Calling
 // this again with the same session always yields the same entitlement. ECDSA
@@ -61,13 +61,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const tier = verification.session.tier;
 
-  const license = mintLicenseKey(
+  const signedEntitlement = mintLicenseKey(
     tier,
     verification.session.sessionId.slice(-10),
     verification.session.created,
     signingKey
   );
-  if (!license) {
+  if (!signedEntitlement) {
     logCommerceEvent("PAID_BUT_UNFULFILLED", {
       sessionId: verification.session.sessionId,
       reason: "license_mint_returned_null",
@@ -82,5 +82,5 @@ export async function GET(request: Request): Promise<NextResponse> {
     tier,
     via: "unlock_page",
   });
-  return NextResponse.json({ license, tier, packageName: getPackage(tier).name });
+  return NextResponse.json({ signedEntitlement, tier, packageName: getPackage(tier).name });
 }

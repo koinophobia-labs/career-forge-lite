@@ -64,7 +64,7 @@ const ORIGINAL_ENV = { ...process.env };
 // blank environment.
 async function withEnv(vars, fn) {
   for (const key of Object.keys(process.env)) {
-    if (/^(STRIPE_|LICENSE_|RESEND_|KV_|NEXT_PUBLIC_COMMERCE)/.test(key)) delete process.env[key];
+    if (/^(STRIPE_|LICENSE_|RESEND_|REDEMPTION_|KV_|NEXT_PUBLIC_COMMERCE)/.test(key)) delete process.env[key];
   }
   Object.assign(process.env, vars);
   try {
@@ -78,6 +78,7 @@ async function withEnv(vars, fn) {
 const ALL_CONFIG = {
   STRIPE_SECRET_KEY: "x",
   LICENSE_SIGNING_PRIVATE_KEY: "x",
+  REDEMPTION_CODE_PEPPER: "x",
   STRIPE_PRICE_RESET: "price_test_reset",
   STRIPE_WEBHOOK_SECRET: "x",
   RESEND_API_KEY: "x",
@@ -178,6 +179,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     fulfillmentStoreKind: "neon-postgres",
     fulfillmentAttempts: 2,
     licenseTierVerified: "reset",
+    redemptionTierVerified: "reset",
     successRouteStatus: 200,
     cancellationRouteStatus: 200,
     completedAt: "2026-07-20T12:00:00.000Z",
@@ -248,6 +250,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     ["evidence without durable duplicate suppression fails", { fulfillmentAttempts: 1 }, /duplicate webhook/i],
     ["evidence without a durable store fails", { fulfillmentStoreKind: "memory" }, /durable fulfillment store/i],
     ["evidence without license activation fails", { licenseTierVerified: "job-search" }, /issued license activates/i],
+    ["evidence without short-code redemption fails", { redemptionTierVerified: "job-search" }, /emailed access code activates/i],
     ["evidence without both return routes fails", { cancellationRouteStatus: 500 }, /return routes/i],
     ["evidence from an older drill version fails", { drillVersion: "1.0.0" }, /drill 1\.0\.0/i],
   ];
@@ -424,18 +427,19 @@ check("webhook still verifies the Stripe signature", webhookRoute.includes("veri
 check("webhook logs rejected signatures", webhookRoute.includes('logCommerceEvent("webhook_rejected"'));
 check("webhook claims the session durably", webhookRoute.includes("store.claim(session.id"));
 check("webhook refuses when no durable store exists", /no_durable_fulfillment_store[\s\S]{0,300}status:\s*503/.test(webhookRoute));
-check("webhook suppresses a duplicate using durable state", /record\.emailSent[\s\S]{0,300}duplicate: true/.test(webhookRoute));
+check("webhook suppresses a duplicate using durable state", /record\.emailSent[\s\S]{0,500}duplicate: true/.test(webhookRoute));
 check("webhook records the mint before emailing", /licenseMinted: true/.test(webhookRoute));
 check("webhook records successful delivery", /emailSent: true/.test(webhookRoute));
 check("webhook records the real provider message id", /emailProviderMessageId: providerMessageId/.test(webhookRoute));
-check("fulfillment email is plain text only", /text:/.test(webhookRoute) && !/\n\s*html:/.test(webhookRoute));
+check("fulfillment email has plain-text and simple HTML parity", /text:/.test(webhookRoute) && /\n\s*html:/.test(webhookRoute));
 check("fulfillment email uses a monitored reply-to", /reply_to: replyToAddress/.test(webhookRoute));
-check("fulfillment email contains the exact license key", /`License key:`[\s\S]{0,80}\blicense,/.test(webhookRoute));
+check("fulfillment email contains the short redemption code", /`Your access code:`[\s\S]{0,100}\bredemptionCode,/.test(webhookRoute));
+check("fulfillment email does not expose the signed entitlement", !/[`>]License key:/.test(webhookRoute) && !/\bsignedEntitlement,/.test(webhookRoute));
 check("fulfillment email contains one direct unlock destination", /const unlockUrl = appUrl \? `\$\{appUrl\}\/unlock`/.test(webhookRoute));
 check("fulfillment email uses provider idempotency", /Idempotency-Key/.test(webhookRoute) && /career-forge-license\//.test(webhookRoute));
 check(
   "fulfillment email subject is transactional and unique per checkout",
-  webhookRoute.includes("subject: `Career Forge license ${session.id.slice(-8)}`") &&
+  webhookRoute.includes("subject: `Career Forge access ${session.id.slice(-8)}`") &&
     !webhookRoute.includes("Your Career Forge license key")
 );
 check(
@@ -467,6 +471,7 @@ const certify = read("scripts/certify-fulfillment.mjs");
 check("certification client targets only the exact production host", /hostname !== "career-forge-lite\.vercel\.app"/.test(certify));
 check("certification client reads the operator token only from the environment", /process\.env\.CERTIFICATION_OPERATOR_TOKEN/.test(certify) && !/operator-token/.test(certify));
 check("certification client holds no Stripe key", !/STRIPE_TEST_SECRET_KEY|STRIPE_SECRET_KEY|sk_test_/.test(certify));
+check("certification client takes the delivered access code only from the environment", /process\.env\.CERTIFICATION_REDEMPTION_CODE/.test(certify));
 check("certification client states it does not authorize live checkout", /evidence, not permission|No live-commerce approval/i.test(certify));
 
 const operatorRoute = read("src/app/api/internal/commerce-certification/route.ts");
@@ -475,6 +480,7 @@ check("production-host recorder requires a bearer token", /operatorAuthorized/.t
 check("production-host recorder refuses a foreign host or stale commit", /requestHost !== identity\.host/.test(operatorRoute) && /certification_commit/.test(operatorRoute));
 check("production-host recorder retrieves the Stripe event directly", /\/events\//.test(operatorRoute) && /checkout\.session\.completed/.test(operatorRoute));
 check("production-host recorder requires a provider message id and duplicate claim", /emailProviderMessageId/.test(operatorRoute) && /record\.attempts < 2/.test(operatorRoute));
+check("production-host recorder proves the short-code redemption endpoint", /fetchDeployment\(request, "\/api\/redeem"/.test(operatorRoute) && /verifiedRedemption/.test(operatorRoute));
 check("production-host recorder never writes an approval record", !operatorRoute.includes("APPROVAL_RECORD_ID"));
 check("unsafe local certification recorder is removed", !fs.existsSync(path.join(root, "scripts/record-certification.mjs")));
 

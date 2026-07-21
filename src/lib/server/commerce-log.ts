@@ -25,6 +25,9 @@ export type CommerceEvent =
   | "webhook_rejected"
   | "fulfillment_email_sent"
   | "fulfillment_email_failed"
+  | "redemption_succeeded"
+  | "redemption_failed"
+  | "redemption_rate_limited"
   | "PAID_BUT_UNFULFILLED";
 
 /**

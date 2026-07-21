@@ -15,7 +15,7 @@
  * After Stripe has delivered and then re-delivered the same event from a fresh
  * deployment instance:
  *
- *   CERTIFICATION_OPERATOR_TOKEN=... \
+ *   CERTIFICATION_OPERATOR_TOKEN=... CERTIFICATION_REDEMPTION_CODE=... \
  *   node scripts/certify-fulfillment.mjs --base https://career-forge-lite.vercel.app \
  *     --session-id cs_test_... --event-id evt_...
  */
@@ -39,6 +39,7 @@ const base = values.base?.replace(/\/$/, "");
 const token = process.env.CERTIFICATION_OPERATOR_TOKEN?.trim();
 const testEmail = process.env.CERTIFICATION_TEST_EMAIL?.trim();
 const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+const redemptionCode = process.env.CERTIFICATION_REDEMPTION_CODE?.trim();
 
 if (!base || !token) {
   die("set CERTIFICATION_OPERATOR_TOKEN and pass --base with the exact production URL");
@@ -56,6 +57,9 @@ const recording = Boolean(sessionId || eventId);
 if (recording && (!sessionId || !eventId)) {
   die("recording requires both --session-id and --event-id");
 }
+if (recording && !redemptionCode) {
+  die("set CERTIFICATION_REDEMPTION_CODE to the short code received by the controlled test mailbox");
+}
 if (!recording && !testEmail) {
   die("set CERTIFICATION_TEST_EMAIL to create the controlled test Checkout Session");
 }
@@ -68,7 +72,7 @@ const response = await fetch(target, {
   },
   body: JSON.stringify(
     recording
-      ? { action: "record", sessionId, eventId }
+      ? { action: "record", sessionId, eventId, redemptionCode }
       : { action: "create", email: testEmail }
   ),
 });

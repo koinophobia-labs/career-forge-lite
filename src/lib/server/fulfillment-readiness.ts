@@ -104,6 +104,12 @@ export function configurationReadiness(): ConfigurationReadiness {
       present: present("LICENSE_SIGNING_PRIVATE_KEY"),
     },
     {
+      name: "REDEMPTION_CODE_PEPPER",
+      consequence:
+        "Customer access codes cannot be securely hashed or recovered for a safe fulfillment retry.",
+      present: present("REDEMPTION_CODE_PEPPER"),
+    },
+    {
       name: "STRIPE_PRICE_RESET",
       consequence:
         "Checkout falls back to an inline price with no stable id, so fulfillment cannot derive which package was bought from the paid session.",

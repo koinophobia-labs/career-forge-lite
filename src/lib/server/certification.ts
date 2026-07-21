@@ -27,7 +27,7 @@
 import { createHash } from "node:crypto";
 
 /** Bump when the certification procedure changes shape. */
-export const DRILL_VERSION = "3.0.0";
+export const DRILL_VERSION = "4.0.0";
 
 export const CERTIFICATION_RECORD_ID = "certification:operational";
 export const APPROVAL_RECORD_ID = "approval:live-commerce";
@@ -42,9 +42,16 @@ export const CERTIFIED_SURFACE = [
   "src/app/api/internal/commerce-certification/route.ts",
   "src/app/api/stripe-webhook/route.ts",
   "src/app/api/license/route.ts",
+  "src/app/api/redeem/route.ts",
+  "src/app/pricing/page.tsx",
+  "src/app/unlock/page.tsx",
+  "src/components/PremiumAccess.tsx",
+  "src/lib/redemption-code.ts",
   "src/lib/server/stripe.ts",
   "src/lib/server/session-verification.ts",
   "src/lib/server/license-mint.ts",
+  "src/lib/server/redemption-code.ts",
+  "src/lib/server/redemption-rate-limit.ts",
   "src/lib/server/fulfillment-store.ts",
   "src/lib/server/fulfillment-readiness.ts",
   "src/lib/packages.ts",
@@ -72,6 +79,8 @@ export type CertificationEvidence = {
   fulfillmentAttempts: number;
   /** The deployment verified the issued license grants this tier. */
   licenseTierVerified: string;
+  /** The emailed short code redeemed into the same purchased tier. */
+  redemptionTierVerified: string;
   successRouteStatus: number;
   cancellationRouteStatus: number;
   completedAt: string;
@@ -212,6 +221,10 @@ export function evaluateEvidence(
 
   if (evidence.licenseTierVerified !== evidence.tier) {
     reasons.push("Evidence does not prove the issued license activates the purchased package.");
+  }
+
+  if (evidence.redemptionTierVerified !== evidence.tier) {
+    reasons.push("Evidence does not prove the emailed access code activates the purchased package.");
   }
 
   if (evidence.successRouteStatus !== 200 || evidence.cancellationRouteStatus !== 200) {
