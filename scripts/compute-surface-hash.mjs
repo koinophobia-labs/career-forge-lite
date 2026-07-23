@@ -37,6 +37,9 @@ const SURFACE = [
   "src/lib/server/redemption-rate-limit.ts",
   "src/lib/server/fulfillment-store.ts",
   "src/lib/server/fulfillment-readiness.ts",
+  "src/lib/server/certification.ts",
+  "src/lib/server/approval-crypto.ts",
+  "src/lib/server/approval-public-key.ts",
   "src/lib/packages.ts",
 ];
 

@@ -24,7 +24,11 @@
  * shop. Only Blake does, per commit, in writing.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, type KeyObject } from "node:crypto";
+import {
+  verifyApprovalSignature,
+  type SignedApproval,
+} from "@/lib/server/approval-crypto";
 
 /** Bump when the certification procedure changes shape. */
 export const DRILL_VERSION = "4.0.0";
@@ -54,6 +58,9 @@ export const CERTIFIED_SURFACE = [
   "src/lib/server/redemption-rate-limit.ts",
   "src/lib/server/fulfillment-store.ts",
   "src/lib/server/fulfillment-readiness.ts",
+  "src/lib/server/certification.ts",
+  "src/lib/server/approval-crypto.ts",
+  "src/lib/server/approval-public-key.ts",
   "src/lib/packages.ts",
 ] as const;
 
@@ -86,6 +93,12 @@ export type CertificationEvidence = {
   completedAt: string;
 };
 
+/**
+ * @deprecated Unsigned plaintext approvals are no longer honored. An approval is
+ * now a {@link SignedApproval}; the runtime rejects any record that is not
+ * cryptographically signed by the release owner. Retained only so historical
+ * readers of `cf_docs` can recognise the legacy shape that was exploited.
+ */
 export type ApprovalRecord = {
   approvedCommitSha: string;
   approvedEnvironment: string;
@@ -234,43 +247,73 @@ export function evaluateEvidence(
   return { valid: reasons.length === 0, reasons };
 }
 
-/** Does this approval authorize the running code? */
+/**
+ * Does this approval authorize the running code?
+ *
+ * The signature is checked FIRST and unconditionally. Nothing the record claims
+ * about itself — not its actor, not its commit, not its evidence id — is trusted
+ * until the release owner's key has vouched for the exact bytes. Only then are
+ * the signed bindings compared against this deployment. A record inserted by any
+ * database client that cannot produce the owner's signature dies at the first
+ * check, which is precisely the impersonation this boundary exists to stop.
+ */
 export function evaluateApproval(
-  approval: ApprovalRecord | null,
+  approval: SignedApproval | null,
   evidence: CertificationEvidence | null,
-  current: { commitSha: string; environment: string }
+  current: {
+    commitSha: string;
+    environment: string;
+    host: string;
+    surfaceHash: string;
+  },
+  approvalPublicKey: KeyObject | null
 ): CertificationVerdict {
-  const reasons: string[] = [];
-
   if (!approval) {
     return {
       valid: false,
       reasons: [
-        "Live checkout has not been authorized. Technical readiness does not open a shop — Blake does, per commit.",
+        "Live checkout has not been authorized. Technical readiness does not open a shop — the release owner does, per commit, with a signed approval.",
       ],
     };
   }
 
-  if (approval.approvedCommitSha !== current.commitSha || current.commitSha === "unknown") {
+  // 1. Cryptographic proof, before anything the payload asserts is read.
+  const signature = verifyApprovalSignature(approval, approvalPublicKey);
+  if (!signature.valid) {
+    return {
+      valid: false,
+      reasons: [
+        `Approval is not a valid owner signature: ${signature.reason} An actor name is not authorization.`,
+      ],
+    };
+  }
+
+  // 2. The signed statement must be about THIS deployment and THIS evidence.
+  const reasons: string[] = [];
+  const p = approval.payload;
+
+  if (p.approvedCommitSha !== current.commitSha || current.commitSha === "unknown") {
     reasons.push(
-      `Approval covers commit ${approval.approvedCommitSha.slice(0, 12)}; this deployment runs ${current.commitSha.slice(0, 12)}.`
+      `Approval signs commit ${p.approvedCommitSha.slice(0, 12)}; this deployment runs ${current.commitSha.slice(0, 12)}.`
     );
   }
 
-  if (approval.approvedEnvironment !== current.environment) {
-    reasons.push(
-      `Approval covers environment "${approval.approvedEnvironment}", not "${current.environment}".`
-    );
+  if (p.approvedSurfaceHash !== current.surfaceHash) {
+    reasons.push("Approval signs a different payment-surface hash than this build runs.");
   }
 
-  if (!approval.approvalActor?.trim()) {
-    reasons.push("Approval names no actor.");
+  if (p.approvedHost !== current.host) {
+    reasons.push(`Approval signs host "${p.approvedHost}", not "${current.host}".`);
+  }
+
+  if (p.approvedEnvironment !== current.environment) {
+    reasons.push(`Approval signs environment "${p.approvedEnvironment}", not "${current.environment}".`);
   }
 
   if (!evidence) {
     reasons.push("Approval references evidence that is no longer present.");
-  } else if (approval.evidenceId !== evidenceId(evidence)) {
-    reasons.push("Approval was granted against different evidence than is currently recorded.");
+  } else if (p.evidenceId !== evidenceId(evidence)) {
+    reasons.push("Approval was signed against different certification evidence than is currently recorded.");
   }
 
   return { valid: reasons.length === 0, reasons };
