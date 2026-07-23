@@ -98,21 +98,22 @@ export interface FulfillmentStore {
    * Small JSON documents that are not fulfillment records — e.g. certification
    * evidence. Kept separate from the session namespace so nothing in the payment
    * path can write them by accident. NOTE: live-commerce approvals are NOT here;
-   * they live in their own table with their own database grants (getApproval /
-   * putApproval below).
+   * they live in their own table with their own database grants (getApproval
+   * below, read-only).
    */
   getDoc<T>(id: string): Promise<T | null>;
   putDoc<T>(id: string, doc: T): Promise<void>;
   /**
-   * The live-commerce approval, isolated in its own table (`cf_approvals`).
-   * The application/certification database role is granted SELECT only, so the
-   * runtime can READ an approval to verify its signature but a payment-path
-   * write cannot create one. Writing requires the separate offline approver
-   * credential — the database rejects the write otherwise, independently of the
-   * cryptographic check. Two locks: Postgres permission, then Ed25519 signature.
+   * READ the live-commerce approval, isolated in its own table (`cf_approvals`).
+   *
+   * There is deliberately NO write method on this interface. The runtime that
+   * Vercel loads can read an approval to verify its signature but has no way to
+   * create one — approval writing lives in a separate Postgres-only module
+   * (`approver-store.ts`) used exclusively by the offline signer, connecting with
+   * a credential that is never the application's. Two locks: the database grant,
+   * then the Ed25519 signature.
    */
   getApproval<T>(id: string): Promise<T | null>;
-  putApproval<T>(id: string, approval: T): Promise<void>;
   /** Round-trip probe. Operational readiness depends on this passing. */
   healthy(): Promise<boolean>;
 }
@@ -242,7 +243,12 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     return raw === undefined ? null : (JSON.parse(raw) as T);
   }
 
-  async putApproval<T>(id: string, approval: T): Promise<void> {
+  /**
+   * TEST SEAM ONLY — not part of `FulfillmentStore`. Lets tests seed an approval
+   * to exercise the runtime reader. Production code holds the interface type and
+   * so cannot reach this; the real writer is `approver-store.ts`.
+   */
+  async seedApprovalForTest<T>(id: string, approval: T): Promise<void> {
     this.approvals.set(id, JSON.stringify(approval));
   }
 
@@ -428,18 +434,12 @@ export class KvFulfillmentStore implements FulfillmentStore {
     await this.command(["SET", `cf:doc:${id}`, JSON.stringify(doc)]);
   }
 
-  async getApproval<T>(id: string): Promise<T | null> {
-    const raw = await this.command(["GET", `cf:approval:${id}`]);
-    if (typeof raw !== "string") return null;
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
-    }
-  }
-
-  async putApproval<T>(id: string, approval: T): Promise<void> {
-    await this.command(["SET", `cf:approval:${id}`, JSON.stringify(approval)]);
+  // Vercel KV uses ONE token for every key, so it cannot isolate approval
+  // writes from the payment path the way the Postgres role split does. KV is
+  // therefore not an approval store: reads always return null, and readiness
+  // refuses live commerce on a KV-only deployment (see fulfillment-readiness).
+  async getApproval<T>(_id: string): Promise<T | null> {
+    return null;
   }
 
   async healthy() {
@@ -734,8 +734,9 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
 
   // cf_approvals is created and owned by the MIGRATION, not by the application.
   // The app role is granted SELECT only, so ensure() deliberately does not touch
-  // this table. A read before the migration has run fails closed (null → no
-  // approval → checkout stays closed).
+  // this table and there is NO write method here. A read before the migration
+  // has run fails closed (null → no approval → checkout stays closed). Writes
+  // happen only through approver-store.ts with the separate approver credential.
   async getApproval<T>(id: string): Promise<T | null> {
     try {
       const sql = await this.sql();
@@ -744,17 +745,6 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     } catch {
       return null;
     }
-  }
-
-  // In production the application role has NO write grant on cf_approvals, so
-  // this INSERT is rejected by Postgres unless the caller connected with the
-  // separate offline approver credential. That is the database lock that sits
-  // underneath the Ed25519 signature check.
-  async putApproval<T>(id: string, approval: T): Promise<void> {
-    const sql = await this.sql();
-    await sql`
-      INSERT INTO cf_approvals (id, approval) VALUES (${id}, ${JSON.stringify(approval)}::jsonb)
-      ON CONFLICT (id) DO UPDATE SET approval = EXCLUDED.approval, created_at = NOW()`;
   }
 
   async healthy(): Promise<boolean> {

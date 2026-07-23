@@ -48,6 +48,8 @@ function loadTs(relPath) {
   return loaded.exports;
 }
 
+const loadSource = (relPath) => fs.readFileSync(path.resolve(root, relPath), "utf8");
+
 let passed = 0;
 let failed = 0;
 const check = (label, ok) => {
@@ -254,14 +256,49 @@ check("baseline: a genuine owner-signed approval is accepted", evaluateApproval(
   check("a doc-namespace write is not visible to the approvals reader", seenByGate === null);
 
   // Even placed directly in the approvals namespace, an unsigned row is refused.
-  await store.putApproval("approval:live-commerce", legacyPlaintext);
+  await store.seedApprovalForTest("approval:live-commerce", legacyPlaintext);
   const stored = await store.getApproval("approval:live-commerce");
   check("13. a plaintext row in the approvals table is rejected (unsigned)", evaluateApproval(stored, evidence, current, ownerPublicKey).valid === false);
 
   // A genuine owner signature in the approvals namespace still works.
-  await store.putApproval("approval:live-commerce", ownerSigned());
+  await store.seedApprovalForTest("approval:live-commerce", ownerSigned());
   const good = await store.getApproval("approval:live-commerce");
   check("a genuine signed approval in the approvals table is accepted", evaluateApproval(good, evidence, current, ownerPublicKey).valid === true);
+}
+
+// The runtime abstraction has no approval WRITER. Payment-path code holds a
+// FulfillmentStore and so cannot create an approval at all.
+{
+  const storeSource = loadSource("src/lib/server/fulfillment-store.ts");
+  const interfaceBlock = storeSource.slice(
+    storeSource.indexOf("interface FulfillmentStore"),
+    storeSource.indexOf("const now =")
+  );
+  check("FulfillmentStore interface exposes getApproval", interfaceBlock.includes("getApproval<T>"));
+  check("FulfillmentStore interface exposes NO approval writer", !/putApproval|writeApproval|recordApproval/.test(interfaceBlock));
+
+  const { KvFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
+  const kv = new KvFulfillmentStore();
+  check("the KV store has no putApproval method", typeof kv.putApproval !== "function");
+  check("the KV store's getApproval always returns null (no isolated approvals)", (await kv.getApproval("approval:live-commerce")) === null);
+}
+
+// The signer refuses every credential except the separate approver Postgres URL.
+{
+  const { approverConfigError } = loadTs("src/lib/server/approver-store.ts");
+  const withEnv = async (value, run) => {
+    const prev = process.env.APPROVAL_DATABASE_URL;
+    if (value === undefined) delete process.env.APPROVAL_DATABASE_URL;
+    else process.env.APPROVAL_DATABASE_URL = value;
+    try { return await run(); } finally {
+      if (prev === undefined) delete process.env.APPROVAL_DATABASE_URL;
+      else process.env.APPROVAL_DATABASE_URL = prev;
+    }
+  };
+  check("signer refuses a missing approver credential", await withEnv(undefined, () => approverConfigError() !== null));
+  check("signer refuses a non-Postgres (KV/HTTP) approver URL", await withEnv("https://kv.example.com", () => approverConfigError() !== null));
+  check("signer refuses an empty approver URL", await withEnv("   ", () => approverConfigError() !== null));
+  check("signer accepts a Postgres approver URL", await withEnv("postgresql://approver@host/db", () => approverConfigError() === null));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

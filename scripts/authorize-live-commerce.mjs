@@ -14,7 +14,13 @@
  * Two credentials are required, and by design they live only on the owner's
  * machine — never in Vercel, the repo, or an agent environment:
  *   --private-key-file   the offline Ed25519 key from generate-approval-keypair
- *   APPROVAL_DATABASE_URL the writer credential for the approvals store
+ *   APPROVAL_DATABASE_URL the offline APPROVER Postgres credential (never the
+ *                         application DATABASE_URL, never KV)
+ *
+ * Writing goes through approver-store.ts, the only approval writer, which refuses
+ * any non-Postgres URL and which the database rejects unless the connected role
+ * holds write on cf_approvals. The application role is granted SELECT only, so a
+ * leaked application DATABASE_URL cannot record an approval here.
  *
  * Usage:
  *   APPROVAL_DATABASE_URL=… node scripts/authorize-live-commerce.mjs \
@@ -70,13 +76,6 @@ const keyFile = arg("private-key-file");
 if (!commit) fail("Pass --commit <sha> — the exact deployed commit being authorized.");
 if (!keyFile) fail("Pass --private-key-file <path> — your offline Ed25519 approval key.");
 
-// The approvals table grants write only to the offline approver role. Connect
-// the store with that credential, never the application DATABASE_URL. Requiring
-// it here means a run without the approver credential cannot record an approval
-// even though it can sign one.
-const approverUrl = process.env.APPROVAL_DATABASE_URL?.trim();
-if (!approverUrl) fail("Set APPROVAL_DATABASE_URL to the offline approver database credential (not the app DATABASE_URL).");
-process.env.DATABASE_URL = approverUrl;
 
 let privateKey;
 try {
@@ -86,17 +85,19 @@ try {
 }
 if (privateKey.asymmetricKeyType !== "ed25519") fail("The approval key must be Ed25519.");
 
-const { getFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
-const store = getFulfillmentStore();
-if (!store) fail("No approvals store configured. Set APPROVAL_DATABASE_URL and retry.");
-if (store.kind === "memory") fail("An in-memory store cannot hold an approval.");
+// Approval writing goes ONLY through the Postgres-only approver store, with the
+// offline approver credential. It refuses KV, memory, and the app DATABASE_URL.
+const { approverConfigError, readApproverDoc, recordApproval } =
+  loadTs("src/lib/server/approver-store.ts");
+const configError = approverConfigError();
+if (configError) fail(configError);
 
 const { APPROVAL_RECORD_ID, CERTIFICATION_RECORD_ID, evidenceId, evaluateEvidence } =
   loadTs("src/lib/server/certification.ts");
 const { CERTIFIED_SURFACE_HASH } = loadTs("src/lib/server/certified-surface-hash.ts");
 const { canonicalApprovalMessage } = loadTs("src/lib/server/approval-crypto.ts");
 
-const evidence = await store.getDoc(CERTIFICATION_RECORD_ID);
+const evidence = await readApproverDoc(CERTIFICATION_RECORD_ID);
 if (!evidence) fail("No operational certification exists. Certify a real test purchase first.");
 if (evidence.surfaceHash !== CERTIFIED_SURFACE_HASH)
   fail(`Certification covers surface ${evidence.surfaceHash}, this build is ${CERTIFIED_SURFACE_HASH}. Re-certify.`);
@@ -123,9 +124,9 @@ const payload = {
 const signature = edSign(null, canonicalApprovalMessage(payload), privateKey).toString("base64");
 const signed = { payload, signature, alg: "ed25519" };
 
-// Written to cf_approvals, which only the approver credential may write. If this
-// were run with the app DATABASE_URL, Postgres would reject the insert.
-await store.putApproval(APPROVAL_RECORD_ID, signed);
+// Written to cf_approvals through the approver store. If this were run with the
+// app DATABASE_URL (SELECT-only on cf_approvals), Postgres rejects the insert.
+await recordApproval(APPROVAL_RECORD_ID, signed);
 
 console.log("\n✓ Live commerce authorized with a verified owner signature.\n");
 console.log(`  commit    ${payload.approvedCommitSha}`);
