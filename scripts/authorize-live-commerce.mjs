@@ -70,6 +70,14 @@ const keyFile = arg("private-key-file");
 if (!commit) fail("Pass --commit <sha> — the exact deployed commit being authorized.");
 if (!keyFile) fail("Pass --private-key-file <path> — your offline Ed25519 approval key.");
 
+// The approvals table grants write only to the offline approver role. Connect
+// the store with that credential, never the application DATABASE_URL. Requiring
+// it here means a run without the approver credential cannot record an approval
+// even though it can sign one.
+const approverUrl = process.env.APPROVAL_DATABASE_URL?.trim();
+if (!approverUrl) fail("Set APPROVAL_DATABASE_URL to the offline approver database credential (not the app DATABASE_URL).");
+process.env.DATABASE_URL = approverUrl;
+
 let privateKey;
 try {
   privateKey = createPrivateKey({ key: fs.readFileSync(keyFile, "utf8") });
@@ -115,7 +123,9 @@ const payload = {
 const signature = edSign(null, canonicalApprovalMessage(payload), privateKey).toString("base64");
 const signed = { payload, signature, alg: "ed25519" };
 
-await store.putDoc(APPROVAL_RECORD_ID, signed);
+// Written to cf_approvals, which only the approver credential may write. If this
+// were run with the app DATABASE_URL, Postgres would reject the insert.
+await store.putApproval(APPROVAL_RECORD_ID, signed);
 
 console.log("\n✓ Live commerce authorized with a verified owner signature.\n");
 console.log(`  commit    ${payload.approvedCommitSha}`);

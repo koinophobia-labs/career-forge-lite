@@ -235,5 +235,34 @@ check("baseline: a genuine owner-signed approval is accepted", evaluateApproval(
   check("with no installed key, even a genuine signature cannot open checkout", v.valid === false);
 }
 
+// Role separation (defense in depth): approvals live in their own namespace,
+// which the payment path cannot reach. A write to the document namespace — the
+// only thing the app role can do — is invisible to the gate that reads approvals.
+{
+  const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
+  const store = new MemoryFulfillmentStore();
+  const legacyPlaintext = {
+    approvedCommitSha: current.commitSha,
+    approvedEnvironment: current.environment,
+    approvalActor: "Blake Taylor",
+    evidenceId: evidenceId(evidence),
+    approvedAt: "2026-07-21T21:17:47.704182+00:00",
+  };
+  // The exact incident write — into the app-writable document namespace.
+  await store.putDoc("approval:live-commerce", legacyPlaintext);
+  const seenByGate = await store.getApproval("approval:live-commerce");
+  check("a doc-namespace write is not visible to the approvals reader", seenByGate === null);
+
+  // Even placed directly in the approvals namespace, an unsigned row is refused.
+  await store.putApproval("approval:live-commerce", legacyPlaintext);
+  const stored = await store.getApproval("approval:live-commerce");
+  check("13. a plaintext row in the approvals table is rejected (unsigned)", evaluateApproval(stored, evidence, current, ownerPublicKey).valid === false);
+
+  // A genuine owner signature in the approvals namespace still works.
+  await store.putApproval("approval:live-commerce", ownerSigned());
+  const good = await store.getApproval("approval:live-commerce");
+  check("a genuine signed approval in the approvals table is accepted", evaluateApproval(good, evidence, current, ownerPublicKey).valid === true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

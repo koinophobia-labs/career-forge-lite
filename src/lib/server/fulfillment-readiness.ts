@@ -228,8 +228,10 @@ export async function operationalReadiness(
   // Human authorization — a statement signed by the release owner's offline
   // key. The public key that checks it grants no power to create one, so a
   // database client cannot mint authorization by writing a row.
+  // Read from the isolated approvals table (SELECT-only for this role), never
+  // from the app-writable document namespace.
   const approval = healthy
-    ? await store.getDoc<SignedApproval>(APPROVAL_RECORD_ID).catch(() => null)
+    ? await store.getApproval<SignedApproval>(APPROVAL_RECORD_ID).catch(() => null)
     : null;
   // Tests inject a throwaway key; production always resolves the committed
   // trust root. The override is a function argument, unreachable at runtime.
