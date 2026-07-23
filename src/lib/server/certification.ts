@@ -51,6 +51,7 @@ export const CERTIFIED_SURFACE = [
   "src/lib/server/session-verification.ts",
   "src/lib/server/license-mint.ts",
   "src/lib/server/redemption-code.ts",
+  "src/lib/server/redemption-cap.ts",
   "src/lib/server/redemption-rate-limit.ts",
   "src/lib/server/fulfillment-store.ts",
   "src/lib/server/fulfillment-readiness.ts",

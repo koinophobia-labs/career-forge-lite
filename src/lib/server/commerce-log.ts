@@ -28,6 +28,7 @@ export type CommerceEvent =
   | "redemption_succeeded"
   | "redemption_failed"
   | "redemption_rate_limited"
+  | "redemption_cap_reached"
   | "PAID_BUT_UNFULFILLED";
 
 /**

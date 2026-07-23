@@ -10,6 +10,10 @@ import {
   hashRedemptionCode,
 } from "@/lib/server/redemption-code";
 import {
+  redemptionCapReached,
+  resolveRedemptionMaxActivations,
+} from "@/lib/server/redemption-cap";
+import {
   clearRedemptionFailures,
   rateLimitBlocked,
   recordRedemptionFailure,
@@ -79,6 +83,23 @@ export async function POST(request: Request): Promise<NextResponse> {
   const redemption = await store.getRedemptionByHash(codeHash).catch(() => null);
   if (!redemption || redemption.revoked || !isPackageTier(redemption.tier)) {
     return fail(redemption?.revoked ? "revoked" : "not_found");
+  }
+
+  // CF-03: a single bearer code must not mint entitlements without limit. The
+  // store already tracks redemptionCount; enforce a generous, env-configurable
+  // ceiling using it. The count rides on the record we just read, so this adds
+  // no store round-trip and cannot lock a buyer out on a transient store error.
+  // The refusal is the same generic error as any other failure — no oracle that
+  // distinguishes "valid but capped" from "unknown code".
+  const maxActivations = resolveRedemptionMaxActivations();
+  if (redemptionCapReached(redemption.redemptionCount, maxActivations)) {
+    logCommerceEvent("redemption_cap_reached", {
+      sessionId: redemption.sessionId,
+      tier: redemption.tier,
+      priorActivations: redemption.redemptionCount,
+      maxActivations,
+    });
+    return fail("cap_reached");
   }
 
   const issuedAt = Math.floor(new Date(redemption.purchaseTimestamp).getTime() / 1000);

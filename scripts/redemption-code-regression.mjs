@@ -136,6 +136,48 @@ const secondStrike = Array.from({ length: 5 }).reduce(
 );
 check("repeated abuse increases cooldown", secondStrike.cooldownUntil - (rate.cooldownUntil + 1) >= 120_000);
 
+// CF-03: a single bearer code activates a generous, capped number of times.
+const cap = loadTs(path.join(root, "src/lib/server/redemption-cap.ts"));
+check("default activation cap is a generous 10", cap.DEFAULT_REDEMPTION_MAX_ACTIVATIONS === 10);
+check("unset activation cap falls back to the generous default", cap.resolveRedemptionMaxActivations(undefined) === 10);
+check("blank activation cap falls back to the default", cap.resolveRedemptionMaxActivations("   ") === 10);
+for (const bad of ["abc", "0", "-3", "2.5", "Infinity", "NaN"]) {
+  check(`nonsense cap "${bad}" fails open to the default`, cap.resolveRedemptionMaxActivations(bad) === 10);
+}
+check("an operator can lower the cap explicitly", cap.resolveRedemptionMaxActivations("3") === 3);
+check("an operator can raise the cap explicitly", cap.resolveRedemptionMaxActivations("25") === 25);
+check(
+  "a code is refused once prior activations reach the cap",
+  cap.redemptionCapReached(3, 3) === true && cap.redemptionCapReached(4, 3) === true
+);
+check(
+  "a code is allowed while prior activations remain under the cap",
+  cap.redemptionCapReached(0, 3) === false && cap.redemptionCapReached(2, 3) === false
+);
+check(
+  "an unreadable (non-finite/negative) count fails open to allowed",
+  cap.redemptionCapReached(NaN, 3) === false && cap.redemptionCapReached(-1, 3) === false
+);
+// Executed store-level walk: redeeming to the cap flips the gate, and it stays
+// flipped, without ever revoking the code.
+const cappedStore = new MemoryFulfillmentStore();
+const capIssue = await cryptoCode.issueRedemptionCode(
+  cappedStore,
+  { sessionId: "cs_test_cap_walk", tier: "reset", entitlementReference: "cap-walk", purchaseTimestamp: "2026-07-21T12:00:00.000Z" },
+  pepper,
+  () => "CF-CAP2-WAKE-2Q3R4"
+);
+let capBefore = null;
+for (let i = 0; i < 3; i += 1) {
+  const rec = await cappedStore.getRedemptionByHash(capIssue.record.codeHash);
+  check(`activation ${i + 1} of 3 is under the cap and allowed`, cap.redemptionCapReached(rec.redemptionCount, 3) === false);
+  capBefore = await cappedStore.markRedemptionRedeemed(capIssue.record.codeHash);
+}
+check("after three activations the stored count equals the cap", capBefore.redemptionCount === 3);
+const capAfter = await cappedStore.getRedemptionByHash(capIssue.record.codeHash);
+check("a fourth activation is refused by the cap", cap.redemptionCapReached(capAfter.redemptionCount, 3) === true);
+check("reaching the cap does not revoke the code", capAfter.revoked === false);
+
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
 const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
@@ -156,6 +198,8 @@ check("email includes short code and excludes signed entitlement", webhookSource
 check("email has plain-text and HTML variants", webhookSource.includes("text:") && webhookSource.includes("html:"));
 check("redemption endpoint returns generic invalid-code errors", redeemSource.includes("That access code could not be activated") && !redeemSource.includes("partial"));
 check("redemption endpoint never logs plaintext codes", !/logCommerceEvent\([^)]*(submitted|normalized|codeHash)/s.test(redeemSource));
+check("redemption endpoint enforces the per-code activation cap", redeemSource.includes("redemptionCapReached") && redeemSource.includes("resolveRedemptionMaxActivations"));
+check("redemption endpoint refuses a capped code with the generic error", redeemSource.includes('return fail("cap_reached")'));
 check("unlock labels the customer field Access code", /htmlFor="access-code"[\s\S]{0,80}Access code/.test(unlockSource));
 check("unlock supports paste, auto-capitalization, and accessible status", unlockSource.includes("Paste code") && unlockSource.includes('autoCapitalize="characters"') && unlockSource.includes('role="status"'));
 check("unlock never renders a signed entitlement", !/\{fulfillment\.(license|signedEntitlement)\}/.test(unlockSource));
