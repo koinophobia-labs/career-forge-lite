@@ -95,12 +95,24 @@ export interface FulfillmentStore {
   /** Sessions that took money but never completed. Drives reconciliation. */
   listUnfulfilled(): Promise<FulfillmentRecord[]>;
   /**
-   * Small JSON documents that are not fulfillment records — certification
-   * evidence and the live-commerce approval. Kept separate from the session
-   * namespace so nothing in the payment path can write them by accident.
+   * Small JSON documents that are not fulfillment records — e.g. certification
+   * evidence. Kept separate from the session namespace so nothing in the payment
+   * path can write them by accident. NOTE: live-commerce approvals are NOT here;
+   * they live in their own table with their own database grants (getApproval /
+   * putApproval below).
    */
   getDoc<T>(id: string): Promise<T | null>;
   putDoc<T>(id: string, doc: T): Promise<void>;
+  /**
+   * The live-commerce approval, isolated in its own table (`cf_approvals`).
+   * The application/certification database role is granted SELECT only, so the
+   * runtime can READ an approval to verify its signature but a payment-path
+   * write cannot create one. Writing requires the separate offline approver
+   * credential — the database rejects the write otherwise, independently of the
+   * cryptographic check. Two locks: Postgres permission, then Ed25519 signature.
+   */
+  getApproval<T>(id: string): Promise<T | null>;
+  putApproval<T>(id: string, approval: T): Promise<void>;
   /** Round-trip probe. Operational readiness depends on this passing. */
   healthy(): Promise<boolean>;
 }
@@ -136,6 +148,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   readonly kind = "memory";
   private records = new Map<string, FulfillmentRecord>();
   private docs = new Map<string, string>();
+  private approvals = new Map<string, string>();
   private redemptionsByHash = new Map<string, RedemptionRecord>();
   private redemptionHashBySession = new Map<string, string>();
 
@@ -224,6 +237,15 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     this.docs.set(id, JSON.stringify(doc));
   }
 
+  async getApproval<T>(id: string): Promise<T | null> {
+    const raw = this.approvals.get(id);
+    return raw === undefined ? null : (JSON.parse(raw) as T);
+  }
+
+  async putApproval<T>(id: string, approval: T): Promise<void> {
+    this.approvals.set(id, JSON.stringify(approval));
+  }
+
   async healthy() {
     return true;
   }
@@ -232,6 +254,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   reset() {
     this.records.clear();
     this.docs.clear();
+    this.approvals.clear();
     this.redemptionsByHash.clear();
     this.redemptionHashBySession.clear();
   }
@@ -403,6 +426,20 @@ export class KvFulfillmentStore implements FulfillmentStore {
 
   async putDoc<T>(id: string, doc: T): Promise<void> {
     await this.command(["SET", `cf:doc:${id}`, JSON.stringify(doc)]);
+  }
+
+  async getApproval<T>(id: string): Promise<T | null> {
+    const raw = await this.command(["GET", `cf:approval:${id}`]);
+    if (typeof raw !== "string") return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async putApproval<T>(id: string, approval: T): Promise<void> {
+    await this.command(["SET", `cf:approval:${id}`, JSON.stringify(approval)]);
   }
 
   async healthy() {
@@ -693,6 +730,31 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     await sql`
       INSERT INTO cf_docs (id, doc) VALUES (${id}, ${JSON.stringify(doc)}::jsonb)
       ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = NOW()`;
+  }
+
+  // cf_approvals is created and owned by the MIGRATION, not by the application.
+  // The app role is granted SELECT only, so ensure() deliberately does not touch
+  // this table. A read before the migration has run fails closed (null → no
+  // approval → checkout stays closed).
+  async getApproval<T>(id: string): Promise<T | null> {
+    try {
+      const sql = await this.sql();
+      const rows = await sql`SELECT approval FROM cf_approvals WHERE id = ${id}`;
+      return rows.length ? (rows[0].approval as T) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // In production the application role has NO write grant on cf_approvals, so
+  // this INSERT is rejected by Postgres unless the caller connected with the
+  // separate offline approver credential. That is the database lock that sits
+  // underneath the Ed25519 signature check.
+  async putApproval<T>(id: string, approval: T): Promise<void> {
+    const sql = await this.sql();
+    await sql`
+      INSERT INTO cf_approvals (id, approval) VALUES (${id}, ${JSON.stringify(approval)}::jsonb)
+      ON CONFLICT (id) DO UPDATE SET approval = EXCLUDED.approval, created_at = NOW()`;
   }
 
   async healthy(): Promise<boolean> {

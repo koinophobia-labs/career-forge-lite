@@ -182,6 +182,8 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     listUnfulfilled: (...a) => inner.listUnfulfilled(...a),
     getDoc: (...a) => inner.getDoc(...a),
     putDoc: (...a) => inner.putDoc(...a),
+    getApproval: (...a) => inner.getApproval(...a),
+    putApproval: (...a) => inner.putApproval(...a),
     healthy: (...a) => inner.healthy(...a),
   });
 
@@ -245,7 +247,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence));
+    await store.putApproval(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence));
     const v = await sell(store);
     check("Stripe-verified evidence + a valid signed approval may sell", v.canSellSafely === true);
   }
@@ -255,7 +257,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, {
+    await store.putApproval(APPROVAL_RECORD_ID,{
       approvedCommitSha: identity.commitSha,
       approvedEnvironment: identity.environment,
       approvalActor: "Blake Taylor",
@@ -297,7 +299,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const store = durable(inner);
     const ev = { ...goodEvidence, ...patch };
     await store.putDoc(CERTIFICATION_RECORD_ID, ev);
-    await store.putDoc(APPROVAL_RECORD_ID, approvalFor(ev));
+    await store.putApproval(APPROVAL_RECORD_ID,approvalFor(ev));
     const v = await sell(store);
     check(label, v.canSellSafely === false);
     check(`${label} — blocker explains why`, v.blockers.some((b) => pattern.test(b)));
@@ -309,7 +311,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence, { approvedCommitSha: "oldcommit0000" }));
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { approvedCommitSha: "oldcommit0000" }));
     const v = await sell(store);
     check("a signed approval for a previous commit keeps checkout closed", v.canSellSafely === false);
     check("the blocker names the commit mismatch", v.blockers.some((b) => /Approval signs commit/i.test(b)));
@@ -318,7 +320,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence, { evidenceId: "0".repeat(32) }));
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { evidenceId: "0".repeat(32) }));
     const v = await sell(store);
     check("a signed approval against different evidence fails", v.canSellSafely === false);
   }
@@ -326,7 +328,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence, { approvedEnvironment: "production" }));
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { approvedEnvironment: "production" }));
     const v = await sell(store);
     check("a preview-scoped approval cannot authorize another environment", v.canSellSafely === false);
   }
@@ -375,9 +377,19 @@ await withEnv(
   const legacy = read("scripts/approve-live-commerce.mjs");
   check(
     "the legacy unsigned approval recorder is disabled",
-    legacy.includes("is disabled") && !legacy.includes("putDoc(APPROVAL_RECORD_ID")
+    legacy.includes("is disabled") &&
+      !legacy.includes("putDoc(APPROVAL_RECORD_ID") &&
+      !legacy.includes("putApproval(")
   );
   const authorize = read("scripts/authorize-live-commerce.mjs");
+  check(
+    "the authorize tool writes only via the isolated approvals table",
+    authorize.includes("putApproval(") && authorize.includes("APPROVAL_DATABASE_URL")
+  );
+  check(
+    "the runtime reads approvals from the isolated table, not the doc namespace",
+    read("src/lib/server/fulfillment-readiness.ts").includes("store.getApproval")
+  );
   check(
     "the authorize tool signs a scoped payload with the offline key",
     authorize.includes("canonicalApprovalMessage") &&
