@@ -28,6 +28,8 @@ export type CommerceEvent =
   | "redemption_succeeded"
   | "redemption_failed"
   | "redemption_rate_limited"
+  | "founder_invite_minted"
+  | "founder_invite_blocked"
   | "PAID_BUT_UNFULFILLED";
 
 /**

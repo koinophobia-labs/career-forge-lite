@@ -2,17 +2,21 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PackageTier } from "@/lib/packages";
 import { mintLicenseKey } from "@/lib/server/license-mint";
 
-export const FOUNDER_INVITE_TIER: PackageTier = "job-search";
+// A founder invite comps the entry ("reset") tier — the same tier the live paid
+// beta actually sells. An invite must never grant a HIGHER tier than a real
+// purchase can buy.
+export const FOUNDER_INVITE_TIER: PackageTier = "reset";
 
-// SHA-256("lazyboikoi"). The public repository never needs the plaintext code,
-// and production can replace or disable it without changing the client bundle.
-const DEFAULT_FOUNDER_INVITE_CODE_SHA256 = "5216551874a15fa31d3f90385cde3755058a97ac8df1a94e5f9e2fda3251e1cf";
-
+// The founder invite is OFF unless a deployment explicitly opts in AND supplies
+// its own per-deployment code hash. There is deliberately NO shipped default
+// hash: a code baked into the public client bundle is a backdoor, not a
+// credential. With neither env var set, getFounderInviteHash() returns null and
+// every submitted code is rejected (fail-closed).
 export function getFounderInviteHash(): string | null {
-  if (process.env.FOUNDER_INVITE_ENABLED?.trim().toLowerCase() === "false") return null;
+  if (process.env.FOUNDER_INVITE_ENABLED?.trim().toLowerCase() !== "true") return null;
   const configured = process.env.FOUNDER_INVITE_CODE_SHA256?.trim().toLowerCase();
-  const candidate = configured || DEFAULT_FOUNDER_INVITE_CODE_SHA256;
-  return /^[a-f0-9]{64}$/.test(candidate) ? candidate : null;
+  if (!configured) return null;
+  return /^[a-f0-9]{64}$/.test(configured) ? configured : null;
 }
 
 export function founderInviteCodeMatches(code: unknown, expectedHash: string | null = getFounderInviteHash()): boolean {
