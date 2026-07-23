@@ -14,10 +14,12 @@
 /src/lib/server/fulfillment-readiness.ts    @koinophobia-labs
 /src/lib/server/certified-surface-hash.ts   @koinophobia-labs
 
-# The signing / authorization tooling and database role separation.
+# The approval writer and its database role separation.
+/src/lib/server/approver-store.ts           @koinophobia-labs
 /scripts/authorize-live-commerce.mjs        @koinophobia-labs
 /scripts/generate-approval-keypair.mjs      @koinophobia-labs
 /scripts/migrations/                         @koinophobia-labs
+/scripts/approval-migration-smoke.sh        @koinophobia-labs
 
 # Protect the ownership map itself, so no one can rewrite who controls the above.
 /.github/CODEOWNERS                          @koinophobia-labs

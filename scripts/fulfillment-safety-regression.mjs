@@ -174,8 +174,11 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
   // sellVerdict override: pass the test public key so signed approvals verify.
   const sell = (store) => sellVerdict(store, testPublicKey);
 
+  // Simulates the durable Postgres store (kind "neon-postgres") so the isolation
+  // check passes. putApproval is the memory test seam, exposed here for seeding —
+  // it is NOT part of the production FulfillmentStore interface.
   const durable = (inner) => ({
-    kind: "fake-durable",
+    kind: "neon-postgres",
     claim: (...a) => inner.claim(...a),
     get: (...a) => inner.get(...a),
     update: (...a) => inner.update(...a),
@@ -183,7 +186,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     getDoc: (...a) => inner.getDoc(...a),
     putDoc: (...a) => inner.putDoc(...a),
     getApproval: (...a) => inner.getApproval(...a),
-    putApproval: (...a) => inner.putApproval(...a),
+    putApproval: (...a) => inner.seedApprovalForTest(...a),
     healthy: (...a) => inner.healthy(...a),
   });
 
@@ -333,6 +336,21 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     check("a preview-scoped approval cannot authorize another environment", v.canSellSafely === false);
   }
 
+  // 6. The KV side door: a durable KV store, fully certified and validly signed,
+  //    still may not open live commerce — it has no isolated approval store.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const kvLike = { ...durable(inner), kind: "vercel-kv" };
+    await kvLike.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await kvLike.putApproval(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence));
+    const v = await sell(kvLike);
+    check("a KV-backed durable store cannot open live commerce", v.canSellSafely === false);
+    check(
+      "the blocker says KV has no isolated approval store",
+      v.blockers.some((b) => /isolate approvals|requires the Postgres/i.test(b))
+    );
+  }
+
   delete process.env.VERCEL_GIT_COMMIT_SHA;
   delete process.env.VERCEL_ENV;
   delete process.env.VERCEL_URL;
@@ -383,8 +401,15 @@ await withEnv(
   );
   const authorize = read("scripts/authorize-live-commerce.mjs");
   check(
-    "the authorize tool writes only via the isolated approvals table",
-    authorize.includes("putApproval(") && authorize.includes("APPROVAL_DATABASE_URL")
+    "the authorize tool writes only through the Postgres-only approver store",
+    authorize.includes("recordApproval(") &&
+      authorize.includes("approverConfigError") &&
+      !authorize.includes("getFulfillmentStore")
+  );
+  const approver = read("src/lib/server/approver-store.ts");
+  check(
+    "the approver store refuses non-Postgres credentials",
+    approver.includes("APPROVAL_DATABASE_URL") && approver.includes("must be a Postgres connection string")
   );
   check(
     "the runtime reads approvals from the isolated table, not the doc namespace",

@@ -191,6 +191,24 @@ export async function operationalReadiness(
   });
   if (!durable) blockers.push("Fulfillment store is in-memory, not durable.");
 
+  // Approval isolation. Only the Postgres store has a separate cf_approvals table
+  // with its own write role; Vercel KV uses one token for every key and cannot
+  // keep the payment path from writing approvals. A KV-only deployment therefore
+  // may not open live commerce, even though KV is otherwise durable.
+  const isolatedApprovals = store.kind === "neon-postgres";
+  checks.push({
+    name: "isolated_approval_store",
+    passed: isolatedApprovals,
+    detail: isolatedApprovals
+      ? "Approvals are isolated in cf_approvals with a separate write role."
+      : `Store "${store.kind}" has no isolated approval store; live commerce requires Postgres role separation.`,
+  });
+  if (!isolatedApprovals) {
+    blockers.push(
+      `Store "${store.kind}" cannot isolate approvals from the payment path; live commerce requires the Postgres cf_approvals table with a separate write role.`
+    );
+  }
+
   let healthy = false;
   try {
     healthy = await store.healthy();
