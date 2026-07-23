@@ -40,11 +40,54 @@ const terminationPatterns: RegExp[] = [
   /\b(underwent|went\s+through|had|announced)\s+(a\s+)?(round\s+of\s+)?layoffs?\b/i,
   /\b(company|employer|org(anization)?|department|team)\s+(was\s+)?reorganiz(ed|ation)\b/i,
   /\b(department|team|role|position|division|group|unit)\s+(was|were)\s+(\w+\s+)?(reorganiz(ed)|restructur(ed)|eliminated|dissolved|downsized)\b/i,
-  /\bleadership\s+(decided\s+to\s+)?eliminat(ed?|ing)\s+(the\s+)?(role|position|team|department)\b/i
+  /\bleadership\s+(decided\s+to\s+)?eliminat(ed?|ing)\s+(the\s+)?(role|position|team|department)\b/i,
+  // CF-02 — phrasings that bypassed the original list (red-team: 8/10 bypassed).
+  // Position/role/seat cut, eliminated, sunset, dissolved (separation-specific).
+  /\b(my|the|their|his|her|our)\s+(position|role|seat|job|title|department|team)\s+(was|were|got|been|is|had\s+been)?\s*(cut|eliminated|removed|dissolved|axed|sunset|sunsetted|gone|absorbed)\b/i,
+  /\b(cut|eliminated|removed|dissolved|axed|sunset|sunsetted)\s+(my|the|their|his|her|our)\s+(position|role|seat|job|title|team|department|group|division)\b/i,
+  /\b(position|role|seat|job|title|department|team|division)\s+(was\s+)?(cut|eliminated|sunset|sunsetted|dissolved|axed)\b/i,
+  // Company failure / funding loss.
+  /\b(ran|run|running)\s+out\s+of\s+(funding|money|cash|runway|capital)\b/i,
+  /\bout\s+of\s+(funding|runway|capital)\b/i,
+  /\b(company|startup|employer|business|firm|org(anization)?)\s+(went\s+(bankrupt|under|belly[\s-]?up)|folded|dissolved|ceased\s+operations|wound\s+down|closed\s+(down|its\s+doors|shop))\b/i,
+  // Forced departure.
+  /\b(pushed|forced|managed|eased|shown)\s+out\b/i,
+  /\blost\s+(my|his|her|their)\s+(job|role|position|gig)\b/i,
+  // Separation instruments.
+  /\bseverance\b/i,
+  /\bbuy[\s-]?out\b/i,
+  /\bfurlough(ed|s)?\b/i,
+  /\b(contract|role|position|tenure|term)\s+(was\s+)?(not\s+renewed|not\s+extended|ended|expired|wasn'?t\s+renewed)\b/i,
+  /\b(was|were|been|got)\s+(dismissed|discharged|offboarded|off-boarded|separated|sacked|canned)\b/i
 ];
 
 export function containsTerminationReason(text: string): boolean {
   return terminationPatterns.some((pattern) => pattern.test(text));
+}
+
+// CF-02 durability layer: "no strict match" must NOT be treated as "definitely
+// safe". These softer cues frequently accompany a separation but are ambiguous
+// enough that auto-removal would mangle legitimate content — so text matching
+// one of these (and NOT already a definite termination reason) is FLAGGED for
+// the user to review before sending, and the export receipt reflects that
+// uncertainty instead of falsely reporting "nothing withheld".
+const possibleSeparationPatterns: RegExp[] = [
+  /\breorg(aniz(ation|ed|ing))?\b/i,
+  /\brestructur(e|ed|ing|es|ation)\b/i,
+  /\bparted\s+ways\b/i,
+  /\bno\s+longer\s+(with|at|employed)\b/i,
+  /\bmoved\s+on\s+from\b/i,
+  /\bbetween\s+(roles|jobs|positions)\b/i,
+  /\b(company|team|department|budget)\s+(downturn|headwinds|belt[\s-]?tightening|cost[\s-]?cutting|cuts?)\b/i,
+  /\bmy\s+(time|tenure|stint)\s+(at|with)\b.{0,40}\b(ended|concluded|wrapped|came\s+to\s+an\s+end)\b/i
+];
+
+/** True when the text carries a POSSIBLE (unclassified) end-of-employment
+ *  context that the strict guard did not catch — a signal to flag for review,
+ *  not to silently strip. */
+export function hasPossibleSeparationContext(text: string): boolean {
+  if (containsTerminationReason(text)) return false; // already handled as definite
+  return possibleSeparationPatterns.some((pattern) => pattern.test(text));
 }
 
 const trailingConjunction = /\s+(until|after|when|because|since|though|although)\s*[.!?]?\s*$/i;

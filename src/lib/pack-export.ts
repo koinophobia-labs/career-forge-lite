@@ -10,7 +10,7 @@ import {
   isProfessionalEvidence,
   sanitizeResumeForProfessionalUse
 } from "@/lib/evidence-admissibility";
-import { stripTerminationReasons } from "@/lib/truth-guards";
+import { stripTerminationReasons, hasPossibleSeparationContext } from "@/lib/truth-guards";
 
 export type PackExportFormat = "pdf" | "docx";
 export type SectionKey = ResumeVariant["sectionOrder"][number];
@@ -22,13 +22,24 @@ export type ExportSection =
   | { key: "summary" | "skills" | "education"; heading: string; text: string }
   | { key: "experience" | "projects"; heading: string; roles: ResumePackage["experience"] };
 
-function sourceContainsWithheldFact(resume: ResumePackage): boolean {
-  const values = [
+function resumeTextValues(resume: ResumePackage): string[] {
+  return [
     resume.summary,
     resume.linkedinSummary,
     ...resume.experience.flatMap((role) => [role.title, role.company, ...role.bullets])
-  ];
-  return values.some((value) => stripTerminationReasons(value ?? "").withheld);
+  ].map((value) => value ?? "");
+}
+
+function sourceContainsWithheldFact(resume: ResumePackage): boolean {
+  return resumeTextValues(resume).some((value) => stripTerminationReasons(value).withheld);
+}
+
+// CF-02 — text the strict guard did NOT strip but that carries a possible
+// end-of-employment context. It stays in the document (auto-removal would mangle
+// legitimate content), but the receipt must surface it for user review rather
+// than reporting a clean pack.
+function sourceHasPossibleSeparation(resume: ResumePackage): boolean {
+  return resumeTextValues(resume).some((value) => hasPossibleSeparationContext(value));
 }
 
 // One render plan for PDF, DOCX, and plain text. The resume is sanitized at the
@@ -39,8 +50,12 @@ export function exportSections(
   resume: ResumePackage,
   sectionOrder?: SectionKey[],
   kind: ResumeVariant["kind"] = "ats"
-): { sections: ExportSection[]; withheldFacts: string[] } {
+): { sections: ExportSection[]; withheldFacts: string[]; reviewFlags: string[] } {
   const withheldFacts = sourceContainsWithheldFact(resume) ? ["reason for leaving"] : [];
+  // CF-02: never report a clean pack on the strength of "no regex match" alone.
+  const reviewFlags = sourceHasPossibleSeparation(resume)
+    ? ["possible reason for leaving — review this pack before sending"]
+    : [];
   const safeResume = sanitizeResumeForProfessionalUse(resume);
   const order = sectionOrder?.length ? sectionOrder : DEFAULT_SECTION_ORDER;
   // A project is not an employer: split by kind so it renders under its own
@@ -78,7 +93,7 @@ export function exportSections(
     if (experienceIndex >= 0) sections.splice(experienceIndex + 1, 0, projectSection);
     else sections.push(projectSection);
   }
-  return { sections, withheldFacts };
+  return { sections, withheldFacts, reviewFlags };
 }
 
 function identityContactLine(dossier: CareerDossier): string {
