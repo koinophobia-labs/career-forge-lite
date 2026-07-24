@@ -39,7 +39,12 @@ function restoreOptionalApplicationHistory(state: CommandCenterState): CommandCe
         const interviewHistory = Array.isArray(source.interviewHistory)
           ? source.interviewHistory.filter((value): value is string => typeof value === "string")
           : application.interviewHistory;
-        return { ...application, stageHistory, interviewHistory };
+        return {
+          ...application,
+          stageHistory,
+          interviewHistory,
+          statusRevision: typeof source.statusRevision === "string" ? source.statusRevision : application.statusRevision
+        };
       })
     };
   } catch {
