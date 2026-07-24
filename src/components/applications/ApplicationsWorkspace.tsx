@@ -21,6 +21,7 @@ import { createId } from "@/lib/command-center-store";
 import { assessApplication, validateApplicationInput } from "@/lib/input-guidance";
 import { hasSavedJobWorkspace } from "@/lib/job-workspace";
 import { useCommandCenter } from "@/lib/use-command-center";
+import { useCurrentTime } from "@/lib/use-current-time";
 import type { ApplicationRecord, ApplicationStatus, CommandCenterState, RoleSprintRecord } from "@/types/command-center";
 
 const statusLabels: Record<ApplicationStatus, string> = { drafting: "Drafting", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", closed: "Closed" };
@@ -34,6 +35,7 @@ type StatusUndo = {
   applicationId: string;
   before: ApplicationStatusSnapshot;
   after: ApplicationStatus;
+  transitionRevision: string;
 };
 
 function formatTimestampDate(iso: string | null): string {
@@ -58,7 +60,7 @@ export function ApplicationsWorkspace() {
   const [inputIssues, setInputIssues] = useState<string[]>([]);
   const [pendingRemovalId, setPendingRemovalId] = useState<string | null>(null);
   const [lastStatusChange, setLastStatusChange] = useState<StatusUndo | null>(null);
-  const nowIso = useMemo(() => new Date().toISOString(), []);
+  const nowIso = useCurrentTime();
 
   const sorted = useMemo(
     () => [...state.applications].sort((a, b) => applicationPriority(a) - applicationPriority(b) || (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt)),
@@ -78,7 +80,7 @@ export function ApplicationsWorkspace() {
         postingDate: null, deadline: null, contactName: "", contactUrl: "", resumeVariantId: null, applicationQuestions: [],
         resumeVersionId: null, appliedAt: null, nextFollowUpAt: null, followUpsSent: [], interviewAt: null, notes: "",
         analysisKeywords: [], analysisGaps: [], analysisWeakSpots: [], createdAt: now, updatedAt: now,
-        stageHistory: [{ status: "drafting", at: now }], interviewHistory: []
+        stageHistory: [{ status: "drafting", at: now }], interviewHistory: [], statusRevision: now
       }]
     }));
     setCompany(""); setRoleTitle(""); setLaneId("");
@@ -104,8 +106,14 @@ export function ApplicationsWorkspace() {
       ...current,
       applications: current.applications.map((item) => {
         if (item.id !== application.id || item.status === status) return item;
-        undo = { applicationId: item.id, before: captureApplicationStatus(item), after: status };
-        return transitionApplicationStatus(item, status, now);
+        const transitioned = transitionApplicationStatus(item, status, now);
+        undo = {
+          applicationId: item.id,
+          before: captureApplicationStatus(item),
+          after: status,
+          transitionRevision: transitioned.statusRevision ?? now
+        };
+        return transitioned;
       })
     }));
     if (undo) setLastStatusChange(undo);
@@ -118,24 +126,56 @@ export function ApplicationsWorkspace() {
       ...current,
       applications: current.applications.map((application) => {
         if (application.id !== lastStatusChange.applicationId) return application;
-        // A newer tab may have moved the application again. Never overwrite it.
-        if (application.status !== lastStatusChange.after) return application;
+        // Notes and answers do not change statusRevision, so they survive Undo.
+        // Any newer interview, follow-up, or stage mutation changes the token and
+        // blocks this stale action from overwriting another tab.
+        if (application.status !== lastStatusChange.after || application.statusRevision !== lastStatusChange.transitionRevision) return application;
         return restoreApplicationStatus(application, lastStatusChange.before, now);
       })
     }));
     setLastStatusChange(null);
   }
 
-  function updateInterviewDate(application: ApplicationRecord, nextDate: string) {
-    const interviewHistory = application.interviewAt && application.interviewAt !== nextDate
-      ? [...new Set([...(application.interviewHistory ?? []), application.interviewAt])]
-      : application.interviewHistory ?? [];
-    patchApplication(application.id, { interviewAt: nextDate || null, interviewHistory });
+  function updateInterviewDate(applicationId: string, nextDate: string) {
+    const now = new Date().toISOString();
+    update((current) => ({
+      ...current,
+      applications: current.applications.map((application) => {
+        if (application.id !== applicationId || application.interviewAt === (nextDate || null)) return application;
+        const interviewHistory = application.interviewAt && application.interviewAt !== nextDate
+          ? [...new Set([...(application.interviewHistory ?? []), application.interviewAt])]
+          : application.interviewHistory ?? [];
+        return { ...application, interviewAt: nextDate || null, interviewHistory, statusRevision: now, updatedAt: now };
+      })
+    }));
   }
 
-  function logFollowUp(application: ApplicationRecord) {
-    const logged = logApplicationFollowUp(application, new Date().toISOString());
-    patchApplication(application.id, { followUpsSent: logged.followUpsSent, nextFollowUpAt: logged.nextFollowUpAt });
+  function logFollowUp(applicationId: string) {
+    const now = new Date().toISOString();
+    update((current) => ({
+      ...current,
+      applications: current.applications.map((application) => {
+        if (application.id !== applicationId) return application;
+        const logged = logApplicationFollowUp(application, now);
+        return { ...application, followUpsSent: logged.followUpsSent, nextFollowUpAt: logged.nextFollowUpAt, statusRevision: now, updatedAt: now };
+      })
+    }));
+  }
+
+  function updateApplicationQuestion(applicationId: string, questionId: string, draftAnswer: string) {
+    const now = new Date().toISOString();
+    update((current) => ({
+      ...current,
+      applications: current.applications.map((application) => application.id === applicationId
+        ? {
+            ...application,
+            applicationQuestions: application.applicationQuestions.map((question) => question.id === questionId
+              ? { ...question, draftAnswer, userEdited: true }
+              : question),
+            updatedAt: now
+          }
+        : application)
+    }));
   }
 
   function confirmRemoval(applicationId: string, mode: ApplicationRemovalMode) {
@@ -195,19 +235,19 @@ export function ApplicationsWorkspace() {
                     </div>
 
                     <select value={application.status} onChange={(event) => setStatus(application, event.target.value as ApplicationStatus)} className={`lab-mono rounded-full border bg-obsidian/60 px-3 py-1.5 text-[0.65rem] font-bold uppercase ${statusStyles[application.status]}`}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-                    {followUpDue && <button type="button" onClick={() => logFollowUp(application)} className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan">Followed up</button>}
-                    {application.status === "interviewing" && <input type="date" value={calendarDateInputValue(application.interviewAt)} onChange={(event) => updateInterviewDate(application, event.target.value)} className="trust-input border px-2 py-1.5 text-xs text-ink" aria-label="Interview date" />}
+                    {followUpDue && <button type="button" onClick={() => logFollowUp(application.id)} className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan">Followed up</button>}
+                    {application.status === "interviewing" && <input type="date" value={calendarDateInputValue(application.interviewAt)} onChange={(event) => updateInterviewDate(application.id, event.target.value)} className="trust-input border px-2 py-1.5 text-xs text-ink" aria-label="Interview date" />}
                     <button type="button" onClick={() => setPendingRemovalId(removalOpen ? null : application.id)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-paper/50 transition hover:border-coral hover:text-coral">Remove</button>
                   </div>
 
-                  {pastInterview && <div className="mt-4 rounded-xl border border-cyan/35 bg-cyan/10 p-4"><p className="font-bold text-paper">How did the interview go?</p><p className="mt-1 text-xs leading-5 text-paper/55">Update the result before Career Forge recommends more preparation.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setStatus(application, "offer")} className="rounded-md border border-mint/45 px-3 py-2 text-xs font-bold text-mint">Move to offer</button><button type="button" onClick={() => updateInterviewDate(application, "")} className="rounded-md border border-cyan/45 px-3 py-2 text-xs font-bold text-cyan">Next round not scheduled</button><button type="button" onClick={() => setStatus(application, "rejected")} className="rounded-md border border-coral/45 px-3 py-2 text-xs font-bold text-coral">Rejected</button><button type="button" onClick={() => setStatus(application, "closed")} className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-paper/60">Close application</button></div></div>}
+                  {pastInterview && <div className="mt-4 rounded-xl border border-cyan/35 bg-cyan/10 p-4"><p className="font-bold text-paper">How did the interview go?</p><p className="mt-1 text-xs leading-5 text-paper/55">Update the result before Career Forge recommends more preparation.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setStatus(application, "offer")} className="rounded-md border border-mint/45 px-3 py-2 text-xs font-bold text-mint">Move to offer</button><button type="button" onClick={() => updateInterviewDate(application.id, "")} className="rounded-md border border-cyan/45 px-3 py-2 text-xs font-bold text-cyan">Next round not scheduled</button><button type="button" onClick={() => setStatus(application, "rejected")} className="rounded-md border border-coral/45 px-3 py-2 text-xs font-bold text-coral">Rejected</button><button type="button" onClick={() => setStatus(application, "closed")} className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-paper/60">Close application</button></div></div>}
 
                   {unscheduledInterview && <div className="mt-4 rounded-xl border border-cyan/35 bg-cyan/10 p-4"><p className="font-bold text-paper">Set the next interview date when you have it.</p><p className="mt-1 text-xs leading-5 text-paper/55">Until then, Career Forge will keep this in waiting-for-next-round mode instead of sending you back into interview practice.</p></div>}
 
                   {removalOpen && <div className="mt-4 rounded-xl border border-coral/35 bg-coral/10 p-4 text-sm leading-6 text-paper/75">{linkedRoleSprintCount(state, application.id) > 0 ? <><p className="font-bold text-paper">This job has {linkedRoleSprintCount(state, application.id)} linked Role Sprint{linkedRoleSprintCount(state, application.id) === 1 ? "" : "s"}.</p><p className="mt-1 text-xs text-paper/55">Approved practice evidence stays in your evidence library. Pending or rejected evidence is removed with deleted sprint records.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => confirmRemoval(application.id, "keep-sprints")} className="rounded-md border border-gold/45 px-3 py-2 text-xs font-bold text-gold">Delete job, keep practice</button><button type="button" onClick={() => confirmRemoval(application.id, "remove-sprints")} className="rounded-md border border-coral/50 px-3 py-2 text-xs font-bold text-coral">Delete job + sprint records</button><button type="button" onClick={() => setPendingRemovalId(null)} className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-paper/60">Cancel</button></div></> : <div className="flex flex-wrap items-center gap-3"><span>Delete this job workspace?</span><button type="button" onClick={() => confirmRemoval(application.id, "keep-sprints")} className="rounded-md border border-coral/50 px-3 py-2 text-xs font-bold text-coral">Delete job</button><button type="button" onClick={() => setPendingRemovalId(null)} className="text-xs font-bold text-paper/60">Cancel</button></div>}</div>}
 
                   <textarea value={application.notes} rows={1} placeholder="Notes: contact names, salary range, what you emphasized…" onChange={(event) => patchApplication(application.id, { notes: event.target.value })} className="mt-3 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80 placeholder:text-paper/35" />
-                  {application.applicationQuestions.length > 0 && <section className="mt-4 border-t border-white/10 pt-4"><h3 className="text-sm font-bold text-paper">Application answers</h3><div className="mt-3 grid gap-3">{application.applicationQuestions.map((question) => <label key={question.id} className="block"><span className="text-xs font-bold text-paper/70">{question.prompt}</span><textarea value={question.draftAnswer} rows={4} onChange={(event) => patchApplication(application.id, { applicationQuestions: application.applicationQuestions.map((item) => item.id === question.id ? { ...item, draftAnswer: event.target.value, userEdited: true } : item) })} className="mt-1 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80" /><span className="mt-1 block text-xs text-paper/45">Supporting evidence: {question.evidenceIds.length ? question.evidenceIds.map((id) => state.dossier.evidence.find((item) => item.id === id)?.detail).filter(Boolean).join(" · ") : "None — do not submit until evidence is added."}{question.userEdited ? " · User edited" : ""}</span></label>)}</div></section>}
+                  {application.applicationQuestions.length > 0 && <section className="mt-4 border-t border-white/10 pt-4"><h3 className="text-sm font-bold text-paper">Application answers</h3><div className="mt-3 grid gap-3">{application.applicationQuestions.map((question) => <label key={question.id} className="block"><span className="text-xs font-bold text-paper/70">{question.prompt}</span><textarea value={question.draftAnswer} rows={4} onChange={(event) => updateApplicationQuestion(application.id, question.id, event.target.value)} className="mt-1 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80" /><span className="mt-1 block text-xs text-paper/45">Supporting evidence: {question.evidenceIds.length ? question.evidenceIds.map((id) => state.dossier.evidence.find((item) => item.id === id)?.detail).filter(Boolean).join(" · ") : "None — do not submit until evidence is added."}{question.userEdited ? " · User edited" : ""}</span></label>)}</div></section>}
 
                   {(stageHistory.length > 0 || interviewHistory.length > 0) && <details className="mt-4 border-t border-white/10 pt-3"><summary className="cursor-pointer text-xs font-bold text-paper/55">Application history</summary><div className="mt-3 grid gap-2 text-xs leading-5 text-paper/55">{stageHistory.length > 0 && <div><span className="font-bold text-paper/70">Stages:</span> {stageHistory.map((event) => `${statusLabels[event.status]} ${formatTimestampDate(event.at)}`).join(" · ")}</div>}{interviewHistory.length > 0 && <div><span className="font-bold text-paper/70">Prior interviews:</span> {interviewHistory.map(formatCalendarDate).join(" · ")}</div>}</div></details>}
                 </article>
