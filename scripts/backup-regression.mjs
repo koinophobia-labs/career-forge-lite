@@ -116,7 +116,11 @@ const fullState = {
       analysisKeywords: ["fraud"],
       analysisGaps: ["SQL"],
       analysisWeakSpots: [],
-      createdAt: NOW
+      createdAt: NOW,
+      updatedAt: NOW,
+      statusRevision: NOW,
+      stageHistory: [{ status: "applied", at: NOW }],
+      interviewHistory: ["2026-07-05"]
     }
   ],
   outreach: [
@@ -155,17 +159,34 @@ const fullState = {
   ]
 };
 
+const interviewSession = {
+  id: "session-1",
+  messages: [],
+  resumeDraft: {},
+  memory: {},
+  fieldStatuses: [],
+  currentStage: "role_targeting",
+  completedStages: [],
+  createdAt: NOW,
+  updatedAt: NOW
+};
+const sidecars = {
+  interviewPrepDrafts: { "app-1::lane-1::question": "A private practice answer" },
+  interviewSession
+};
+
 // --- Export shape -----------------------------------------------------------------
 const stateSnapshotBefore = JSON.stringify(fullState);
-const backup = createBackup(fullState, NOW);
+const backup = createBackup(fullState, NOW, sidecars);
 
 check("backup carries app marker", backup.app === "career-forge");
-check("backup carries schema version", backup.schemaVersion === BACKUP_SCHEMA_VERSION);
+check("backup carries schema version", backup.schemaVersion === BACKUP_SCHEMA_VERSION && BACKUP_SCHEMA_VERSION === 3);
 check("backup carries exportedAt", backup.exportedAt === NOW);
 check(
   "backup contains every persisted section",
   backup.state.profile && backup.state.lanes.length === 1 && backup.state.applications.length === 1 && backup.state.outreach.length === 1 && backup.state.resumeVersions.length === 1
 );
+check("backup includes interview sidecars", backup.sidecars.interviewPrepDrafts["app-1::lane-1::question"] === "A private practice answer" && backup.sidecars.interviewSession?.id === "session-1");
 check("export does not mutate live state", JSON.stringify(fullState) === stateSnapshotBefore);
 check("backup state is a copy, not a reference", backup.state !== fullState && backup.state.applications !== fullState.applications);
 check("filename is dated", backupFilename(NOW) === "career-forge-backup-2026-07-06.json");
@@ -183,8 +204,16 @@ check(
   validated.ok && validated.state.applications[0].resumeVersionId === "resume-1" && validated.state.resumeVersions[0].applicationId === "app-1"
 );
 check(
+  "application history and lifecycle revision survive export/import",
+  validated.ok && validated.state.applications[0].statusRevision === NOW && validated.state.applications[0].stageHistory?.length === 1 && validated.state.applications[0].interviewHistory?.[0] === "2026-07-05"
+);
+check(
   "restored state equals exported state exactly",
   validated.ok && JSON.stringify(validated.state) === JSON.stringify(backup.state)
+);
+check(
+  "restored sidecars equal exported sidecars exactly",
+  validated.ok && JSON.stringify(validated.sidecars) === JSON.stringify(backup.sidecars)
 );
 check(
   "no data invented during backup/restore",
@@ -200,9 +229,12 @@ check(
     validated.preview.snapshotCount === 1 &&
     validated.preview.outreachCount === 1 &&
     validated.preview.laneCount === 1 &&
+    validated.preview.roleSprintCount === 0 &&
+    validated.preview.interviewDraftCount === 1 &&
+    validated.preview.interviewSessionPresent === true &&
     validated.preview.profilePresent === true &&
     validated.preview.exportedAt === NOW &&
-    validated.preview.schemaVersion === 2
+    validated.preview.schemaVersion === 3
 );
 check("preview of empty state shows profile absent", buildPreview(emptyState(), null, null).profilePresent === false);
 
@@ -229,14 +261,16 @@ const legacy = validateBackup(JSON.stringify(fullState));
 check("bare state object imports as legacy backup", legacy.ok === true);
 check("legacy backup preview has no exportedAt", legacy.ok && legacy.preview.exportedAt === null && legacy.preview.schemaVersion === null);
 check("legacy backup keeps snapshots and links", legacy.ok && legacy.state.resumeVersions[0].resumeSnapshot !== null && legacy.state.applications[0].resumeVersionId === "resume-1");
+check("legacy backup safely starts with empty sidecars", legacy.ok && Object.keys(legacy.sidecars.interviewPrepDrafts).length === 0 && legacy.sidecars.interviewSession === null);
 
 // --- Corrupt sections degrade, not crash --------------------------------------------------------
 const corrupt = validateBackup(
   JSON.stringify({
     app: "career-forge",
-    schemaVersion: 1,
+    schemaVersion: 3,
     exportedAt: NOW,
-    state: { profile: "junk", lanes: "junk", applications: [{ id: "ok-app" }, "junk"], resumeVersions: [{ id: "v", resumeSnapshot: "junk" }], outreach: 42 }
+    state: { profile: "junk", lanes: "junk", applications: [{ id: "ok-app" }, "junk"], resumeVersions: [{ id: "v", resumeSnapshot: "junk" }], outreach: 42 },
+    sidecars: { interviewPrepDrafts: { keep: "draft", drop: 7 }, interviewSession: "junk" }
   })
 );
 check("corrupt sections degrade safely instead of crashing", corrupt.ok === true);
@@ -247,7 +281,10 @@ check(
     corrupt.state.outreach.length === 0 &&
     corrupt.state.applications.length === 1 &&
     corrupt.state.resumeVersions[0].resumeSnapshot === null &&
-    corrupt.state.profile.currentSituation === ""
+    corrupt.state.profile.currentSituation === "" &&
+    corrupt.sidecars.interviewPrepDrafts.keep === "draft" &&
+    !("drop" in corrupt.sidecars.interviewPrepDrafts) &&
+    corrupt.sidecars.interviewSession === null
 );
 
 // --- Backup nudge logic -----------------------------------------------------------------------------
