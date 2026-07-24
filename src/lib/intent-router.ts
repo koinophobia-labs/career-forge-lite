@@ -144,7 +144,46 @@ export function goalEntryAction(state: CommandCenterState, kind: CareerGoalKind)
   };
 }
 
+function interviewSortTime(value: string | null, fallback: string): number {
+  const timestamp = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : new Date(fallback).getTime();
+}
+
 export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal(state)): NextBestAction {
+  const offer = [...state.applications]
+    .filter((application) => application.status === "offer")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (offer) {
+    return {
+      title: `Review your offer from ${offer.company || offer.roleTitle}`,
+      detail: "An offer is the highest-priority item in your workspace. Review the role, timing, and next decision before doing more practice.",
+      href: "/applications",
+      actionLabel: "Open offer"
+    };
+  }
+
+  const interviewing = [...state.applications]
+    .filter((application) => application.status === "interviewing")
+    .sort((a, b) => interviewSortTime(a.interviewAt, a.createdAt) - interviewSortTime(b.interviewAt, b.createdAt))[0];
+  if (interviewing) {
+    return {
+      title: `Prepare for ${interviewing.roleTitle} at ${interviewing.company}`,
+      detail: "Practice the real requirements, your strongest examples, and the gaps you should answer honestly.",
+      href: "/interview",
+      actionLabel: "Practice interview"
+    };
+  }
+
+  const followUp = state.applications.find((application) => application.nextFollowUpAt && new Date(application.nextFollowUpAt).getTime() <= Date.now());
+  if (followUp) {
+    return {
+      title: `Follow up on ${followUp.company || followUp.roleTitle}`,
+      detail: "This application is ready for a follow-up now.",
+      href: "/applications",
+      actionLabel: "Log follow-up"
+    };
+  }
+
   const pendingSprint = [...state.roleSprints]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .find((sprint) => {
@@ -174,19 +213,15 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
   }
 
   if (state.pendingImportReviews.length || assessDossierReadiness(state.dossier).level === "not-ready") return goalEntryAction(state, kind);
-  const interviewing = state.applications.find((application) => application.status === "interviewing");
-  if (interviewing) {
+  const draft = state.applications.find((application) => application.status === "drafting");
+  if (draft) {
     return {
-      title: `Prepare for ${interviewing.roleTitle} at ${interviewing.company}`,
-      detail: "Practice the real requirements, your strongest examples, and the gaps you should answer honestly.",
-      href: "/interview",
-      actionLabel: "Practice interview"
+      title: `Continue ${draft.roleTitle} at ${draft.company}`,
+      detail: "Return to the saved job, finish the application, or continue its linked Role Sprint.",
+      href: `/tailor?applicationId=${draft.id}`,
+      actionLabel: "Continue saved job"
     };
   }
-  const followUp = state.applications.find((application) => application.nextFollowUpAt && new Date(application.nextFollowUpAt).getTime() <= Date.now());
-  if (followUp) return { title: `Follow up on ${followUp.company || followUp.roleTitle}`, detail: "This application is ready for a follow-up.", href: "/applications", actionLabel: "Log follow-up" };
-  const draft = state.applications.find((application) => application.status === "drafting");
-  if (draft) return { title: `Continue ${draft.roleTitle} at ${draft.company}`, detail: "Return to the saved job, finish the application, or continue its linked Role Sprint.", href: `/tailor?applicationId=${draft.id}`, actionLabel: "Continue saved job" };
   return goalEntryAction(state, kind);
 }
 
