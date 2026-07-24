@@ -17,15 +17,9 @@ import {
   syncRoleSprintsWithEvidence
 } from "@/lib/role-sprint";
 import { primarySprintOutput } from "@/lib/role-sprint-ux";
-import { validateSprintArtifact } from "@/lib/role-sprint-work-validator";
+import { sprintArtifactChecks, validateSprintArtifact } from "@/lib/role-sprint-work-validator";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { RoleSprintOutputs, RoleSprintRecord } from "@/types/command-center";
-
-const statusChip: Record<RoleSprintRecord["status"], { label: string; className: string }> = {
-  draft: { label: "In progress", className: "border-gold/50 bg-gold/10 text-gold" },
-  completed: { label: "Ready for review", className: "border-cyan/50 bg-cyan/10 text-cyan" },
-  "approved-as-evidence": { label: "Approved practice", className: "border-spruce/60 bg-mint/10 text-mint" }
-};
+import type { CommandCenterState, RoleSprintOutputs, RoleSprintRecord } from "@/types/command-center";
 
 const sprintTypeLabel: Record<RoleSprintRecord["sprintType"], string> = {
   explain: "Explain",
@@ -43,6 +37,26 @@ const allOutputFields: Array<{ key: keyof Omit<RoleSprintOutputs, "userEdited">;
   { key: "talkingPoint", label: "Application talking point", hint: "For a cover letter or application question.", rows: 3 }
 ];
 
+type EvidenceState = "none" | "missing" | "approved" | "rejected" | "pending";
+
+function linkedEvidenceState(state: CommandCenterState, sprint: RoleSprintRecord): EvidenceState {
+  if (!sprint.evidenceId) return "none";
+  const evidence = state.dossier.evidence.find((item) => item.id === sprint.evidenceId);
+  if (!evidence) return "missing";
+  if (evidence.rejected) return "rejected";
+  if (evidence.approved) return "approved";
+  return "pending";
+}
+
+function displayStatus(state: CommandCenterState, sprint: RoleSprintRecord): { label: string; className: string } {
+  if (sprint.status === "draft") return { label: "In progress", className: "border-gold/50 bg-gold/10 text-gold" };
+  const evidenceState = linkedEvidenceState(state, sprint);
+  if (evidenceState === "approved") return { label: "Approved practice", className: "border-spruce/60 bg-mint/10 text-mint" };
+  if (evidenceState === "rejected") return { label: "Rejected proof", className: "border-coral/50 bg-coral/10 text-coral" };
+  if (evidenceState === "missing") return { label: "Evidence missing", className: "border-coral/50 bg-coral/10 text-coral" };
+  return { label: "Ready for review", className: "border-cyan/50 bg-cyan/10 text-cyan" };
+}
+
 function RoleSprintWorkspace() {
   const searchParams = useSearchParams();
   const sprintId = searchParams.get("id") ?? "";
@@ -53,16 +67,7 @@ function RoleSprintWorkspace() {
   const application = sprint?.applicationId ? state.applications.find((item) => item.id === sprint.applicationId) ?? null : null;
   const evidence = sprint?.evidenceId ? state.dossier.evidence.find((item) => item.id === sprint.evidenceId) ?? null : null;
   const supporting = sprint ? sprintSupportingEvidence(sprint, state.dossier) : [];
-
-  const evidenceState = !sprint || !sprint.evidenceId
-    ? "none"
-    : !evidence
-      ? "missing"
-      : evidence.approved && !evidence.rejected
-        ? "approved"
-        : evidence.rejected
-          ? "rejected"
-          : "pending";
+  const evidenceState = sprint ? linkedEvidenceState(state, sprint) : "none";
 
   function patchSprint(id: string, patch: Partial<RoleSprintRecord>) {
     update((current) => ({
@@ -135,15 +140,18 @@ function RoleSprintWorkspace() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">Each sprint creates labeled practice, not fake work experience.</p>
         {sprints.length ? (
           <div className="mt-6 grid gap-2.5">
-            {sprints.map((item) => (
-              <Link key={item.id} href={`/role-sprint?id=${item.id}`} className="rounded-lg border border-white/12 bg-obsidian/40 p-4 transition hover:border-cyan/50">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="max-w-2xl text-sm font-bold leading-5 text-paper">{item.title || item.requirement}</p>
-                  <span className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusChip[item.status].className}`}>{statusChip[item.status].label}</span>
-                </div>
-                <p className="mt-1.5 text-xs text-paper/55">{[item.roleTitle, item.company].filter(Boolean).join(" at ") || "No job saved"}</p>
-              </Link>
-            ))}
+            {sprints.map((item) => {
+              const chip = displayStatus(state, item);
+              return (
+                <Link key={item.id} href={`/role-sprint?id=${item.id}`} className="rounded-lg border border-white/12 bg-obsidian/40 p-4 transition hover:border-cyan/50">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="max-w-2xl text-sm font-bold leading-5 text-paper">{item.title || item.requirement}</p>
+                    <span className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${chip.className}`}>{chip.label}</span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-paper/55">{[item.roleTitle, item.company].filter(Boolean).join(" at ") || "No job saved"}</p>
+                </Link>
+              );
+            })}
           </div>
         ) : <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">No sprints yet. Start by analyzing one job posting.</div>}
         <Link href="/tailor" className="lab-pill-button mt-6 inline-flex px-5 py-2.5 text-sm font-black">Analyze a job →</Link>
@@ -155,8 +163,18 @@ function RoleSprintWorkspace() {
   const target = [sprint.roleTitle, sprint.company].filter(Boolean).join(" at ");
   const workLength = sprint.userWork.trim().length;
   const isCompleted = sprint.status !== "draft";
+  const checks = sprintArtifactChecks(sprint.userWork, sprint.sprintType);
+  const readyToSubmit = workLength >= ROLE_SPRINT_MIN_WORK_CHARS && checks.every((check) => check.met);
   const primaryOutput = sprint.outputs ? primarySprintOutput(sprint.sprintType) : null;
   const secondaryOutputFields = primaryOutput ? allOutputFields.filter((field) => field.key !== primaryOutput.key) : allOutputFields;
+  const chip = displayStatus(state, sprint);
+  const editedAfterReview = Boolean(
+    evidence &&
+    (evidenceState === "approved" || evidenceState === "rejected") &&
+    sprint.outputs?.userEdited &&
+    new Date(sprint.updatedAt).getTime() > new Date(evidence.updatedAt).getTime()
+  );
+  const outputsUsable = evidenceState !== "rejected";
 
   return (
     <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
@@ -167,7 +185,7 @@ function RoleSprintWorkspace() {
           <p className="mt-2 max-w-2xl text-base font-bold leading-7 text-paper">{sprint.requirement}</p>
           <p className="mt-1 text-sm text-paper/55">{target || "Target job"} · 20–60 minutes</p>
         </div>
-        <span className={`lab-mono shrink-0 rounded-full border px-3 py-1 text-[0.65rem] font-bold uppercase ${statusChip[sprint.status].className}`}>{statusChip[sprint.status].label}</span>
+        <span className={`lab-mono shrink-0 rounded-full border px-3 py-1 text-[0.65rem] font-bold uppercase ${chip.className}`}>{chip.label}</span>
       </div>
 
       {!isCompleted && (
@@ -195,18 +213,25 @@ function RoleSprintWorkspace() {
         <h2 className="text-lg font-bold text-paper">{isCompleted ? "Your work" : "Do the work here"}</h2>
         <p className="mt-1 text-sm text-paper/55">Saved automatically. This exact work becomes the source for your practice evidence.</p>
         <textarea aria-label="Sprint work area" value={sprint.userWork} rows={12} placeholder="Write or paste your completed task here…" onChange={(event) => patchSprint(sprint.id, { userWork: event.target.value })} disabled={evidenceState === "approved"} className="trust-input mt-3 w-full border px-3 py-2.5 text-sm text-ink disabled:opacity-60" />
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p className={`text-xs ${workLength >= ROLE_SPRINT_MIN_WORK_CHARS ? "text-mint" : "text-paper/50"}`}>{workLength} / {ROLE_SPRINT_MIN_WORK_CHARS} minimum characters</p>
-          {evidenceState !== "approved" && <button type="button" onClick={() => submitWork(sprint)} disabled={workLength < ROLE_SPRINT_MIN_WORK_CHARS} className="lab-pill-button ml-auto px-5 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{isCompleted ? "Update my proof" : "Finish sprint →"}</button>}
+        <div className="mt-4 rounded-lg border border-white/10 bg-obsidian/35 p-3">
+          <p className="text-xs font-black uppercase tracking-wide text-paper/50">Ready-to-finish checklist</p>
+          <ul className="mt-2 grid gap-1.5 text-sm leading-5">
+            <li className={workLength >= ROLE_SPRINT_MIN_WORK_CHARS ? "text-mint" : "text-paper/50"}>{workLength >= ROLE_SPRINT_MIN_WORK_CHARS ? "✓" : "○"} At least {ROLE_SPRINT_MIN_WORK_CHARS} characters of actual work</li>
+            {checks.map((check) => <li key={check.label} className={check.met ? "text-mint" : "text-paper/50"}>{check.met ? "✓" : "○"} {check.label}</li>)}
+          </ul>
         </div>
-        {sprint.outputs?.userEdited && evidenceState !== "approved" && <p className="mt-2 text-xs text-gold">You edited the generated drafts. Updating the proof will ask before replacing those edits.</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className={`text-xs ${readyToSubmit ? "text-mint" : "text-paper/50"}`}>{readyToSubmit ? "Ready to submit" : "Complete the checklist before submitting"}</p>
+          {evidenceState !== "approved" && <button type="button" onClick={() => submitWork(sprint)} disabled={!readyToSubmit} className="lab-pill-button ml-auto px-5 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{isCompleted ? "Update my proof" : "Finish sprint →"}</button>}
+        </div>
+        {sprint.outputs?.userEdited && evidenceState !== "approved" && evidenceState !== "rejected" && <p className="mt-2 text-xs text-gold">You edited the generated drafts. Updating the proof will ask before replacing those edits.</p>}
         {submitError && <p className="mt-3 rounded-lg border border-coral/40 bg-coral/10 px-3 py-2 text-sm leading-6 text-paper/80">{submitError}</p>}
       </div>
 
       {isCompleted && sprint.outputs && (
         <>
           <div className={`mt-6 rounded-xl border p-4 text-sm leading-6 ${evidenceState === "approved" ? "border-mint/35 bg-mint/10 text-paper/78" : evidenceState === "rejected" || evidenceState === "missing" ? "border-coral/35 bg-coral/10 text-paper/78" : "border-gold/35 bg-gold/10 text-paper/78"}`}>
-            {evidenceState === "approved" ? <><span className="font-bold text-mint">Approved.</span> This is labeled practice evidence, not employment experience.</> : evidenceState === "rejected" ? <><span className="font-bold text-coral">Rejected.</span> Update the work and submit a new version when ready.</> : evidenceState === "missing" ? <><span className="font-bold text-coral">Evidence missing.</span> Submit again to recreate it.</> : <><span className="font-bold text-gold">Sprint complete.</span> Decide whether this finished work should become labeled practice evidence.</>}
+            {evidenceState === "approved" ? <><span className="font-bold text-mint">Approved.</span> This is labeled practice evidence, not employment experience.</> : evidenceState === "rejected" ? <><span className="font-bold text-coral">Rejected.</span> Update the work and submit a new version before using its drafts.</> : evidenceState === "missing" ? <><span className="font-bold text-coral">Evidence missing.</span> Submit again to recreate it.</> : <><span className="font-bold text-gold">Sprint complete.</span> Decide whether this finished work should become labeled practice evidence.</>}
           </div>
 
           {evidenceState === "pending" && (
@@ -222,7 +247,13 @@ function RoleSprintWorkspace() {
             </div>
           )}
 
-          {primaryOutput && (
+          {editedAfterReview && (
+            <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm leading-6 text-paper/78">
+              <span className="font-bold text-gold">Edited after review.</span> These output drafts have not been rechecked and do not change the approved or rejected evidence record.
+            </div>
+          )}
+
+          {outputsUsable && primaryOutput && (
             <div className="trust-panel mt-6 p-5 sm:p-6">
               <p className="text-xs font-black uppercase tracking-wide text-cyan">Best way to use this</p>
               <label className="mt-3 block">
@@ -233,18 +264,20 @@ function RoleSprintWorkspace() {
             </div>
           )}
 
-          <details className="trust-panel mt-6 p-5 sm:p-6">
-            <summary className="cursor-pointer text-base font-bold text-cyan">Other ways to use this work</summary>
-            <div className="mt-5 grid gap-4">
-              {secondaryOutputFields.map((field) => (
-                <label key={field.key} className="block">
-                  <span className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-paper">{field.label}</span><CopyButton getText={() => sprint.outputs?.[field.key] ?? ""} /></span>
-                  <span className="mt-0.5 block text-xs text-paper/50">{field.hint}</span>
-                  <textarea aria-label={field.label} value={sprint.outputs?.[field.key] ?? ""} rows={field.rows} onChange={(event) => patchOutputs(sprint, field.key, event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" />
-                </label>
-              ))}
-            </div>
-          </details>
+          {outputsUsable && (
+            <details className="trust-panel mt-6 p-5 sm:p-6">
+              <summary className="cursor-pointer text-base font-bold text-cyan">Other ways to use this work</summary>
+              <div className="mt-5 grid gap-4">
+                {secondaryOutputFields.map((field) => (
+                  <label key={field.key} className="block">
+                    <span className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-paper">{field.label}</span><CopyButton getText={() => sprint.outputs?.[field.key] ?? ""} /></span>
+                    <span className="mt-0.5 block text-xs text-paper/50">{field.hint}</span>
+                    <textarea aria-label={field.label} value={sprint.outputs?.[field.key] ?? ""} rows={field.rows} onChange={(event) => patchOutputs(sprint, field.key, event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" />
+                  </label>
+                ))}
+              </div>
+            </details>
+          )}
 
           <details className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <summary className="cursor-pointer text-sm font-bold text-paper/60">Proof details</summary>
