@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { activationEventsForTransition } from "@/lib/activation";
 import { trackCareerEvent } from "@/lib/analytics";
 import { draftApplicationQuestion } from "@/lib/application-questions";
-import { statusForWorkspaceSave } from "@/lib/application-workflow";
+import { statusForWorkspaceSave, transitionApplicationStatus } from "@/lib/application-workflow";
 import { calendarDateInputValue } from "@/lib/calendar-date";
 import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
 import { createId } from "@/lib/command-center-store";
@@ -190,7 +190,8 @@ export function useTailorWorkspace() {
   function buildApplication(id: string, requestedStatus: "drafting" | "applied", current?: ApplicationRecord): ApplicationRecord {
     const nowIso = new Date().toISOString();
     const inferred = inferJobIdentity(form.jobPost);
-    const status = statusForWorkspaceSave(current?.status, requestedStatus);
+    const finalStatus = statusForWorkspaceSave(current?.status, requestedStatus);
+    const baseStatus = current?.status ?? finalStatus;
     const questions = mergeApplicationQuestions(form.questionPrompts, current?.applicationQuestions ?? [], state.dossier, id);
     const chosenLaneId = form.laneId === NO_SELECTION
       ? null
@@ -198,12 +199,12 @@ export function useTailorWorkspace() {
     const chosenBaselineId = form.baselineVariantId === NO_SELECTION
       ? null
       : form.baselineVariantId || effectiveBaseline?.id || current?.resumeVariantId || null;
-    return {
+    const record: ApplicationRecord = {
       id,
       company: form.company.trim() || inferred.company || current?.company || "Unknown company",
       roleTitle: form.roleTitle.trim() || inferred.roleTitle || current?.roleTitle || effectiveLane?.title || "Untitled role",
       laneId: chosenLaneId,
-      status,
+      status: baseStatus,
       jobPostUrl: form.jobPost.trim() ? encodeJobPostText(form.jobPost) : current?.jobPostUrl ?? "",
       source: form.source,
       discoveryUrl: form.discoveryUrl.trim(),
@@ -215,8 +216,8 @@ export function useTailorWorkspace() {
       resumeVariantId: chosenBaselineId,
       applicationQuestions: questions,
       resumeVersionId: current?.resumeVersionId ?? null,
-      appliedAt: current?.appliedAt ?? (status === "applied" || status === "interviewing" || status === "offer" ? nowIso : null),
-      nextFollowUpAt: status === "applied" ? current?.nextFollowUpAt ?? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS) : null,
+      appliedAt: current?.appliedAt ?? (baseStatus === "applied" || baseStatus === "interviewing" || baseStatus === "offer" ? nowIso : null),
+      nextFollowUpAt: baseStatus === "applied" ? current?.nextFollowUpAt ?? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS) : null,
       followUpsSent: current?.followUpsSent ?? [],
       interviewAt: current?.interviewAt ?? null,
       notes: current?.notes || (analysis ? `Tailoring notes — top keywords: ${analysis.keywords.slice(0, 6).map((hit) => hit.term).join(", ")}` : ""),
@@ -225,9 +226,10 @@ export function useTailorWorkspace() {
       analysisWeakSpots: analysis ? analysis.weakSpots.slice(0, 4) : current?.analysisWeakSpots ?? [],
       createdAt: current?.createdAt ?? nowIso,
       updatedAt: nowIso,
-      stageHistory: current?.stageHistory ?? [{ status, at: nowIso }],
+      stageHistory: current?.stageHistory ?? [{ status: baseStatus, at: nowIso }],
       interviewHistory: current?.interviewHistory ?? []
     };
+    return finalStatus === baseStatus ? record : transitionApplicationStatus(record, finalStatus, nowIso);
   }
 
   function saveAsApplication(status: "drafting" | "applied"): string {
