@@ -2,6 +2,10 @@ import type { ApplicationRecord, ApplicationStatus, CommandCenterState } from "@
 import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
 
 export type ApplicationRemovalMode = "keep-sprints" | "remove-sprints";
+export type ApplicationStatusSnapshot = Pick<
+  ApplicationRecord,
+  "status" | "appliedAt" | "nextFollowUpAt" | "interviewAt" | "stageHistory" | "interviewHistory"
+>;
 
 const STATUS_PRIORITY: Record<ApplicationStatus, number> = {
   offer: 0,
@@ -106,6 +110,33 @@ export function applicationStatusPatch(
     interviewHistory,
     updatedAt: nowIso
   };
+}
+
+export function transitionApplicationStatus(
+  application: ApplicationRecord,
+  status: ApplicationStatus,
+  nowIso: string
+): ApplicationRecord {
+  return { ...application, ...applicationStatusPatch(application, status, nowIso) };
+}
+
+export function captureApplicationStatus(application: ApplicationRecord): ApplicationStatusSnapshot {
+  return {
+    status: application.status,
+    appliedAt: application.appliedAt,
+    nextFollowUpAt: application.nextFollowUpAt,
+    interviewAt: application.interviewAt,
+    stageHistory: application.stageHistory,
+    interviewHistory: application.interviewHistory
+  };
+}
+
+export function restoreApplicationStatus(
+  application: ApplicationRecord,
+  snapshot: ApplicationStatusSnapshot,
+  nowIso: string
+): ApplicationRecord {
+  return { ...application, ...snapshot, updatedAt: nowIso };
 }
 
 export function applicationPriority(application: ApplicationRecord): number {

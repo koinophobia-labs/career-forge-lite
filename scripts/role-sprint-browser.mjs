@@ -1,8 +1,8 @@
 // Final Role Sprint acceptance:
 // structured proof validation, frozen review versions, exact-claim approval,
 // output edit warnings, durable job linkage, answer preservation, reversible
-// status changes, past-interview routing, same-title replacement, manual-workspace
-// upgrade, and safe linked-sprint deletion.
+// field-scoped status changes, interview waiting, same-title replacement,
+// manual-workspace upgrade, and safe linked-sprint deletion.
 import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
@@ -177,16 +177,25 @@ try {
   await sqlCard.getByText("partial", { exact: true }).waitFor();
   verify(await sqlCard.getByText("partial", { exact: true }).isVisible(), "approved practice refreshes to partial, never covered");
 
+  await page.getByText("Other actions", { exact: true }).click();
+  await page.getByRole("button", { name: "I applied" }).click();
+  const explicitlyApplied = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  const appliedFromWorkspace = explicitlyApplied.applications.find((item) => item.id === firstApplicationId);
+  verify(appliedFromWorkspace?.status === "applied" && appliedFromWorkspace?.stageHistory.at(-1)?.status === "applied", "I applied records the shared stage transition");
+
   await page.goto(`${baseUrl}/applications`);
   let acmeCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
   const answerBox = acmeCard.getByText("Why do you want this role?", { exact: true }).locator("..").getByRole("textbox");
   await answerBox.fill("I want this role because it combines customer problem solving with product feedback.");
-  await acmeCard.locator("select").selectOption("applied");
   page.once("dialog", (dialog) => dialog.accept());
   await acmeCard.locator("select").selectOption("drafting");
+  acmeCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
+  const notesBox = acmeCard.getByPlaceholder(/Notes: contact names/i);
+  await notesBox.fill("Note written after the stage change.");
   await page.getByRole("button", { name: "Undo" }).click();
   acmeCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
   verify(await acmeCard.locator("select").inputValue() === "applied", "destructive stage change can be undone");
+  verify((await acmeCard.getByPlaceholder(/Notes: contact names/i).inputValue()) === "Note written after the stage change.", "field-scoped undo preserves later notes");
   await acmeCard.getByRole("link", { name: "Open job workspace →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
   const knowledgeCard = page.locator("div.rounded-lg").filter({ hasText: /onboarding knowledge base/i }).first();
@@ -255,6 +264,10 @@ try {
   await page.getByRole("link", { name: "Update interview result" }).click();
   await page.getByText("How did the interview go?", { exact: true }).waitFor();
   verify(await page.getByRole("button", { name: "Move to offer" }).isVisible(), "past interviews route to an outcome check-in instead of more preparation");
+  await page.getByRole("button", { name: "Next round not scheduled" }).click();
+  await page.goto(baseUrl);
+  await page.getByRole("heading", { name: /Set the next interview date for Customer Experience Associate/i }).waitFor();
+  verify(await page.getByRole("link", { name: "Set interview date" }).isVisible(), "unscheduled next rounds stop the interview-practice loop");
 
   console.log(`\nFinal Role Sprint browser acceptance: ${passes} passed, 0 failed`);
   await context.close();

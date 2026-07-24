@@ -1,5 +1,5 @@
 import { parseState } from "@/lib/command-center-store";
-import type { CommandCenterState } from "@/types/command-center";
+import type { ApplicationRecord, ApplicationStatus, CommandCenterState } from "@/types/command-center";
 
 // Full command-center backup: everything Career Forge persists (profile,
 // lanes, applications, outreach, resume versions with snapshots) wrapped in a
@@ -36,15 +36,62 @@ export type BackupValidation =
   | { ok: true; state: CommandCenterState; preview: BackupPreview }
   | { ok: false; error: string };
 
+const applicationStatuses = new Set<ApplicationStatus>(["drafting", "applied", "interviewing", "offer", "rejected", "closed"]);
+
+function restoreApplicationDurability(
+  state: CommandCenterState,
+  rawState: unknown
+): CommandCenterState {
+  if (!rawState || typeof rawState !== "object" || Array.isArray(rawState)) return state;
+  const rawApplications = (rawState as { applications?: unknown }).applications;
+  if (!Array.isArray(rawApplications)) return state;
+
+  const byId = new Map(
+    rawApplications
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === "string")
+      .map((item) => [item.id as string, item])
+  );
+
+  return {
+    ...state,
+    applications: state.applications.map((application): ApplicationRecord => {
+      const source = byId.get(application.id);
+      if (!source) return application;
+      const stageHistory = Array.isArray(source.stageHistory)
+        ? source.stageHistory.flatMap((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+            const value = entry as Record<string, unknown>;
+            if (typeof value.status !== "string" || !applicationStatuses.has(value.status as ApplicationStatus) || typeof value.at !== "string") return [];
+            return [{ status: value.status as ApplicationStatus, at: value.at }];
+          })
+        : application.stageHistory;
+      const interviewHistory = Array.isArray(source.interviewHistory)
+        ? source.interviewHistory.filter((value): value is string => typeof value === "string")
+        : application.interviewHistory;
+      return {
+        ...application,
+        updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : application.updatedAt,
+        stageHistory,
+        interviewHistory
+      };
+    })
+  };
+}
+
+function normalizeBackupState(rawState: unknown): CommandCenterState {
+  const parsed = parseState(JSON.stringify(rawState));
+  return restoreApplicationDurability(parsed, rawState);
+}
+
 // Creating a backup never mutates the live state: the state is serialized and
-// re-parsed through the same hardened revival used on every load, which also
-// normalizes the copy to the current schema.
+// re-parsed through the hardened revival used on every load, then additive
+// durability fields are restored so application history survives migration.
 export function createBackup(state: CommandCenterState, nowIso?: string): CommandCenterBackup {
   return {
     app: "career-forge",
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: nowIso ?? new Date().toISOString(),
-    state: parseState(JSON.stringify(state))
+    state: normalizeBackupState(state)
   };
 }
 
@@ -109,14 +156,14 @@ export function validateBackup(serialized: string): BackupValidation {
     if (!root.state || typeof root.state !== "object" || Array.isArray(root.state)) {
       return { ok: false, error: "The backup's data section is missing or malformed." };
     }
-    const state = parseState(JSON.stringify(root.state));
+    const state = normalizeBackupState(root.state);
     const exportedAt = typeof root.exportedAt === "string" ? root.exportedAt : null;
     return { ok: true, state, preview: buildPreview(state, exportedAt, root.schemaVersion) };
   }
 
   // Legacy path: a bare state object (e.g. copied straight from localStorage).
   if ("profile" in root || "applications" in root || "resumeVersions" in root || "roleSprints" in root) {
-    const state = parseState(serialized);
+    const state = normalizeBackupState(root);
     return { ok: true, state, preview: buildPreview(state, null, null) };
   }
 
@@ -135,10 +182,20 @@ export function markBackupCreated(nowIso?: string): void {
 
 const BACKUP_NUDGE_DAYS = 14;
 
-// Nudge when there's meaningful data at stake and no recent backup.
+// Role Sprints represent concentrated work, so they count more heavily than
+// lightweight tracker entries. This avoids nagging early users while protecting
+// substantial practice and evidence libraries.
 export function shouldNudgeBackup(state: CommandCenterState, lastBackupAt: string | null, nowIso: string): boolean {
-  const meaningful = state.applications.length + state.resumeVersions.length >= 3;
-  if (!meaningful) return false;
+  const approvedEvidence = state.dossier.evidence.filter((item) => item.approved && !item.rejected).length;
+  const meaningfulAssets =
+    state.applications.length +
+    state.resumeVersions.length +
+    state.resumePacks.length +
+    state.roleSprints.length * 2 +
+    state.outreach.length +
+    state.pendingImportReviews.length +
+    approvedEvidence;
+  if (meaningfulAssets < 4) return false;
   if (!lastBackupAt) return true;
   const age = new Date(nowIso).getTime() - new Date(lastBackupAt).getTime();
   return Number.isNaN(age) || age > BACKUP_NUDGE_DAYS * 24 * 60 * 60 * 1000;

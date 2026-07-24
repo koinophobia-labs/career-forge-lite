@@ -67,15 +67,16 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
   if (offer) return { title: `Review your offer from ${offer.company || offer.roleTitle}`, detail: "An offer is the highest-priority item in your workspace. Review the role, timing, and next decision before doing more practice.", href: "/applications", actionLabel: "Open offer" };
 
   const interviewing = selectInterviewApplication(state.applications);
-  if (interviewing) {
-    if (interviewTiming(interviewing) === "past") {
-      return {
-        title: `How did the ${interviewing.roleTitle} interview go?`,
-        detail: "Update the result before Career Forge recommends more preparation.",
-        href: `/applications#application-${interviewing.id}`,
-        actionLabel: "Update interview result"
-      };
-    }
+  const interviewState = interviewing ? interviewTiming(interviewing) : null;
+  if (interviewing && interviewState === "past") {
+    return {
+      title: `How did the ${interviewing.roleTitle} interview go?`,
+      detail: "Update the result before Career Forge recommends more preparation.",
+      href: `/applications#application-${interviewing.id}`,
+      actionLabel: "Update interview result"
+    };
+  }
+  if (interviewing && (interviewState === "today" || interviewState === "upcoming")) {
     return { title: `Prepare for ${interviewing.roleTitle} at ${interviewing.company}`, detail: "Practice the real requirements, your strongest examples, and the gaps you should answer honestly.", href: `/interview?applicationId=${interviewing.id}`, actionLabel: "Practice interview" };
   }
 
@@ -84,6 +85,15 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
 
   const pendingSprint = [...state.roleSprints].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).find((sprint) => sprintEvidenceState(state, sprint) === "pending");
   if (pendingSprint) return { title: "Review the practice proof you finished", detail: `Your Role Sprint for “${pendingSprint.requirement}” is complete. Approve it as labeled practice or revise the frozen submission.`, href: `/role-sprint?id=${pendingSprint.id}`, actionLabel: "Review practice proof" };
+
+  if (interviewing && interviewState === "unscheduled") {
+    return {
+      title: `Set the next interview date for ${interviewing.roleTitle}`,
+      detail: "This application is waiting for the next round. Add the date when the employer confirms it.",
+      href: `/applications#application-${interviewing.id}`,
+      actionLabel: "Set interview date"
+    };
+  }
 
   const draftSprint = [...state.roleSprints].filter((sprint) => sprint.status === "draft").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   if (draftSprint) return { title: "Finish the Role Sprint you started", detail: `Continue the practice task for “${draftSprint.requirement}” before starting another job workflow.`, href: `/role-sprint?id=${draftSprint.id}`, actionLabel: "Continue Role Sprint" };
