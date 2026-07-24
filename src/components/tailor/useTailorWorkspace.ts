@@ -131,6 +131,7 @@ export function useTailorWorkspace() {
     if (newPosting) {
       setSavedApplicationId(null);
       loadedApplicationRef.current = null;
+      window.history.replaceState({}, "", "/tailor");
       setForm((current) => ({
         ...current,
         jobPost: nextPost,
