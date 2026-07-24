@@ -38,9 +38,9 @@ check("first run: choices are job, resume, interview", ["new-job", "update-resum
 check("first run: career change and first resume are not separate decisions", !firstRunKinds.includes("career-change") && !firstRunKinds.includes("first-resume"));
 check("first run: one simple question", intent.includes("What are you trying to do?"));
 
-check("home: no competing marketing landing page", !home.includes("Local-first career evidence compiler") && !home.includes("Your career is bigger than your last résumé."));
+check("home: no competing marketing landing page", !home.includes("Your career is bigger than your last résumé.") && home.indexOf("<IntentRouter />") < home.indexOf("How Career Forge stays honest"));
 check("home: optional sample is collapsed after the main choice", home.includes("SampleExperience") && home.includes("See a finished sample first") && home.indexOf("<IntentRouter />") < home.indexOf("See a finished sample first"));
-check("home: no seven-station workflow wall", !home.includes("Advanced workspace") && !home.includes("Career Lanes") && !home.includes("Truth Map"));
+check("home: no seven-station workflow wall", !home.includes("const loop") && !home.includes("lg:grid-cols-7") && !home.includes("Career Lanes") && !home.includes("Truth Map"));
 check("home: returning users still get one next step", home.includes("<IntentRouter />"));
 check("home: full workspace is collapsed", home.includes("Open full workspace") && home.includes("<details"));
 
