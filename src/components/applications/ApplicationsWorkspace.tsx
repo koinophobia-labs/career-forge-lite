@@ -6,16 +6,17 @@ import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
   applicationPriority,
+  applicationStatusPatch,
   linkedRoleSprintCount,
   removeApplicationWorkspace,
   type ApplicationRemovalMode
 } from "@/lib/application-workflow";
-import { APPLICATION_FOLLOW_UP_DAYS, addDays, isDue, logApplicationFollowUp } from "@/lib/command-center-insights";
+import { APPLICATION_FOLLOW_UP_DAYS, isDue, logApplicationFollowUp } from "@/lib/command-center-insights";
 import { createId } from "@/lib/command-center-store";
 import { assessApplication, validateApplicationInput } from "@/lib/input-guidance";
 import { hasSavedJobWorkspace } from "@/lib/job-workspace";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { ApplicationRecord, ApplicationStatus } from "@/types/command-center";
+import type { ApplicationRecord, ApplicationStatus, CommandCenterState, RoleSprintRecord } from "@/types/command-center";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   drafting: "Drafting",
@@ -38,6 +39,15 @@ const statusStyles: Record<ApplicationStatus, string> = {
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function sprintTrackerLabel(state: CommandCenterState, sprint: RoleSprintRecord): string {
+  if (sprint.status === "draft") return "in progress";
+  const evidence = sprint.evidenceId ? state.dossier.evidence.find((item) => item.id === sprint.evidenceId) : null;
+  if (!evidence) return "evidence missing";
+  if (evidence.rejected) return "proof rejected · revise";
+  if (evidence.approved) return "approved practice";
+  return "proof pending review";
 }
 
 export function ApplicationsWorkspace() {
@@ -101,14 +111,7 @@ export function ApplicationsWorkspace() {
   }
 
   function setStatus(application: ApplicationRecord, status: ApplicationStatus) {
-    const now = new Date().toISOString();
-    const patch: Partial<ApplicationRecord> = { status };
-    if (status === "applied" && !application.appliedAt) {
-      patch.appliedAt = now;
-      patch.nextFollowUpAt = addDays(now, APPLICATION_FOLLOW_UP_DAYS);
-    }
-    if (status !== "applied" && status !== "drafting") patch.nextFollowUpAt = null;
-    patchApplication(application.id, patch);
+    patchApplication(application.id, applicationStatusPatch(application, status, new Date().toISOString()));
   }
 
   function logFollowUp(application: ApplicationRecord) {
@@ -168,7 +171,7 @@ export function ApplicationsWorkspace() {
                       </p>
 
                       <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                        {hasSavedJobWorkspace(application) && <Link href={`/tailor?applicationId=${application.id}`} className="rounded-md border border-gold/40 px-3 py-2 font-black text-gold">Open job workspace →</Link>}
+                        <Link href={`/tailor?applicationId=${application.id}`} className="rounded-md border border-gold/40 px-3 py-2 font-black text-gold">{hasSavedJobWorkspace(application) ? "Open job workspace →" : "Add job posting →"}</Link>
                         {resumeVersionLabel(application.resumeVersionId) && <Link href={`/versions/view?id=${application.resumeVersionId}`} className="rounded-md border border-cyan/35 px-3 py-2 font-bold text-cyan">Open attached résumé</Link>}
                         {application.discoveryUrl && <a href={application.discoveryUrl} target="_blank" rel="noreferrer" className="rounded-md border border-white/15 px-3 py-2 text-paper/65">Discovery post</a>}
                         {application.applicationUrl && <a href={application.applicationUrl} target="_blank" rel="noreferrer" className="rounded-md border border-white/15 px-3 py-2 text-paper/65">Employer application</a>}
@@ -177,7 +180,7 @@ export function ApplicationsWorkspace() {
                       {linkedSprints.length > 0 && (
                         <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[0.72rem] leading-4">
                           <span className="uppercase text-paper/45">Role Sprints:</span>
-                          {linkedSprints.map((sprint) => <Link key={sprint.id} href={`/role-sprint?id=${sprint.id}`} className="text-cyan/85 underline-offset-2 hover:text-gold hover:underline">{sprint.title || sprint.requirement} · {sprint.status === "draft" ? "in progress" : sprint.status === "completed" ? "proof pending review" : "approved practice"}</Link>)}
+                          {linkedSprints.map((sprint) => <Link key={sprint.id} href={`/role-sprint?id=${sprint.id}`} className="text-cyan/85 underline-offset-2 hover:text-gold hover:underline">{sprint.title || sprint.requirement} · {sprintTrackerLabel(state, sprint)}</Link>)}
                         </p>
                       )}
                     </div>
