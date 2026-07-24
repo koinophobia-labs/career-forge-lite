@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
@@ -10,14 +10,19 @@ import {
   getLastBackupAt,
   markBackupCreated,
   validateBackup,
-  type BackupPreview
+  type BackupPreview,
+  type CommandCenterBackup
 } from "@/lib/backup";
+import { emptyBackupSidecars, type BackupSidecars } from "@/lib/backup-sidecars";
 import { buildPilotSummary, pilotSummaryContainsContent } from "@/lib/pilot-metrics";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
 import { emptyState, RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
-import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
-import { HANDOFF_KEY } from "@/lib/tailor-handoff";
 import { LAST_BACKUP_KEY } from "@/lib/backup";
+import {
+  captureWorkspaceSidecars,
+  clearWorkspaceSidecars,
+  replaceWorkspaceSidecars
+} from "@/lib/workspace-sidecars";
 import type { CommandCenterState } from "@/types/command-center";
 
 function formatDate(iso: string | null): string {
@@ -30,14 +35,15 @@ function formatDate(iso: string | null): string {
 
 function PreviewStats({ preview, context = "backup" }: { preview: BackupPreview; context?: "backup" | "current" }) {
   const rows: Array<[string, string]> = [
-    // "Exported" only means something when describing a backup file; on the
-    // live-data panel it read as if the app had already lost something.
     ...(context === "backup"
       ? [["Exported", preview.exportedAt ? formatDate(preview.exportedAt) : "not recorded (older backup format)"] as [string, string]]
       : []),
     ["Profile", preview.profilePresent ? "present" : "empty"],
     ["Target lanes", String(preview.laneCount)],
     ["Applications", String(preview.applicationCount)],
+    ["Role Sprints", String(preview.roleSprintCount)],
+    ["Interview answer drafts", String(preview.interviewDraftCount)],
+    ["Conversation interview", preview.interviewSessionPresent ? "present" : "empty"],
     ["Outreach contacts", String(preview.outreachCount)],
     ["Resume versions", `${preview.resumeVersionCount} (${preview.snapshotCount} with styled snapshots)`],
     ["Dossier evidence", String(preview.dossierEvidenceCount)],
@@ -57,12 +63,23 @@ function PreviewStats({ preview, context = "backup" }: { preview: BackupPreview;
   );
 }
 
+function downloadJsonBackup(backup: CommandCenterBackup, filename: string) {
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export default function SettingsPage() {
   const { state, hydrated } = useCommandCenter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const [pendingImport, setPendingImport] = useState<{ state: CommandCenterState; preview: BackupPreview } | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ state: CommandCenterState; sidecars: BackupSidecars; preview: BackupPreview } | null>(null);
+  const [rollbackBackup, setRollbackBackup] = useState<CommandCenterBackup | null>(null);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [pilotConsent, setPilotConsent] = useState(false);
@@ -71,8 +88,6 @@ export default function SettingsPage() {
   function exportPilotSummary() {
     if (!pilotConsent) return;
     const summary = buildPilotSummary(state, new Date().toISOString());
-    // Fail closed: if the summary shape ever grows a content-bearing field,
-    // refuse to export rather than leak résumé text.
     if (pilotSummaryContainsContent(summary)) {
       setPilotNotice("Export blocked: the summary unexpectedly contained content fields. Please report this.");
       return;
@@ -87,19 +102,13 @@ export default function SettingsPage() {
     setPilotNotice("Saved. Open the file to review it before sharing.");
   }
 
-  // Read once per render on the client; hydration-gated below.
   const lastBackup = lastBackupAt ?? (typeof window !== "undefined" ? getLastBackupAt() : null);
-  const currentPreview = useMemo(() => buildPreview(state, null, null), [state]);
+  const currentSidecars = hydrated && typeof window !== "undefined" ? captureWorkspaceSidecars() : emptyBackupSidecars();
+  const currentPreview = buildPreview(state, null, null, currentSidecars);
 
   function exportBackup() {
-    const backup = createBackup(state);
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = backupFilename(backup.exportedAt);
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const backup = createBackup(state, undefined, captureWorkspaceSidecars());
+    downloadJsonBackup(backup, backupFilename(backup.exportedAt));
     markBackupCreated(backup.exportedAt);
     setLastBackupAt(backup.exportedAt);
   }
@@ -114,29 +123,41 @@ export default function SettingsPage() {
       setImportError(result.error);
       return;
     }
-    setPendingImport({ state: result.state, preview: result.preview });
+    setPendingImport({ state: result.state, sidecars: result.sidecars, preview: result.preview });
   }
 
   function confirmRestore() {
     if (!pendingImport) return;
-    // Replaces the live store atomically; every open page re-renders from the
-    // restored state through the shared subscription.
+    const nowIso = new Date().toISOString();
+    const rollback = createBackup(state, nowIso, captureWorkspaceSidecars());
+    const rollbackStamp = nowIso.replace(/[:.]/g, "-");
+    downloadJsonBackup(rollback, `career-forge-before-restore-${rollbackStamp}.json`);
+    setRollbackBackup(rollback);
+
+    // Sidecars are replaced before the command-center update so the rebuildable
+    // activity index cannot override timestamps from the restored dataset.
+    replaceWorkspaceSidecars(pendingImport.sidecars);
     updateCommandCenter(() => pendingImport.state);
     setPendingImport(null);
     setRestoredAt(new Date().toLocaleTimeString());
   }
 
+  function undoRestore() {
+    if (!rollbackBackup) return;
+    replaceWorkspaceSidecars(rollbackBackup.sidecars);
+    updateCommandCenter(() => rollbackBackup.state);
+    setRollbackBackup(null);
+    setRestoredAt(`${new Date().toLocaleTimeString()} (restore undone)`);
+  }
+
   function clearLocalData() {
-    // Every Career Forge key, so "clear" actually means clear: main store,
-    // backup marker, in-flight tailor handoff, interview session, and any
-    // quarantined recovery snapshot.
+    clearWorkspaceSidecars();
     window.localStorage.removeItem(STORAGE_KEY);
     window.localStorage.removeItem(LAST_BACKUP_KEY);
-    window.localStorage.removeItem(HANDOFF_KEY);
-    window.localStorage.removeItem(INTERVIEW_SESSION_KEY);
     window.localStorage.removeItem(RECOVERY_KEY);
     updateCommandCenter(() => emptyState());
     setPendingImport(null);
+    setRollbackBackup(null);
     setConfirmingClear(false);
   }
 
@@ -155,8 +176,8 @@ export default function SettingsPage() {
         <div className="trust-panel mt-8 p-5 sm:p-6">
           <h2 className="text-xl font-bold text-paper">Create a backup</h2>
           <p className="mt-1 text-sm leading-6 text-paper/60">
-            Downloads one JSON file containing your profile, lanes, applications, outreach, and every resume version
-            including styled snapshots.
+            Downloads one JSON file containing your profile, evidence, applications, Role Sprints, interview drafts,
+            conversation interview, outreach, and every résumé version including styled snapshots.
           </p>
           {hydrated && <PreviewStats preview={currentPreview} context="current" />}
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -174,8 +195,8 @@ export default function SettingsPage() {
             )}
           </div>
           <p className="mt-4 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs leading-5 text-paper/75">
-            Backups contain your personal career data — work history, contacts, applications. Store the file somewhere
-            private, and don’t share it or commit it to a public repo.
+            Backups contain your personal career data — work history, contacts, applications, and interview answers.
+            Store the file somewhere private, and don’t share it or commit it to a public repo.
           </p>
         </div>
 
@@ -212,8 +233,8 @@ export default function SettingsPage() {
         <div className="trust-panel mt-6 p-5 sm:p-6">
           <h2 className="text-xl font-bold text-paper">Restore from a backup</h2>
           <p className="mt-1 text-sm leading-6 text-paper/60">
-            Pick a Career Forge backup file. You’ll see what’s inside before anything is written — restoring replaces
-            the data currently on this device.
+            Pick a Career Forge backup file. You’ll see what’s inside before anything is written. Restoring replaces
+            the current workspace and clears any temporary résumé handoff that was waiting from the old dataset.
           </p>
           <input
             ref={fileInputRef}
@@ -248,9 +269,9 @@ export default function SettingsPage() {
               <p className="mt-3 text-sm leading-6 text-paper/75">
                 Restoring will <strong className="text-coral">replace</strong> the data currently on this device
                 {hydrated
-                  ? ` (${currentPreview.applicationCount} applications, ${currentPreview.resumeVersionCount} resume versions)`
+                  ? ` (${currentPreview.applicationCount} applications, ${currentPreview.roleSprintCount} Role Sprints, ${currentPreview.interviewDraftCount} interview drafts)`
                   : ""}
-                . If the current data matters, download a backup of it first.
+                . Career Forge will automatically download a pre-restore rollback file first.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -272,13 +293,18 @@ export default function SettingsPage() {
           )}
 
           {restoredAt && (
-            <p className="mt-4 rounded-lg border border-spruce/50 bg-mint/10 px-3 py-2 text-sm leading-6 text-mint">
-              Backup restored at {restoredAt}. Every page is now reading the restored data — check the dashboard.
-            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-spruce/50 bg-mint/10 px-3 py-2 text-sm leading-6 text-mint">
+              <span>Backup restored at {restoredAt}. Every page is now reading the restored workspace.</span>
+              {rollbackBackup && <button type="button" onClick={undoRestore} className="font-black underline underline-offset-2">Undo restore</button>}
+            </div>
           )}
         </div>
 
-        <div className="mt-6 rounded-xl border border-coral/30 bg-coral/5 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Clear local data</h2><p className="mt-1 text-sm leading-6 text-paper/60">Use this only after downloading a backup. This removes the dossier, résumé packs, applications, outreach, and export history from this browser.</p>{confirmingClear ? <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={clearLocalData} className="rounded-md bg-coral px-4 py-2 text-sm font-black text-ink">Yes, clear all local Career Forge data</button><button type="button" onClick={() => setConfirmingClear(false)} className="rounded border border-white/20 px-4 py-2 text-sm text-paper/70">Cancel</button></div> : <button type="button" onClick={() => setConfirmingClear(true)} className="mt-4 rounded border border-coral/50 px-4 py-2 text-sm font-bold text-coral">Clear local data…</button>}</div>
+        <div className="mt-6 rounded-xl border border-coral/30 bg-coral/5 p-5 sm:p-6">
+          <h2 className="text-xl font-bold text-paper">Clear local data</h2>
+          <p className="mt-1 text-sm leading-6 text-paper/60">Use this only after downloading a backup. This removes the dossier, résumé packs, applications, Role Sprints, outreach, interview drafts, conversation interview, and temporary handoffs from this browser.</p>
+          {confirmingClear ? <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={clearLocalData} className="rounded-md bg-coral px-4 py-2 text-sm font-black text-ink">Yes, clear all local Career Forge data</button><button type="button" onClick={() => setConfirmingClear(false)} className="rounded border border-white/20 px-4 py-2 text-sm text-paper/70">Cancel</button></div> : <button type="button" onClick={() => setConfirmingClear(true)} className="mt-4 rounded border border-coral/50 px-4 py-2 text-sm font-bold text-coral">Clear local data…</button>}
+        </div>
       </section>
 
       <SiteFooter />
