@@ -32,7 +32,7 @@ check("legacy state revives without inventing a goal", store.parseState(JSON.str
 check("unknown goal fails closed", store.parseState(JSON.stringify({ ...empty, activeGoal: { kind: "be-famous", selectedAt: NOW, updatedAt: NOW } })).activeGoal === null);
 const selected = { ...empty, activeGoal: { kind: "career-change", selectedAt: NOW, updatedAt: NOW } };
 check("valid goal persists across serialization", store.parseState(JSON.stringify(selected)).activeGoal.kind === "career-change");
-check("router offers five distinct meaningful goals", router.CAREER_GOALS.length === 5 && new Set(router.CAREER_GOALS.map((item) => item.kind)).size === 5 && router.CAREER_GOALS.every((item) => item.description.length > 20));
+check("router retains five distinct internal goals", router.CAREER_GOALS.length === 5 && new Set(router.CAREER_GOALS.map((item) => item.kind)).size === 5 && router.CAREER_GOALS.every((item) => item.description.length > 20));
 check("goal choices materially change workflow entry", router.goalEntryAction(empty, "practice-interview").href === "/interview" && router.goalEntryAction(empty, "first-resume").href === "/profile#manual-history");
 check("import entry explains the work before asking for it", router.goalEntryAction(empty, "new-job").detail.includes("pull out the facts") && router.goalEntryAction(empty, "new-job").detail.includes("need your attention") && router.goalEntryAction(empty, "new-job").href === "/profile#import");
 
@@ -50,11 +50,14 @@ check("backup and restore preserve active goal", restored.ok && restored.state.a
 const ui = source("src/components/IntentRouter.tsx");
 const home = source("src/app/page.tsx");
 const analytics = source("src/lib/analytics.ts");
-check("first-run UI renders every one-tap goal", ui.includes("CAREER_GOALS.map") && ui.includes("option.label") && ui.includes("option.description") && ui.includes("What do you need help with today?"));
-check("returning UI has one dominant next move and recent work", ui.includes("Do this next") && ui.includes("Recent") && ui.includes("Change goal"));
-check("first-run promise is one choice and one next step", ui.includes("One choice. One clear next step.") && ui.includes("take you directly to the right starting point"));
+const firstRunBlock = ui.match(/const FIRST_RUN_GOALS:[\s\S]*?= \[([\s\S]*?)\n\];/)?.[1] ?? "";
+const visibleKinds = [...firstRunBlock.matchAll(/kind:\s*"([^"]+)"/g)].map((match) => match[1]);
+check("first-run UI groups five internal goals into three choices", visibleKinds.length === 3 && ["new-job", "update-resume", "practice-interview"].every((kind) => visibleKinds.includes(kind)));
+check("first-run UI uses plain goal labels", ["Get a job", "Build or update my résumé", "Practice for an interview"].every((label) => firstRunBlock.includes(label)));
+check("returning UI has one dominant next move and optional history", ui.includes("Do this next") && ui.includes("Recent work") && ui.includes("Change goal"));
+check("first-run promise is one choice and one next step", ui.includes("What are you trying to do?") && ui.includes("Pick one. Career Forge will take you to the next step."));
 check("router uses no theatrical percentage", !/%|progress-bar|progressBar/.test(ui));
-check("homepage places intent before marketing and hides workspace on first run", home.indexOf("<IntentRouter") < home.indexOf('id="landing"') && home.includes("hydrated && !isFirstRun"));
+check("homepage puts intent first and collapses sample and workspace", home.indexOf("<IntentRouter") < home.indexOf("See a finished sample first") && home.includes("Open full workspace") && home.includes("hydrated && !isFirstRun"));
 check("manual first-résumé entry anchor exists", source("src/app/profile/page.tsx").includes('id="manual-history"'));
 check("intent analytics remain event-name only", analytics.includes('"intent_goal_selected"') && analytics.includes('"intent_goal_resumed"') && /function trackCareerEvent\(event: CareerForgeEventName\)\s*\{\s*track\(event\)/.test(analytics));
 
