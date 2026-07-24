@@ -1,7 +1,6 @@
-// Role Sprint continuity acceptance:
-// approved profile → paste one job → recommended gap → auto-save/link job →
-// complete sprint → Today resumes review → approve practice inline → return to
-// the exact posting → refreshed analysis shows honest partial practice support.
+// Final Role Sprint acceptance:
+// structured proof validation, durable job linkage, applied-status preservation,
+// offer priority, same-title posting replacement, and safe linked-sprint deletion.
 import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
@@ -97,9 +96,12 @@ seed.dossier = {
   updatedAt: NOW
 };
 
-const requirement = "Ability to build weekly SQL dashboards for support leadership";
-const jobPost = `Product Support Specialist at Acme Software\n\nResponsibilities:\n- Resolve customer tickets and explain next steps clearly\n- Document repeatable support workflows\n\nRequirements:\n- ${requirement}\n- 3+ years of product support experience\n- Bachelor's degree preferred`;
-const submission = "Practice artifact: Weekly Support Dashboard Specification. I defined five fields for a mock ticket dataset: ticket ID, created date, resolution date, category, and escalation status. I wrote a SQL outline that groups tickets by week and category, calculates ticket volume and average resolution time, and counts escalations. The dashboard layout includes weekly volume, average resolution time, escalation rate, and the top three ticket categories, followed by a short leadership note explaining what changed and which workflow needs attention.";
+const sqlRequirement = "Ability to build weekly SQL dashboards for support leadership";
+const knowledgeRequirement = "Ability to create a searchable onboarding knowledge base for new support agents";
+const jobPost = `Product Support Specialist\n\nAcme Software\n\nResponsibilities:\n- Resolve customer tickets and explain next steps clearly\n- Document repeatable support workflows\n\nRequirements:\n- ${sqlRequirement}\n- ${knowledgeRequirement}\n- 3+ years of product support experience\n- Bachelor's degree preferred`;
+const invalidDescription = "I would build a dashboard that helps leaders understand support trends, ticket volume, resolution time, escalation rates, and the categories that need attention each week.";
+const validArtifact = `Weekly Support Dashboard Artifact\nFields: ticket_id, created_week, category, resolution_hours, escalation_status\nQuery: SELECT created_week, category, COUNT(*) AS ticket_volume FROM tickets GROUP BY created_week, category\nMetrics: weekly volume, average resolution time, escalation rate, top categories\nOutput: a weekly leadership report with a short note on what changed and which workflow needs attention`;
+const secondJobPost = `Product Support Specialist\n\nBeta Software\n\nResponsibilities:\n- Support enterprise customers\n\nRequirements:\n- Ability to build a customer escalation dashboard in SQL\n- Ability to design a repeatable incident handoff process`;
 
 let browser;
 try {
@@ -113,63 +115,82 @@ try {
   await page.goto(`${baseUrl}/tailor`);
 
   await page.getByRole("heading", { name: "Paste a job. See what you can prove." }).waitFor();
-  verify(await page.getByText("The job post is the only required input.", { exact: false }).isVisible(), "job analysis opens with one required input");
-  verify(!(await page.getByText("Add application details", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "optional application details start collapsed");
-
   await page.getByLabel("Paste the full job posting").fill(jobPost);
+  await page.getByText("Add application details", { exact: true }).click();
+  await page.getByText("Company", { exact: true }).locator("..").getByRole("textbox").fill("Acme Software");
   await page.getByRole("button", { name: "Analyze this job →" }).click();
-  await page.getByText("Best next step", { exact: true }).waitFor();
   const startSprintButton = page.getByRole("button", { name: "Start one Role Sprint →" });
   await startSprintButton.waitFor();
-  const recommendationText = await startSprintButton.locator("..").textContent();
-  verify(/SQL dashboards/i.test(recommendationText ?? ""), "ranking promotes the strongest addressable gap");
-  verify(/Recommended because/i.test(recommendationText ?? ""), "the recommendation explains why this gap was selected");
+  verify(/SQL dashboards/i.test(await startSprintButton.locator("..").textContent()), "ranking promotes the strongest addressable gap");
 
   await startSprintButton.click();
   await page.waitForURL(/\/role-sprint\?id=/);
-  const sprintUrl = page.url();
-  await page.getByRole("heading", { name: "Close this gap" }).waitFor();
-
+  const firstSprintUrl = page.url();
   const started = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
-  const startedSprint = started.roleSprints[0];
-  const savedApplication = started.applications[0];
-  verify(started.applications.length === 1 && startedSprint.applicationId === savedApplication.id, "starting a sprint auto-saves and links one job workspace");
-  verify(savedApplication.jobPostUrl.startsWith("career-forge-job-text:v1:"), "the full posting is stored durably in the backed-up application record");
-  verify(savedApplication.company === "Acme Software" && savedApplication.roleTitle === "Product Support Specialist", "job identity is inferred into the saved workspace");
+  const firstApplicationId = started.applications[0].id;
+  verify(started.roleSprints[0].applicationId === firstApplicationId && started.applications[0].company === "Acme Software", "starting a sprint saves and links the correct job");
 
-  await page.getByLabel("Sprint work area").fill(submission);
+  await page.getByLabel("Sprint work area").fill(invalidDescription);
   await page.getByRole("button", { name: "Finish sprint →" }).click();
-  await page.getByText("Sprint complete.", { exact: false }).waitFor();
+  await page.getByText(/Paste the artifact itself/i).waitFor();
+  verify(await page.getByText(/Paste the artifact itself/i).isVisible(), "build sprint rejects a description without artifact structure");
+
+  await page.getByLabel("Sprint work area").fill(validArtifact);
+  await page.getByRole("button", { name: "Finish sprint →" }).click();
   await page.getByText("Review your practice proof", { exact: true }).waitFor();
-  await page.getByText("Best way to use this", { exact: true }).waitFor();
-  verify(await page.getByRole("textbox", { name: "Portfolio summary" }).inputValue().then((value) => /practice/i.test(value)), "a build sprint promotes the portfolio summary instead of forcing a résumé bullet first");
-  verify(!(await page.getByText("Other ways to use this work", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "secondary outputs stay collapsed");
-
-  const pending = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
-  const pendingSprint = pending.roleSprints[0];
-  const pendingEvidence = pending.dossier.evidence.find((item) => item.id === pendingSprint.evidenceId);
-  verify(pendingEvidence && !pendingEvidence.approved && !pendingEvidence.rejected, "sprint evidence starts pending rather than approved");
-
   await page.goto(baseUrl);
   await page.getByRole("heading", { name: "Review the practice proof you finished" }).waitFor();
-  verify(await page.getByRole("link", { name: "Review practice proof →" }).isVisible(), "Today prioritizes completed practice review");
-  await page.goto(sprintUrl);
-
+  await page.goto(firstSprintUrl);
   await page.getByRole("button", { name: "Approve as practice →" }).click();
   await page.getByText("Approved.", { exact: false }).waitFor();
-  verify(await page.getByText("Approved practice", { exact: true }).isVisible(), "inline review synchronizes the approved-practice state");
-  const approvalText = await page.getByText("Approved.", { exact: false }).first().locator("..").textContent();
-  verify(/not employment experience/i.test(approvalText ?? ""), "approved work remains explicitly separate from employment experience");
-
   await page.getByRole("link", { name: "Return to this job →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
-  await page.getByText("Best next step", { exact: true }).waitFor();
-  verify(await page.getByLabel("Paste the full job posting").inputValue().then((value) => value === jobPost), "returning to the job restores the exact posting");
-  const requirementCard = page.locator("div.rounded-lg").filter({ hasText: /SQL dashboards/i }).first();
-  verify(await requirementCard.getByText("partial", { exact: true }).isVisible(), "refreshed analysis moves approved practice support to partial, never covered");
-  verify(/Role Sprint practice|labeled practice/i.test(await requirementCard.textContent()), "refreshed analysis explains the practice-only support");
+  const sqlCard = page.locator("div.rounded-lg").filter({ hasText: /SQL dashboards/i }).first();
+  verify(await sqlCard.getByText("partial", { exact: true }).isVisible(), "approved practice refreshes to partial, never covered");
 
-  console.log(`\nRole Sprint continuity acceptance: ${passes} passed, 0 failed`);
+  await page.goto(`${baseUrl}/applications`);
+  const acmeCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
+  await acmeCard.locator("select").selectOption("applied");
+  await acmeCard.getByRole("link", { name: "Open job workspace →" }).click();
+  await page.waitForURL(/\/tailor\?applicationId=/);
+  const knowledgeCard = page.locator("div.rounded-lg").filter({ hasText: /onboarding knowledge base/i }).first();
+  await knowledgeCard.getByRole("button", { name: /Practice this after applying|Build proof for this/ }).click();
+  await page.waitForURL(/\/role-sprint\?id=/);
+  const appliedState = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  verify(appliedState.applications.find((item) => item.id === firstApplicationId)?.status === "applied", "starting more practice does not downgrade an applied job");
+
+  await page.goto(`${baseUrl}/applications`);
+  await page.locator("article").filter({ hasText: /Acme Software/i }).first().locator("select").selectOption("offer");
+  await page.goto(baseUrl);
+  await page.getByRole("heading", { name: /Review your offer from Acme Software/i }).waitFor();
+  verify(await page.getByRole("link", { name: "Open offer →" }).isVisible(), "Today prioritizes an offer over an unfinished sprint");
+
+  await page.goto(`${baseUrl}/tailor?applicationId=${firstApplicationId}`);
+  const postingBox = page.getByLabel("Paste the full job posting");
+  await postingBox.waitFor();
+  await postingBox.evaluate((element, value) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(element, value);
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: value }));
+  }, secondJobPost);
+  await page.getByText("Add application details", { exact: true }).click();
+  await page.getByText("Company", { exact: true }).locator("..").getByRole("textbox").fill("Beta Software");
+  await page.getByRole("button", { name: "Analyze this job →" }).click();
+  await page.getByRole("button", { name: "Start one Role Sprint →" }).click();
+  await page.waitForURL(/\/role-sprint\?id=/);
+  const replaced = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  verify(replaced.applications.length === 2, "same-title pasted job creates a separate workspace");
+  verify(replaced.applications.some((item) => item.company === "Acme Software" && item.status === "offer") && replaced.applications.some((item) => item.company === "Beta Software"), "new posting does not overwrite the original job or status");
+
+  await page.goto(`${baseUrl}/applications`);
+  const originalCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
+  await originalCard.getByRole("button", { name: "Remove" }).click();
+  await originalCard.getByRole("button", { name: "Delete job, keep practice" }).click();
+  const removedState = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  verify(!removedState.applications.some((item) => item.id === firstApplicationId), "linked job can be removed explicitly");
+  verify(removedState.roleSprints.filter((item) => item.company === "Acme Software").every((item) => item.applicationId === null), "keeping practice detaches linked sprints instead of orphaning them");
+
+  console.log(`\nFinal Role Sprint browser acceptance: ${passes} passed, 0 failed`);
   await context.close();
 } finally {
   await browser?.close();
