@@ -83,7 +83,7 @@ check("Today prioritizes unfinished Role Sprints when no live event exists", int
 
 const tailor = `${read("src/components/tailor/TailorWorkspace.tsx")}\n${read("src/components/tailor/useTailorWorkspace.ts")}`;
 const sprintPage = read("src/components/role-sprint/RoleSprintWorkspacePage.tsx");
-check("starting a sprint auto-saves the job first", tailor.includes('const applicationId = saveAsApplication("drafting")') && tailor.includes("jobPostUrl: encodeJobPostText(form.jobPost)"));
+check("starting a sprint auto-saves the job first", tailor.includes('const applicationId = saveAsApplication("drafting")') && tailor.includes("encodeJobPostText(form.jobPost)"));
 check("new posting identity resets from full-content comparison", tailor.includes("isLikelyNewJobPost") && tailor.includes("companyEdited: false") && tailor.includes("roleTitleEdited: false"));
 check("saved jobs reopen by application id", tailor.includes("applicationJobPost(application)") && tailor.includes('new URLSearchParams(window.location.search).get("applicationId")'));
 check("inline practice review is present", sprintPage.includes("Approve as practice") && sprintPage.includes("reviewPractice(true)") && !sprintPage.includes("Review this evidence →"));
