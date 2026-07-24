@@ -18,7 +18,7 @@ export function sprintArtifactChecks(userWork: string, sprintType: RoleSprintTyp
   if (sprintType === "build") {
     const structured = lines.length >= 4 && /\b(column|field|section|template|query|select|from|where|formula|step|input|output|metric|table|dashboard|report)\b/i.test(text);
     const actualArtifact = hasUrl(text) || structured;
-    const designExplanation = /\b(choice|chose|because|decid|tradeoff|improve|next time|with more time)\b/i.test(text);
+    const designExplanation = /\b(choice|chose|because|decid|defined|selected|included|tradeoff|improve|next time|with more time)\b/i.test(text);
     return [
       { label: "Artifact, full structure, or working link included", met: actualArtifact },
       { label: "Fields, sections, steps, metrics, or query structure shown", met: structured || hasUrl(text) },
