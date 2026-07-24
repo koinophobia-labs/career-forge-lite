@@ -85,7 +85,7 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
           kind,
           label: text(item.label) || "Evidence",
           detail,
-          source: ["guided", "story", "resume-import", "legacy-profile", "manual"].includes(text(item.source))
+          source: ["guided", "story", "resume-import", "legacy-profile", "manual", "role-sprint"].includes(text(item.source))
             ? text(item.source) as EvidenceSource
             : "manual",
           sourceText: text(item.sourceText) || detail,

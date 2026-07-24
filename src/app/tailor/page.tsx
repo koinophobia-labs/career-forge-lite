@@ -11,7 +11,8 @@ import { useEntitlement } from "@/lib/entitlement";
 import { createId } from "@/lib/command-center-store";
 import { assessDossierReadiness } from "@/lib/dossier";
 import { assessJobPost } from "@/lib/input-guidance";
-import { analyzeJobPost, type JobPostAnalysis } from "@/lib/job-post-analyzer";
+import { analyzeJobPost, type JobPostAnalysis, type RequirementMatch } from "@/lib/job-post-analyzer";
+import { createRoleSprint, sprintEligibility } from "@/lib/role-sprint";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
 import { trackCareerEvent } from "@/lib/analytics";
 import { activationEventsForTransition } from "@/lib/activation";
@@ -107,6 +108,46 @@ export default function TailorPage() {
     setSavedApplication(true);
     setSavedApplicationId(newApplicationId);
     events.forEach(trackCareerEvent);
+  }
+
+  // One click on an eligible gap/partial requirement opens a bounded Role
+  // Sprint. The sprint record is created immediately (durable restore point);
+  // an existing sprint for the same requirement + target is reused so a
+  // second click never forks the provenance chain.
+  function startRoleSprint(req: RequirementMatch) {
+    const nowIso = new Date().toISOString();
+    let sprintId = "";
+    update((current) => {
+      const existing = current.roleSprints.find(
+        (item) =>
+          item.requirement === req.requirement &&
+          item.company === company.trim() &&
+          item.roleTitle === roleTitle.trim() &&
+          (item.applicationId === savedApplicationId || (!item.applicationId && !savedApplicationId))
+      );
+      if (existing) {
+        sprintId = existing.id;
+        return savedApplicationId && !existing.applicationId
+          ? {
+              ...current,
+              roleSprints: current.roleSprints.map((item) =>
+                item.id === existing.id ? { ...item, applicationId: savedApplicationId, updatedAt: nowIso } : item
+              )
+            }
+          : current;
+      }
+      const sprint = createRoleSprint({
+        requirement: req,
+        company,
+        roleTitle,
+        applicationId: savedApplicationId,
+        nowIso
+      });
+      sprintId = sprint.id;
+      return { ...current, roleSprints: [...current.roleSprints, sprint] };
+    });
+    trackCareerEvent("role_sprint_started");
+    router.push(`/role-sprint?id=${sprintId}`);
   }
 
   function startTailoredResume() {
@@ -296,19 +337,40 @@ export default function TailorPage() {
               <h2 className="text-xl font-bold text-paper">Requirements vs. your profile</h2>
               <div className="mt-4 grid gap-2.5">
                 {analysis.requirements.length ? (
-                  analysis.requirements.map((req) => (
-                    <div key={req.requirement} className="rounded-lg border border-white/12 bg-obsidian/40 p-3.5">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="max-w-3xl text-sm font-bold leading-5 text-paper">{req.requirement}</p>
-                        <span
-                          className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusStyles[req.status]}`}
-                        >
-                          {req.status}
-                        </span>
+                  analysis.requirements.map((req) => {
+                    const eligibility = req.status === "covered" ? null : sprintEligibility(req);
+                    const existingSprint = state.roleSprints.find(
+                      (item) => item.requirement === req.requirement && item.company === company.trim() && item.roleTitle === roleTitle.trim()
+                    );
+                    return (
+                      <div key={req.requirement} className="rounded-lg border border-white/12 bg-obsidian/40 p-3.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="max-w-3xl text-sm font-bold leading-5 text-paper">{req.requirement}</p>
+                          <span
+                            className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusStyles[req.status]}`}
+                          >
+                            {req.status}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{req.evidence}</p>
+                        {eligibility?.eligible && (
+                          <button
+                            type="button"
+                            onClick={() => startRoleSprint(req)}
+                            className="mt-2.5 rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-xs font-bold text-cyan transition hover:border-gold hover:text-gold"
+                          >
+                            {existingSprint ? "Resume your Role Sprint →" : "Build proof for this gap →"}
+                          </button>
+                        )}
+                        {eligibility && !eligibility.eligible && (
+                          <p className="mt-2 text-[0.72rem] leading-5 text-paper/45">
+                            <span className="lab-mono mr-1.5 font-bold uppercase text-paper/55">No sprint offered</span>
+                            {eligibility.reason}
+                          </p>
+                        )}
                       </div>
-                      <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{req.evidence}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-sm text-paper/60">
                     Couldn’t isolate requirement lines. Try pasting the post with its original line breaks.

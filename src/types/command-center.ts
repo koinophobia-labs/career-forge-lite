@@ -125,6 +125,47 @@ export type ApplicationQuestion = {
   userEdited: boolean;
 };
 
+export type RoleSprintType = "explain" | "evaluate" | "plan" | "simulate" | "build";
+
+export type RoleSprintStatus = "draft" | "completed" | "approved-as-evidence";
+
+// Editable drafts generated from the user's submitted work. They live on the
+// sprint record so edits survive refresh; nothing here enters a résumé or
+// application until the user moves it there deliberately.
+export type RoleSprintOutputs = {
+  portfolioTitle: string;
+  portfolioSummary: string;
+  resumeBullet: string;
+  starStory: string;
+  talkingPoint: string;
+  userEdited: boolean;
+};
+
+// One bounded practice sprint for one job-post requirement. Keeps the full
+// chain connected: requirement text → sprint → user submission (userWork) →
+// pending dossier evidence (evidenceId) → the application it serves.
+export type RoleSprintRecord = {
+  id: string;
+  applicationId: string | null;
+  company: string;
+  roleTitle: string;
+  requirement: string;
+  originalStatus: "gap" | "partial";
+  sprintType: RoleSprintType;
+  title: string;
+  instructions: string[];
+  completionCriteria: string[];
+  // Approved dossier evidence ids the analysis found related to this
+  // requirement when the sprint was created ("what you already have").
+  supportingEvidenceIds: string[];
+  userWork: string;
+  status: RoleSprintStatus;
+  evidenceId: string | null;
+  outputs: RoleSprintOutputs | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OutreachContact = {
   id: string;
   name: string;
@@ -151,6 +192,7 @@ export type CommandCenterState = {
   resumePacks: ResumePack[];
   exports: ExportMetadata[];
   pendingImportReviews: PendingImportReview[];
+  roleSprints: RoleSprintRecord[];
   activeGoal: ActiveCareerGoal | null;
 };
 

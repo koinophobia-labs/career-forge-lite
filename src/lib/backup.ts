@@ -29,6 +29,7 @@ export type BackupPreview = {
   resumePackCount: number;
   exportCount: number;
   pendingImportReviewCount: number;
+  roleSprintCount: number;
 };
 
 export type BackupValidation =
@@ -69,7 +70,8 @@ export function buildPreview(state: CommandCenterState, exportedAt: string | nul
     dossierEvidenceCount: state.dossier.evidence.length,
     resumePackCount: state.resumePacks.length,
     exportCount: state.exports.length,
-    pendingImportReviewCount: state.pendingImportReviews.length
+    pendingImportReviewCount: state.pendingImportReviews.length,
+    roleSprintCount: state.roleSprints.length
   };
 }
 
@@ -113,7 +115,7 @@ export function validateBackup(serialized: string): BackupValidation {
   }
 
   // Legacy path: a bare state object (e.g. copied straight from localStorage).
-  if ("profile" in root || "applications" in root || "resumeVersions" in root) {
+  if ("profile" in root || "applications" in root || "resumeVersions" in root || "roleSprints" in root) {
     const state = parseState(serialized);
     return { ok: true, state, preview: buildPreview(state, null, null) };
   }
