@@ -149,7 +149,9 @@ try {
   await page.getByText("Approved.", { exact: false }).waitFor();
   await page.getByRole("link", { name: "Return to this job →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
+  await page.getByText("Best next step", { exact: true }).waitFor();
   const sqlCard = page.locator("div.rounded-lg").filter({ hasText: /SQL dashboards/i }).first();
+  await sqlCard.getByText("partial", { exact: true }).waitFor();
   verify(await sqlCard.getByText("partial", { exact: true }).isVisible(), "approved practice refreshes to partial, never covered");
 
   await page.goto(`${baseUrl}/applications`);
