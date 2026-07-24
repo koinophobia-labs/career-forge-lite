@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
+import { interviewTiming } from "@/lib/application-interview";
 import { applicationPriority, applicationStatusPatch, linkedRoleSprintCount, removeApplicationWorkspace, type ApplicationRemovalMode } from "@/lib/application-workflow";
 import { calendarDateInputValue, formatCalendarDate } from "@/lib/calendar-date";
 import { APPLICATION_FOLLOW_UP_DAYS, isDue, logApplicationFollowUp } from "@/lib/command-center-insights";
@@ -41,6 +42,7 @@ export function ApplicationsWorkspace() {
   const [laneId, setLaneId] = useState("");
   const [inputIssues, setInputIssues] = useState<string[]>([]);
   const [pendingRemovalId, setPendingRemovalId] = useState<string | null>(null);
+  const [lastStatusChange, setLastStatusChange] = useState<{ before: ApplicationRecord; after: ApplicationStatus } | null>(null);
   const nowIso = useMemo(() => new Date().toISOString(), []);
 
   const sorted = useMemo(
@@ -60,7 +62,8 @@ export function ApplicationsWorkspace() {
         laneId: laneId || null, status: "drafting", jobPostUrl: "", source: "other", discoveryUrl: "", applicationUrl: "",
         postingDate: null, deadline: null, contactName: "", contactUrl: "", resumeVariantId: null, applicationQuestions: [],
         resumeVersionId: null, appliedAt: null, nextFollowUpAt: null, followUpsSent: [], interviewAt: null, notes: "",
-        analysisKeywords: [], analysisGaps: [], analysisWeakSpots: [], createdAt: now, updatedAt: now
+        analysisKeywords: [], analysisGaps: [], analysisWeakSpots: [], createdAt: now, updatedAt: now,
+        stageHistory: [{ status: "drafting", at: now }], interviewHistory: []
       }]
     }));
     setCompany(""); setRoleTitle(""); setLaneId("");
@@ -75,7 +78,29 @@ export function ApplicationsWorkspace() {
   }
 
   function setStatus(application: ApplicationRecord, status: ApplicationStatus) {
+    if (application.status === status) return;
+    if (status === "drafting" && (application.status === "applied" || application.status === "interviewing" || application.status === "offer")) {
+      const confirmed = window.confirm("Move this application back to Drafting? Active follow-up and interview dates will be cleared, but first-applied and interview history will be preserved. You can also undo immediately afterward.");
+      if (!confirmed) return;
+    }
+    setLastStatusChange({ before: application, after: status });
     patchApplication(application.id, applicationStatusPatch(application, status, new Date().toISOString()));
+  }
+
+  function undoStatusChange() {
+    if (!lastStatusChange) return;
+    update((current) => ({
+      ...current,
+      applications: current.applications.map((application) => application.id === lastStatusChange.before.id ? lastStatusChange.before : application)
+    }));
+    setLastStatusChange(null);
+  }
+
+  function updateInterviewDate(application: ApplicationRecord, nextDate: string) {
+    const interviewHistory = application.interviewAt && application.interviewAt !== nextDate
+      ? [...new Set([...(application.interviewHistory ?? []), application.interviewAt])]
+      : application.interviewHistory ?? [];
+    patchApplication(application.id, { interviewAt: nextDate || null, interviewHistory });
   }
 
   function logFollowUp(application: ApplicationRecord) {
@@ -99,6 +124,8 @@ export function ApplicationsWorkspace() {
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Applications tracker</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">Offers and interviews stay at the top. Marking a job as applied schedules a follow-up in {APPLICATION_FOLLOW_UP_DAYS} days.</p>
 
+        {lastStatusChange && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-gold/35 bg-gold/10 p-4 text-sm text-paper/75"><span>Status changed to <strong>{statusLabels[lastStatusChange.after]}</strong>.</span><button type="button" onClick={undoStatusChange} className="font-black text-gold underline-offset-2 hover:underline">Undo</button><button type="button" onClick={() => setLastStatusChange(null)} className="ml-auto text-xs font-bold text-paper/45">Dismiss</button></div>}
+
         <div className="trust-panel mt-8 flex flex-wrap items-end gap-3 p-5">
           <label className="min-w-40 flex-1"><span className="text-sm font-bold text-paper">Company</span><input value={company} onChange={(event) => setCompany(event.target.value)} placeholder="Company name" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
           <label className="min-w-40 flex-1"><span className="text-sm font-bold text-paper">Role</span><input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} placeholder="Role title" className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
@@ -116,15 +143,18 @@ export function ApplicationsWorkspace() {
               const dataFlags = assessApplication(application);
               const linkedSprints = state.roleSprints.filter((sprint) => sprint.applicationId === application.id);
               const removalOpen = pendingRemovalId === application.id;
+              const pastInterview = application.status === "interviewing" && interviewTiming(application, nowIso) === "past";
+              const stageHistory = application.stageHistory ?? [];
+              const interviewHistory = application.interviewHistory ?? [];
               return (
-                <article key={application.id} className={`trust-panel p-4 sm:p-5 ${followUpDue ? "border-gold/40" : application.status === "offer" ? "border-mint/45" : ""}`}>
+                <article id={`application-${application.id}`} key={application.id} className={`trust-panel scroll-mt-24 p-4 sm:p-5 ${followUpDue ? "border-gold/40" : application.status === "offer" ? "border-mint/45" : pastInterview ? "border-cyan/40" : ""}`}>
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="mr-auto min-w-0">
                       <h2 className="text-base font-bold text-paper">{application.roleTitle} <span className="font-normal text-paper/55">· {application.company}</span>{dataFlags.map((flag) => <span key={flag} className="lab-mono ml-2 rounded-full border border-gold/50 bg-gold/10 px-2 py-0.5 text-[0.6rem] font-bold uppercase text-gold">{flag}</span>)}</h2>
-                      <p className="lab-mono mt-1 text-[0.65rem] font-bold uppercase text-paper/45">Target: {laneTitle(application.laneId)} · Applied: {formatTimestampDate(application.appliedAt)} · Next follow-up: <span className={followUpDue ? "text-gold" : ""}>{formatTimestampDate(application.nextFollowUpAt)}</span>{application.followUpsSent.length > 0 && ` · Sent: ${application.followUpsSent.length}`}{application.interviewAt ? ` · Interview: ${formatCalendarDate(application.interviewAt)}` : ""}</p>
+                      <p className="lab-mono mt-1 text-[0.65rem] font-bold uppercase text-paper/45">Target: {laneTitle(application.laneId)} · First applied: {formatTimestampDate(application.appliedAt)} · Next follow-up: <span className={followUpDue ? "text-gold" : ""}>{formatTimestampDate(application.nextFollowUpAt)}</span>{application.followUpsSent.length > 0 && ` · Sent: ${application.followUpsSent.length}`}{application.interviewAt ? ` · Interview: ${formatCalendarDate(application.interviewAt)}` : ""}</p>
                       <div className="mt-3 flex flex-wrap gap-3 text-xs">
                         <Link href={`/tailor?applicationId=${application.id}`} className="rounded-md border border-gold/40 px-3 py-2 font-black text-gold">{hasSavedJobWorkspace(application) ? "Open job workspace →" : "Add job posting →"}</Link>
-                        {application.status === "interviewing" && <Link href={`/interview?applicationId=${application.id}`} className="rounded-md border border-cyan/35 px-3 py-2 font-bold text-cyan">Practice this interview</Link>}
+                        {application.status === "interviewing" && !pastInterview && <Link href={`/interview?applicationId=${application.id}`} className="rounded-md border border-cyan/35 px-3 py-2 font-bold text-cyan">Practice this interview</Link>}
                         {resumeVersionLabel(application.resumeVersionId) && <Link href={`/versions/view?id=${application.resumeVersionId}`} className="rounded-md border border-cyan/35 px-3 py-2 font-bold text-cyan">Open attached résumé</Link>}
                         {application.discoveryUrl && <a href={application.discoveryUrl} target="_blank" rel="noreferrer" className="rounded-md border border-white/15 px-3 py-2 text-paper/65">Discovery post</a>}
                         {application.applicationUrl && <a href={application.applicationUrl} target="_blank" rel="noreferrer" className="rounded-md border border-white/15 px-3 py-2 text-paper/65">Employer application</a>}
@@ -134,14 +164,18 @@ export function ApplicationsWorkspace() {
 
                     <select value={application.status} onChange={(event) => setStatus(application, event.target.value as ApplicationStatus)} className={`lab-mono rounded-full border bg-obsidian/60 px-3 py-1.5 text-[0.65rem] font-bold uppercase ${statusStyles[application.status]}`}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                     {followUpDue && <button type="button" onClick={() => logFollowUp(application)} className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan">Followed up</button>}
-                    {application.status === "interviewing" && <input type="date" value={calendarDateInputValue(application.interviewAt)} onChange={(event) => patchApplication(application.id, { interviewAt: event.target.value || null })} className="trust-input border px-2 py-1.5 text-xs text-ink" aria-label="Interview date" />}
+                    {application.status === "interviewing" && <input type="date" value={calendarDateInputValue(application.interviewAt)} onChange={(event) => updateInterviewDate(application, event.target.value)} className="trust-input border px-2 py-1.5 text-xs text-ink" aria-label="Interview date" />}
                     <button type="button" onClick={() => setPendingRemovalId(removalOpen ? null : application.id)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-paper/50 transition hover:border-coral hover:text-coral">Remove</button>
                   </div>
+
+                  {pastInterview && <div className="mt-4 rounded-xl border border-cyan/35 bg-cyan/10 p-4"><p className="font-bold text-paper">How did the interview go?</p><p className="mt-1 text-xs leading-5 text-paper/55">Update the result before Career Forge recommends more preparation.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setStatus(application, "offer")} className="rounded-md border border-mint/45 px-3 py-2 text-xs font-bold text-mint">Move to offer</button><button type="button" onClick={() => updateInterviewDate(application, "")} className="rounded-md border border-cyan/45 px-3 py-2 text-xs font-bold text-cyan">Still interviewing</button><button type="button" onClick={() => setStatus(application, "rejected")} className="rounded-md border border-coral/45 px-3 py-2 text-xs font-bold text-coral">Rejected</button><button type="button" onClick={() => setStatus(application, "closed")} className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-paper/60">Close application</button></div></div>}
 
                   {removalOpen && <div className="mt-4 rounded-xl border border-coral/35 bg-coral/10 p-4 text-sm leading-6 text-paper/75">{linkedRoleSprintCount(state, application.id) > 0 ? <><p className="font-bold text-paper">This job has {linkedRoleSprintCount(state, application.id)} linked Role Sprint{linkedRoleSprintCount(state, application.id) === 1 ? "" : "s"}.</p><p className="mt-1 text-xs text-paper/55">Approved practice evidence stays in your evidence library. Pending or rejected evidence is removed with deleted sprint records.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => confirmRemoval(application.id, "keep-sprints")} className="rounded-md border border-gold/45 px-3 py-2 text-xs font-bold text-gold">Delete job, keep practice</button><button type="button" onClick={() => confirmRemoval(application.id, "remove-sprints")} className="rounded-md border border-coral/50 px-3 py-2 text-xs font-bold text-coral">Delete job + sprint records</button><button type="button" onClick={() => setPendingRemovalId(null)} className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-paper/60">Cancel</button></div></> : <div className="flex flex-wrap items-center gap-3"><span>Delete this job workspace?</span><button type="button" onClick={() => confirmRemoval(application.id, "keep-sprints")} className="rounded-md border border-coral/50 px-3 py-2 text-xs font-bold text-coral">Delete job</button><button type="button" onClick={() => setPendingRemovalId(null)} className="text-xs font-bold text-paper/60">Cancel</button></div>}</div>}
 
                   <textarea value={application.notes} rows={1} placeholder="Notes: contact names, salary range, what you emphasized…" onChange={(event) => patchApplication(application.id, { notes: event.target.value })} className="mt-3 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80 placeholder:text-paper/35" />
                   {application.applicationQuestions.length > 0 && <section className="mt-4 border-t border-white/10 pt-4"><h3 className="text-sm font-bold text-paper">Application answers</h3><div className="mt-3 grid gap-3">{application.applicationQuestions.map((question) => <label key={question.id} className="block"><span className="text-xs font-bold text-paper/70">{question.prompt}</span><textarea value={question.draftAnswer} rows={4} onChange={(event) => patchApplication(application.id, { applicationQuestions: application.applicationQuestions.map((item) => item.id === question.id ? { ...item, draftAnswer: event.target.value, userEdited: true } : item) })} className="mt-1 w-full rounded-md border border-white/10 bg-obsidian/40 px-3 py-2 text-sm text-paper/80" /><span className="mt-1 block text-xs text-paper/45">Supporting evidence: {question.evidenceIds.length ? question.evidenceIds.map((id) => state.dossier.evidence.find((item) => item.id === id)?.detail).filter(Boolean).join(" · ") : "None — do not submit until evidence is added."}{question.userEdited ? " · User edited" : ""}</span></label>)}</div></section>}
+
+                  {(stageHistory.length > 0 || interviewHistory.length > 0) && <details className="mt-4 border-t border-white/10 pt-3"><summary className="cursor-pointer text-xs font-bold text-paper/55">Application history</summary><div className="mt-3 grid gap-2 text-xs leading-5 text-paper/55">{stageHistory.length > 0 && <div><span className="font-bold text-paper/70">Stages:</span> {stageHistory.map((event) => `${statusLabels[event.status]} ${formatTimestampDate(event.at)}`).join(" · ")}</div>}{interviewHistory.length > 0 && <div><span className="font-bold text-paper/70">Prior interviews:</span> {interviewHistory.map(formatCalendarDate).join(" · ")}</div>}</div></details>}
                 </article>
               );
             })}
