@@ -2,7 +2,12 @@ import type { RequirementMatch } from "@/lib/job-post-analyzer";
 import { sprintEligibility } from "@/lib/role-sprint";
 import type { ApplicationStatus, RoleSprintOutputs, RoleSprintType } from "@/types/command-center";
 
-export type SprintRecommendationDecision = "sprint" | "apply-first";
+export type SprintRecommendationDecision =
+  | "sprint"
+  | "apply-first"
+  | "application-live"
+  | "prepare-interview"
+  | "review-offer";
 
 export type SprintRecommendationContext = {
   applicationStatus?: ApplicationStatus | null;
@@ -63,11 +68,34 @@ export function recommendRoleSprintRequirement(
   const winner = ranked[0];
   if (!winner) return null;
 
+  if (context.applicationStatus === "offer") {
+    return {
+      requirement: winner.requirement,
+      decision: "review-offer",
+      reason: "You already have an offer. Review the role, compensation, timing, and decision before doing more application work."
+    };
+  }
+
+  if (context.applicationStatus === "interviewing") {
+    return {
+      requirement: winner.requirement,
+      decision: "prepare-interview",
+      reason: `You are already interviewing. Prepare to discuss “${winner.requirement.requirement}” honestly instead of rebuilding the application.`
+    };
+  }
+
+  if (context.applicationStatus === "applied") {
+    return {
+      requirement: winner.requirement,
+      decision: "application-live",
+      reason: `Your application is already submitted. Keep “${winner.requirement.requirement}” as optional practice while you track follow-up and interview activity.`
+    };
+  }
+
   const nowIso = context.nowIso ?? new Date().toISOString();
-  const liveStage = context.applicationStatus === "applied" || context.applicationStatus === "interviewing" || context.applicationStatus === "offer";
   const urgentDeadline = deadlineIsUrgent(context.deadline, nowIso);
   const strongEnoughToDelay = winner.score >= 12 && winner.requirement.status === "gap" && !OPTIONAL_SIGNAL.test(winner.requirement.requirement);
-  const decision: SprintRecommendationDecision = liveStage || urgentDeadline || (context.hasResumeBaseline && !strongEnoughToDelay)
+  const decision: SprintRecommendationDecision = urgentDeadline || (context.hasResumeBaseline && !strongEnoughToDelay)
     ? "apply-first"
     : "sprint";
 
@@ -78,15 +106,12 @@ export function recommendRoleSprintRequirement(
   ];
 
   if (decision === "apply-first") {
-    const timingReason = liveStage
-      ? "this application is already live"
-      : urgentDeadline
-        ? "the deadline is close"
-        : "your current résumé is ready to tailor now";
     return {
       requirement: winner.requirement,
       decision,
-      reason: `Apply first because ${timingReason}. Practice “${winner.requirement.requirement}” afterward if it still matters.`
+      reason: urgentDeadline
+        ? `Apply first because the deadline is close. Practice “${winner.requirement.requirement}” afterward if it still matters.`
+        : `Tailor and apply with your current evidence. Practice “${winner.requirement.requirement}” afterward if it still matters.`
     };
   }
 
