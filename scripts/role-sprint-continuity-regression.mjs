@@ -52,8 +52,8 @@ const requirements = [
   { requirement: "Bachelor's degree required", status: "gap", evidence: "None", evidenceIds: [], supportType: null }
 ];
 const recommendation = recommendRoleSprintRequirement(requirements, jobPost, { hasResumeBaseline: false, nowIso: "2026-07-24T06:00:00.000Z" });
-check("ranking ignores ineligible credentials", recommendation?.requirement.requirement !== "Bachelor's degree required");
-check("ranking favors a required demonstrable artifact over an optional soft skill", /SQL dashboards/.test(recommendation?.requirement.requirement ?? ""));
+check("ranking ignores ineligible credentials", recommendation?.requirement?.requirement !== "Bachelor's degree required");
+check("ranking favors a required demonstrable artifact over an optional soft skill", /SQL dashboards/.test(recommendation?.requirement?.requirement ?? ""));
 check("ranking explains the recommendation", /Recommended because/.test(recommendation?.reason ?? "") && recommendation?.decision === "sprint");
 
 check("build sprint promotes portfolio summary", primarySprintOutput("build").key === "portfolioSummary");
@@ -86,7 +86,8 @@ const sprintPage = read("src/components/role-sprint/RoleSprintWorkspacePage.tsx"
 check("starting a sprint auto-saves the job first", tailor.includes('const applicationId = saveAsApplication("drafting")') && tailor.includes("encodeJobPostText(form.jobPost)"));
 check("new posting identity resets from full-content comparison", tailor.includes("isLikelyNewJobPost") && tailor.includes("companyEdited: false") && tailor.includes("roleTitleEdited: false"));
 check("saved jobs reopen by application id", tailor.includes("applicationJobPost(application)") && tailor.includes('new URLSearchParams(window.location.search).get("applicationId")'));
-check("inline practice review is present", sprintPage.includes("Approve as practice") && sprintPage.includes("reviewPractice(true)") && !sprintPage.includes("Review this evidence →"));
+check("inline practice review shows exact claim", sprintPage.includes("Approve this exact claim") && sprintPage.includes("Career Forge will save this claim") && sprintPage.includes("reviewPractice(true)"));
+check("pending submission is frozen until explicit revision", sprintPage.includes("Revise submission") && sprintPage.includes("beginRoleSprintRevision") && sprintPage.includes("disabled={submittedLocked}"));
 check("sprint returns to the exact saved job", sprintPage.includes("Return to this job") && sprintPage.includes("/tailor?applicationId="));
 check("edited output regeneration requires confirmation", sprintPage.includes("Regenerate drafts from your updated work?") && sprintPage.includes("record.outputs?.userEdited"));
 
