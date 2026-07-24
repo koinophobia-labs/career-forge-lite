@@ -4,4 +4,4 @@
 // operational certification vouches for. If this changes, prior proof is void
 // and checkout re-closes until the journey is certified again.
 
-export const CERTIFIED_SURFACE_HASH = "d6ff88a641606e0d8583189b483170ad";
+export const CERTIFIED_SURFACE_HASH = "9d239d1713325545ed113860243a3b2e";

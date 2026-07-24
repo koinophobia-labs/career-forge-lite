@@ -146,15 +146,47 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     evidenceId,
   } = loadTs("src/lib/server/certification.ts");
   const { CERTIFIED_SURFACE_HASH } = loadTs("src/lib/server/certified-surface-hash.ts");
+  const { canonicalApprovalMessage } = loadTs("src/lib/server/approval-crypto.ts");
 
+  // A throwaway owner keypair for the test. The runtime is handed the matching
+  // PUBLIC key via sellVerdict's override so the committed fail-closed key is not
+  // in the way; the private key exists only inside this process.
+  const { generateKeyPairSync, sign: edSign, randomBytes } = await import("node:crypto");
+  const testKeys = generateKeyPairSync("ed25519");
+  const testPublicKey = testKeys.publicKey;
+  const signApproval = (payload) => ({
+    payload,
+    signature: edSign(null, canonicalApprovalMessage(payload), testKeys.privateKey).toString("base64"),
+    alg: "ed25519",
+  });
+  const signedApprovalFor = (ev, overrides = {}) =>
+    signApproval({
+      approvedCommitSha: identity.commitSha,
+      approvedSurfaceHash: CERTIFIED_SURFACE_HASH,
+      approvedHost: identity.host,
+      approvedEnvironment: identity.environment,
+      evidenceId: evidenceId(ev),
+      approvalActor: "Blake Taylor",
+      approvedAt: "2026-07-20T12:05:00.000Z",
+      nonce: randomBytes(8).toString("hex"),
+      ...overrides,
+    });
+  // sellVerdict override: pass the test public key so signed approvals verify.
+  const sell = (store) => sellVerdict(store, testPublicKey);
+
+  // Simulates the durable Postgres store (kind "neon-postgres") so the isolation
+  // check passes. putApproval is the memory test seam, exposed here for seeding —
+  // it is NOT part of the production FulfillmentStore interface.
   const durable = (inner) => ({
-    kind: "fake-durable",
+    kind: "neon-postgres",
     claim: (...a) => inner.claim(...a),
     get: (...a) => inner.get(...a),
     update: (...a) => inner.update(...a),
     listUnfulfilled: (...a) => inner.listUnfulfilled(...a),
     getDoc: (...a) => inner.getDoc(...a),
     putDoc: (...a) => inner.putDoc(...a),
+    getApproval: (...a) => inner.getApproval(...a),
+    putApproval: (...a) => inner.seedApprovalForTest(...a),
     healthy: (...a) => inner.healthy(...a),
   });
 
@@ -212,30 +244,40 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     );
   }
 
-  // 3. Evidence + approval for the CURRENT commit: the only passing case.
+  // 3. Evidence + a VALID SIGNED approval for the CURRENT commit: the only
+  //    passing case. An unsigned approval, however written, is not enough.
   {
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, {
+    await store.putApproval(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence));
+    const v = await sell(store);
+    check("Stripe-verified evidence + a valid signed approval may sell", v.canSellSafely === true);
+  }
+
+  // 3b. The exact incident: an unsigned plaintext approval must NOT open the shop.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const store = durable(inner);
+    await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await store.putApproval(APPROVAL_RECORD_ID,{
       approvedCommitSha: identity.commitSha,
       approvedEnvironment: identity.environment,
-      approvalActor: "blake",
+      approvalActor: "Blake Taylor",
       evidenceId: evidenceId(goodEvidence),
       approvedAt: "2026-07-20T12:05:00.000Z",
     });
-    const v = await sellVerdict(store);
-    check("Stripe-verified evidence + matching approval may sell", v.canSellSafely === true);
+    const v = await sell(store);
+    check("an unsigned plaintext approval cannot open checkout", v.canSellSafely === false);
+    check(
+      "the blocker says the approval is not a valid owner signature",
+      v.blockers.some((b) => /valid owner signature|not authorization/i.test(b))
+    );
   }
 
-  // 4. Every way evidence can be stale or foreign.
-  const approvalFor = (ev) => ({
-    approvedCommitSha: identity.commitSha,
-    approvedEnvironment: identity.environment,
-    approvalActor: "blake",
-    evidenceId: evidenceId(ev),
-    approvedAt: "2026-07-20T12:05:00.000Z",
-  });
+  // 4. Every way evidence can be stale or foreign, each under a valid signature
+  //    so the ONLY reason for closure is the evidence defect.
+  const approvalFor = (ev) => signedApprovalFor(ev);
 
   const mutations = [
     ["evidence from an older commit fails", { commitSha: "999999999999" }, /certifies commit/i],
@@ -260,37 +302,53 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     const store = durable(inner);
     const ev = { ...goodEvidence, ...patch };
     await store.putDoc(CERTIFICATION_RECORD_ID, ev);
-    await store.putDoc(APPROVAL_RECORD_ID, approvalFor(ev));
-    const v = await sellVerdict(store);
+    await store.putApproval(APPROVAL_RECORD_ID,approvalFor(ev));
+    const v = await sell(store);
     check(label, v.canSellSafely === false);
     check(`${label} — blocker explains why`, v.blockers.some((b) => pattern.test(b)));
   }
 
-  // 5. Approval scoping.
+  // 5. Approval scoping — each override goes INTO the signed payload, so the
+  //    signature stays valid and only the binding mismatch closes checkout.
   {
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), approvedCommitSha: "oldcommit0000" });
-    const v = await sellVerdict(store);
-    check("approval for a previous commit keeps checkout closed", v.canSellSafely === false);
-    check("the blocker names the commit mismatch", v.blockers.some((b) => /Approval covers commit/i.test(b)));
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { approvedCommitSha: "oldcommit0000" }));
+    const v = await sell(store);
+    check("a signed approval for a previous commit keeps checkout closed", v.canSellSafely === false);
+    check("the blocker names the commit mismatch", v.blockers.some((b) => /Approval signs commit/i.test(b)));
   }
   {
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), evidenceId: "0".repeat(32) });
-    const v = await sellVerdict(store);
-    check("approval granted against different evidence fails", v.canSellSafely === false);
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { evidenceId: "0".repeat(32) }));
+    const v = await sell(store);
+    check("a signed approval against different evidence fails", v.canSellSafely === false);
   }
   {
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
     await store.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
-    await store.putDoc(APPROVAL_RECORD_ID, { ...approvalFor(goodEvidence), approvedEnvironment: "production" });
-    const v = await sellVerdict(store);
-    check("a preview approval cannot authorize another environment", v.canSellSafely === false);
+    await store.putApproval(APPROVAL_RECORD_ID,signedApprovalFor(goodEvidence, { approvedEnvironment: "production" }));
+    const v = await sell(store);
+    check("a preview-scoped approval cannot authorize another environment", v.canSellSafely === false);
+  }
+
+  // 6. The KV side door: a durable KV store, fully certified and validly signed,
+  //    still may not open live commerce — it has no isolated approval store.
+  {
+    const inner = new MemoryFulfillmentStore();
+    const kvLike = { ...durable(inner), kind: "vercel-kv" };
+    await kvLike.putDoc(CERTIFICATION_RECORD_ID, goodEvidence);
+    await kvLike.putApproval(APPROVAL_RECORD_ID, signedApprovalFor(goodEvidence));
+    const v = await sell(kvLike);
+    check("a KV-backed durable store cannot open live commerce", v.canSellSafely === false);
+    check(
+      "the blocker says KV has no isolated approval store",
+      v.blockers.some((b) => /isolate approvals|requires the Postgres/i.test(b))
+    );
   }
 
   delete process.env.VERCEL_GIT_COMMIT_SHA;
@@ -334,12 +392,34 @@ await withEnv(
 }
 
 {
-  const source = read("scripts/approve-live-commerce.mjs");
+  const legacy = read("scripts/approve-live-commerce.mjs");
   check(
-    "approval recorder writes the field names consumed by the runtime gate",
-    source.includes("approvedCommitSha: commitSha") &&
-      source.includes("approvedEnvironment: environment") &&
-      source.includes("approvalActor: actor")
+    "the legacy unsigned approval recorder is disabled",
+    legacy.includes("is disabled") &&
+      !legacy.includes("putDoc(APPROVAL_RECORD_ID") &&
+      !legacy.includes("putApproval(")
+  );
+  const authorize = read("scripts/authorize-live-commerce.mjs");
+  check(
+    "the authorize tool writes only through the Postgres-only approver store",
+    authorize.includes("recordApproval(") &&
+      authorize.includes("approverConfigError") &&
+      !authorize.includes("getFulfillmentStore")
+  );
+  const approver = read("src/lib/server/approver-store.ts");
+  check(
+    "the approver store refuses non-Postgres credentials",
+    approver.includes("APPROVAL_DATABASE_URL") && approver.includes("must be a Postgres connection string")
+  );
+  check(
+    "the runtime reads approvals from the isolated table, not the doc namespace",
+    read("src/lib/server/fulfillment-readiness.ts").includes("store.getApproval")
+  );
+  check(
+    "the authorize tool signs a scoped payload with the offline key",
+    authorize.includes("canonicalApprovalMessage") &&
+      authorize.includes("edSign(") &&
+      authorize.includes("private-key-file")
   );
 }
 

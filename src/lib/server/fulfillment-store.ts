@@ -95,12 +95,25 @@ export interface FulfillmentStore {
   /** Sessions that took money but never completed. Drives reconciliation. */
   listUnfulfilled(): Promise<FulfillmentRecord[]>;
   /**
-   * Small JSON documents that are not fulfillment records — certification
-   * evidence and the live-commerce approval. Kept separate from the session
-   * namespace so nothing in the payment path can write them by accident.
+   * Small JSON documents that are not fulfillment records — e.g. certification
+   * evidence. Kept separate from the session namespace so nothing in the payment
+   * path can write them by accident. NOTE: live-commerce approvals are NOT here;
+   * they live in their own table with their own database grants (getApproval
+   * below, read-only).
    */
   getDoc<T>(id: string): Promise<T | null>;
   putDoc<T>(id: string, doc: T): Promise<void>;
+  /**
+   * READ the live-commerce approval, isolated in its own table (`cf_approvals`).
+   *
+   * There is deliberately NO write method on this interface. The runtime that
+   * Vercel loads can read an approval to verify its signature but has no way to
+   * create one — approval writing lives in a separate Postgres-only module
+   * (`approver-store.ts`) used exclusively by the offline signer, connecting with
+   * a credential that is never the application's. Two locks: the database grant,
+   * then the Ed25519 signature.
+   */
+  getApproval<T>(id: string): Promise<T | null>;
   /** Round-trip probe. Operational readiness depends on this passing. */
   healthy(): Promise<boolean>;
 }
@@ -136,6 +149,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   readonly kind = "memory";
   private records = new Map<string, FulfillmentRecord>();
   private docs = new Map<string, string>();
+  private approvals = new Map<string, string>();
   private redemptionsByHash = new Map<string, RedemptionRecord>();
   private redemptionHashBySession = new Map<string, string>();
 
@@ -224,6 +238,20 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     this.docs.set(id, JSON.stringify(doc));
   }
 
+  async getApproval<T>(id: string): Promise<T | null> {
+    const raw = this.approvals.get(id);
+    return raw === undefined ? null : (JSON.parse(raw) as T);
+  }
+
+  /**
+   * TEST SEAM ONLY — not part of `FulfillmentStore`. Lets tests seed an approval
+   * to exercise the runtime reader. Production code holds the interface type and
+   * so cannot reach this; the real writer is `approver-store.ts`.
+   */
+  async seedApprovalForTest<T>(id: string, approval: T): Promise<void> {
+    this.approvals.set(id, JSON.stringify(approval));
+  }
+
   async healthy() {
     return true;
   }
@@ -232,6 +260,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   reset() {
     this.records.clear();
     this.docs.clear();
+    this.approvals.clear();
     this.redemptionsByHash.clear();
     this.redemptionHashBySession.clear();
   }
@@ -403,6 +432,14 @@ export class KvFulfillmentStore implements FulfillmentStore {
 
   async putDoc<T>(id: string, doc: T): Promise<void> {
     await this.command(["SET", `cf:doc:${id}`, JSON.stringify(doc)]);
+  }
+
+  // Vercel KV uses ONE token for every key, so it cannot isolate approval
+  // writes from the payment path the way the Postgres role split does. KV is
+  // therefore not an approval store: reads always return null, and readiness
+  // refuses live commerce on a KV-only deployment (see fulfillment-readiness).
+  async getApproval<T>(_id: string): Promise<T | null> {
+    return null;
   }
 
   async healthy() {
@@ -693,6 +730,21 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     await sql`
       INSERT INTO cf_docs (id, doc) VALUES (${id}, ${JSON.stringify(doc)}::jsonb)
       ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = NOW()`;
+  }
+
+  // cf_approvals is created and owned by the MIGRATION, not by the application.
+  // The app role is granted SELECT only, so ensure() deliberately does not touch
+  // this table and there is NO write method here. A read before the migration
+  // has run fails closed (null → no approval → checkout stays closed). Writes
+  // happen only through approver-store.ts with the separate approver credential.
+  async getApproval<T>(id: string): Promise<T | null> {
+    try {
+      const sql = await this.sql();
+      const rows = await sql`SELECT approval FROM cf_approvals WHERE id = ${id}`;
+      return rows.length ? (rows[0].approval as T) : null;
+    } catch {
+      return null;
+    }
   }
 
   async healthy(): Promise<boolean> {

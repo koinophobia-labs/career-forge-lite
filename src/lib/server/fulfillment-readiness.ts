@@ -42,6 +42,7 @@
  * the running commit. Technical readiness does not open a shop; Blake does.
  */
 
+import { type KeyObject } from "node:crypto";
 import {
   durableStoreConfigured,
   getFulfillmentStore,
@@ -53,10 +54,11 @@ import {
   deploymentIdentity,
   evaluateApproval,
   evaluateEvidence,
-  type ApprovalRecord,
   type CertificationEvidence,
 } from "@/lib/server/certification";
 import { CERTIFIED_SURFACE_HASH } from "@/lib/server/certified-surface-hash";
+import { loadApprovalPublicKey, type SignedApproval } from "@/lib/server/approval-crypto";
+import { APPROVAL_PUBLIC_KEY_SPKI_BASE64 } from "@/lib/server/approval-public-key";
 
 /**
  * Environments whose certification may authorize this deployment.
@@ -158,7 +160,8 @@ export function configurationReadiness(): ConfigurationReadiness {
  * human authorization. Nothing a caller controls can satisfy these.
  */
 export async function operationalReadiness(
-  storeOverride?: FulfillmentStore | null
+  storeOverride?: FulfillmentStore | null,
+  approvalKeyOverride?: KeyObject | null
 ): Promise<OperationalReadiness> {
   const store = storeOverride !== undefined ? storeOverride : getFulfillmentStore();
   const checks: Array<{ name: string; passed: boolean; detail: string }> = [];
@@ -187,6 +190,24 @@ export async function operationalReadiness(
       : "In-memory store cannot survive a cold start; it is not durable.",
   });
   if (!durable) blockers.push("Fulfillment store is in-memory, not durable.");
+
+  // Approval isolation. Only the Postgres store has a separate cf_approvals table
+  // with its own write role; Vercel KV uses one token for every key and cannot
+  // keep the payment path from writing approvals. A KV-only deployment therefore
+  // may not open live commerce, even though KV is otherwise durable.
+  const isolatedApprovals = store.kind === "neon-postgres";
+  checks.push({
+    name: "isolated_approval_store",
+    passed: isolatedApprovals,
+    detail: isolatedApprovals
+      ? "Approvals are isolated in cf_approvals with a separate write role."
+      : `Store "${store.kind}" has no isolated approval store; live commerce requires Postgres role separation.`,
+  });
+  if (!isolatedApprovals) {
+    blockers.push(
+      `Store "${store.kind}" cannot isolate approvals from the payment path; live commerce requires the Postgres cf_approvals table with a separate write role.`
+    );
+  }
 
   let healthy = false;
   try {
@@ -222,16 +243,31 @@ export async function operationalReadiness(
   });
   blockers.push(...evidenceVerdict.reasons);
 
-  // Human authorization. Technical readiness does not open a shop.
+  // Human authorization — a statement signed by the release owner's offline
+  // key. The public key that checks it grants no power to create one, so a
+  // database client cannot mint authorization by writing a row.
+  // Read from the isolated approvals table (SELECT-only for this role), never
+  // from the app-writable document namespace.
   const approval = healthy
-    ? await store.getDoc<ApprovalRecord>(APPROVAL_RECORD_ID).catch(() => null)
+    ? await store.getApproval<SignedApproval>(APPROVAL_RECORD_ID).catch(() => null)
     : null;
-  const approvalVerdict = evaluateApproval(approval, evidence, identity);
+  // Tests inject a throwaway key; production always resolves the committed
+  // trust root. The override is a function argument, unreachable at runtime.
+  const approvalPublicKey =
+    approvalKeyOverride !== undefined
+      ? approvalKeyOverride
+      : loadApprovalPublicKey(APPROVAL_PUBLIC_KEY_SPKI_BASE64);
+  const approvalVerdict = evaluateApproval(
+    approval,
+    evidence,
+    { ...identity, surfaceHash: CERTIFIED_SURFACE_HASH },
+    approvalPublicKey
+  );
   checks.push({
     name: "human_authorization",
     passed: approvalVerdict.valid,
     detail: approvalVerdict.valid
-      ? `Authorized by ${approval!.approvalActor} at ${approval!.approvedAt}.`
+      ? `Signed authorization verified for ${approval!.payload.approvalActor} at ${approval!.payload.approvedAt}.`
       : approvalVerdict.reasons.join(" "),
   });
   blockers.push(...approvalVerdict.reasons);
@@ -265,9 +301,12 @@ export type SellVerdict = {
   blockers: string[];
 };
 
-export async function sellVerdict(storeOverride?: FulfillmentStore | null): Promise<SellVerdict> {
+export async function sellVerdict(
+  storeOverride?: FulfillmentStore | null,
+  approvalKeyOverride?: KeyObject | null
+): Promise<SellVerdict> {
   const configuration = configurationReadiness();
-  const operational = await operationalReadiness(storeOverride);
+  const operational = await operationalReadiness(storeOverride, approvalKeyOverride);
   const liveMode = isLiveCommerce();
 
   const blockers = [
@@ -286,9 +325,12 @@ export async function sellVerdict(storeOverride?: FulfillmentStore | null): Prom
 }
 
 /** True when configured to sell but not proven able to deliver. */
-export async function liveCommerceUnsafe(storeOverride?: FulfillmentStore | null): Promise<boolean> {
+export async function liveCommerceUnsafe(
+  storeOverride?: FulfillmentStore | null,
+  approvalKeyOverride?: KeyObject | null
+): Promise<boolean> {
   if (!isLiveCommerce()) return false;
-  const verdict = await sellVerdict(storeOverride);
+  const verdict = await sellVerdict(storeOverride, approvalKeyOverride);
   return !verdict.canSellSafely;
 }
 

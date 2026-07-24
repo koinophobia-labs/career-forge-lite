@@ -1,0 +1,25 @@
+# Live-commerce authorization trust root — require the release owner's review.
+#
+# These files decide who can open paid checkout. A change to any of them must be
+# reviewed by the release owner, so an agent cannot, for example, swap the
+# approval public key for one it generated itself. This is only enforced when
+# `main` is protected with "require review from Code Owners" (see
+# docs/APPROVAL_BOUNDARY.md) AND the reviewing identity is separate from any
+# credential available to automation.
+
+# The cryptographic trust root and gate.
+/src/lib/server/approval-public-key.ts     @koinophobia-labs
+/src/lib/server/approval-crypto.ts          @koinophobia-labs
+/src/lib/server/certification.ts            @koinophobia-labs
+/src/lib/server/fulfillment-readiness.ts    @koinophobia-labs
+/src/lib/server/certified-surface-hash.ts   @koinophobia-labs
+
+# The approval writer and its database role separation.
+/src/lib/server/approver-store.ts           @koinophobia-labs
+/scripts/authorize-live-commerce.mjs        @koinophobia-labs
+/scripts/generate-approval-keypair.mjs      @koinophobia-labs
+/scripts/migrations/                         @koinophobia-labs
+/scripts/approval-migration-smoke.sh        @koinophobia-labs
+
+# Protect the ownership map itself, so no one can rewrite who controls the above.
+/.github/CODEOWNERS                          @koinophobia-labs
