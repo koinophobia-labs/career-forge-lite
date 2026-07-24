@@ -150,7 +150,7 @@ try {
   await page.getByRole("button", { name: "Finish sprint →" }).click();
   await page.getByText("Sprint complete.", { exact: false }).waitFor();
   await page.getByText("Best way to use this", { exact: true }).waitFor();
-  verify(await page.getByLabel("Résumé / project bullet").inputValue().then((value) => value.toLowerCase().includes("practice")), "recommended résumé output keeps the practice label");
+  verify(await page.getByRole("textbox", { name: "Résumé / project bullet" }).inputValue().then((value) => value.toLowerCase().includes("practice")), "recommended résumé output keeps the practice label");
   verify(!(await page.getByText("Other ways to use this work", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "secondary outputs stay collapsed behind the recommended output");
 
   const pending = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
