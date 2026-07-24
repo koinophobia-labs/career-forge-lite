@@ -26,7 +26,8 @@ export const CAREER_GOALS: GoalOption[] = [
 export function hasCareerActivity(state: CommandCenterState): boolean {
   return Boolean(
     state.dossier.evidence.length || state.pendingImportReviews.length || state.lanes.length ||
-    state.resumePacks.length || state.resumeVersions.length || state.applications.length || state.outreach.length
+    state.resumePacks.length || state.resumeVersions.length || state.applications.length || state.outreach.length ||
+    state.roleSprints.length
   );
 }
 
@@ -37,7 +38,7 @@ export function isIntentFirstRun(state: CommandCenterState): boolean {
 export function inferCareerGoal(state: CommandCenterState): CareerGoalKind {
   if (state.activeGoal) return state.activeGoal.kind;
   if (state.applications.some((application) => application.status === "interviewing")) return "practice-interview";
-  if (state.applications.length || state.resumePacks.length || state.lanes.length) return "new-job";
+  if (state.applications.length || state.resumePacks.length || state.lanes.length || state.roleSprints.length) return "new-job";
   if (state.resumeVersions.length) return "update-resume";
   return "new-job";
 }
@@ -144,6 +145,34 @@ export function goalEntryAction(state: CommandCenterState, kind: CareerGoalKind)
 }
 
 export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal(state)): NextBestAction {
+  const pendingSprint = [...state.roleSprints]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .find((sprint) => {
+      if (sprint.status !== "completed" || !sprint.evidenceId) return false;
+      const evidence = state.dossier.evidence.find((item) => item.id === sprint.evidenceId);
+      return Boolean(evidence && !evidence.approved && !evidence.rejected);
+    });
+  if (pendingSprint) {
+    return {
+      title: "Review the practice proof you finished",
+      detail: `Your Role Sprint for “${pendingSprint.requirement}” is complete. Approve it as labeled practice or keep editing it.`,
+      href: `/role-sprint?id=${pendingSprint.id}`,
+      actionLabel: "Review practice proof"
+    };
+  }
+
+  const draftSprint = [...state.roleSprints]
+    .filter((sprint) => sprint.status === "draft")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (draftSprint) {
+    return {
+      title: "Finish the Role Sprint you started",
+      detail: `Continue the practice task for “${draftSprint.requirement}” before starting another job workflow.`,
+      href: `/role-sprint?id=${draftSprint.id}`,
+      actionLabel: "Continue Role Sprint"
+    };
+  }
+
   if (state.pendingImportReviews.length || assessDossierReadiness(state.dossier).level === "not-ready") return goalEntryAction(state, kind);
   const interviewing = state.applications.find((application) => application.status === "interviewing");
   if (interviewing) {
@@ -157,14 +186,21 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
   const followUp = state.applications.find((application) => application.nextFollowUpAt && new Date(application.nextFollowUpAt).getTime() <= Date.now());
   if (followUp) return { title: `Follow up on ${followUp.company || followUp.roleTitle}`, detail: "This application is ready for a follow-up.", href: "/applications", actionLabel: "Log follow-up" };
   const draft = state.applications.find((application) => application.status === "drafting");
-  if (draft) return { title: `Continue ${draft.roleTitle} at ${draft.company}`, detail: "Finish the application you already started.", href: "/applications", actionLabel: "Continue application" };
+  if (draft) return { title: `Continue ${draft.roleTitle} at ${draft.company}`, detail: "Return to the saved job, finish the application, or continue its linked Role Sprint.", href: `/tailor?applicationId=${draft.id}`, actionLabel: "Continue saved job" };
   return goalEntryAction(state, kind);
 }
 
 export function recentCareerItems(state: CommandCenterState, limit = 3): RecentCareerItem[] {
   const items: RecentCareerItem[] = [
     ...state.pendingImportReviews.map((batch) => ({ id: batch.id, label: "Facts to review", detail: `${batch.proposals.length} imported facts`, href: "/profile#review", timestamp: batch.updatedAt })),
-    ...state.applications.map((application) => ({ id: application.id, label: [application.roleTitle, application.company].filter(Boolean).join(" · ") || "Saved application", detail: `${application.status} application`, href: "/applications", timestamp: application.createdAt })),
+    ...state.roleSprints.map((sprint) => ({
+      id: sprint.id,
+      label: sprint.title || sprint.requirement,
+      detail: sprint.status === "draft" ? "Role Sprint in progress" : sprint.status === "completed" ? "Practice proof ready for review" : "Approved practice proof",
+      href: `/role-sprint?id=${sprint.id}`,
+      timestamp: sprint.updatedAt
+    })),
+    ...state.applications.map((application) => ({ id: application.id, label: [application.roleTitle, application.company].filter(Boolean).join(" · ") || "Saved application", detail: `${application.status} application`, href: `/tailor?applicationId=${application.id}`, timestamp: application.createdAt })),
     ...state.resumePacks.map((pack) => ({ id: pack.id, label: "Résumé pack", detail: `${pack.variants.length} versions · ${pack.status.replace("-", " ")}`, href: "/versions", timestamp: pack.updatedAt })),
     ...state.resumeVersions.map((version) => ({ id: version.id, label: version.label || "Résumé version", detail: version.source === "tailor" ? "Tailored résumé" : "Guided résumé", href: "/versions", timestamp: version.createdAt }))
   ];

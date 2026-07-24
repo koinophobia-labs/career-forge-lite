@@ -55,7 +55,7 @@ check("role sprint: explanation is optional", sprint.includes("Why this task?") 
 check("role sprint: one dominant submit action", sprint.includes("Finish sprint →"));
 check("role sprint: one recommended output appears first", sprint.indexOf("Best way to use this") < sprint.indexOf("Other ways to use this work"));
 check("role sprint: provenance is collapsed", sprint.includes("Proof details"));
-check("role sprint: practice is never presented as employment", sprint.includes("not employment experience") && sprint.includes("never under employment"));
+check("role sprint: practice is never presented as employment", sprint.includes("not employment experience") && sprint.includes("never employment"));
 
 console.log(`\nFounding-user simplicity regression: ${passes} passed, ${failures} failed.`);
 if (failures > 0) process.exit(1);
