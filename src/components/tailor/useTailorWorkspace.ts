@@ -17,9 +17,9 @@ import { createRoleSprint } from "@/lib/role-sprint";
 import { recommendRoleSprintRequirement } from "@/lib/role-sprint-ux";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
 import { useCommandCenter } from "@/lib/use-command-center";
-import type { ApplicationRecord } from "@/types/command-center";
+import type { ApplicationQuestion, ApplicationRecord } from "@/types/command-center";
 
-type JobSource = "linkedin" | "company-site" | "referral" | "recruiter" | "other";
+export type JobSource = "linkedin" | "company-site" | "referral" | "recruiter" | "other";
 
 export type TailorForm = {
   jobPost: string;
@@ -68,6 +68,26 @@ function inferJobIdentity(jobPost: string): { roleTitle: string; company: string
   return { roleTitle: lines[0] ?? "", company: "" };
 }
 
+function normalizePrompt(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function mergeApplicationQuestions(
+  questionPrompts: string,
+  currentQuestions: ApplicationQuestion[],
+  dossier: Parameters<typeof draftApplicationQuestion>[1],
+  applicationId: string
+): ApplicationQuestion[] {
+  const prompts = questionPrompts.split(/\n+/).map((prompt) => prompt.trim()).filter(Boolean);
+  if (!prompts.length) return currentQuestions;
+  const existing = new Map(currentQuestions.map((question) => [normalizePrompt(question.prompt), question]));
+  return prompts.map((prompt, index) => {
+    const saved = existing.get(normalizePrompt(prompt));
+    if (saved) return { ...saved, prompt };
+    return draftApplicationQuestion(prompt, dossier, `${applicationId}-question-${index + 1}`);
+  });
+}
+
 export function useTailorWorkspace() {
   const { state, update, hydrated } = useCommandCenter();
   const { hasFeature } = useEntitlement();
@@ -77,26 +97,37 @@ export function useTailorWorkspace() {
   const [analysis, setAnalysis] = useState<JobPostAnalysis | null>(null);
   const [savedApplicationId, setSavedApplicationId] = useState<string | null>(null);
 
+  const currentApplication = savedApplicationId ? state.applications.find((item) => item.id === savedApplicationId) ?? null : null;
   const effectiveLane = useMemo(
     () => state.lanes.find((lane) => lane.id === form.laneId) ?? state.lanes.find((lane) => lane.status === "active") ?? state.lanes[0] ?? null,
     [form.laneId, state.lanes]
   );
-  const currentPack = useMemo(() => [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null, [state.resumePacks]);
-  const baselines = useMemo(
-    () => currentPack?.variants.filter((variant) => variant.kind !== "job-specific" && (!effectiveLane || variant.laneId === effectiveLane.id)) ?? [],
-    [currentPack, effectiveLane]
-  );
-  const effectiveBaseline = baselines.find((variant) => variant.id === form.baselineVariantId) ?? baselines.find((variant) => variant.kind === "ats") ?? baselines[0] ?? null;
-  const currentApplication = savedApplicationId ? state.applications.find((item) => item.id === savedApplicationId) ?? null : null;
+  const baselines = useMemo(() => {
+    const seen = new Set<string>();
+    return [...state.resumePacks]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .flatMap((pack) => [...pack.variants].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
+      .filter((variant) => variant.kind !== "job-specific" && (!effectiveLane || variant.laneId === effectiveLane.id))
+      .filter((variant) => {
+        if (seen.has(variant.id)) return false;
+        seen.add(variant.id);
+        return true;
+      });
+  }, [effectiveLane, state.resumePacks]);
+  const effectiveBaseline = baselines.find((variant) => variant.id === form.baselineVariantId)
+    ?? baselines.find((variant) => variant.id === currentApplication?.resumeVariantId)
+    ?? baselines.find((variant) => variant.kind === "ats")
+    ?? baselines[0]
+    ?? null;
   const profileReady = hydrated && assessDossierReadiness(state.dossier).level !== "not-ready";
 
   useEffect(() => {
     if (!hydrated || loadedApplicationRef.current) return;
     const applicationId = new URLSearchParams(window.location.search).get("applicationId");
     const application = applicationId ? state.applications.find((item) => item.id === applicationId) : null;
-    const savedPost = application ? applicationJobPost(application) : "";
-    if (!application || !savedPost) return;
+    if (!application) return;
 
+    const savedPost = applicationJobPost(application);
     loadedApplicationRef.current = application.id;
     setForm({
       jobPost: savedPost,
@@ -116,8 +147,10 @@ export function useTailorWorkspace() {
       questionPrompts: application.applicationQuestions.map((question) => question.prompt).join("\n")
     });
     setSavedApplicationId(application.id);
-    const lane = state.lanes.find((item) => item.id === application.laneId) ?? effectiveLane;
-    setAnalysis(analyzeJobPost(savedPost, state.profile, lane, state.dossier));
+    if (savedPost) {
+      const lane = state.lanes.find((item) => item.id === application.laneId) ?? effectiveLane;
+      setAnalysis(analyzeJobPost(savedPost, state.profile, lane, state.dossier));
+    }
   }, [effectiveLane, hydrated, state.applications, state.dossier, state.lanes, state.profile]);
 
   function setField<K extends keyof TailorForm>(key: K, value: TailorForm[K]) {
@@ -125,7 +158,7 @@ export function useTailorWorkspace() {
   }
 
   function handleJobPostChange(nextPost: string, inputType = "") {
-    const newPosting = Boolean(savedApplicationId && isLikelyNewJobPost(form.jobPost, nextPost, inputType));
+    const newPosting = Boolean(savedApplicationId && form.jobPost && isLikelyNewJobPost(form.jobPost, nextPost, inputType));
     const inferred = inferJobIdentity(nextPost);
     setAnalysis(null);
     if (newPosting) {
@@ -175,24 +208,23 @@ export function useTailorWorkspace() {
     const nowIso = new Date().toISOString();
     const inferred = inferJobIdentity(form.jobPost);
     const status = statusForWorkspaceSave(current?.status, requestedStatus);
-    const questions = form.questionPrompts.trim()
-      ? form.questionPrompts.split(/\n+/).map((prompt) => prompt.trim()).filter(Boolean).map((prompt, index) => draftApplicationQuestion(prompt, state.dossier, `${id}-question-${index + 1}`))
-      : current?.applicationQuestions ?? [];
+    const questions = mergeApplicationQuestions(form.questionPrompts, current?.applicationQuestions ?? [], state.dossier, id);
+    const chosenBaselineId = form.baselineVariantId || current?.resumeVariantId || effectiveBaseline?.id || null;
     return {
       id,
-      company: form.company.trim() || inferred.company || "Unknown company",
-      roleTitle: form.roleTitle.trim() || inferred.roleTitle || effectiveLane?.title || "Untitled role",
-      laneId: effectiveLane?.id ?? null,
+      company: form.company.trim() || inferred.company || current?.company || "Unknown company",
+      roleTitle: form.roleTitle.trim() || inferred.roleTitle || current?.roleTitle || effectiveLane?.title || "Untitled role",
+      laneId: effectiveLane?.id ?? current?.laneId ?? null,
       status,
-      jobPostUrl: encodeJobPostText(form.jobPost),
+      jobPostUrl: form.jobPost.trim() ? encodeJobPostText(form.jobPost) : current?.jobPostUrl ?? "",
       source: form.source,
       discoveryUrl: form.discoveryUrl.trim(),
       applicationUrl: form.applicationUrl.trim(),
-      postingDate: form.postingDate ? new Date(form.postingDate).toISOString() : null,
-      deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+      postingDate: form.postingDate ? new Date(form.postingDate).toISOString() : current?.postingDate ?? null,
+      deadline: form.deadline ? new Date(form.deadline).toISOString() : current?.deadline ?? null,
       contactName: form.contactName.trim(),
       contactUrl: form.contactUrl.trim(),
-      resumeVariantId: effectiveBaseline?.id ?? current?.resumeVariantId ?? null,
+      resumeVariantId: chosenBaselineId,
       applicationQuestions: questions,
       resumeVersionId: current?.resumeVersionId ?? null,
       appliedAt: status === "applied" || status === "interviewing" || status === "offer" ? current?.appliedAt ?? nowIso : null,
@@ -279,6 +311,7 @@ export function useTailorWorkspace() {
     baselines,
     effectiveBaseline,
     savedApplicationId,
+    currentApplication,
     profileReady,
     recommendation,
     canTailorResume: hasFeature("tailored_resume_export")

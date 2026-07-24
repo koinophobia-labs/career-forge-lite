@@ -19,7 +19,7 @@ export function TailorWorkspace() {
   const {
     state, hydrated, form, setField, handleJobPostChange, analysis, runAnalysis,
     saveAsApplication, startRoleSprint, startTailoredResume, effectiveLane,
-    baselines, effectiveBaseline, savedApplicationId, profileReady,
+    baselines, effectiveBaseline, savedApplicationId, currentApplication, profileReady,
     recommendation, canTailorResume
   } = workspace;
 
@@ -40,6 +40,12 @@ export function TailorWorkspace() {
         {!profileReady && hydrated && (
           <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">
             Results will be more useful after you add some work history. You can still analyze the posting now. <Link href="/profile" className="font-bold text-gold">Add work history</Link>
+          </div>
+        )}
+
+        {currentApplication && !form.jobPost.trim() && (
+          <div className="mt-6 rounded-xl border border-cyan/30 bg-cyan/10 p-4 text-sm leading-6 text-paper/75">
+            <span className="font-bold text-cyan">Complete this saved application.</span> Paste the job posting below. Your company, role, status, notes, résumé link, and edited answers will stay attached to this workspace.
           </div>
         )}
 
@@ -97,6 +103,24 @@ export function TailorWorkspace() {
                     <button type="button" onClick={() => startRoleSprint(eligibleRequirement)} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Start one Role Sprint →</button>
                     <p className="mt-2 text-xs text-paper/45">This job will be saved automatically so the sprint can return here.</p>
                   </>
+                ) : recommendation?.decision === "review-offer" ? (
+                  <>
+                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Review the offer before doing more application work.</p>
+                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
+                    <Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Open offer →</Link>
+                  </>
+                ) : recommendation?.decision === "prepare-interview" ? (
+                  <>
+                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Prepare for the interview.</p>
+                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
+                    <Link href="/interview" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Practice interview →</Link>
+                  </>
+                ) : recommendation?.decision === "application-live" ? (
+                  <>
+                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Your application is already submitted.</p>
+                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
+                    <Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Track this application →</Link>
+                  </>
                 ) : recommendation?.decision === "apply-first" && effectiveBaseline && canTailorResume ? (
                   <>
                     <p className="mt-2 text-sm font-bold leading-6 text-paper">Apply with the experience you already have.</p>
@@ -125,13 +149,14 @@ export function TailorWorkspace() {
                   const eligibility = requirement.status === "covered" ? null : sprintEligibility(requirement);
                   const existingSprint = state.roleSprints.find((item) => item.requirement === requirement.requirement && item.applicationId === savedApplicationId);
                   const shownAsPrimarySprint = sprintIsBest && requirement === eligibleRequirement;
+                  const practiceLater = recommendation?.decision !== "sprint" && requirement === eligibleRequirement;
                   return (
                     <div key={requirement.requirement} className="rounded-lg border border-white/12 bg-obsidian/40 p-3.5">
                       <div className="flex flex-wrap items-start justify-between gap-2"><p className="max-w-3xl text-sm font-bold leading-5 text-paper">{requirement.requirement}</p><span className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusStyles[requirement.status]}`}>{requirement.status}</span></div>
                       <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{requirement.evidence}</p>
                       {eligibility?.eligible && !shownAsPrimarySprint && (
                         <button type="button" onClick={() => startRoleSprint(requirement)} className="mt-2.5 text-xs font-bold text-cyan">
-                          {existingSprint ? "Resume sprint →" : recommendation?.decision === "apply-first" && requirement === eligibleRequirement ? "Practice this after applying →" : "Build proof for this →"}
+                          {existingSprint ? "Resume sprint →" : practiceLater ? "Practice this later →" : "Build proof for this →"}
                         </button>
                       )}
                       {eligibility && !eligibility.eligible && <p className="mt-2 text-[0.72rem] leading-5 text-paper/42">A short practice task cannot honestly replace this requirement.</p>}

@@ -81,18 +81,22 @@ const requirements = [
 ];
 const sprintNow = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: false, nowIso: "2026-07-24T00:00:00.000Z" });
 check("recommendation: strong missing artifact can recommend sprint", sprintNow?.decision === "sprint");
-const applyAfterSubmitted = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: true, applicationStatus: "applied", nowIso: "2026-07-24T00:00:00.000Z" });
-check("recommendation: submitted application says apply first", applyAfterSubmitted?.decision === "apply-first");
+const submitted = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: true, applicationStatus: "applied", nowIso: "2026-07-24T00:00:00.000Z" });
+check("recommendation: submitted application routes to tracking", submitted?.decision === "application-live");
+const interviewing = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: true, applicationStatus: "interviewing", nowIso: "2026-07-24T00:00:00.000Z" });
+check("recommendation: interview routes to preparation", interviewing?.decision === "prepare-interview");
+const offer = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: true, applicationStatus: "offer", nowIso: "2026-07-24T00:00:00.000Z" });
+check("recommendation: offer routes to review", offer?.decision === "review-offer");
 const urgent = sprintUx.recommendRoleSprintRequirement(requirements, postA, { hasResumeBaseline: true, deadline: "2026-07-25T00:00:00.000Z", nowIso: "2026-07-24T00:00:00.000Z" });
 check("recommendation: close deadline says apply first", urgent?.decision === "apply-first");
 
-const validBuild = "Dashboard artifact\nFields: ticket_id, week, category, resolution_hours\nQuery: SELECT week, COUNT(*) FROM tickets GROUP BY week\nMetrics: volume, resolution time, escalation rate\nOutput: weekly leadership report";
+const validBuild = "Dashboard artifact\nFields: ticket_id, week, category, resolution_hours\nQuery: SELECT week, COUNT(*) FROM tickets GROUP BY week\nMetrics: volume, resolution time, escalation rate\nI chose these fields because leaders need trend context. With more time I would add filters.";
 check("validation: build requires artifact structure", sprintValidation.validateSprintArtifact("I would build a dashboard that helps leaders understand support.", "build").ok === false);
 check("validation: structured build passes", sprintValidation.validateSprintArtifact(validBuild, "build").ok === true);
-check("validation: evaluate requires rubric verdict and fix", sprintValidation.validateSprintArtifact("Scenario: ticket reply. Rubric checks tone and accuracy. Verdict: fail. Fix: add the missing next step.", "evaluate").ok === true);
+check("validation: evaluate requires rubric verdict reasoning and fix", sprintValidation.validateSprintArtifact("Scenario: ticket reply. Rubric checks tone and accuracy. Verdict: fail because the next step is missing. Fix: add the missing next step.", "evaluate").ok === true);
 check("validation: plan requires steps done conditions and risk", sprintValidation.validateSprintArtifact("1. Gather inputs. Done when all owners confirm.\n2. Draft workflow. Checkpoint: review complete.\n3. Test it. Risk: missing data; catch it early.\n4. Launch and measure success.", "plan").ok === true);
 check("validation: simulate requires scenario response and debrief", sprintValidation.validateSprintArtifact("Scenario: an upset customer reports a duplicate charge. Response: I would send a clear reply and take these steps. Debrief: I prioritized safety and would watch for another charge next.", "simulate").ok === true);
-check("validation: explain requires depth and examples", sprintValidation.validateSprintArtifact(`${"This explains the concept in plain language and how it changes daily decisions. ".repeat(12)} Example one covers onboarding. Example two covers escalation.`, "explain").ok === true);
+check("validation: explain requires depth and examples", sprintValidation.validateSprintArtifact(`${"This explains the concept in plain language and how it changes daily work decisions. ".repeat(12)} Example one covers onboarding. Example two covers escalation.`, "explain").ok === true);
 
 console.log(`\nFinal Role Sprint hardening regression: ${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
