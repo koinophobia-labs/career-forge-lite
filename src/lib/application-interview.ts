@@ -32,13 +32,13 @@ export function selectInterviewApplication(
   return [...interviewing].sort((a, b) => {
     const aTiming = interviewTiming(a, nowIso);
     const bTiming = interviewTiming(b, nowIso);
-    const group = (timing: InterviewTiming) => timing === "today" ? 0 : timing === "upcoming" ? 1 : timing === "unscheduled" ? 2 : 3;
+    const group = (timing: InterviewTiming) => timing === "today" ? 0 : timing === "upcoming" ? 1 : timing === "past" ? 2 : 3;
     const aGroup = group(aTiming);
     const bGroup = group(bTiming);
     if (aGroup !== bGroup) return aGroup - bGroup;
     const aDay = calendarDay(a.interviewAt);
     const bDay = calendarDay(b.interviewAt);
-    if (aDay !== null && bDay !== null) return aGroup === 3 ? bDay - aDay : aDay - bDay;
+    if (aDay !== null && bDay !== null) return aGroup === 2 ? bDay - aDay : aDay - bDay;
     return (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt);
   })[0] ?? null;
 }
