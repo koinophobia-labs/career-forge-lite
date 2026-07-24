@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InterviewMode } from "@/components/InterviewMode";
 import { InterviewPrep } from "@/components/InterviewPrep";
 import { useCommandCenter } from "@/lib/use-command-center";
 
-export default function InterviewPage() {
+function InterviewPageContent() {
   const [view, setView] = useState<"prep" | "intake">("prep");
   const searchParams = useSearchParams();
   const requestedApplicationId = searchParams.get("applicationId");
@@ -40,4 +40,12 @@ export default function InterviewPage() {
   }
 
   return <InterviewPrep onSwitchToIntake={() => setView("intake")} />;
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-obsidian" aria-busy="true" />}>
+      <InterviewPageContent />
+    </Suspense>
+  );
 }
