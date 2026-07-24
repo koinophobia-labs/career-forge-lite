@@ -111,9 +111,9 @@ seed.dossier = {
   updatedAt: NOW
 };
 
-const requirement = "Experience using Zendesk to resolve customer tickets";
+const requirement = "Ability to build weekly SQL dashboards for support leadership";
 const jobPost = `Product Support Specialist at Acme Software\n\nResponsibilities:\n- Resolve customer tickets and explain next steps clearly\n- Document repeatable support workflows\n\nRequirements:\n- ${requirement}\n- 3+ years of product support experience\n- Bachelor's degree preferred`;
-const submission = "Practice plan: I would triage the ticket by urgency and customer impact, confirm the issue and desired outcome, document reproduction steps, choose the correct queue and priority, write a clear customer update with ownership and timing, note the resolution, and add a reusable knowledge-base entry. I would review the response for empathy, accuracy, escalation risk, and a concrete next action.";
+const submission = "Practice artifact: Weekly Support Dashboard Specification. I defined five fields for a mock ticket dataset: ticket ID, created date, resolution date, category, and escalation status. I wrote a SQL outline that groups tickets by week and category, calculates ticket volume and average resolution time, and counts escalations. The dashboard layout includes weekly volume, average resolution time, escalation rate, and the top three ticket categories, followed by a short leadership note explaining what changed and which workflow needs attention.";
 
 let browser;
 try {
@@ -133,15 +133,17 @@ try {
   await page.getByLabel("Paste the full job posting").fill(jobPost);
   await page.getByRole("button", { name: "Analyze this job →" }).click();
   await page.getByText("Best next step", { exact: true }).waitFor();
-  await page.getByText(requirement, { exact: true }).first().waitFor();
-  verify(await page.getByRole("button", { name: "Start one Role Sprint →" }).isVisible(), "analysis promotes one clear gap-closing action");
+  const startSprintButton = page.getByRole("button", { name: "Start one Role Sprint →" });
+  await startSprintButton.waitFor();
+  const recommendationText = await startSprintButton.locator("..").textContent();
+  verify(/SQL dashboards/i.test(recommendationText ?? ""), "analysis promotes the intended addressable gap as one clear action");
 
-  await page.getByRole("button", { name: "Start one Role Sprint →" }).click();
+  await startSprintButton.click();
   await page.waitForURL(/\/role-sprint\?id=/);
   const sprintUrl = page.url();
   await page.getByRole("heading", { name: "Close this gap" }).waitFor();
   await page.getByRole("heading", { name: "Do this" }).waitFor();
-  verify(await page.getByText(requirement, { exact: true }).isVisible(), "sprint keeps the exact job gap visible");
+  verify(await page.getByText(/SQL dashboards/i).first().isVisible(), "sprint keeps the selected job gap visible");
   verify(!(await page.getByText("Why this task?", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "honesty details stay available but collapsed during the task");
 
   await page.getByLabel("Sprint work area").fill(submission);
