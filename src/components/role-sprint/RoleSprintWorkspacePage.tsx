@@ -13,7 +13,7 @@ import {
   sprintSupportingEvidence,
   sprintUnprovenStatement
 } from "@/lib/role-sprint";
-import { reviewRoleSprintEvidence, submitRoleSprintForReview } from "@/lib/role-sprint-lifecycle";
+import { beginRoleSprintRevision, reviewRoleSprintEvidence, submitRoleSprintForReview } from "@/lib/role-sprint-lifecycle";
 import { primarySprintOutput } from "@/lib/role-sprint-ux";
 import { sprintArtifactChecks, validateSprintArtifact } from "@/lib/role-sprint-work-validator";
 import { useCommandCenter } from "@/lib/use-command-center";
@@ -102,6 +102,12 @@ function RoleSprintWorkspace() {
     trackCareerEvent("role_sprint_completed");
   }
 
+  function reviseSubmission(record: RoleSprintRecord) {
+    const confirmed = window.confirm("Revise this submitted proof? The pending review snapshot and generated drafts will be removed. Your work stays in the editor so you can update and submit a new version.");
+    if (!confirmed) return;
+    update((current) => beginRoleSprintRevision(current, record.id, new Date().toISOString()));
+  }
+
   function reviewPractice(approved: boolean) {
     if (!sprint?.evidenceId) return;
     update((current) => reviewRoleSprintEvidence(current, sprint.id, approved, new Date().toISOString()));
@@ -146,11 +152,9 @@ function RoleSprintWorkspace() {
   const primaryOutput = sprint.outputs ? primarySprintOutput(sprint.sprintType) : null;
   const secondaryOutputFields = primaryOutput ? allOutputFields.filter((field) => field.key !== primaryOutput.key) : allOutputFields;
   const chip = displayStatus(state, sprint);
-  const editedAfterReview = Boolean(
-    evidence && (evidenceState === "approved" || evidenceState === "rejected") && sprint.outputs?.userEdited &&
-    new Date(sprint.updatedAt).getTime() > new Date(evidence.updatedAt).getTime()
-  );
   const outputsUsable = evidenceState !== "rejected" && evidenceState !== "missing";
+  const submittedLocked = evidenceState === "pending" || evidenceState === "approved";
+  const outputNeedsVerification = Boolean(sprint.outputs?.userEdited);
 
   return (
     <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
@@ -185,19 +189,19 @@ function RoleSprintWorkspace() {
       )}
 
       <div id="sprint-work-area" className="trust-panel mt-6 scroll-mt-24 p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-paper">{isCompleted ? "Your work" : "Do the work here"}</h2>
-        <p className="mt-1 text-sm text-paper/55">Saved automatically. This exact work becomes the source for your practice evidence.</p>
-        <textarea aria-label="Sprint work area" value={sprint.userWork} rows={12} placeholder="Write or paste your completed task here…" onChange={(event) => patchSprint(sprint.id, { userWork: event.target.value })} disabled={evidenceState === "approved"} className="trust-input mt-3 w-full border px-3 py-2.5 text-sm text-ink disabled:opacity-60" />
-        <div className="mt-4 rounded-lg border border-white/10 bg-obsidian/35 p-3">
+        <h2 className="text-lg font-bold text-paper">{isCompleted ? "Submitted work" : "Do the work here"}</h2>
+        <p className="mt-1 text-sm text-paper/55">{submittedLocked ? "This review version is frozen. Revise the submission explicitly before changing it." : "Saved automatically. This exact work becomes the source for your practice evidence."}</p>
+        <textarea aria-label="Sprint work area" value={sprint.userWork} rows={12} placeholder="Write or paste your completed task here…" onChange={(event) => patchSprint(sprint.id, { userWork: event.target.value })} disabled={submittedLocked} className="trust-input mt-3 w-full border px-3 py-2.5 text-sm text-ink disabled:opacity-60" />
+        {!submittedLocked && <div className="mt-4 rounded-lg border border-white/10 bg-obsidian/35 p-3">
           <p className="text-xs font-black uppercase tracking-wide text-paper/50">Ready-to-finish checklist</p>
           <ul className="mt-2 grid gap-1.5 text-sm leading-5">
             <li className={workLength >= ROLE_SPRINT_MIN_WORK_CHARS ? "text-mint" : "text-paper/50"}>{workLength >= ROLE_SPRINT_MIN_WORK_CHARS ? "✓" : "○"} At least {ROLE_SPRINT_MIN_WORK_CHARS} characters of actual work</li>
             {checks.map((check) => <li key={check.label} className={check.met ? "text-mint" : "text-paper/50"}>{check.met ? "✓" : "○"} {check.label}</li>)}
           </ul>
-        </div>
+        </div>}
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p className={`text-xs ${readyToSubmit ? "text-mint" : "text-paper/50"}`}>{readyToSubmit ? "Ready to submit" : "Complete the checklist before submitting"}</p>
-          {evidenceState !== "approved" && <button type="button" onClick={() => submitWork(sprint)} disabled={!readyToSubmit} className="lab-pill-button ml-auto px-5 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{isCompleted ? "Update my proof" : "Finish sprint →"}</button>}
+          {!submittedLocked && <p className={`text-xs ${readyToSubmit ? "text-mint" : "text-paper/50"}`}>{readyToSubmit ? "Ready to submit" : "Complete the checklist before submitting"}</p>}
+          {evidenceState !== "approved" && evidenceState !== "pending" && <button type="button" onClick={() => submitWork(sprint)} disabled={!readyToSubmit} className="lab-pill-button ml-auto px-5 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40">{isCompleted ? "Update my proof" : "Finish sprint →"}</button>}
         </div>
         {sprint.outputs?.userEdited && evidenceState !== "approved" && evidenceState !== "rejected" && <p className="mt-2 text-xs text-gold">You edited the generated drafts. Updating the proof will ask before replacing those edits.</p>}
         {submitError && <p className="mt-3 rounded-lg border border-coral/40 bg-coral/10 px-3 py-2 text-sm leading-6 text-paper/80">{submitError}</p>}
@@ -206,23 +210,29 @@ function RoleSprintWorkspace() {
       {isCompleted && sprint.outputs && (
         <>
           <div className={`mt-6 rounded-xl border p-4 text-sm leading-6 ${evidenceState === "approved" ? "border-mint/35 bg-mint/10 text-paper/78" : evidenceState === "rejected" || evidenceState === "missing" ? "border-coral/35 bg-coral/10 text-paper/78" : "border-gold/35 bg-gold/10 text-paper/78"}`}>
-            {evidenceState === "approved" ? <><span className="font-bold text-mint">Approved.</span> This is labeled practice evidence, not employment experience.</> : evidenceState === "rejected" ? <><span className="font-bold text-coral">Rejected.</span> Update the work and submit a new version before using its drafts.</> : evidenceState === "missing" ? <><span className="font-bold text-coral">Evidence missing.</span> Submit again to recreate it.</> : <><span className="font-bold text-gold">Sprint complete.</span> Decide whether this finished work should become labeled practice evidence.</>}
+            {evidenceState === "approved" ? <><span className="font-bold text-mint">Approved.</span> This is labeled practice evidence, not employment experience.</> : evidenceState === "rejected" ? <><span className="font-bold text-coral">Rejected.</span> Update the work and submit a new version before using its drafts.</> : evidenceState === "missing" ? <><span className="font-bold text-coral">Evidence missing.</span> Submit again to recreate it.</> : <><span className="font-bold text-gold">Sprint complete.</span> Review the exact frozen claim below before approving it.</>}
           </div>
 
-          {evidenceState === "pending" && (
+          {evidenceState === "pending" && evidence && (
             <div className="trust-panel mt-6 p-5 sm:p-6">
               <p className="text-xs font-black uppercase tracking-wide text-gold">Review your practice proof</p>
-              <h2 className="mt-2 text-xl font-bold text-paper">Use this as labeled practice?</h2>
-              <p className="mt-2 text-sm leading-6 text-paper/60">Approval lets Career Forge cite the work as practice. It still cannot count as employment experience or satisfy years of experience.</p>
+              <h2 className="mt-2 text-xl font-bold text-paper">Use this exact claim as labeled practice?</h2>
+              <p className="mt-2 text-sm leading-6 text-paper/60">Approval lets Career Forge cite this claim as practice. It still cannot count as employment experience or satisfy years of experience.</p>
+              <div className="mt-4 rounded-lg border border-white/12 bg-obsidian/40 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-paper/45">Career Forge will save this claim</p>
+                <p className="mt-2 text-sm leading-6 text-paper/80">{evidence.detail}</p>
+                <p className="mt-4 text-xs font-black uppercase tracking-wide text-paper/45">Submitted source excerpt</p>
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-paper/60">{evidence.sourceText || sprint.userWork}</p>
+              </div>
               <div className="mt-4 flex flex-wrap gap-3">
-                <button type="button" onClick={() => reviewPractice(true)} className="lab-pill-button px-5 py-2.5 text-sm font-black">Approve as practice →</button>
-                <a href="#sprint-work-area" className="rounded-md border border-white/15 px-4 py-2.5 text-sm font-bold text-paper/70">Keep editing</a>
+                <button type="button" onClick={() => reviewPractice(true)} className="lab-pill-button px-5 py-2.5 text-sm font-black">Approve this exact claim →</button>
+                <button type="button" onClick={() => reviseSubmission(sprint)} className="rounded-md border border-white/15 px-4 py-2.5 text-sm font-bold text-paper/70">Revise submission</button>
                 <button type="button" onClick={() => reviewPractice(false)} className="rounded-md border border-coral/45 px-4 py-2.5 text-sm font-bold text-coral">Reject this proof</button>
               </div>
             </div>
           )}
 
-          {editedAfterReview && <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm leading-6 text-paper/78"><span className="font-bold text-gold">Edited after review.</span> These output drafts have not been rechecked and do not change the approved or rejected evidence record.</div>}
+          {outputNeedsVerification && outputsUsable && <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm leading-6 text-paper/78"><span className="font-bold text-gold">User edited · not checked by Career Forge.</span> These output drafts may differ from the reviewed evidence claim. Review them before copying or submitting.</div>}
 
           {outputsUsable && primaryOutput && (
             <div className="trust-panel mt-6 p-5 sm:p-6">
