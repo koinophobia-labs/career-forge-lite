@@ -1,7 +1,7 @@
-// Founding-user Role Sprint browser acceptance:
-// approved profile → paste one job → start one gap sprint → submit work →
-// review pending practice evidence → approve → confirm it remains labeled
-// practice rather than employment experience.
+// Role Sprint continuity acceptance:
+// approved profile → paste one job → recommended gap → auto-save/link job →
+// complete sprint → Today resumes review → approve practice inline → return to
+// the exact posting → refreshed analysis shows honest partial practice support.
 import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
@@ -81,22 +81,8 @@ function verify(condition, message) {
 }
 
 const seed = emptyState();
-const roleEvidence = evidenceRecord(
-  "role",
-  "Customer Support Specialist at Northstar Software, 2022–2026",
-  "manual",
-  true,
-  NOW,
-  { label: "Employment record" }
-);
-const responsibilityEvidence = evidenceRecord(
-  "responsibility",
-  "Resolved escalated billing and account-access issues for customers",
-  "manual",
-  true,
-  NOW,
-  { label: "Role responsibility" }
-);
+const roleEvidence = evidenceRecord("role", "Customer Support Specialist at Northstar Software, 2022–2026", "manual", true, NOW, { label: "Employment record" });
+const responsibilityEvidence = evidenceRecord("responsibility", "Resolved escalated billing and account-access issues for customers", "manual", true, NOW, { label: "Role responsibility" });
 seed.activeGoal = { kind: "new-job", selectedAt: NOW, updatedAt: NOW };
 seed.profile.currentSituation = "Customer support professional seeking a product support role";
 seed.profile.targetRoles = "Product Support Specialist";
@@ -136,49 +122,54 @@ try {
   const startSprintButton = page.getByRole("button", { name: "Start one Role Sprint →" });
   await startSprintButton.waitFor();
   const recommendationText = await startSprintButton.locator("..").textContent();
-  verify(/SQL dashboards/i.test(recommendationText ?? ""), "analysis promotes the intended addressable gap as one clear action");
+  verify(/SQL dashboards/i.test(recommendationText ?? ""), "ranking promotes the strongest addressable gap");
+  verify(/Recommended because/i.test(recommendationText ?? ""), "the recommendation explains why this gap was selected");
 
   await startSprintButton.click();
   await page.waitForURL(/\/role-sprint\?id=/);
   const sprintUrl = page.url();
   await page.getByRole("heading", { name: "Close this gap" }).waitFor();
-  await page.getByRole("heading", { name: "Do this" }).waitFor();
-  verify(await page.getByText(/SQL dashboards/i).first().isVisible(), "sprint keeps the selected job gap visible");
-  verify(!(await page.getByText("Why this task?", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "honesty details stay available but collapsed during the task");
+
+  const started = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  const startedSprint = started.roleSprints[0];
+  const savedApplication = started.applications[0];
+  verify(started.applications.length === 1 && startedSprint.applicationId === savedApplication.id, "starting a sprint auto-saves and links one job workspace");
+  verify(savedApplication.jobPostUrl.startsWith("career-forge-job-text:v1:"), "the full posting is stored durably in the backed-up application record");
+  verify(savedApplication.company === "Acme Software" && savedApplication.roleTitle === "Product Support Specialist", "job identity is inferred into the saved workspace");
 
   await page.getByLabel("Sprint work area").fill(submission);
   await page.getByRole("button", { name: "Finish sprint →" }).click();
   await page.getByText("Sprint complete.", { exact: false }).waitFor();
+  await page.getByText("Review your practice proof", { exact: true }).waitFor();
   await page.getByText("Best way to use this", { exact: true }).waitFor();
-  verify(await page.getByRole("textbox", { name: "Résumé / project bullet" }).inputValue().then((value) => value.toLowerCase().includes("practice")), "recommended résumé output keeps the practice label");
-  verify(!(await page.getByText("Other ways to use this work", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "secondary outputs stay collapsed behind the recommended output");
+  verify(await page.getByRole("textbox", { name: "Portfolio summary" }).inputValue().then((value) => /practice/i.test(value)), "a build sprint promotes the portfolio summary instead of forcing a résumé bullet first");
+  verify(!(await page.getByText("Other ways to use this work", { exact: true }).locator("..").evaluate((node) => node.hasAttribute("open"))), "secondary outputs stay collapsed");
 
   const pending = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
   const pendingSprint = pending.roleSprints[0];
   const pendingEvidence = pending.dossier.evidence.find((item) => item.id === pendingSprint.evidenceId);
-  verify(pendingSprint.status === "completed", "finishing the sprint creates a completed record");
-  verify(pendingEvidence && !pendingEvidence.approved && !pendingEvidence.rejected && pendingEvidence.source === "role-sprint", "sprint evidence starts pending rather than approved");
-  verify(/practice/i.test(pendingEvidence.detail) && !/employed|employment experience/i.test(pendingEvidence.detail), "pending evidence is labeled practice and does not claim employment");
+  verify(pendingEvidence && !pendingEvidence.approved && !pendingEvidence.rejected, "sprint evidence starts pending rather than approved");
 
-  await page.getByRole("link", { name: "Review this evidence →" }).click();
-  await page.waitForURL(/\/profile#evidence-review/);
-  await page.getByRole("heading", { name: "Review proposed or migrated evidence" }).waitFor();
-  const practiceCard = page.locator("article").filter({ hasText: /labeled practice work/i }).first();
-  await practiceCard.getByRole("button", { name: "Approve fact" }).click();
-
+  await page.goto(baseUrl);
+  await page.getByRole("heading", { name: "Review the practice proof you finished" }).waitFor();
+  verify(await page.getByRole("link", { name: "Review practice proof →" }).isVisible(), "Today prioritizes completed practice review");
   await page.goto(sprintUrl);
-  const approvalBanner = page.getByText("Approved.", { exact: false }).first();
-  await approvalBanner.waitFor();
-  const approvalText = await approvalBanner.locator("..").textContent();
-  verify(/labeled practice evidence, not employment experience/i.test(approvalText ?? ""), "approved sprint still states that it is not employment experience");
-  verify(await page.getByText("Approved practice", { exact: true }).isVisible(), "approved state uses a truthful practice label");
 
-  const approved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
-  const approvedSprint = approved.roleSprints[0];
-  const approvedEvidence = approved.dossier.evidence.find((item) => item.id === approvedSprint.evidenceId);
-  verify(approvedSprint.status === "approved-as-evidence" && approvedEvidence.approved, "profile approval synchronizes the sprint and evidence states");
+  await page.getByRole("button", { name: "Approve as practice →" }).click();
+  await page.getByText("Approved.", { exact: false }).waitFor();
+  verify(await page.getByText("Approved practice", { exact: true }).isVisible(), "inline review synchronizes the approved-practice state");
+  const approvalText = await page.getByText("Approved.", { exact: false }).first().locator("..").textContent();
+  verify(/not employment experience/i.test(approvalText ?? ""), "approved work remains explicitly separate from employment experience");
 
-  console.log(`\nRole Sprint browser acceptance: ${passes} passed, 0 failed`);
+  await page.getByRole("link", { name: "Return to this job →" }).click();
+  await page.waitForURL(/\/tailor\?applicationId=/);
+  await page.getByText("Best next step", { exact: true }).waitFor();
+  verify(await page.getByLabel("Paste the full job posting").inputValue().then((value) => value === jobPost), "returning to the job restores the exact posting");
+  const requirementCard = page.locator("div.rounded-lg").filter({ hasText: /SQL dashboards/i }).first();
+  verify(await requirementCard.getByText("partial", { exact: true }).isVisible(), "refreshed analysis moves approved practice support to partial, never covered");
+  verify(/Role Sprint practice|labeled practice/i.test(await requirementCard.textContent()), "refreshed analysis explains the practice-only support");
+
+  console.log(`\nRole Sprint continuity acceptance: ${passes} passed, 0 failed`);
   await context.close();
 } finally {
   await browser?.close();
