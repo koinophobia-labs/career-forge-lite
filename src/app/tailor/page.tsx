@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- restoring one saved local job workspace after client hydration */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
