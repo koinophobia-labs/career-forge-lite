@@ -1,12 +1,12 @@
+import { emptyBackupSidecars, sanitizeBackupSidecars, type BackupSidecars } from "@/lib/backup-sidecars";
 import { parseState } from "@/lib/command-center-store";
 import type { ApplicationRecord, ApplicationStatus, CommandCenterState } from "@/types/command-center";
 
-// Full command-center backup: everything Career Forge persists (profile,
-// lanes, applications, outreach, resume versions with snapshots) wrapped in a
-// versioned envelope. Local-first by design — the file is downloaded to the
-// user's machine and never leaves it unless they move it themselves.
+// Full workspace backup: everything Career Forge persists, including interview
+// drafts and the conversational interview session, wrapped in a versioned file.
+// Consume-once navigation handoffs are intentionally excluded.
 
-export const BACKUP_SCHEMA_VERSION = 2;
+export const BACKUP_SCHEMA_VERSION = 3;
 export const LAST_BACKUP_KEY = "career-forge-last-backup-at";
 
 export type CommandCenterBackup = {
@@ -14,6 +14,7 @@ export type CommandCenterBackup = {
   schemaVersion: typeof BACKUP_SCHEMA_VERSION;
   exportedAt: string;
   state: CommandCenterState;
+  sidecars: BackupSidecars;
 };
 
 export type BackupPreview = {
@@ -30,10 +31,12 @@ export type BackupPreview = {
   exportCount: number;
   pendingImportReviewCount: number;
   roleSprintCount: number;
+  interviewDraftCount: number;
+  interviewSessionPresent: boolean;
 };
 
 export type BackupValidation =
-  | { ok: true; state: CommandCenterState; preview: BackupPreview }
+  | { ok: true; state: CommandCenterState; sidecars: BackupSidecars; preview: BackupPreview }
   | { ok: false; error: string };
 
 const applicationStatuses = new Set<ApplicationStatus>(["drafting", "applied", "interviewing", "offer", "rejected", "closed"]);
@@ -72,7 +75,8 @@ function restoreApplicationDurability(
         ...application,
         updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : application.updatedAt,
         stageHistory,
-        interviewHistory
+        interviewHistory,
+        statusRevision: typeof source.statusRevision === "string" ? source.statusRevision : application.statusRevision
       };
     })
   };
@@ -83,15 +87,17 @@ function normalizeBackupState(rawState: unknown): CommandCenterState {
   return restoreApplicationDurability(parsed, rawState);
 }
 
-// Creating a backup never mutates the live state: the state is serialized and
-// re-parsed through the hardened revival used on every load, then additive
-// durability fields are restored so application history survives migration.
-export function createBackup(state: CommandCenterState, nowIso?: string): CommandCenterBackup {
+export function createBackup(
+  state: CommandCenterState,
+  nowIso?: string,
+  sidecars: BackupSidecars = emptyBackupSidecars()
+): CommandCenterBackup {
   return {
     app: "career-forge",
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: nowIso ?? new Date().toISOString(),
-    state: normalizeBackupState(state)
+    state: normalizeBackupState(state),
+    sidecars: sanitizeBackupSidecars(sidecars)
   };
 }
 
@@ -100,7 +106,12 @@ export function backupFilename(nowIso?: string): string {
   return `career-forge-backup-${stamp}.json`;
 }
 
-export function buildPreview(state: CommandCenterState, exportedAt: string | null, schemaVersion: number | null): BackupPreview {
+export function buildPreview(
+  state: CommandCenterState,
+  exportedAt: string | null,
+  schemaVersion: number | null,
+  sidecars: BackupSidecars = emptyBackupSidecars()
+): BackupPreview {
   return {
     exportedAt,
     schemaVersion,
@@ -118,16 +129,14 @@ export function buildPreview(state: CommandCenterState, exportedAt: string | nul
     resumePackCount: state.resumePacks.length,
     exportCount: state.exports.length,
     pendingImportReviewCount: state.pendingImportReviews.length,
-    roleSprintCount: state.roleSprints.length
+    roleSprintCount: state.roleSprints.length,
+    interviewDraftCount: Object.keys(sidecars.interviewPrepDrafts).length,
+    interviewSessionPresent: Boolean(sidecars.interviewSession)
   };
 }
 
-// Validates a backup file's contents without touching stored data. Accepts:
-// - the versioned envelope written by createBackup, and
-// - a bare command-center state object (a "legacy" backup made by copying
-//   the localStorage value directly).
-// Malformed sections inside the state degrade safely via parseState; only a
-// structurally unusable file blocks the import.
+// Validates a backup without touching live storage. Version 1–2 backups remain
+// valid and simply restore with empty interview sidecars.
 export function validateBackup(serialized: string): BackupValidation {
   let raw: unknown;
   try {
@@ -142,7 +151,6 @@ export function validateBackup(serialized: string): BackupValidation {
 
   const root = raw as Record<string, unknown>;
 
-  // Versioned envelope path.
   if ("schemaVersion" in root || "app" in root) {
     if (root.app !== "career-forge") {
       return { ok: false, error: "This JSON file wasn't exported by Career Forge." };
@@ -157,14 +165,15 @@ export function validateBackup(serialized: string): BackupValidation {
       return { ok: false, error: "The backup's data section is missing or malformed." };
     }
     const state = normalizeBackupState(root.state);
+    const sidecars = sanitizeBackupSidecars(root.sidecars);
     const exportedAt = typeof root.exportedAt === "string" ? root.exportedAt : null;
-    return { ok: true, state, preview: buildPreview(state, exportedAt, root.schemaVersion) };
+    return { ok: true, state, sidecars, preview: buildPreview(state, exportedAt, root.schemaVersion, sidecars) };
   }
 
-  // Legacy path: a bare state object (e.g. copied straight from localStorage).
   if ("profile" in root || "applications" in root || "resumeVersions" in root || "roleSprints" in root) {
     const state = normalizeBackupState(root);
-    return { ok: true, state, preview: buildPreview(state, null, null) };
+    const sidecars = emptyBackupSidecars();
+    return { ok: true, state, sidecars, preview: buildPreview(state, null, null, sidecars) };
   }
 
   return { ok: false, error: "That file doesn't contain Career Forge data." };
