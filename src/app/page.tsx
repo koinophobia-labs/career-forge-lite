@@ -35,12 +35,30 @@ export default function Dashboard() {
             <span aria-hidden="true">•</span>
             <span>You approve every career claim</span>
           </div>
-          <details className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <summary className="cursor-pointer text-center text-sm font-bold text-cyan">See a finished sample first</summary>
-            <div className="mt-5" tabIndex={0} role="region" aria-label="Finished Career Forge sample">
-              <SampleExperience />
-            </div>
-          </details>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <details className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <summary className="cursor-pointer text-center text-sm font-bold text-cyan">See a finished sample first</summary>
+              <div className="mt-5" tabIndex={0} role="region" aria-label="Finished Career Forge sample">
+                <SampleExperience />
+              </div>
+            </details>
+
+            <details className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <summary className="cursor-pointer text-center text-sm font-bold text-paper/65">How Career Forge stays honest</summary>
+              <div className="mt-4 grid gap-3 text-sm leading-6 text-paper/62">
+                <p>
+                  Career Forge is a local-first career evidence compiler and reviewable evidence system. It works locally
+                  without an account. Imported facts stay proposals until you approve them.
+                </p>
+                <p>
+                  <strong className="text-paper">Not another AI résumé writer.</strong> Career Forge keeps unsupported
+                  context and missing proof out of professional drafts, builds a distinct résumé for each active lane, and
+                  links generated claims to their reviewed sources.
+                </p>
+              </div>
+            </details>
+          </div>
         </section>
       )}
 
@@ -77,7 +95,7 @@ export default function Dashboard() {
 
       {hydrated && !isFirstRun && (
         <section className="mx-auto max-w-6xl px-5 pb-10 sm:px-8">
-          <details className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <details aria-label="Advanced workspace" className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <summary className="cursor-pointer text-sm font-bold text-paper/60">Open full workspace</summary>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
