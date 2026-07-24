@@ -21,8 +21,8 @@ function check(label, condition) {
 const nav = read("src/components/CommandNav.tsx");
 const intent = read("src/components/IntentRouter.tsx");
 const home = read("src/app/page.tsx");
-const tailor = read("src/app/tailor/page.tsx");
-const sprint = read("src/app/role-sprint/page.tsx");
+const tailor = `${read("src/components/tailor/TailorWorkspace.tsx")}\n${read("src/components/tailor/useTailorWorkspace.ts")}`;
+const sprint = read("src/components/role-sprint/RoleSprintWorkspacePage.tsx");
 
 const primaryBlock = nav.match(/const primaryStations:[\s\S]*?= \[([\s\S]*?)\n\];/)?.[1] ?? "";
 const primaryEntries = [...primaryBlock.matchAll(/\["[^"]+",\s*"[^"]+"\]/g)];
@@ -44,9 +44,9 @@ check("home: no seven-station workflow wall", !home.includes("const loop") && !h
 check("home: returning users still get one next step", home.includes("<IntentRouter />"));
 check("home: full workspace is collapsed", home.includes("Open full workspace") && home.includes("<details"));
 
-check("tailor: job post is the only required input", tailor.includes("disabled={!jobPost.trim()}") && !tailor.includes("if (!jobPost.trim() || !selectedBaseline)"));
+check("tailor: job post is the only required input", tailor.includes("disabled={!form.jobPost.trim()}") && !tailor.includes("if (!form.jobPost.trim() || !effectiveBaseline)"));
 check("tailor: application details are collapsed", tailor.includes("Add application details") && tailor.indexOf("Paste the full job posting") < tailor.indexOf("Add application details"));
-check("tailor: analysis can run without a resume baseline", tailor.includes("setAnalysis(analyzeJobPost") && !tailor.includes("if (!jobPost.trim() || !effectiveBaseline)"));
+check("tailor: analysis can run without a resume baseline", tailor.includes("setAnalysis(analyzeJobPost") && !tailor.includes("if (!form.jobPost.trim() || !effectiveBaseline)"));
 check("tailor: one best next step is visually explicit", tailor.includes("Best next step"));
 check("tailor: secondary analysis is collapsed", tailor.includes("More analysis") && tailor.includes("Other actions"));
 

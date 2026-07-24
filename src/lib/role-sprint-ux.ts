@@ -1,10 +1,20 @@
 import type { RequirementMatch } from "@/lib/job-post-analyzer";
 import { sprintEligibility } from "@/lib/role-sprint";
-import type { RoleSprintOutputs, RoleSprintType } from "@/types/command-center";
+import type { ApplicationStatus, RoleSprintOutputs, RoleSprintType } from "@/types/command-center";
+
+export type SprintRecommendationDecision = "sprint" | "apply-first";
+
+export type SprintRecommendationContext = {
+  applicationStatus?: ApplicationStatus | null;
+  deadline?: string | null;
+  hasResumeBaseline: boolean;
+  nowIso?: string;
+};
 
 export type RecommendedSprintRequirement = {
   requirement: RequirementMatch;
   reason: string;
+  decision: SprintRecommendationDecision;
 };
 
 const STRONG_REQUIREMENT_SIGNAL = /\b(must|required|requires|ability to|responsible for|proficien\w*|strong|demonstrated|hands-on)\b/i;
@@ -32,9 +42,19 @@ function scoreRequirement(requirement: RequirementMatch, jobPost: string): numbe
   return score;
 }
 
+function deadlineIsUrgent(deadline: string | null | undefined, nowIso: string): boolean {
+  if (!deadline) return false;
+  const deadlineTime = new Date(deadline).getTime();
+  const nowTime = new Date(nowIso).getTime();
+  if (!Number.isFinite(deadlineTime) || !Number.isFinite(nowTime)) return false;
+  const hours = (deadlineTime - nowTime) / 3_600_000;
+  return hours >= 0 && hours <= 48;
+}
+
 export function recommendRoleSprintRequirement(
   requirements: RequirementMatch[],
-  jobPost: string
+  jobPost: string,
+  context: SprintRecommendationContext = { hasResumeBaseline: false }
 ): RecommendedSprintRequirement | null {
   const ranked = requirements
     .filter((requirement) => requirement.status !== "covered" && sprintEligibility(requirement).eligible)
@@ -42,12 +62,39 @@ export function recommendRoleSprintRequirement(
     .sort((a, b) => b.score - a.score || a.requirement.requirement.localeCompare(b.requirement.requirement));
   const winner = ranked[0];
   if (!winner) return null;
+
+  const nowIso = context.nowIso ?? new Date().toISOString();
+  const liveStage = context.applicationStatus === "applied" || context.applicationStatus === "interviewing" || context.applicationStatus === "offer";
+  const urgentDeadline = deadlineIsUrgent(context.deadline, nowIso);
+  const strongEnoughToDelay = winner.score >= 12 && winner.requirement.status === "gap" && !OPTIONAL_SIGNAL.test(winner.requirement.requirement);
+  const decision: SprintRecommendationDecision = liveStage || urgentDeadline || (context.hasResumeBaseline && !strongEnoughToDelay)
+    ? "apply-first"
+    : "sprint";
+
   const reasonParts = [
     winner.requirement.status === "gap" ? "your profile has no direct proof for it" : "your current proof is only partial",
     ARTIFACT_SIGNAL.test(winner.requirement.requirement) ? "a short artifact can demonstrate useful practice" : "a bounded exercise can address it honestly",
     OPTIONAL_SIGNAL.test(winner.requirement.requirement) ? "the posting marks it as optional" : "the posting treats it as meaningful"
   ];
-  return { requirement: winner.requirement, reason: `Recommended because ${reasonParts.join(", ")}.` };
+
+  if (decision === "apply-first") {
+    const timingReason = liveStage
+      ? "this application is already live"
+      : urgentDeadline
+        ? "the deadline is close"
+        : "your current résumé is ready to tailor now";
+    return {
+      requirement: winner.requirement,
+      decision,
+      reason: `Apply first because ${timingReason}. Practice “${winner.requirement.requirement}” afterward if it still matters.`
+    };
+  }
+
+  return {
+    requirement: winner.requirement,
+    decision,
+    reason: `Recommended because ${reasonParts.join(", ")}.`
+  };
 }
 
 export type PrimarySprintOutput = {
