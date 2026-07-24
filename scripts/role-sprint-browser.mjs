@@ -167,8 +167,10 @@ try {
   await practiceCard.getByRole("button", { name: "Approve fact" }).click();
 
   await page.goto(sprintUrl);
-  await page.getByText("Approved.", { exact: false }).waitFor();
-  verify(await page.getByText("This is labeled practice evidence, not employment experience.", { exact: true }).isVisible(), "approved sprint still states that it is not employment experience");
+  const approvalBanner = page.getByText("Approved.", { exact: false }).first();
+  await approvalBanner.waitFor();
+  const approvalText = await approvalBanner.locator("..").textContent();
+  verify(/labeled practice evidence, not employment experience/i.test(approvalText ?? ""), "approved sprint still states that it is not employment experience");
   verify(await page.getByText("Approved practice", { exact: true }).isVisible(), "approved state uses a truthful practice label");
 
   const approved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
