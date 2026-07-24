@@ -132,8 +132,12 @@ try {
 
   await page.getByLabel("Sprint work area").fill(invalidDescription);
   await page.getByRole("button", { name: "Finish sprint →" }).click();
-  await page.getByText(/Paste the artifact itself/i).waitFor();
-  verify(await page.getByText(/Paste the artifact itself/i).isVisible(), "build sprint rejects a description without artifact structure");
+  const artifactError = page.getByText(
+    "Paste the artifact itself, its full structure, or a working link. A description of what you would build is not enough.",
+    { exact: true }
+  );
+  await artifactError.waitFor();
+  verify(await artifactError.isVisible(), "build sprint rejects a description without artifact structure");
 
   await page.getByLabel("Sprint work area").fill(validArtifact);
   await page.getByRole("button", { name: "Finish sprint →" }).click();
@@ -169,9 +173,10 @@ try {
   const postingBox = page.getByLabel("Paste the full job posting");
   await postingBox.waitFor();
   await postingBox.evaluate((element, value) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    const view = element.ownerDocument.defaultView;
+    const setter = Object.getOwnPropertyDescriptor(view.HTMLTextAreaElement.prototype, "value")?.set;
     setter?.call(element, value);
-    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: value }));
+    element.dispatchEvent(new view.InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: value }));
   }, secondJobPost);
   await page.getByText("Add application details", { exact: true }).click();
   await page.getByText("Company", { exact: true }).locator("..").getByRole("textbox").fill("Beta Software");
