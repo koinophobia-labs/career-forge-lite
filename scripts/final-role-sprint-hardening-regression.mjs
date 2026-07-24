@@ -15,16 +15,16 @@ function loadTsModule(filePath) {
     compilerOptions: { esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     fileName: absolute
   });
-  const module = { exports: {} };
-  cache.set(absolute, module);
+  const cjsModule = { exports: {} };
+  cache.set(absolute, cjsModule);
   const dirname = path.dirname(absolute);
   const localRequire = (request) => {
     if (request.startsWith("@/")) return loadTsModule(path.join(root, "src", `${request.slice(2)}.ts`));
     if (request.startsWith(".")) return loadTsModule(path.resolve(dirname, request.endsWith(".ts") ? request : `${request}.ts`));
     return require(request);
   };
-  new Function("require", "module", "exports", "__dirname", "__filename", outputText)(localRequire, module, module.exports, dirname, absolute);
-  return module.exports;
+  new Function("require", "module", "exports", "__dirname", "__filename", outputText)(localRequire, cjsModule, cjsModule.exports, dirname, absolute);
+  return cjsModule.exports;
 }
 
 const workflow = loadTsModule(path.join(root, "src/lib/application-workflow.ts"));
