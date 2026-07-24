@@ -53,8 +53,6 @@ export type ResumeVersionRecord = {
   label: string;
   laneId: string | null;
   notes: string;
-  // Tailoring metadata. Versions from the plain guided builder use
-  // source "builder" with the target fields empty.
   source: "builder" | "tailor";
   applicationId: string | null;
   dossierId?: string;
@@ -64,14 +62,8 @@ export type ResumeVersionRecord = {
   targetTitle: string;
   keywordsUsed: string[];
   gapsAcknowledged: string[];
-  // Human-readable record of how tailoring changed this version's output.
   influenceSummary: string;
-  // The exact plain-text render of the generated resume, persisted verbatim so
-  // versions can be reopened and copied later. Legacy versions revive with "".
   resumeText: string;
-  // Structured snapshot of the generated document, persisted verbatim at
-  // generation time so the styled preview/print view can reopen it without
-  // regenerating. Null for versions created before snapshots existed.
   resumeSnapshot: ResumeSnapshot | null;
   createdAt: string;
 };
@@ -104,17 +96,14 @@ export type ApplicationRecord = {
   resumeVersionId: string | null;
   appliedAt: string | null;
   nextFollowUpAt: string | null;
-  // ISO timestamps of follow-ups actually sent for this application — the
-  // durable record behind "follow-ups completed" in the weekly review.
   followUpsSent: string[];
   interviewAt: string | null;
   notes: string;
-  // Summary of the job-post analysis that produced this application, kept so
-  // interview prep can build gap-defense questions from the real posting.
   analysisKeywords: string[];
   analysisGaps: string[];
   analysisWeakSpots: string[];
   createdAt: string;
+  updatedAt: string;
 };
 
 export type ApplicationQuestion = {
@@ -129,9 +118,6 @@ export type RoleSprintType = "explain" | "evaluate" | "plan" | "simulate" | "bui
 
 export type RoleSprintStatus = "draft" | "completed" | "approved-as-evidence";
 
-// Editable drafts generated from the user's submitted work. They live on the
-// sprint record so edits survive refresh; nothing here enters a résumé or
-// application until the user moves it there deliberately.
 export type RoleSprintOutputs = {
   portfolioTitle: string;
   portfolioSummary: string;
@@ -141,9 +127,6 @@ export type RoleSprintOutputs = {
   userEdited: boolean;
 };
 
-// One bounded practice sprint for one job-post requirement. Keeps the full
-// chain connected: requirement text → sprint → user submission (userWork) →
-// pending dossier evidence (evidenceId) → the application it serves.
 export type RoleSprintRecord = {
   id: string;
   applicationId: string | null;
@@ -155,8 +138,6 @@ export type RoleSprintRecord = {
   title: string;
   instructions: string[];
   completionCriteria: string[];
-  // Approved dossier evidence ids the analysis found related to this
-  // requirement when the sprint was created ("what you already have").
   supportingEvidenceIds: string[];
   userWork: string;
   status: RoleSprintStatus;
