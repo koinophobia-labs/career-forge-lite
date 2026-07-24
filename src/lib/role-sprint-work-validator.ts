@@ -17,11 +17,13 @@ export function sprintArtifactChecks(userWork: string, sprintType: RoleSprintTyp
 
   if (sprintType === "build") {
     const structured = lines.length >= 4 && /\b(column|field|section|template|query|select|from|where|formula|step|input|output|metric|table|dashboard|report)\b/i.test(text);
-    const actualArtifact = hasUrl(text) || structured;
+    const linked = hasUrl(text);
     const designExplanation = /\b(choice|chose|because|decid|defined|selected|included|tradeoff|improve|next time|with more time)\b/i.test(text);
     return [
-      { label: "Artifact, full structure, or working link included", met: actualArtifact },
-      { label: "Fields, sections, steps, metrics, or query structure shown", met: structured || hasUrl(text) },
+      { label: "Artifact text, structure, or a working link included", met: linked || structured },
+      // A URL may point anywhere. Require enough accompanying structure that a
+      // reviewer can judge what was actually built without trusting the link.
+      { label: "Fields, sections, steps, metrics, or query structure shown", met: structured },
       { label: "Design choices or next improvement explained", met: designExplanation }
     ];
   }
@@ -64,9 +66,5 @@ export function validateSprintArtifact(userWork: string, sprintType: RoleSprintT
   const checks = sprintArtifactChecks(userWork, sprintType);
   const missing = checks.filter((check) => !check.met).map((check) => check.label);
   if (!missing.length) return { ok: true };
-
-  return {
-    ok: false,
-    error: `Finish these parts before submitting: ${missing.join("; ")}.`
-  };
+  return { ok: false, error: `Finish these parts before submitting: ${missing.join("; ")}.` };
 }
