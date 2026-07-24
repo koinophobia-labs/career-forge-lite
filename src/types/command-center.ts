@@ -29,6 +29,8 @@ export type ResumeSnapshot = {
   fullName: string; email: string; phone: string; website: string; template: TemplateStyle; resume: ResumePackage;
 };
 
+export type ApplicationStageEvent = { status: ApplicationStatus; at: string };
+
 export type ApplicationRecord = {
   id: string; company: string; roleTitle: string; laneId: string | null; status: ApplicationStatus; jobPostUrl: string;
   source: "linkedin" | "company-site" | "referral" | "recruiter" | "other"; discoveryUrl: string; applicationUrl: string;
@@ -38,6 +40,9 @@ export type ApplicationRecord = {
   analysisWeakSpots: string[]; createdAt: string;
   // Added after the original local schema. Legacy records fall back to createdAt.
   updatedAt?: string;
+  // Explicit stage history makes destructive transitions explainable and reversible.
+  stageHistory?: ApplicationStageEvent[];
+  interviewHistory?: string[];
 };
 
 export type ApplicationQuestion = { id: string; prompt: string; draftAnswer: string; evidenceIds: string[]; userEdited: boolean };
