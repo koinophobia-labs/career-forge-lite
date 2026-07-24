@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { isProfileStarted } from "@/lib/command-center-store";
 import { answerScaffold, scaffoldTemplate } from "@/lib/input-guidance";
+import { loadPrepDraft, prepDraftKey, savePrepDraft } from "@/lib/interview-prep-drafts";
 import {
   coachAnswer,
   generateInterviewPrep,
-  loadPrepDraft,
   resolvePrepLane,
-  savePrepDraft,
   type CoachingFeedback,
   type PrepCategory,
   type PrepQuestion
@@ -45,15 +44,19 @@ const categoryOrder: PrepCategory[] = ["transition", "role", "behavioral", "gap_
 
 type QuestionCardProps = {
   question: PrepQuestion;
+  draftKey: string;
 };
 
-function QuestionCard({ question }: QuestionCardProps) {
+function QuestionCard({ question, draftKey }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
-  // Drafts persist per question text; the textarea only renders after an
-  // explicit click, so the lazy localStorage read can't cause a hydration
-  // mismatch.
-  const [answer, setAnswer] = useState(() => loadPrepDraft(question.question));
+  const [answer, setAnswer] = useState(() => loadPrepDraft(draftKey));
   const [feedback, setFeedback] = useState<CoachingFeedback[] | null>(null);
+
+  useEffect(() => {
+    setAnswer(loadPrepDraft(draftKey));
+    setFeedback(null);
+    setOpen(false);
+  }, [draftKey]);
 
   return (
     <article className="rounded-xl border border-white/12 bg-obsidian/40 p-4 sm:p-5">
@@ -109,7 +112,7 @@ function QuestionCard({ question }: QuestionCardProps) {
                 placeholder={question.category === "discovery" ? "Write the real situation, action, result, source, or detail you still need to verify." : "Write it the way you'd say it out loud — or insert the structure below and fill in each line."}
                 onChange={(event) => {
                   setAnswer(event.target.value);
-                  savePrepDraft(question.question, event.target.value);
+                  savePrepDraft(draftKey, event.target.value);
                   setFeedback(null);
                 }}
                 className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
@@ -120,8 +123,9 @@ function QuestionCard({ question }: QuestionCardProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    setAnswer(scaffoldTemplate(question.category));
-                    savePrepDraft(question.question, scaffoldTemplate(question.category));
+                    const template = scaffoldTemplate(question.category);
+                    setAnswer(template);
+                    savePrepDraft(draftKey, template);
                   }}
                   className="rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold"
                 >
@@ -166,26 +170,29 @@ function QuestionCard({ question }: QuestionCardProps) {
 
 type InterviewPrepProps = {
   onSwitchToIntake: () => void;
+  requestedApplicationId?: string | null;
 };
 
-export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
+export function InterviewPrep({ onSwitchToIntake, requestedApplicationId = null }: InterviewPrepProps) {
   const { state, hydrated } = useCommandCenter();
   const [laneId, setLaneId] = useState<string | null>(null);
   const [applicationId, setApplicationId] = useState<string | null>(null);
 
+  const defaultApplication = useMemo(
+    () => state.applications.find((app) => app.id === requestedApplicationId && app.status === "interviewing")
+      ?? state.applications.find((app) => app.status === "interviewing")
+      ?? null,
+    [state.applications, requestedApplicationId]
+  );
+
   const defaultLane = useMemo(() => {
-    const interviewing = state.applications.find((app) => app.status === "interviewing" && app.laneId);
-    if (interviewing) {
-      const lane = state.lanes.find((item) => item.id === interviewing.laneId);
+    if (defaultApplication?.laneId) {
+      const lane = state.lanes.find((item) => item.id === defaultApplication.laneId);
       if (lane) return lane;
     }
     return state.lanes.find((lane) => lane.status === "active") ?? state.lanes[0] ?? null;
-  }, [state.lanes, state.applications]);
+  }, [state.lanes, defaultApplication]);
 
-  const defaultApplication = useMemo(
-    () => state.applications.find((app) => app.status === "interviewing") ?? null,
-    [state.applications]
-  );
   const selectedApplication =
     applicationId === null
       ? defaultApplication
@@ -282,8 +289,6 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
               value={selectedApplication?.id ?? ""}
               onChange={(event) => {
                 setApplicationId(event.target.value || "none");
-                // A newly-picked application brings its own lane; clear any
-                // stale manual lane choice so the application's lane wins.
                 setLaneId(null);
               }}
               className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"
@@ -335,9 +340,15 @@ export function InterviewPrep({ onSwitchToIntake }: InterviewPrepProps) {
               <h2 className="text-xl font-bold text-paper">{categoryMeta[group.category].label}</h2>
               <p className="mt-1 text-sm text-paper/60">{categoryMeta[group.category].blurb}</p>
               <div className="mt-4 grid gap-3">
-                {group.questions.map((question) => (
-                  <QuestionCard key={`${group.category}-${question.id}-${question.question.slice(0, 24)}`} question={question} />
-                ))}
+                {group.questions.map((question) => {
+                  const draftKey = prepDraftKey({
+                    applicationId: selectedApplication?.id ?? null,
+                    laneId: selectedLane?.id ?? null,
+                    questionId: question.id,
+                    question: question.question
+                  });
+                  return <QuestionCard key={draftKey} draftKey={draftKey} question={question} />;
+                })}
               </div>
             </div>
           ))}
