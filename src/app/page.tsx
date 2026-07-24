@@ -37,7 +37,9 @@ export default function Dashboard() {
           </div>
           <details className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <summary className="cursor-pointer text-center text-sm font-bold text-cyan">See a finished sample first</summary>
-            <div className="mt-5"><SampleExperience /></div>
+            <div className="mt-5" tabIndex={0} role="region" aria-label="Finished Career Forge sample">
+              <SampleExperience />
+            </div>
           </details>
         </section>
       )}
