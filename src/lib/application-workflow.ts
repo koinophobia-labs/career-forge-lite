@@ -1,4 +1,5 @@
 import type { ApplicationRecord, ApplicationStatus, CommandCenterState } from "@/types/command-center";
+import { APPLICATION_FOLLOW_UP_DAYS, addDays } from "@/lib/command-center-insights";
 
 export type ApplicationRemovalMode = "keep-sprints" | "remove-sprints";
 
@@ -20,6 +21,50 @@ export function statusForWorkspaceSave(
   if (requestedStatus === "drafting") return existingStatus;
   if (existingStatus === "offer" || existingStatus === "interviewing") return existingStatus;
   return "applied";
+}
+
+/**
+ * Keeps dates consistent with the selected stage. Only explicit status changes
+ * call this helper; background workspace saves use statusForWorkspaceSave.
+ */
+export function applicationStatusPatch(
+  application: ApplicationRecord,
+  status: ApplicationStatus,
+  nowIso: string
+): Partial<ApplicationRecord> {
+  if (status === "drafting") {
+    return { status, appliedAt: null, nextFollowUpAt: null, interviewAt: null };
+  }
+
+  if (status === "applied") {
+    const enteringApplied = application.status !== "applied";
+    return {
+      status,
+      appliedAt: enteringApplied ? nowIso : application.appliedAt ?? nowIso,
+      nextFollowUpAt: enteringApplied
+        ? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS)
+        : application.nextFollowUpAt ?? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS),
+      interviewAt: null
+    };
+  }
+
+  if (status === "interviewing") {
+    return {
+      status,
+      appliedAt: application.appliedAt ?? nowIso,
+      nextFollowUpAt: null
+    };
+  }
+
+  if (status === "offer") {
+    return {
+      status,
+      appliedAt: application.appliedAt ?? nowIso,
+      nextFollowUpAt: null
+    };
+  }
+
+  return { status, nextFollowUpAt: null };
 }
 
 export function applicationPriority(application: ApplicationRecord): number {
