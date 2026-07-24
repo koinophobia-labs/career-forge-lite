@@ -24,6 +24,7 @@ import {
   truthInboxCounts
 } from "@/lib/truth-inbox";
 import { isUncertaintyStatement } from "@/lib/truth-guards";
+import { syncRoleSprintsWithEvidence } from "@/lib/role-sprint";
 import { earlyWinBullets } from "@/lib/early-win";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
@@ -137,7 +138,14 @@ export default function DossierPage() {
   function save(next: CareerDossier) {
     let events: ReturnType<typeof activationEventsForTransition> = [];
     update((current) => {
-      const nextState = withUpdatedDossier(current, { ...next, updatedAt: new Date().toISOString() });
+      const now = new Date().toISOString();
+      const withDossier = withUpdatedDossier(current, { ...next, updatedAt: now });
+      // Approving/rejecting/deleting evidence here is what moves a Role Sprint
+      // between "completed" and "approved-as-evidence" — keep them in step.
+      const nextState = {
+        ...withDossier,
+        roleSprints: syncRoleSprintsWithEvidence(withDossier.roleSprints, withDossier.dossier.evidence, now)
+      };
       events = activationEventsForTransition(current, nextState);
       return nextState;
     });
@@ -559,7 +567,7 @@ export default function DossierPage() {
             </section>
 
             {(proposed.length > 0 || dossier.migrationReview.length > 0) && (
-              <section className="trust-panel mt-6 p-5 sm:p-6">
+              <section className="trust-panel mt-6 scroll-mt-28 p-5 sm:p-6" id="evidence-review">
                 <h2 className="text-xl font-bold text-paper">Review proposed or migrated evidence</h2>
                 <p className="mt-1 text-sm text-paper/55">Source text and confidence stay attached. Unsupported assumptions remain unapproved.</p>
                 {dossier.migrationReview.map((item) => <p key={item} className="mt-3 rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-paper/70">{item}</p>)}

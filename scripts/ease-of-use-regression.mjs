@@ -56,9 +56,10 @@ const routerComponent = source("src/components/IntentRouter.tsx");
 const routerLogic = source("src/lib/intent-router.ts");
 const founding = source("src/app/founding-beta/page.tsx");
 
-check("desktop navigation exposes four plain primary destinations", ["Today", "My Résumé", "Applications", "Interview"].every((label) => nav.includes(`[\"${label}\"`) || nav.includes(`["${label}"`)));
-check("advanced workflow tools are grouped behind More", nav.includes("const moreStations") && /<summary[\s\S]*?>\s*More\s*<\/summary>/.test(nav) && nav.includes("Data & Backup"));
-check("first-run router promises one clear next step", routerComponent.includes("One choice. One clear next step.") && routerComponent.includes("take you directly to the right starting point"));
+const primaryBlock = nav.match(/const primaryStations:[\s\S]*?= \[([\s\S]*?)\n\];/)?.[1] ?? "";
+check("desktop navigation exposes four plain primary destinations", ["Today", "Résumé", "Jobs", "Applications"].every((label) => primaryBlock.includes(`\"${label}\"`)) && [...primaryBlock.matchAll(/\["[^"]+",\s*"[^"]+"\]/g)].length === 4);
+check("advanced workflow tools are grouped behind Workspace", nav.includes("const workspaceStations") && /<summary[\s\S]*?>\s*Workspace\s*<\/summary>/.test(nav) && nav.includes("Data & Backup"));
+check("first-run router promises one clear next step", routerComponent.includes("What are you trying to do?") && routerComponent.includes("Pick one. Career Forge will take you to the next step."));
 check("returning progress uses plain-language milestones", ["Work history added", "Facts reviewed", "Target role chosen", "Résumé ready"].every((label) => routerLogic.includes(label)));
 check("founding cohort routes to live pricing checkout", founding.includes('href="/pricing"') && founding.includes("Secure checkout is live"));
 check("founding cohort no longer uses a mail application", !founding.includes("mailto:") && !founding.includes("Automated checkout is being finalized"));

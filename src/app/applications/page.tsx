@@ -243,6 +243,26 @@ export default function ApplicationsPage() {
                         </p>
                       )}
                       {(app.discoveryUrl || app.applicationUrl) && <p className="mt-2 flex flex-wrap gap-3 text-xs"><span className="uppercase text-paper/45">Source: {app.source}</span>{app.discoveryUrl && <a href={app.discoveryUrl} target="_blank" rel="noreferrer" className="text-cyan underline">Discovery post</a>}{app.applicationUrl && <a href={app.applicationUrl} target="_blank" rel="noreferrer" className="font-bold text-gold underline">Employer application</a>}</p>}
+                      {(() => {
+                        const sprints = state.roleSprints.filter((sprint) => sprint.applicationId === app.id);
+                        if (!sprints.length) return null;
+                        return (
+                          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.72rem] leading-4">
+                            <span className="uppercase text-paper/45">Role Sprints:</span>
+                            {sprints.map((sprint) => (
+                              <Link
+                                key={sprint.id}
+                                href={`/role-sprint?id=${sprint.id}`}
+                                className="text-cyan/85 underline-offset-2 transition hover:text-gold hover:underline"
+                              >
+                                {sprint.title || sprint.requirement}
+                                {" · "}
+                                {sprint.status === "draft" ? "in progress" : sprint.status === "completed" ? "proof pending review" : "approved evidence"}
+                              </Link>
+                            ))}
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     <select

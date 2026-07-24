@@ -42,6 +42,8 @@ export type CareerForgeEventName =
   | "differentiation_section_cta_clicked"
   | "intent_goal_selected"
   | "intent_goal_resumed"
+  | "role_sprint_started"
+  | "role_sprint_completed"
   | "activation_feedback_submitted"
   | "beta_feedback_submitted"
   // Commerce funnel — event names only, like everything above. Which package

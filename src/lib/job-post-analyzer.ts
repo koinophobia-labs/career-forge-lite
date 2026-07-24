@@ -115,8 +115,28 @@ function profileCorpus(profile: CareerProfile): string {
   );
 }
 
+// Experience evidence only. Role Sprint practice work is deliberately kept
+// out of every corpus and support path below — practice can never read as
+// employment experience — and re-enters solely through the explicit
+// practice-partial branch in matchRequirement.
 function approvedRecords(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
-  return dossier?.evidence.filter((item) => item.approved && !item.rejected) ?? [];
+  return dossier?.evidence.filter((item) => item.approved && !item.rejected && item.source !== "role-sprint") ?? [];
+}
+
+function approvedPracticeRecords(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
+  return dossier?.evidence.filter((item) => item.approved && !item.rejected && item.source === "role-sprint") ?? [];
+}
+
+// Practice work supports a requirement only when its own text overlaps the
+// requirement's meaningful terms — the same bar directlyRelevant uses.
+function practiceRecordsFor(requirement: string, dossier?: CareerDossier | null): DossierEvidenceRecord[] {
+  const meaningfulWords = requirementTerms(requirement);
+  if (!meaningfulWords.length) return [];
+  return approvedPracticeRecords(dossier).filter((item) => {
+    const detail = normalize(item.detail);
+    const hits = meaningfulWords.filter((word) => detail.includes(word));
+    return hits.length >= Math.min(2, meaningfulWords.length);
+  });
 }
 
 function truthCorpus(profile: CareerProfile, dossier?: CareerDossier | null): string {
@@ -506,6 +526,16 @@ export function matchRequirement(requirement: string, profile: CareerProfile, do
         supportType: "transferred"
       };
     }
+    const practiceForYears = practiceRecordsFor(requirement, dossier);
+    if (practiceForYears.length) {
+      return {
+        requirement,
+        status: "partial",
+        evidence: `Approved Role Sprint practice work relates to this requirement, but labeled practice can never verify the requested ${requiredYears}-year duration or employment experience.`,
+        evidenceIds: practiceForYears.map((item) => item.id),
+        supportType: "transferred"
+      };
+    }
     return {
       requirement,
       status: "gap",
@@ -543,6 +573,20 @@ export function matchRequirement(requirement: string, profile: CareerProfile, do
       status: "partial",
       evidence: `Approved evidence is related (${overlap.slice(0, 3).join(", ")}) but does not prove the exact requirement.`,
       evidenceIds: records.filter((item) => overlap.some((word) => normalize(item.detail).includes(word))).map((item) => item.id),
+      supportType: "transferred"
+    };
+  }
+
+  // Practice support is the weakest signal and can never produce "covered":
+  // a completed Role Sprint is honest, labeled proof of effort — not
+  // employment experience.
+  const practice = practiceRecordsFor(requirement, dossier);
+  if (practice.length) {
+    return {
+      requirement,
+      status: "partial",
+      evidence: `Supported only by approved Role Sprint practice work — honest to show as labeled practice, never as experience: "${practice[0].detail}".`,
+      evidenceIds: practice.map((item) => item.id),
       supportType: "transferred"
     };
   }

@@ -6,6 +6,7 @@ import type {
   OutreachContact,
   ResumeSnapshot,
   ResumeVersionRecord,
+  RoleSprintRecord,
   TargetLane
 } from "@/types/command-center";
 import { emptyDossier, mergeLegacyResumeSnapshots, migrateLegacyProfile, reviveDossier } from "@/lib/dossier";
@@ -45,6 +46,7 @@ export function emptyState(): CommandCenterState {
     resumePacks: [],
     exports: [],
     pendingImportReviews: [],
+    roleSprints: [],
     activeGoal: null
   };
 }
@@ -206,6 +208,53 @@ function reviveApplication(raw: Record<string, unknown>): ApplicationRecord | nu
     analysisGaps: asStringArray(raw.analysisGaps),
     analysisWeakSpots: asStringArray(raw.analysisWeakSpots),
     createdAt: asString(raw.createdAt, new Date(0).toISOString())
+  };
+}
+
+const roleSprintTypes = ["explain", "evaluate", "plan", "simulate", "build"] as const;
+const roleSprintStatuses = ["draft", "completed", "approved-as-evidence"] as const;
+
+// Every field is revived explicitly — an unrevived field silently vanishes on
+// the next load, which is exactly how sprint provenance would get lost.
+function reviveRoleSprint(raw: Record<string, unknown>): RoleSprintRecord | null {
+  if (!asString(raw.id) || !asString(raw.requirement)) return null;
+  const sprintType = roleSprintTypes.includes(raw.sprintType as (typeof roleSprintTypes)[number])
+    ? (raw.sprintType as RoleSprintRecord["sprintType"])
+    : "explain";
+  const status = roleSprintStatuses.includes(raw.status as (typeof roleSprintStatuses)[number])
+    ? (raw.status as RoleSprintRecord["status"])
+    : "draft";
+  const outputsRaw = raw.outputs && typeof raw.outputs === "object" && !Array.isArray(raw.outputs)
+    ? (raw.outputs as Record<string, unknown>)
+    : null;
+  const createdAt = asString(raw.createdAt, new Date(0).toISOString());
+  return {
+    id: asString(raw.id),
+    applicationId: asStringOrNull(raw.applicationId),
+    company: asString(raw.company),
+    roleTitle: asString(raw.roleTitle),
+    requirement: asString(raw.requirement),
+    originalStatus: raw.originalStatus === "partial" ? "partial" : "gap",
+    sprintType,
+    title: asString(raw.title),
+    instructions: asStringArray(raw.instructions),
+    completionCriteria: asStringArray(raw.completionCriteria),
+    supportingEvidenceIds: asStringArray(raw.supportingEvidenceIds),
+    userWork: asString(raw.userWork),
+    status,
+    evidenceId: asStringOrNull(raw.evidenceId),
+    outputs: outputsRaw
+      ? {
+          portfolioTitle: asString(outputsRaw.portfolioTitle),
+          portfolioSummary: asString(outputsRaw.portfolioSummary),
+          resumeBullet: asString(outputsRaw.resumeBullet),
+          starStory: asString(outputsRaw.starStory),
+          talkingPoint: asString(outputsRaw.talkingPoint),
+          userEdited: outputsRaw.userEdited === true
+        }
+      : null,
+    createdAt,
+    updatedAt: asString(raw.updatedAt, createdAt)
   };
 }
 
@@ -455,6 +504,9 @@ export function parseState(serialized: string | null): CommandCenterState {
       resumePacks: reviveList(raw.resumePacks, reviveResumePack),
       exports: reviveList(raw.exports, reviveExport),
       pendingImportReviews: reviveList(raw.pendingImportReviews, revivePendingImportReview),
+      // Blobs saved before Role Sprints existed revive with [] — the additive
+      // migration convention used by every slice above.
+      roleSprints: reviveList(raw.roleSprints, reviveRoleSprint),
       activeGoal: reviveActiveGoal(raw.activeGoal)
     };
   } catch {

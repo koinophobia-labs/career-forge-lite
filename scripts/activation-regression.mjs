@@ -30,6 +30,7 @@ const source = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const NOW = "2026-07-15T12:00:00.000Z";
 
 const home = source("src/app/page.tsx");
+const intent = source("src/components/IntentRouter.tsx");
 const profile = source("src/app/profile/page.tsx");
 const versions = source("src/app/versions/page.tsx");
 const sample = source("src/components/SampleExperience.tsx");
@@ -37,8 +38,8 @@ const feedback = source("src/components/ActivationFeedback.tsx");
 const analytics = source("src/lib/analytics.ts");
 const nav = source("src/components/CommandNav.tsx");
 
-check("homepage explains the evidence compiler before input", home.includes("Your career is bigger than your last résumé.") && home.includes("Local-first career evidence compiler") && home.indexOf("What you get") < home.indexOf("Advanced workspace"));
-check("primary CTA reaches import-first entrance", /href="\/profile#import"/.test(home) && home.includes("Import my résumés"));
+check("homepage asks one plain first question before optional detail", intent.includes("What are you trying to do?") && home.indexOf("<IntentRouter") < home.indexOf("See a finished sample first") && home.includes("Open full workspace"));
+check("primary job path reaches import-first entrance", intent.includes('kind: "new-job"') && source("src/lib/intent-router.ts").includes('href: "/profile#import"'));
 check("import remains local and approval-gated", profile.includes("Processing happens in this browser") && profile.includes("Nothing becomes trusted evidence until you approve it"));
 check("proposal review explains unusable-before-approval state", profile.includes("Nothing here supports readiness, lanes, résumés, matching, or answers until approved and saved"));
 check("approval unlock messaging uses canonical readiness", profile.includes("readiness.level") && profile.includes("What your approvals unlock"));
@@ -71,8 +72,8 @@ const restored = validateBackup(JSON.stringify(createBackup(stateWithPack, NOW))
 check("backup and restore preserve activation stage", restored.ok && currentActivationStage(restored.state).id === "application");
 const legacy = parseState(JSON.stringify({ ...stateWithPack, version: 1 }));
 check("legacy users skip completed first-run stages", activationStages(legacy).filter((item) => item.complete).length >= 4);
-check("navigation keeps one compact mobile menu and groups desktop tools", nav.includes("Career Forge mobile stations") && nav.includes("md:hidden") && nav.includes("primaryStations") && nav.includes("moreStations") && /<summary[\s\S]*?>\s*More\s*<\/summary>/.test(nav));
-check("touch targets are explicit on primary workflow", [home, profile, versions].every((text) => text.includes("min-h-11")));
+check("navigation keeps one compact mobile menu and groups advanced tools", nav.includes("Career Forge mobile navigation") && nav.includes("md:hidden") && nav.includes("primaryStations") && nav.includes("workspaceStations") && /<summary[\s\S]*?>\s*Workspace\s*<\/summary>/.test(nav));
+check("touch targets are explicit on the primary workflow", [intent, profile, versions].every((text) => /min-h-(?:11|12|20)/.test(text)));
 check("empty users receive honest guidance", profile.includes("Start with one real role or project") && profile.includes("Missing credentials and unverified duration remain visible gaps"));
 check("variant distinction is semantic, not cosmetic", variantPurpose("ats").difference !== variantPurpose("recruiter").difference && variantPurpose("ats").purpose !== variantPurpose("recruiter").purpose);
 

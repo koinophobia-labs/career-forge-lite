@@ -14,7 +14,10 @@ export type EvidenceKind =
   | "constraint"
   | "goal";
 
-export type EvidenceSource = "guided" | "story" | "resume-import" | "legacy-profile" | "manual";
+// "role-sprint" marks evidence produced by a bounded practice sprint. It is
+// provenance, not employment history: the analyzer treats it as at-most
+// partial support and the record's detail text carries the practice label.
+export type EvidenceSource = "guided" | "story" | "resume-import" | "legacy-profile" | "manual" | "role-sprint";
 
 export type DossierEvidenceRecord = {
   id: string;

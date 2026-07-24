@@ -2,8 +2,8 @@
 //   import résumé files → review/approve evidence → identity → adopt a lane →
 //   forge (visible working state) → hit the entitlement gate with a clear
 //   path → activate a license on /unlock → export the complete ZIP on the
-//   FIRST attempt — plus the always-visible save-status pill and the
-//   five-step progress path.
+//   FIRST attempt — plus the always-visible save-status pill and one obvious
+//   next action.
 //
 // This validates the intake → approval → generation → entitlement → export
 // journey end to end. (Real Stripe checkout cannot run headless; the
@@ -41,8 +41,6 @@ function loadTsModule(filePath) {
 
 const { mintLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-mint.ts"));
 
-// Test keypair — never the production keys. The public half goes to the dev
-// server env; the private half mints the license the "purchase" would issue.
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
 const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
@@ -101,10 +99,14 @@ try {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
 
-  // --- 0. Pre-entry visibility: a finished sample PDF before any data entry --
+  // --- 0. First screen stays simple; sample remains available on demand -----
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  await page.getByRole("heading", { name: "What are you trying to do?" }).waitFor();
+  verify((await page.getByRole("button").filter({ hasText: /Get a job|Build or update my résumé|Practice for an interview/ }).count()) === 3,
+    "fresh users see exactly three plain-language starting paths");
+  await page.getByText("See a finished sample first", { exact: true }).click();
   await page.getByRole("button", { name: "Explore sample pack" }).click();
   const samplePromise = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download the finished sample PDF/ }).click();
@@ -112,7 +114,7 @@ try {
   const samplePath = await sampleDownload.path();
   const sampleHead = fs.readFileSync(samplePath).subarray(0, 5).toString();
   verify(sampleDownload.suggestedFilename() === "Career-Forge-Sample-Resume.pdf" && sampleHead === "%PDF-",
-    "a real finished sample PDF is downloadable before any data entry (built by the production export engine)");
+    "a real finished sample PDF remains available without competing with the main first step");
 
   // --- 1. Fresh user: import does the typing --------------------------------
   await page.goto(`${baseUrl}/profile`);
@@ -141,18 +143,17 @@ try {
   await page.getByLabel("Responsibilities", { exact: true }).fill("Resolved escalated billing disputes\nWrote 45 knowledge-base articles");
   await page.getByRole("button", { name: "Add approved role" }).click();
 
-  // --- 4. Progress is always visible with one obvious next action -----------
+  // --- 4. Returning user gets one obvious next action -----------------------
   await page.goto(baseUrl);
-  const pathHeading = page.getByRole("heading", { name: /Next: / });
-  await pathHeading.waitFor();
-  verify(true, `dashboard shows the five-step path with the current next action ("${(await pathHeading.textContent()).trim()}")`);
+  await page.getByText("Do this next", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Choose the job you want to target" }).waitFor();
+  verify(true, "dashboard gives the returning user one clear next action");
 
   // --- 5. Lane + forge with visible working state ---------------------------
   await page.goto(`${baseUrl}/targets`);
   await page.locator('[data-testid="adopt-lane"]:not(:disabled)').first().click();
   const forgeButton = page.getByRole("button", { name: /Forge complete résumé pack|Forging your pack/ });
   await forgeButton.click();
-  // The working state must be visible before navigation completes.
   await page.getByRole("button", { name: "Forging your pack…" }).waitFor({ timeout: 2000 }).catch(() => {});
   await page.waitForURL(`${baseUrl}/versions`);
   await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
@@ -179,7 +180,7 @@ try {
   const download = await downloadPromise;
   verify(download.suggestedFilename() === "Jamie-Journey-Resume-Pack.zip", `full-pack export succeeds on the FIRST attempt (${download.suggestedFilename()})`);
 
-  // --- 9. The journey survives a refresh at the end --------------------------
+  // --- 9. The journey survives a refresh at the end -------------------------
   await page.reload();
   await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
   verify(true, "everything — evidence, pack, entitlement — survives a reload with no hidden state");
