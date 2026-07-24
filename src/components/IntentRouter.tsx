@@ -14,6 +14,7 @@ import {
   recentCareerItems
 } from "@/lib/intent-router";
 import { useCommandCenter } from "@/lib/use-command-center";
+import { useCurrentTime } from "@/lib/use-current-time";
 import type { CareerGoalKind } from "@/types/command-center";
 
 const FIRST_RUN_GOALS: Array<{ kind: CareerGoalKind; label: string; description: string }> = [
@@ -25,11 +26,12 @@ const FIRST_RUN_GOALS: Array<{ kind: CareerGoalKind; label: string; description:
 export function IntentRouter() {
   const { state, update, hydrated } = useCommandCenter();
   const router = useRouter();
+  const nowIso = useCurrentTime();
   if (!hydrated) return <section className="mx-auto min-h-52 max-w-4xl px-5 pt-8 sm:px-8" aria-label="Loading career goal" />;
 
   const firstRun = isIntentFirstRun(state);
   const goal = inferCareerGoal(state);
-  const nextMove = intentNextMove(state, goal);
+  const nextMove = intentNextMove(state, goal, nowIso);
   const recent = recentCareerItems(state);
   const milestones = intentMilestones(state);
 
