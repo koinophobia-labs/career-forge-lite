@@ -92,9 +92,6 @@ export type ApplicationRecord = {
   laneId: string | null;
   status: ApplicationStatus;
   jobPostUrl: string;
-  // The exact posting text that produced the analysis and any linked Role
-  // Sprint. Keeping it on the application makes the job workspace durable.
-  jobPostText: string;
   source: "linkedin" | "company-site" | "referral" | "recruiter" | "other";
   discoveryUrl: string;
   applicationUrl: string;
