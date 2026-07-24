@@ -86,9 +86,6 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
   const pendingSprint = [...state.roleSprints].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).find((sprint) => sprintEvidenceState(state, sprint) === "pending");
   if (pendingSprint) return { title: "Review the practice proof you finished", detail: `Your Role Sprint for “${pendingSprint.requirement}” is complete. Approve it as labeled practice or revise the frozen submission.`, href: `/role-sprint?id=${pendingSprint.id}`, actionLabel: "Review practice proof" };
 
-  const draftSprint = [...state.roleSprints].filter((sprint) => sprint.status === "draft").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  if (draftSprint) return { title: "Finish the Role Sprint you started", detail: `Continue the practice task for “${draftSprint.requirement}” before starting another job workflow.`, href: `/role-sprint?id=${draftSprint.id}`, actionLabel: "Continue Role Sprint" };
-
   if (interviewing && interviewState === "unscheduled") {
     return {
       title: `Set the next interview date for ${interviewing.roleTitle}`,
@@ -97,6 +94,9 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
       actionLabel: "Set interview date"
     };
   }
+
+  const draftSprint = [...state.roleSprints].filter((sprint) => sprint.status === "draft").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (draftSprint) return { title: "Finish the Role Sprint you started", detail: `Continue the practice task for “${draftSprint.requirement}” before starting another job workflow.`, href: `/role-sprint?id=${draftSprint.id}`, actionLabel: "Continue Role Sprint" };
 
   if (state.pendingImportReviews.length || assessDossierReadiness(state.dossier).level === "not-ready") return goalEntryAction(state, kind);
   const draft = [...state.applications].filter((application) => application.status === "drafting").sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt))[0];
