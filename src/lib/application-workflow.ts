@@ -41,8 +41,8 @@ function appendInterviewHistory(application: ApplicationRecord): string[] {
 
 /**
  * Keeps dates consistent with the selected stage while preserving first-applied
- * and prior-interview history. Only explicit status changes call this helper;
- * background workspace saves use statusForWorkspaceSave.
+ * and prior-interview history. statusRevision changes only for lifecycle timing,
+ * allowing Undo to preserve later note edits but reject stale cross-tab actions.
  */
 export function applicationStatusPatch(
   application: ApplicationRecord,
@@ -61,6 +61,7 @@ export function applicationStatusPatch(
       interviewAt: null,
       stageHistory,
       interviewHistory,
+      statusRevision: nowIso,
       updatedAt: nowIso
     };
   }
@@ -76,6 +77,7 @@ export function applicationStatusPatch(
       interviewAt: null,
       stageHistory,
       interviewHistory,
+      statusRevision: nowIso,
       updatedAt: nowIso
     };
   }
@@ -87,6 +89,7 @@ export function applicationStatusPatch(
       nextFollowUpAt: null,
       stageHistory,
       interviewHistory,
+      statusRevision: nowIso,
       updatedAt: nowIso
     };
   }
@@ -98,6 +101,7 @@ export function applicationStatusPatch(
       nextFollowUpAt: null,
       stageHistory,
       interviewHistory,
+      statusRevision: nowIso,
       updatedAt: nowIso
     };
   }
@@ -108,6 +112,7 @@ export function applicationStatusPatch(
     interviewAt: null,
     stageHistory,
     interviewHistory,
+    statusRevision: nowIso,
     updatedAt: nowIso
   };
 }
@@ -136,7 +141,7 @@ export function restoreApplicationStatus(
   snapshot: ApplicationStatusSnapshot,
   nowIso: string
 ): ApplicationRecord {
-  return { ...application, ...snapshot, updatedAt: nowIso };
+  return { ...application, ...snapshot, statusRevision: nowIso, updatedAt: nowIso };
 }
 
 export function applicationPriority(application: ApplicationRecord): number {
