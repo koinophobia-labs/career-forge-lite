@@ -43,6 +43,10 @@ export type ApplicationRecord = {
   // Explicit stage history makes destructive transitions explainable and reversible.
   stageHistory?: ApplicationStageEvent[];
   interviewHistory?: string[];
+  // Changes only when status, active interview timing, or follow-up timing changes.
+  // Undo uses this token so unrelated note edits remain reversible while a newer
+  // stage change from another tab cannot be overwritten.
+  statusRevision?: string;
 };
 
 export type ApplicationQuestion = { id: string; prompt: string; draftAnswer: string; evidenceIds: string[]; userEdited: boolean };
