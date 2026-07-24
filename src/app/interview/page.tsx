@@ -1,30 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InterviewMode } from "@/components/InterviewMode";
 import { InterviewPrep } from "@/components/InterviewPrep";
-import { useCommandCenter } from "@/lib/use-command-center";
 
 function InterviewPageContent() {
   const [view, setView] = useState<"prep" | "intake">("prep");
   const searchParams = useSearchParams();
   const requestedApplicationId = searchParams.get("applicationId");
-  const { hydrated, update } = useCommandCenter();
-
-  useEffect(() => {
-    if (!hydrated || !requestedApplicationId) return;
-    // InterviewPrep historically defaults to the first interviewing record.
-    // Put the explicitly requested record first without changing any dates,
-    // status, or activity timestamps so the page opens the interview Today named.
-    update((current) => {
-      const index = current.applications.findIndex((application) => application.id === requestedApplicationId && application.status === "interviewing");
-      if (index <= 0) return current;
-      const applications = [...current.applications];
-      const [target] = applications.splice(index, 1);
-      return { ...current, applications: [target, ...applications] };
-    });
-  }, [hydrated, requestedApplicationId, update]);
 
   if (view === "intake") {
     return (
@@ -39,7 +23,7 @@ function InterviewPageContent() {
     );
   }
 
-  return <InterviewPrep onSwitchToIntake={() => setView("intake")} />;
+  return <InterviewPrep requestedApplicationId={requestedApplicationId} onSwitchToIntake={() => setView("intake")} />;
 }
 
 export default function InterviewPage() {
