@@ -182,18 +182,20 @@ export function markBackupCreated(nowIso?: string): void {
 
 const BACKUP_NUDGE_DAYS = 14;
 
-// Nudge when there are at least three meaningful durable assets at stake.
+// Role Sprints represent concentrated work, so they count more heavily than
+// lightweight tracker entries. This avoids nagging early users while protecting
+// substantial practice and evidence libraries.
 export function shouldNudgeBackup(state: CommandCenterState, lastBackupAt: string | null, nowIso: string): boolean {
   const approvedEvidence = state.dossier.evidence.filter((item) => item.approved && !item.rejected).length;
   const meaningfulAssets =
     state.applications.length +
     state.resumeVersions.length +
     state.resumePacks.length +
-    state.roleSprints.length +
+    state.roleSprints.length * 2 +
     state.outreach.length +
     state.pendingImportReviews.length +
     approvedEvidence;
-  if (meaningfulAssets < 3) return false;
+  if (meaningfulAssets < 4) return false;
   if (!lastBackupAt) return true;
   const age = new Date(nowIso).getTime() - new Date(lastBackupAt).getTime();
   return Number.isNaN(age) || age > BACKUP_NUDGE_DAYS * 24 * 60 * 60 * 1000;
