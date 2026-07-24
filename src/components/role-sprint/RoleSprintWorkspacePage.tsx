@@ -7,26 +7,20 @@ import { CommandNav } from "@/components/CommandNav";
 import { CopyButton } from "@/components/CopyButton";
 import { SiteFooter } from "@/components/SiteFooter";
 import { trackCareerEvent } from "@/lib/analytics";
-import { withUpdatedDossier } from "@/lib/dossier";
 import {
   ROLE_SPRINT_MIN_WORK_CHARS,
-  completeRoleSprint,
   sprintProvenanceNoun,
   sprintSupportingEvidence,
-  sprintUnprovenStatement,
-  syncRoleSprintsWithEvidence
+  sprintUnprovenStatement
 } from "@/lib/role-sprint";
+import { reviewRoleSprintEvidence, submitRoleSprintForReview } from "@/lib/role-sprint-lifecycle";
 import { primarySprintOutput } from "@/lib/role-sprint-ux";
 import { sprintArtifactChecks, validateSprintArtifact } from "@/lib/role-sprint-work-validator";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { CommandCenterState, RoleSprintOutputs, RoleSprintRecord } from "@/types/command-center";
 
 const sprintTypeLabel: Record<RoleSprintRecord["sprintType"], string> = {
-  explain: "Explain",
-  evaluate: "Evaluate",
-  plan: "Plan",
-  simulate: "Simulate",
-  build: "Build"
+  explain: "Explain", evaluate: "Evaluate", plan: "Plan", simulate: "Simulate", build: "Build"
 };
 
 const allOutputFields: Array<{ key: keyof Omit<RoleSprintOutputs, "userEdited">; label: string; hint: string; rows: number }> = [
@@ -94,7 +88,7 @@ function RoleSprintWorkspace() {
     }
     let error: string | null = null;
     update((current) => {
-      const result = completeRoleSprint(current, record.id, record.userWork, new Date().toISOString());
+      const result = submitRoleSprintForReview(current, record.id, record.userWork, new Date().toISOString());
       if (!result.ok) {
         error = result.error;
         return current;
@@ -110,23 +104,7 @@ function RoleSprintWorkspace() {
 
   function reviewPractice(approved: boolean) {
     if (!sprint?.evidenceId) return;
-    const nowIso = new Date().toISOString();
-    update((current) => {
-      const evidenceList = current.dossier.evidence.map((item) => item.id === sprint.evidenceId
-        ? { ...item, approved, rejected: !approved, updatedAt: nowIso }
-        : item);
-      const dossier = {
-        ...current.dossier,
-        evidence: evidenceList,
-        approvedClaims: [...new Set(evidenceList.filter((item) => item.approved && !item.rejected).map((item) => item.detail))],
-        updatedAt: nowIso
-      };
-      const withDossier = withUpdatedDossier(current, dossier);
-      return {
-        ...withDossier,
-        roleSprints: syncRoleSprintsWithEvidence(withDossier.roleSprints, withDossier.dossier.evidence, nowIso)
-      };
-    });
+    update((current) => reviewRoleSprintEvidence(current, sprint.id, approved, new Date().toISOString()));
   }
 
   if (!hydrated) return <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8" aria-busy="true" />;
@@ -169,12 +147,10 @@ function RoleSprintWorkspace() {
   const secondaryOutputFields = primaryOutput ? allOutputFields.filter((field) => field.key !== primaryOutput.key) : allOutputFields;
   const chip = displayStatus(state, sprint);
   const editedAfterReview = Boolean(
-    evidence &&
-    (evidenceState === "approved" || evidenceState === "rejected") &&
-    sprint.outputs?.userEdited &&
+    evidence && (evidenceState === "approved" || evidenceState === "rejected") && sprint.outputs?.userEdited &&
     new Date(sprint.updatedAt).getTime() > new Date(evidence.updatedAt).getTime()
   );
-  const outputsUsable = evidenceState !== "rejected";
+  const outputsUsable = evidenceState !== "rejected" && evidenceState !== "missing";
 
   return (
     <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
@@ -198,7 +174,6 @@ function RoleSprintWorkspace() {
             <p className="mt-5 text-xs font-black uppercase tracking-wide text-paper/50">Done means</p>
             <ul className="mt-2 grid gap-1.5 text-sm leading-6 text-paper/70">{sprint.completionCriteria.map((criterion) => <li key={criterion}>✓ {criterion}</li>)}</ul>
           </div>
-
           <details className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <summary className="cursor-pointer text-sm font-bold text-cyan">Why this task?</summary>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -247,11 +222,7 @@ function RoleSprintWorkspace() {
             </div>
           )}
 
-          {editedAfterReview && (
-            <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm leading-6 text-paper/78">
-              <span className="font-bold text-gold">Edited after review.</span> These output drafts have not been rechecked and do not change the approved or rejected evidence record.
-            </div>
-          )}
+          {editedAfterReview && <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm leading-6 text-paper/78"><span className="font-bold text-gold">Edited after review.</span> These output drafts have not been rechecked and do not change the approved or rejected evidence record.</div>}
 
           {outputsUsable && primaryOutput && (
             <div className="trust-panel mt-6 p-5 sm:p-6">
@@ -284,10 +255,8 @@ function RoleSprintWorkspace() {
             <div className="mt-4 text-sm leading-6 text-paper/65">
               <p>This {noun} stays labeled as practice and can never count as employment experience or satisfy years-of-experience requirements.</p>
               <ol className="mt-3 grid gap-1.5 text-xs">
-                <li><strong>Requirement:</strong> {sprint.requirement}</li>
-                <li><strong>Task:</strong> {sprintTypeLabel[sprint.sprintType]} · {sprint.title}</li>
-                <li><strong>Submission:</strong> {sprint.userWork.trim().length} characters</li>
-                <li><strong>Evidence:</strong> {evidence ? `${evidence.label} · ${evidenceState}` : "not found"}</li>
+                <li><strong>Requirement:</strong> {sprint.requirement}</li><li><strong>Task:</strong> {sprintTypeLabel[sprint.sprintType]} · {sprint.title}</li>
+                <li><strong>Submission:</strong> {sprint.userWork.trim().length} characters</li><li><strong>Evidence:</strong> {evidence ? `${evidence.label} · ${evidenceState}` : "not found"}</li>
                 <li><strong>Application:</strong> {application ? `${application.roleTitle} at ${application.company}` : target || "not linked"}</li>
               </ol>
             </div>
@@ -310,9 +279,7 @@ export function RoleSprintWorkspacePage() {
   return (
     <main id="main">
       <CommandNav active="/role-sprint" />
-      <Suspense fallback={<section className="mx-auto max-w-4xl px-5 py-10 sm:px-8" aria-busy="true" />}>
-        <RoleSprintWorkspace />
-      </Suspense>
+      <Suspense fallback={<section className="mx-auto max-w-4xl px-5 py-10 sm:px-8" aria-busy="true" />}><RoleSprintWorkspace /></Suspense>
       <SiteFooter />
     </main>
   );
