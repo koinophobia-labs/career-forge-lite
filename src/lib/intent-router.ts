@@ -62,12 +62,16 @@ function sprintEvidenceState(state: CommandCenterState, sprint: RoleSprintRecord
   return "pending";
 }
 
-export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal(state)): NextBestAction {
+export function intentNextMove(
+  state: CommandCenterState,
+  kind = inferCareerGoal(state),
+  nowIso = new Date().toISOString()
+): NextBestAction {
   const offer = [...state.applications].filter((application) => application.status === "offer").sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt))[0];
-  if (offer) return { title: `Review your offer from ${offer.company || offer.roleTitle}`, detail: "An offer is the highest-priority item in your workspace. Review the role, timing, and next decision before doing more practice.", href: "/applications", actionLabel: "Open offer" };
+  if (offer) return { title: `Review your offer from ${offer.company || offer.roleTitle}`, detail: "An offer is the highest-priority item in your workspace. Review the role, timing, and next decision before doing more practice.", href: `/applications#application-${offer.id}`, actionLabel: "Open offer" };
 
-  const interviewing = selectInterviewApplication(state.applications);
-  const interviewState = interviewing ? interviewTiming(interviewing) : null;
+  const interviewing = selectInterviewApplication(state.applications, null, nowIso);
+  const interviewState = interviewing ? interviewTiming(interviewing, nowIso) : null;
   if (interviewing && interviewState === "past") {
     return {
       title: `How did the ${interviewing.roleTitle} interview go?`,
@@ -80,8 +84,9 @@ export function intentNextMove(state: CommandCenterState, kind = inferCareerGoal
     return { title: `Prepare for ${interviewing.roleTitle} at ${interviewing.company}`, detail: "Practice the real requirements, your strongest examples, and the gaps you should answer honestly.", href: `/interview?applicationId=${interviewing.id}`, actionLabel: "Practice interview" };
   }
 
-  const followUp = [...state.applications].filter((application) => application.status === "applied" && application.nextFollowUpAt && new Date(application.nextFollowUpAt).getTime() <= Date.now()).sort((a, b) => (a.nextFollowUpAt ?? "").localeCompare(b.nextFollowUpAt ?? ""))[0];
-  if (followUp) return { title: `Follow up on ${followUp.company || followUp.roleTitle}`, detail: "This application is ready for a follow-up now.", href: "/applications", actionLabel: "Log follow-up" };
+  const nowMs = new Date(nowIso).getTime();
+  const followUp = [...state.applications].filter((application) => application.status === "applied" && application.nextFollowUpAt && new Date(application.nextFollowUpAt).getTime() <= nowMs).sort((a, b) => (a.nextFollowUpAt ?? "").localeCompare(b.nextFollowUpAt ?? ""))[0];
+  if (followUp) return { title: `Follow up on ${followUp.company || followUp.roleTitle}`, detail: "This application is ready for a follow-up now.", href: `/applications#application-${followUp.id}`, actionLabel: "Log follow-up" };
 
   const pendingSprint = [...state.roleSprints].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).find((sprint) => sprintEvidenceState(state, sprint) === "pending");
   if (pendingSprint) return { title: "Review the practice proof you finished", detail: `Your Role Sprint for “${pendingSprint.requirement}” is complete. Approve it as labeled practice or revise the frozen submission.`, href: `/role-sprint?id=${pendingSprint.id}`, actionLabel: "Review practice proof" };
