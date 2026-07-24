@@ -6,7 +6,7 @@ import { LockedActionPill } from "@/components/LockedFeature";
 import { SiteFooter } from "@/components/SiteFooter";
 import { assessJobPost } from "@/lib/input-guidance";
 import { sprintEligibility } from "@/lib/role-sprint";
-import { useTailorWorkspace } from "@/components/tailor/useTailorWorkspace";
+import { NO_SELECTION, useTailorWorkspace } from "@/components/tailor/useTailorWorkspace";
 
 const statusStyles = {
   covered: "border-spruce/60 bg-mint/10 text-mint",
@@ -18,8 +18,8 @@ export function TailorWorkspace() {
   const workspace = useTailorWorkspace();
   const {
     state, hydrated, form, setField, handleJobPostChange, analysis, runAnalysis,
-    saveAsApplication, startRoleSprint, startTailoredResume, effectiveLane,
-    baselines, effectiveBaseline, savedApplicationId, currentApplication, profileReady,
+    saveAsApplication, startRoleSprint, startTailoredResume, effectiveLane, recommendedLane,
+    baselines, effectiveBaseline, recommendedBaseline, savedApplicationId, currentApplication, profileReady,
     recommendation, baselineIssue, canTailorResume
   } = workspace;
 
@@ -29,6 +29,9 @@ export function TailorWorkspace() {
   const partialCount = analysis?.requirements.filter((item) => item.status === "partial").length ?? 0;
   const gapCount = analysis?.requirements.filter((item) => item.status === "gap").length ?? 0;
   const lifecycleClosed = recommendation?.decision === "application-closed" || recommendation?.decision === "deadline-passed";
+  const baselineValueMissing = Boolean(
+    form.baselineVariantId && form.baselineVariantId !== NO_SELECTION && !baselines.some((variant) => variant.id === form.baselineVariantId)
+  );
 
   return (
     <main id="main">
@@ -57,13 +60,13 @@ export function TailorWorkspace() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label><span className="text-sm font-bold text-paper">Company</span><input value={form.company} onChange={(event) => { setField("company", event.target.value); setField("companyEdited", true); }} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
               <label><span className="text-sm font-bold text-paper">Role title</span><input value={form.roleTitle} onChange={(event) => { setField("roleTitle", event.target.value); setField("roleTitleEdited", true); }} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
-              <label><span className="text-sm font-bold text-paper">Target role</span><select value={form.laneId || effectiveLane?.id || ""} onChange={(event) => { setField("laneId", event.target.value); setField("baselineVariantId", ""); }} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="">No saved target</option>{state.lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.title}</option>)}</select></label>
-              <label><span className="text-sm font-bold text-paper">Résumé baseline</span><select value={form.baselineVariantId || effectiveBaseline?.id || ""} onChange={(event) => setField("baselineVariantId", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="">No baseline selected</option>{baselines.map((variant) => <option key={variant.id} value={variant.id}>{variant.kind === "ats" ? "ATS résumé" : "Recruiter résumé"} · {variant.title}</option>)}</select></label>
+              <label><span className="text-sm font-bold text-paper">Target role</span><select value={form.laneId} onChange={(event) => { setField("laneId", event.target.value); setField("baselineVariantId", ""); }} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="">Career Forge recommended{recommendedLane ? ` · ${recommendedLane.title}` : ""}</option><option value={NO_SELECTION}>No saved target</option>{state.lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.title}</option>)}</select><span className="mt-1 block text-xs text-paper/45">Recommended uses your active target. “No saved target” stores no lane.</span></label>
+              <label><span className="text-sm font-bold text-paper">Résumé baseline</span><select value={form.baselineVariantId} onChange={(event) => setField("baselineVariantId", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="">Career Forge recommended{recommendedBaseline ? ` · ${recommendedBaseline.title}` : ""}</option><option value={NO_SELECTION}>No baseline selected</option>{baselineValueMissing && <option value={form.baselineVariantId}>Missing saved baseline · choose replacement</option>}{baselines.map((variant) => <option key={variant.id} value={variant.id}>{variant.kind === "ats" ? "ATS résumé" : "Recruiter résumé"} · {variant.title}</option>)}</select><span className="mt-1 block text-xs text-paper/45">A manual replacement becomes usable immediately. Save is not required first.</span></label>
               <label><span className="text-sm font-bold text-paper">Found on</span><select value={form.source} onChange={(event) => setField("source", event.target.value as typeof form.source)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink"><option value="linkedin">LinkedIn</option><option value="company-site">Company site</option><option value="referral">Referral</option><option value="recruiter">Recruiter</option><option value="other">Other</option></select></label>
               <label><span className="text-sm font-bold text-paper">Job link</span><input value={form.discoveryUrl} onChange={(event) => setField("discoveryUrl", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
               <label><span className="text-sm font-bold text-paper">Application link</span><input value={form.applicationUrl} onChange={(event) => setField("applicationUrl", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
-              <label><span className="text-sm font-bold text-paper">Deadline</span><input type="date" value={form.deadline} onChange={(event) => setField("deadline", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
-              <label><span className="text-sm font-bold text-paper">Posting date</span><input type="date" value={form.postingDate} onChange={(event) => setField("postingDate", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
+              <label><span className="text-sm font-bold text-paper">Deadline</span><input type="date" value={form.deadline} onChange={(event) => setField("deadline", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /><span className="mt-1 block text-xs text-paper/45">Clearing this field removes the saved deadline.</span></label>
+              <label><span className="text-sm font-bold text-paper">Posting date</span><input type="date" value={form.postingDate} onChange={(event) => setField("postingDate", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /><span className="mt-1 block text-xs text-paper/45">Clearing this field removes the saved posting date.</span></label>
               <label><span className="text-sm font-bold text-paper">Contact</span><input value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
               <label><span className="text-sm font-bold text-paper">Contact link</span><input value={form.contactUrl} onChange={(event) => setField("contactUrl", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
             </div>

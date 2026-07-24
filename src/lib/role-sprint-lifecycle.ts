@@ -34,6 +34,34 @@ export function submitRoleSprintForReview(
   };
 }
 
+/**
+ * A pending submission is a frozen review version. Revision explicitly removes
+ * the unapproved snapshot and returns the sprint to draft before edits continue.
+ */
+export function beginRoleSprintRevision(
+  state: CommandCenterState,
+  sprintId: string,
+  nowIso: string
+): CommandCenterState {
+  const sprint = state.roleSprints.find((item) => item.id === sprintId);
+  if (!sprint?.evidenceId) return state;
+  const evidence = state.dossier.evidence.find((item) => item.id === sprint.evidenceId);
+  if (!evidence || evidence.approved) return state;
+
+  const evidenceList = state.dossier.evidence.filter((item) => item.id !== evidence.id);
+  return {
+    ...state,
+    dossier: {
+      ...state.dossier,
+      evidence: evidenceList,
+      approvedClaims: [...new Set(evidenceList.filter((item) => item.approved && !item.rejected).map((item) => item.detail))]
+    },
+    roleSprints: state.roleSprints.map((item) => item.id === sprintId
+      ? { ...item, status: "draft", evidenceId: null, outputs: null, updatedAt: nowIso }
+      : item)
+  };
+}
+
 export function reviewRoleSprintEvidence(
   state: CommandCenterState,
   sprintId: string,

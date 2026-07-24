@@ -53,7 +53,7 @@ const application = {
 };
 
 const draftPatch = workflow.applicationStatusPatch(application, "drafting", NOW);
-check("status transition: drafting clears applied date", draftPatch.appliedAt === null);
+check("status transition: drafting preserves first applied date", draftPatch.appliedAt === application.appliedAt);
 check("status transition: drafting clears stale follow-up", draftPatch.nextFollowUpAt === null);
 check("status transition: drafting clears interview date", draftPatch.interviewAt === null);
 const reappliedPatch = workflow.applicationStatusPatch({ ...application, status: "interviewing", nextFollowUpAt: null }, "applied", NOW);
@@ -130,7 +130,7 @@ check("answers: empty field intentionally clears question records", tailorHook.i
 check("baselines: mismatch is visible and blocks generation", tailorHook.includes("baselineIssue") && tailorUi.includes("Résumé baseline needs attention"));
 check("tracker: every application exposes a workspace action", applicationsUi.includes("Add job posting →") && applicationsUi.includes("Open job workspace →"));
 check("sprint UI: rejected and missing proof hide output-use sections", sprintUi.includes('evidenceState !== "rejected" && evidenceState !== "missing"'));
-check("sprint UI: post-review edits are marked unverified", sprintUi.includes("Edited after review") && sprintUi.includes("have not been rechecked"));
+check("sprint UI: user-edited outputs are always marked unverified", sprintUi.includes("User edited · not checked by Career Forge") && sprintUi.includes("outputNeedsVerification"));
 check("sprint UI: live completion checklist is visible", sprintUi.includes("Ready-to-finish checklist") && sprintUi.includes("sprintArtifactChecks"));
 check("interview page: exact requested application is promoted", interviewPage.includes("requestedApplicationId") && interviewPage.includes("applications: [target, ...applications]"));
 

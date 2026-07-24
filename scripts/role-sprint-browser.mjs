@@ -1,7 +1,8 @@
 // Final Role Sprint acceptance:
-// structured proof validation, durable job linkage, answer preservation,
-// applied-status preservation, offer priority, same-title posting replacement,
-// manual-workspace upgrade, and safe linked-sprint deletion.
+// structured proof validation, frozen review versions, exact-claim approval,
+// output edit warnings, durable job linkage, answer preservation, reversible
+// status changes, past-interview routing, same-title replacement, manual-workspace
+// upgrade, and safe linked-sprint deletion.
 import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
@@ -102,6 +103,7 @@ const knowledgeRequirement = "Ability to create a searchable onboarding knowledg
 const jobPost = `Product Support Specialist\n\nAcme Software\n\nResponsibilities:\n- Resolve customer tickets and explain next steps clearly\n- Document repeatable support workflows\n\nRequirements:\n- ${sqlRequirement}\n- ${knowledgeRequirement}\n- 3+ years of product support experience\n- Bachelor's degree preferred`;
 const invalidDescription = "I would build a dashboard that helps leaders understand support trends, ticket volume, resolution time, escalation rates, and the categories that need attention each week.";
 const validArtifact = `Weekly Support Dashboard Artifact\nFields: ticket_id, created_week, category, resolution_hours, escalation_status\nQuery: SELECT created_week, category, COUNT(*) AS ticket_volume FROM tickets GROUP BY created_week, category\nMetrics: weekly volume, average resolution time, escalation rate, top categories\nI chose these fields because leaders need both trend and severity context. With more time I would add drill-down filters.`;
+const revisedArtifact = `${validArtifact}\nRevision: I added an escalation-status field because severity should be visible beside weekly volume.`;
 const secondJobPost = `Product Support Specialist\n\nBeta Software\n\nResponsibilities:\n- Support enterprise customers\n\nRequirements:\n- Ability to build a customer escalation dashboard in SQL\n- Ability to design a repeatable incident handoff process`;
 const manualJobPost = `Customer Experience Associate at Manual Co\n\nResponsibilities:\n- Resolve customer questions\n\nRequirements:\n- Strong written communication`;
 
@@ -133,20 +135,41 @@ try {
   const firstApplicationId = started.applications[0].id;
   verify(started.roleSprints[0].applicationId === firstApplicationId && started.applications[0].company === "Acme Software", "starting a sprint saves and links the correct job");
 
-  await page.getByLabel("Sprint work area").fill(invalidDescription);
-  const finishButton = page.getByRole("button", { name: "Finish sprint →" });
+  const workBox = page.getByLabel("Sprint work area");
+  await workBox.fill(invalidDescription);
+  let finishButton = page.getByRole("button", { name: "Finish sprint →" });
   verify(await finishButton.isDisabled(), "live checklist blocks a description without artifact structure");
   verify(await page.getByText(/Complete the checklist before submitting/i).isVisible(), "live checklist explains why submission is blocked");
 
-  await page.getByLabel("Sprint work area").fill(validArtifact);
+  await workBox.fill(validArtifact);
   await page.getByText("Ready to submit", { exact: true }).waitFor();
   await finishButton.click();
   await page.getByText("Review your practice proof", { exact: true }).waitFor();
+  verify(await workBox.isDisabled(), "pending review freezes the submitted work version");
+  verify(await page.getByText("Career Forge will save this claim", { exact: true }).isVisible(), "review shows the exact evidence claim");
+  verify(await page.getByText("Submitted source excerpt", { exact: true }).isVisible(), "review shows the submitted source excerpt");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Revise submission" }).click();
+  await workBox.waitFor({ state: "visible" });
+  verify(!(await workBox.isDisabled()), "explicit revision unlocks the work area");
+  const revisionState = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+  verify(revisionState.dossier.evidence.every((item) => item.source !== "role-sprint"), "revision removes the outdated pending evidence snapshot");
+
+  await workBox.fill(revisedArtifact);
+  await page.getByText("Ready to submit", { exact: true }).waitFor();
+  finishButton = page.getByRole("button", { name: "Finish sprint →" });
+  await finishButton.click();
+  await page.getByText("Review your practice proof", { exact: true }).waitFor();
+  const portfolioSummary = page.getByRole("textbox", { name: "Portfolio summary" });
+  await portfolioSummary.fill(`${await portfolioSummary.inputValue()} User-edited framing.`);
+  await page.getByText("User edited · not checked by Career Forge.", { exact: false }).waitFor();
   await page.goto(baseUrl);
   await page.getByRole("heading", { name: "Review the practice proof you finished" }).waitFor();
   await page.goto(firstSprintUrl);
-  await page.getByRole("button", { name: "Approve as practice →" }).click();
+  await page.getByRole("button", { name: "Approve this exact claim →" }).click();
   await page.getByText("Approved.", { exact: false }).waitFor();
+  verify(await page.getByText("User edited · not checked by Career Forge.", { exact: false }).isVisible(), "user-edited output remains explicitly unchecked after evidence approval");
   await page.getByRole("link", { name: "Return to this job →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
   await page.getByText("Best next step", { exact: true }).waitFor();
@@ -159,6 +182,11 @@ try {
   const answerBox = acmeCard.getByText("Why do you want this role?", { exact: true }).locator("..").getByRole("textbox");
   await answerBox.fill("I want this role because it combines customer problem solving with product feedback.");
   await acmeCard.locator("select").selectOption("applied");
+  page.once("dialog", (dialog) => dialog.accept());
+  await acmeCard.locator("select").selectOption("drafting");
+  await page.getByRole("button", { name: "Undo" }).click();
+  acmeCard = page.locator("article").filter({ hasText: /Acme Software/i }).first();
+  verify(await acmeCard.locator("select").inputValue() === "applied", "destructive stage change can be undone");
   await acmeCard.getByRole("link", { name: "Open job workspace →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
   const knowledgeCard = page.locator("div.rounded-lg").filter({ hasText: /onboarding knowledge base/i }).first();
@@ -205,7 +233,7 @@ try {
   await page.getByPlaceholder("Company name").fill("Manual Co");
   await page.getByPlaceholder("Role title").fill("Customer Experience Associate");
   await page.getByRole("button", { name: "Add application" }).click();
-  const manualCard = page.locator("article").filter({ hasText: /Manual Co/i }).first();
+  let manualCard = page.locator("article").filter({ hasText: /Manual Co/i }).first();
   await manualCard.getByRole("link", { name: "Add job posting →" }).click();
   await page.waitForURL(/\/tailor\?applicationId=/);
   await page.getByText("Complete this saved application", { exact: false }).waitFor();
@@ -217,6 +245,16 @@ try {
   const upgraded = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
   verify(upgraded.applications.filter((item) => item.id === manualId).length === 1, "manual application upgrades in place without duplication");
   verify(upgraded.applications.find((item) => item.id === manualId)?.jobPostUrl.startsWith("career-forge-job-text:v1:"), "manual application receives the pasted job workspace");
+
+  await page.goto(`${baseUrl}/applications`);
+  manualCard = page.locator("article").filter({ hasText: /Manual Co/i }).first();
+  await manualCard.locator("select").selectOption("interviewing");
+  await manualCard.getByLabel("Interview date").fill("2020-01-01");
+  await page.goto(baseUrl);
+  await page.getByRole("heading", { name: /How did the Customer Experience Associate interview go/i }).waitFor();
+  await page.getByRole("link", { name: "Update interview result" }).click();
+  await page.getByText("How did the interview go?", { exact: true }).waitFor();
+  verify(await page.getByRole("button", { name: "Move to offer" }).isVisible(), "past interviews route to an outcome check-in instead of more preparation");
 
   console.log(`\nFinal Role Sprint browser acceptance: ${passes} passed, 0 failed`);
   await context.close();

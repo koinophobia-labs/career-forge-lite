@@ -23,44 +23,89 @@ export function statusForWorkspaceSave(
   return "applied";
 }
 
+function appendStage(application: ApplicationRecord, status: ApplicationStatus, nowIso: string) {
+  const history = application.stageHistory ?? [{ status: application.status, at: application.updatedAt ?? application.createdAt }];
+  if (application.status === status) return history;
+  return [...history, { status, at: nowIso }];
+}
+
+function appendInterviewHistory(application: ApplicationRecord): string[] {
+  const history = application.interviewHistory ?? [];
+  if (!application.interviewAt || history.includes(application.interviewAt)) return history;
+  return [...history, application.interviewAt];
+}
+
 /**
- * Keeps dates consistent with the selected stage. Only explicit status changes
- * call this helper; background workspace saves use statusForWorkspaceSave.
+ * Keeps dates consistent with the selected stage while preserving first-applied
+ * and prior-interview history. Only explicit status changes call this helper;
+ * background workspace saves use statusForWorkspaceSave.
  */
 export function applicationStatusPatch(
   application: ApplicationRecord,
   status: ApplicationStatus,
   nowIso: string
 ): Partial<ApplicationRecord> {
+  const stageHistory = appendStage(application, status, nowIso);
+  const leavingInterview = application.status === "interviewing" && status !== "interviewing";
+  const interviewHistory = leavingInterview ? appendInterviewHistory(application) : application.interviewHistory ?? [];
+
   if (status === "drafting") {
-    return { status, appliedAt: null, nextFollowUpAt: null, interviewAt: null, updatedAt: nowIso };
+    return {
+      status,
+      appliedAt: application.appliedAt,
+      nextFollowUpAt: null,
+      interviewAt: null,
+      stageHistory,
+      interviewHistory,
+      updatedAt: nowIso
+    };
   }
 
   if (status === "applied") {
     const enteringApplied = application.status !== "applied";
     return {
       status,
-      // Returning to Applied schedules a new follow-up without rewriting the
-      // original submission date.
       appliedAt: application.appliedAt ?? nowIso,
       nextFollowUpAt: enteringApplied
         ? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS)
         : application.nextFollowUpAt ?? addDays(nowIso, APPLICATION_FOLLOW_UP_DAYS),
       interviewAt: null,
+      stageHistory,
+      interviewHistory,
       updatedAt: nowIso
     };
   }
 
-  if (status === "interviewing" || status === "offer") {
+  if (status === "interviewing") {
     return {
       status,
       appliedAt: application.appliedAt ?? nowIso,
       nextFollowUpAt: null,
+      stageHistory,
+      interviewHistory,
       updatedAt: nowIso
     };
   }
 
-  return { status, nextFollowUpAt: null, updatedAt: nowIso };
+  if (status === "offer") {
+    return {
+      status,
+      appliedAt: application.appliedAt ?? nowIso,
+      nextFollowUpAt: null,
+      stageHistory,
+      interviewHistory,
+      updatedAt: nowIso
+    };
+  }
+
+  return {
+    status,
+    nextFollowUpAt: null,
+    interviewAt: null,
+    stageHistory,
+    interviewHistory,
+    updatedAt: nowIso
+  };
 }
 
 export function applicationPriority(application: ApplicationRecord): number {
