@@ -227,7 +227,8 @@ export function useTailorWorkspace() {
       createdAt: current?.createdAt ?? nowIso,
       updatedAt: nowIso,
       stageHistory: current?.stageHistory ?? [{ status: baseStatus, at: nowIso }],
-      interviewHistory: current?.interviewHistory ?? []
+      interviewHistory: current?.interviewHistory ?? [],
+      statusRevision: current?.statusRevision ?? nowIso
     };
     return finalStatus === baseStatus ? record : transitionApplicationStatus(record, finalStatus, nowIso);
   }
