@@ -20,14 +20,15 @@ export function TailorWorkspace() {
     state, hydrated, form, setField, handleJobPostChange, analysis, runAnalysis,
     saveAsApplication, startRoleSprint, startTailoredResume, effectiveLane,
     baselines, effectiveBaseline, savedApplicationId, currentApplication, profileReady,
-    recommendation, canTailorResume
+    recommendation, baselineIssue, canTailorResume
   } = workspace;
 
   const eligibleRequirement = recommendation?.requirement ?? null;
-  const sprintIsBest = recommendation?.decision === "sprint";
+  const sprintIsBest = recommendation?.decision === "sprint" && Boolean(eligibleRequirement);
   const coveredCount = analysis?.requirements.filter((item) => item.status === "covered").length ?? 0;
   const partialCount = analysis?.requirements.filter((item) => item.status === "partial").length ?? 0;
   const gapCount = analysis?.requirements.filter((item) => item.status === "gap").length ?? 0;
+  const lifecycleClosed = recommendation?.decision === "application-closed" || recommendation?.decision === "deadline-passed";
 
   return (
     <main id="main">
@@ -37,35 +38,17 @@ export function TailorWorkspace() {
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Paste a job. See what you can prove.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">Career Forge compares the real posting with the experience you approved. The job post is the only required input.</p>
 
-        {!profileReady && hydrated && (
-          <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">
-            Results will be more useful after you add some work history. You can still analyze the posting now. <Link href="/profile" className="font-bold text-gold">Add work history</Link>
-          </div>
-        )}
-
-        {currentApplication && !form.jobPost.trim() && (
-          <div className="mt-6 rounded-xl border border-cyan/30 bg-cyan/10 p-4 text-sm leading-6 text-paper/75">
-            <span className="font-bold text-cyan">Complete this saved application.</span> Paste the job posting below. Your company, role, status, notes, résumé link, and edited answers will stay attached to this workspace.
-          </div>
-        )}
+        {!profileReady && hydrated && <div className="mt-6 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">Results will be more useful after you add some work history. You can still analyze the posting now. <Link href="/profile" className="font-bold text-gold">Add work history</Link></div>}
+        {currentApplication && !form.jobPost.trim() && <div className="mt-6 rounded-xl border border-cyan/30 bg-cyan/10 p-4 text-sm leading-6 text-paper/75"><span className="font-bold text-cyan">Complete this saved application.</span> Paste the job posting below. Your company, role, status, notes, résumé link, and edited answers will stay attached to this workspace.</div>}
+        {baselineIssue && <div className="mt-6 rounded-xl border border-gold/35 bg-gold/10 p-4 text-sm leading-6 text-paper/75"><span className="font-bold text-gold">Résumé baseline needs attention.</span> {baselineIssue}</div>}
 
         <div className="trust-panel mt-7 p-5 sm:p-7">
           <label className="block">
             <span className="text-base font-bold text-paper">Paste the full job posting</span>
             <span className="mt-1 block text-xs leading-5 text-paper/55">Include the responsibilities and qualifications sections.</span>
-            <textarea
-              aria-label="Paste the full job posting"
-              value={form.jobPost}
-              rows={12}
-              placeholder="Paste the job posting here…"
-              onChange={(event) => handleJobPostChange(event.target.value, (event.nativeEvent as InputEvent).inputType)}
-              className="trust-input mt-3 w-full border px-3 py-3 text-sm text-ink"
-            />
+            <textarea aria-label="Paste the full job posting" value={form.jobPost} rows={12} placeholder="Paste the job posting here…" onChange={(event) => handleJobPostChange(event.target.value, (event.nativeEvent as InputEvent).inputType)} className="trust-input mt-3 w-full border px-3 py-3 text-sm text-ink" />
           </label>
-          {form.jobPost.trim() && (() => {
-            const quality = assessJobPost(form.jobPost);
-            return <p className={`mt-2 text-xs leading-5 ${quality.status === "good" ? "text-mint" : "text-gold"}`}>{quality.message}</p>;
-          })()}
+          {form.jobPost.trim() && (() => { const quality = assessJobPost(form.jobPost); return <p className={`mt-2 text-xs leading-5 ${quality.status === "good" ? "text-mint" : "text-gold"}`}>{quality.message}</p>; })()}
           <button type="button" onClick={runAnalysis} disabled={!form.jobPost.trim()} className="lab-pill-button mt-5 px-6 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40">Analyze this job →</button>
 
           <details className="mt-5 border-t border-white/10 pt-4">
@@ -84,7 +67,7 @@ export function TailorWorkspace() {
               <label><span className="text-sm font-bold text-paper">Contact</span><input value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
               <label><span className="text-sm font-bold text-paper">Contact link</span><input value={form.contactUrl} onChange={(event) => setField("contactUrl", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
             </div>
-            <label className="mt-4 block"><span className="text-sm font-bold text-paper">Application questions</span><textarea rows={3} value={form.questionPrompts} onChange={(event) => setField("questionPrompts", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /></label>
+            <label className="mt-4 block"><span className="text-sm font-bold text-paper">Application questions</span><textarea rows={3} value={form.questionPrompts} onChange={(event) => setField("questionPrompts", event.target.value)} className="trust-input mt-2 w-full border px-3 py-2.5 text-sm text-ink" /><span className="mt-1 block text-xs text-paper/45">Clear this field and save to remove all saved questions.</span></label>
           </details>
         </div>
 
@@ -96,49 +79,15 @@ export function TailorWorkspace() {
               <p className="mt-2 text-sm leading-6 text-paper/62">{analysis.honestyNote}</p>
               <div className="mt-5 rounded-xl border border-gold/30 bg-gold/10 p-4">
                 <p className="text-xs font-black uppercase tracking-wide text-gold">Best next step</p>
-                {eligibleRequirement && sprintIsBest ? (
-                  <>
-                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Build honest proof for: “{eligibleRequirement.requirement}”</p>
-                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation?.reason}</p>
-                    <button type="button" onClick={() => startRoleSprint(eligibleRequirement)} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Start one Role Sprint →</button>
-                    <p className="mt-2 text-xs text-paper/45">This job will be saved automatically so the sprint can return here.</p>
-                  </>
-                ) : recommendation?.decision === "review-offer" ? (
-                  <>
-                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Review the offer before doing more application work.</p>
-                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
-                    <Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Open offer →</Link>
-                  </>
-                ) : recommendation?.decision === "prepare-interview" ? (
-                  <>
-                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Prepare for the interview.</p>
-                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
-                    <Link href="/interview" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Practice interview →</Link>
-                  </>
-                ) : recommendation?.decision === "application-live" ? (
-                  <>
-                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Your application is already submitted.</p>
-                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
-                    <Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Track this application →</Link>
-                  </>
-                ) : recommendation?.decision === "apply-first" && effectiveBaseline && canTailorResume ? (
-                  <>
-                    <p className="mt-2 text-sm font-bold leading-6 text-paper">Apply with the experience you already have.</p>
-                    <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>
-                    <button type="button" onClick={startTailoredResume} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Build the tailored résumé →</button>
-                  </>
-                ) : effectiveBaseline && canTailorResume ? (
-                  <>
-                    <p className="mt-2 text-sm leading-6 text-paper/70">Your strongest next move is tailoring the résumé you already have.</p>
-                    <button type="button" onClick={startTailoredResume} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Build the tailored résumé →</button>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-2 text-sm leading-6 text-paper/70">Save this job, then add a résumé baseline before deciding whether practice is worth delaying the application.</p>
-                    {recommendation?.reason && <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>}
-                    <button type="button" onClick={() => saveAsApplication("drafting")} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Save this job →</button>
-                  </>
-                )}
+                {eligibleRequirement && sprintIsBest ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">Build honest proof for: “{eligibleRequirement.requirement}”</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation?.reason}</p><button type="button" onClick={() => startRoleSprint(eligibleRequirement)} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Start one Role Sprint →</button><p className="mt-2 text-xs text-paper/45">This job will be saved automatically so the sprint can return here.</p></>
+                : recommendation?.decision === "review-offer" ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">Review the offer before doing more application work.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Open offer →</Link></>
+                : recommendation?.decision === "prepare-interview" ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">Prepare for the interview.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><Link href={`/interview?applicationId=${currentApplication?.id ?? ""}`} className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Practice interview →</Link></>
+                : recommendation?.decision === "application-live" ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">Your application is already submitted.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Track this application →</Link></>
+                : recommendation?.decision === "application-closed" ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">This application is no longer active.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><Link href="/tailor" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Analyze another job →</Link></>
+                : recommendation?.decision === "deadline-passed" ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">The application deadline has passed.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><Link href="/applications" className="lab-pill-button mt-4 inline-flex px-5 py-2.5 text-sm font-black">Close or review this job →</Link></>
+                : recommendation?.decision === "apply-first" && effectiveBaseline && canTailorResume && !baselineIssue ? <><p className="mt-2 text-sm font-bold leading-6 text-paper">Apply with the experience you already have.</p><p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p><button type="button" onClick={startTailoredResume} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Build the tailored résumé →</button></>
+                : effectiveBaseline && canTailorResume && !baselineIssue ? <><p className="mt-2 text-sm leading-6 text-paper/70">Your strongest next move is tailoring the résumé you already have.</p><button type="button" onClick={startTailoredResume} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Build the tailored résumé →</button></>
+                : <><p className="mt-2 text-sm leading-6 text-paper/70">Save this job, then choose a valid résumé baseline before generating a tailored version.</p>{recommendation?.reason && <p className="mt-1 text-xs leading-5 text-paper/55">{recommendation.reason}</p>}<button type="button" onClick={() => saveAsApplication("drafting")} className="lab-pill-button mt-4 px-5 py-2.5 text-sm font-black">Save this job →</button></>}
               </div>
             </div>
 
@@ -150,40 +99,14 @@ export function TailorWorkspace() {
                   const existingSprint = state.roleSprints.find((item) => item.requirement === requirement.requirement && item.applicationId === savedApplicationId);
                   const shownAsPrimarySprint = sprintIsBest && requirement === eligibleRequirement;
                   const practiceLater = recommendation?.decision !== "sprint" && requirement === eligibleRequirement;
-                  return (
-                    <div key={requirement.requirement} className="rounded-lg border border-white/12 bg-obsidian/40 p-3.5">
-                      <div className="flex flex-wrap items-start justify-between gap-2"><p className="max-w-3xl text-sm font-bold leading-5 text-paper">{requirement.requirement}</p><span className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusStyles[requirement.status]}`}>{requirement.status}</span></div>
-                      <p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{requirement.evidence}</p>
-                      {eligibility?.eligible && !shownAsPrimarySprint && (
-                        <button type="button" onClick={() => startRoleSprint(requirement)} className="mt-2.5 text-xs font-bold text-cyan">
-                          {existingSprint ? "Resume sprint →" : practiceLater ? "Practice this later →" : "Build proof for this →"}
-                        </button>
-                      )}
-                      {eligibility && !eligibility.eligible && <p className="mt-2 text-[0.72rem] leading-5 text-paper/42">A short practice task cannot honestly replace this requirement.</p>}
-                    </div>
-                  );
+                  return <div key={requirement.requirement} className="rounded-lg border border-white/12 bg-obsidian/40 p-3.5"><div className="flex flex-wrap items-start justify-between gap-2"><p className="max-w-3xl text-sm font-bold leading-5 text-paper">{requirement.requirement}</p><span className={`lab-mono shrink-0 rounded-full border px-2.5 py-0.5 text-[0.62rem] font-bold uppercase ${statusStyles[requirement.status]}`}>{requirement.status}</span></div><p className="mt-1.5 text-[0.78rem] leading-5 text-paper/60">{requirement.evidence}</p>{eligibility?.eligible && !shownAsPrimarySprint && !lifecycleClosed && <button type="button" onClick={() => startRoleSprint(requirement)} className="mt-2.5 text-xs font-bold text-cyan">{existingSprint ? "Resume sprint →" : practiceLater ? "Practice this later →" : "Build proof for this →"}</button>}{eligibility && !eligibility.eligible && <p className="mt-2 text-[0.72rem] leading-5 text-paper/42">A short practice task cannot honestly replace this requirement.</p>}</div>;
                 }) : <p className="text-sm text-paper/60">Couldn’t isolate the requirements. Paste the posting with its original line breaks.</p>}
               </div>
             </div>
 
-            <details className="trust-panel p-5 sm:p-6">
-              <summary className="cursor-pointer text-base font-bold text-cyan">More analysis</summary>
-              <div className="mt-5 grid gap-6 lg:grid-cols-2">
-                <div><h3 className="font-bold text-paper">Keywords</h3><div className="mt-3 flex flex-wrap gap-2">{analysis.keywords.map((hit) => <span key={hit.term} className={`rounded-full border px-3 py-1 text-xs font-bold ${hit.inProfile ? "border-gold/50 text-gold" : "border-coral/50 text-coral"}`}>{hit.term}</span>)}</div></div>
-                <div><h3 className="font-bold text-paper">Weak spots</h3><ul className="mt-3 grid gap-2">{analysis.weakSpots.map((spot) => <li key={spot} className="text-sm leading-6 text-paper/65">• {spot}</li>)}</ul></div>
-                <div className="lg:col-span-2"><h3 className="font-bold text-paper">Suggested bullet rewrites</h3><ul className="mt-3 grid gap-2">{analysis.bulletSuggestions.map((item) => <li key={item.suggestion} className="rounded-lg border border-white/10 p-3 text-sm leading-6 text-paper/70">{item.suggestion}</li>)}</ul></div>
-              </div>
-            </details>
+            <details className="trust-panel p-5 sm:p-6"><summary className="cursor-pointer text-base font-bold text-cyan">More analysis</summary><div className="mt-5 grid gap-6 lg:grid-cols-2"><div><h3 className="font-bold text-paper">Keywords</h3><div className="mt-3 flex flex-wrap gap-2">{analysis.keywords.map((hit) => <span key={hit.term} className={`rounded-full border px-3 py-1 text-xs font-bold ${hit.inProfile ? "border-gold/50 text-gold" : "border-coral/50 text-coral"}`}>{hit.term}</span>)}</div></div><div><h3 className="font-bold text-paper">Weak spots</h3><ul className="mt-3 grid gap-2">{analysis.weakSpots.map((spot) => <li key={spot} className="text-sm leading-6 text-paper/65">• {spot}</li>)}</ul></div><div className="lg:col-span-2"><h3 className="font-bold text-paper">Suggested bullet rewrites</h3><ul className="mt-3 grid gap-2">{analysis.bulletSuggestions.map((item) => <li key={item.suggestion} className="rounded-lg border border-white/10 p-3 text-sm leading-6 text-paper/70">{item.suggestion}</li>)}</ul></div></div></details>
 
-            <details className="rounded-xl border border-white/12 bg-white/5 p-4">
-              <summary className="cursor-pointer text-sm font-bold text-paper/65">Other actions</summary>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button type="button" onClick={() => saveAsApplication("drafting")} className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-paper/70">{savedApplicationId ? "Save changes" : "Save as draft"}</button>
-                <button type="button" onClick={() => saveAsApplication("applied")} className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-paper/70">I applied</button>
-                {savedApplicationId && <Link href="/applications" className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-cyan">Open applications →</Link>}
-                {canTailorResume ? <button type="button" onClick={startTailoredResume} disabled={!effectiveBaseline} className="rounded-md border border-cyan/40 px-4 py-2 text-sm font-bold text-cyan disabled:opacity-40">Build tailored résumé</button> : <LockedActionPill feature="tailored_resume_export" label="Build tailored résumé" />}
-              </div>
-            </details>
+            <details className="rounded-xl border border-white/12 bg-white/5 p-4"><summary className="cursor-pointer text-sm font-bold text-paper/65">Other actions</summary><div className="mt-4 flex flex-wrap gap-3"><button type="button" onClick={() => saveAsApplication("drafting")} className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-paper/70">{savedApplicationId ? "Save changes" : "Save as draft"}</button>{!lifecycleClosed && <button type="button" onClick={() => saveAsApplication("applied")} className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-paper/70">I applied</button>}{savedApplicationId && <Link href="/applications" className="rounded-md border border-white/15 px-4 py-2 text-sm font-bold text-cyan">Open applications →</Link>}{canTailorResume ? <button type="button" onClick={startTailoredResume} disabled={!effectiveBaseline || Boolean(baselineIssue) || lifecycleClosed} className="rounded-md border border-cyan/40 px-4 py-2 text-sm font-bold text-cyan disabled:opacity-40">Build tailored résumé</button> : <LockedActionPill feature="tailored_resume_export" label="Build tailored résumé" />}</div></details>
           </div>
         )}
       </section>
