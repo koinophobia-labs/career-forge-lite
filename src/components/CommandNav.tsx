@@ -99,7 +99,7 @@ export function CommandNav({ active }: CommandNavProps) {
           <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-bold text-paper/78 transition hover:border-cyan/40 hover:text-cyan">
             Menu
           </summary>
-          <nav aria-label="Career Forge mobile navigation" className="absolute right-0 top-13 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian/95 p-2 shadow-2xl backdrop-blur-xl">
+          <nav aria-label="Career Forge mobile navigation" className="absolute right-0 top-14 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian/95 p-2 shadow-2xl backdrop-blur-xl">
             {primaryStations.map(([label, href]) => (
               <Link key={href} href={href} onClick={() => handleStationClick(href)} className={menuLinkClass(href)}>{label}</Link>
             ))}
