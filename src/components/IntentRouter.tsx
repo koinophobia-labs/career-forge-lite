@@ -56,7 +56,7 @@ export function IntentRouter() {
                 What are you trying to do?
               </h1>
               <p className="mt-4 max-w-xl text-base leading-7 text-paper/65">
-                Choose the outcome. Career Forge will turn the experience you approve into the next useful piece of your job search.
+                Pick one. Career Forge will take you to the next step. From there, it turns the experience you approve into the next useful piece of your job search.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-2" aria-label="Career Forge outcomes">
@@ -83,7 +83,7 @@ export function IntentRouter() {
                     <span className="block text-lg font-black text-paper transition group-hover:text-cyan sm:text-xl">{option.label}</span>
                     <span className="mt-1 block text-sm leading-6 text-paper/58">{option.description}</span>
                   </span>
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan/30 bg-cyan/10 text-lg text-cyan transition group-hover:border-cyan/60 group-hover:bg-cyan/15" aria-hidden="true">→</span>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan/30 bg-cyan/10 text-lg text-cyan transition group-hover:border-cyan/60 group-hover:bg-cyan/20" aria-hidden="true">→</span>
                 </button>
               ))}
             </div>
