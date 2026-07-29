@@ -133,7 +133,6 @@ export function CommandNav({ active }: CommandNavProps) {
                 : "border-transparent text-paper/68 hover:border-white/10 hover:bg-white/5 hover:text-paper"
             }`}>
               Workspace
-              <span className="ml-1.5 text-[0.6rem] text-paper/35" aria-hidden="true">▾</span>
             </summary>
             <div className="absolute right-0 top-12 z-50 grid w-60 rounded-xl border border-white/15 bg-obsidian/95 p-2 shadow-2xl backdrop-blur-xl">
               {workspaceStations.map(([label, href]) => (
