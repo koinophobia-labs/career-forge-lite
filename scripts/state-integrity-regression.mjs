@@ -101,7 +101,13 @@ const interviewApps = [
 ];
 check("interview selection: upcoming dated interview wins", interview.selectInterviewApplication(interviewApps, null, NOW)?.id === "tomorrow");
 check("interview selection: explicit application id wins", interview.selectInterviewApplication(interviewApps, "undated", NOW)?.id === "undated");
-check("Today: interview link carries exact application", router.intentNextMove({ ...emptyState(), applications: interviewApps }).href === "/interview?applicationId=tomorrow");
+const liveTomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+const liveRoutingApps = interviewApps.map((item) => item.id === "tomorrow"
+  ? { ...item, interviewAt: liveTomorrow }
+  : item.id === "past"
+    ? { ...item, interviewAt: "2000-01-01" }
+    : item);
+check("Today: interview link carries exact application", router.intentNextMove({ ...emptyState(), applications: liveRoutingApps }).href === "/interview?applicationId=tomorrow");
 
 const incompleteBuild = "I would build a dashboard with useful metrics and a clean layout.";
 const linkOnlyBuild = "https://example.com";
