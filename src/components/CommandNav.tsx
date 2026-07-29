@@ -65,13 +65,15 @@ export function CommandNav({ active }: CommandNavProps) {
   }
 
   function menuLinkClass(href: string) {
-    return `flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold ${
-      active === href ? "bg-gold/10 text-gold" : "text-paper/70 hover:bg-white/5 hover:text-cyan"
+    return `flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold transition ${
+      active === href
+        ? "border border-cyan/35 bg-cyan/10 text-cyan"
+        : "border border-transparent text-paper/70 hover:border-white/10 hover:bg-white/5 hover:text-paper"
     }`;
   }
 
   return (
-    <header className="relative z-40 border-b border-white/10 bg-obsidian/84 px-5 py-4 backdrop-blur-xl sm:px-8 md:sticky md:top-0">
+    <header className="career-nav-shell relative z-40 border-b border-white/10 px-5 py-3.5 backdrop-blur-xl sm:px-8 md:sticky md:top-0">
       <a
         href="#main"
         onClick={skipToContent}
@@ -84,9 +86,9 @@ export function CommandNav({ active }: CommandNavProps) {
           <Link href="/" className="group inline-flex min-w-0 items-center gap-3" aria-label="Career Forge home">
             <span className="logo-mark shrink-0" aria-hidden="true">CF</span>
             <span className="min-w-0 leading-none">
-              <span className="block truncate text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
-              <span className="hidden text-[0.68rem] font-bold uppercase tracking-[0.16em] text-paper/56 sm:block">
-                One clear next step
+              <span className="block truncate text-xs font-black uppercase tracking-[0.2em] text-gold">Career Forge</span>
+              <span className="mt-1 hidden text-[0.66rem] font-semibold tracking-[0.05em] text-paper/48 sm:block">
+                Your private career studio
               </span>
             </span>
           </Link>
@@ -94,8 +96,10 @@ export function CommandNav({ active }: CommandNavProps) {
         </div>
 
         <details ref={mobileMenuRef} className="relative md:hidden">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-paper/75">Menu</summary>
-          <nav aria-label="Career Forge mobile navigation" className="absolute right-0 top-12 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-bold text-paper/78 transition hover:border-cyan/40 hover:text-cyan">
+            Menu
+          </summary>
+          <nav aria-label="Career Forge mobile navigation" className="absolute right-0 top-13 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian/95 p-2 shadow-2xl backdrop-blur-xl">
             {primaryStations.map(([label, href]) => (
               <Link key={href} href={href} onClick={() => handleStationClick(href)} className={menuLinkClass(href)}>{label}</Link>
             ))}
@@ -106,30 +110,32 @@ export function CommandNav({ active }: CommandNavProps) {
           </nav>
         </details>
 
-        <nav aria-label="Career Forge navigation" className="hidden items-center justify-end gap-1.5 text-xs font-bold text-paper/70 md:flex">
+        <nav aria-label="Career Forge navigation" className="hidden items-center justify-end gap-1 text-xs font-bold text-paper/68 md:flex">
           {primaryStations.map(([label, href]) => (
             <Link
               key={href}
               href={href}
               onClick={() => handleStationClick(href)}
-              className={`flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-2 transition ${
+              className={`flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-xl border px-3 py-2 transition ${
                 active === href
-                  ? "border-gold/50 bg-gold/10 text-gold"
-                  : "border-transparent hover:border-cyan/35 hover:bg-white/5 hover:text-cyan"
+                  ? "border-cyan/40 bg-cyan/10 text-cyan shadow-sm"
+                  : "border-transparent hover:border-white/10 hover:bg-white/5 hover:text-paper"
               }`}
             >
+              {active === href && <span className="mr-2 h-1.5 w-1.5 rounded-full bg-cyan" aria-hidden="true" />}
               {label}
             </Link>
           ))}
           <details ref={workspaceMenuRef} className="relative">
-            <summary className={`flex min-h-11 cursor-pointer list-none items-center rounded-full border px-3 py-2 transition ${
+            <summary className={`flex min-h-10 cursor-pointer list-none items-center rounded-xl border px-3 py-2 transition ${
               workspaceIsActive
-                ? "border-gold/50 bg-gold/10 text-gold"
-                : "border-transparent text-paper/70 hover:border-cyan/35 hover:bg-white/5 hover:text-cyan"
+                ? "border-cyan/40 bg-cyan/10 text-cyan"
+                : "border-transparent text-paper/68 hover:border-white/10 hover:bg-white/5 hover:text-paper"
             }`}>
               Workspace
+              <span className="ml-1.5 text-[0.6rem] text-paper/35" aria-hidden="true">▾</span>
             </summary>
-            <div className="absolute right-0 top-12 z-50 grid w-60 rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
+            <div className="absolute right-0 top-12 z-50 grid w-60 rounded-xl border border-white/15 bg-obsidian/95 p-2 shadow-2xl backdrop-blur-xl">
               {workspaceStations.map(([label, href]) => (
                 <Link key={href} href={href} onClick={() => handleStationClick(href)} className={menuLinkClass(href)}>{label}</Link>
               ))}
