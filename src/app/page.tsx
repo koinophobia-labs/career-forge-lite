@@ -52,8 +52,8 @@ export default function Dashboard() {
             <details className="career-paper-card p-5">
               <summary className="cursor-pointer text-sm font-bold text-paper/72">How Career Forge stays honest</summary>
               <div className="mt-4 grid gap-4 text-sm leading-6 text-paper/62">
-                <p><strong className="text-paper">Local-first career evidence compiler.</strong> Works locally without an account. Imported facts stay proposals until you approve them.</p>
-                <p><strong className="text-paper">Not another AI résumé writer.</strong> Career Forge keeps unsupported context out, creates distinct résumés for each lane, and connects generated claims to reviewed sources.</p>
+                <p><strong className="text-paper">Local-first career evidence compiler.</strong> Works locally without an account. It is a reviewable evidence system. Imported facts stay proposals until you approve them.</p>
+                <p><strong className="text-paper">Not another AI résumé writer.</strong> Career Forge shows what it keeps out of professional drafts, including unsupported context and missing proof. It builds a distinct résumé for each active lane. Links generated claims to their reviewed sources.</p>
               </div>
             </details>
           </div>
