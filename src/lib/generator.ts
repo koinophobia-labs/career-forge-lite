@@ -886,12 +886,20 @@ function buildScopeItems(data: IntakeData) {
 // role statements or third-party narration are dropped rather than templated.
 function splitResponsibilityText(value: string) {
   const { text } = stripTerminationReasons(value);
+  // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
+  // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
+  // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
+  // is one claim and stays one claim.
   return text
-    .split(/,|\n|;|\.|\band\b/i)
-    .map((item) => cleanWhitespace(item).replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
+    .split(/\n|;|(?<=[.!?])\s+/)
+    .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
-    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item))
-    .filter((item) => !/\b(me|they|them|it was|i was|i am|my manager|my boss)\b/i.test(item));
+    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
+    // The narration filter that used to sit here DELETED any sentence mentioning
+    // "my manager", "they", "me" and so on. It destroyed true statements —
+    // "Reported to my manager and the shift lead." vanished from every surface —
+    // while the leftover token "manager" separately authorised an unrelated
+    // canned claim. Narration is the user's own wording and is kept.
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
@@ -1215,6 +1223,41 @@ type GroundedBullet = { text: string; when?: RegExp; evidence?: RegExp[] };
  * the missing clauses become material for a targeted question instead of
  * silently becoming résumé content.
  */
+
+const THIRD_PARTY_DETERMINER = /^(?:the|a|an|our|their|his|her|its|this|that|these|those|every|each)$/i;
+
+// Irregular leads a suffix rule cannot stem.
+const LEAD_STEM_OVERRIDES = new Map<string, string>([
+  ["kept", "keep|kept"], ["held", "hold|held"], ["led", "lead|led"], ["built", "build|built"],
+  ["ran", "run|ran"], ["made", "make|made"], ["took", "take|took"], ["drove", "drive|drove"],
+  ["sent", "send|sent"], ["met", "meet|met"], ["set", "set"], ["put", "put"],
+]);
+
+/**
+ * True when the corpus evidences the ACT named by a composed bullet's lead verb.
+ * Derived from the lead's own first word so every call site is covered without
+ * each one restating its verb.
+ */
+function leadIsEvidenced(corpus: string, lead: string): boolean {
+  const first = (lead.trim().split(/\s+/)[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!first) return true;
+  const override = LEAD_STEM_OVERRIDES.get(first);
+  const stem = override ?? first.replace(/(?:ed|d)$/, "");
+  if (stem.length < 3) return true;
+  const occurrence = new RegExp(`\\b(?:${stem})\\w*`, "gi");
+  let hit: RegExpExecArray | null;
+  while ((hit = occurrence.exec(corpus)) !== null) {
+    // The act has to be the CANDIDATE'S. "The facility keeps care notes"
+    // evidences the word "keeps" but attributes it to the employer, so it is no
+    // licence for the résumé to claim "Kept care notes." A third-party subject
+    // immediately before the verb disqualifies that occurrence.
+    const preceding = corpus.slice(0, hit.index).trimEnd().split(/\s+/).slice(-2);
+    const thirdParty = preceding.length === 2 && THIRD_PARTY_DETERMINER.test(preceding[0] ?? "");
+    if (!thirdParty) return true;
+  }
+  return false;
+}
+
 function composed(
   corpus: string,
   lead: string,
@@ -1224,6 +1267,11 @@ function composed(
   const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
   const min = options.min ?? 1;
   if (matched.length < min) return { text: "" };
+  // The LEAD carries a claim too. Gating only the clauses meant "Maintained the
+  // safety log" emitted "Reported safety concerns." — a correctly grounded
+  // clause bolted to a verb the user never used. A gated clause attached to an
+  // invented verb is still fabrication, so the lead must be evidenced as well.
+  if (!leadIsEvidenced(corpus, lead)) return { text: "" };
   // `concepts` records exactly what this bullet claims, so a later pass can tell
   // whether it restates the user or adds something.
   const evidence = clauses.filter(([test]) => test.test(corpus)).map(([test]) => test);

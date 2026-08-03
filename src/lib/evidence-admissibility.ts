@@ -81,24 +81,27 @@ const AUXILIARIES = "do|does|did|have|has|don['’]?t|doesn['’]?t|didn['’]?t
 
 // Nouns whose ABSENCE is a gap in a candidate's evidence.
 const GAP_OBJECTS =
-  /\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certifications?|certificate|degree|diploma|qualifications?|licen[cs]e[sd]?|background|history|training|education|supervis\w*|budget|p&l|team|teams|reports?|anyone|anybody|people|staff|direct\s+reports?|numbers?|data|saas|software\s+implementation|project[-\s]?management)\b/i;
+  /\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certif\w*|degree|diploma|qualifications?|licen[cs]e[sd]?|background|history|training|education|supervis\w*|budget|p&l|team|teams|reports?|anyone|anybody|people|staff|direct\s+reports?|numbers?|data|saas|software\s+implementation|project[-\s]?management)\b/i;
 
 // Words that may sit between the subject and the auxiliary without changing who
 // the subject is. Adverbs are open-class, so anything ending in -ly counts too.
-const SUBJECT_SKIP = /^(?:currently|honestly|truthfully|unfortunately|sadly|generally|really|still|yet|ever|also|now|today|personally|admittedly|frankly|so|far|right|just|simply|even|actually)$/i;
+const SUBJECT_SKIP = /^(?:currently|honestly|truthfully|unfortunately|sadly|generally|really|still|yet|ever|also|now|today|personally|admittedly|frankly|so|far|right|just|simply|even|actually|point|moment|present|date|stage|time|case)$/i;
 const FIRST_PERSON = /^(?:i|we|my|our|me|us)$/i;
 // A subordinator before the auxiliary means the clause subject is elided from
 // the candidate's own sentence, e.g. "Built the runbook so we did not have…".
 const SUBORDINATOR = /^(?:that|so|because|since|until|till|when|where|which|who|whom|whose|while|after|before|if|and|but|or|then|thus)$/i;
+const AUXILIARY_WORD = /^(?:do|does|did|have|has|had|is|are|was|were|be|been|being|not|never|n['’]?t)$/i;
 const DETERMINER = /^(?:the|that|this|these|those|a|an|my|our|his|her|their|its)$/i;
-const PREPOSITION = /^(?:in|at|on|during|for|with|from|by|under|over|across|after|before|since|throughout|within)$/i;
+const PREPOSITION = /^(?:in|at|on|during|for|with|from|by|under|over|across|after|before|since|throughout|within|of|as|to|up|about|around|per|via)$/i;
 
 /**
  * True when a negated clause is the CANDIDATE reporting a gap in their own
  * evidence, rather than an accomplishment described with a negation.
  */
 function hasSelfDeclaredGapClause(value: string): boolean {
-  const pattern = new RegExp(`\\b(${AUXILIARIES})\\b(\\s+not)?\\s+(${GAP_VERB_FORMS})\\b`, "gi");
+  // `not` and `never` are both negators, and `never` can stand alone with no
+  // auxiliary at all ("Never supervised anybody"), so the auxiliary is optional.
+  const pattern = new RegExp(`(?:\\b(${AUXILIARIES})\\b\\s*)?(\\s*\\b(?:not|never)\\b)?\\s*\\b(${GAP_VERB_FORMS})\\b`, "gi");
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(value)) !== null) {
     const auxiliary = match[1] ?? "";
@@ -113,6 +116,10 @@ function hasSelfDeclaredGapClause(value: string): boolean {
       const word = wordAt(i);
       if (!word) continue;
       if (SUBJECT_SKIP.test(word) || /ly$/i.test(word)) continue;
+      // When `never` carries the negation the match starts after the
+      // auxiliary, so the walk would otherwise read "have" as the subject
+      // of "I have never supervised anybody" and call it a third party.
+      if (AUXILIARY_WORD.test(word)) continue;
       // A leading adverbial phrase is not a subject: in "In that role did not
       // manage people", "role" is the object of a preposition, and the real
       // subject is the elided candidate.
@@ -139,9 +146,13 @@ function hasSelfDeclaredGapClause(value: string): boolean {
 }
 
 const GAP_PATTERNS = [
-  /^\s*no\s+(?![-\s]?code\b)(?=.*\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certifications?|degree|qualification|background|history|saas|software\s+implementation|project[-\s]?management)\b)/i,
+  // "no <evidence noun>" ANYWHERE, not only at the start: "Have no measurable
+  // results yet" is the same statement as "No measurable results yet".
+  /\bno\s+(?![-\s]?code\b)(?:[\w&-]+\s+){0,5}(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certif\w*|degree|diploma|qualifications?|licen[cs]\w*|background|history|training|education|supervis\w*|budget|numbers?|data|saas|software\s+implementation|project[-\s]?management)\b/i,
   /\b(?:i|we)\s+(?:lack|lacks|lacking)\b/i,
-  /\b(?:lack|lacks|lacking|without)\s+(?:formal\s+)?(?:experience|metrics?|outcomes?|credentials?|certifications?|degree|leadership|ownership|qualification)\b/i,
+  // lack/without + any evidence noun, including ones the old short list missed
+  // ("lack any formal project management BACKGROUND").
+  /\b(?:lack|lacks|lacking|without)\s+(?:any\s+)?(?:formal\s+)?(?:[\w&-]+\s+){0,5}(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certif\w*|degree|diploma|qualifications?|licen[cs]\w*|background|history|training|education|supervis\w*|budget|project[-\s]?management)\b/i,
   /\bnot\s+(?:yet\s+)?(?:experienced|certified|qualified|credentialed)\b/i,
   /\b(?:i|we)\s+(?:am|are|was|were)\s+(?:not|never)\s+responsible\s+for\b/i
 ];
