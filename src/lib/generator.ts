@@ -940,7 +940,13 @@ function looksLikeSkillLabel(skill: string) {
 }
 
 function buildSkillList(data: IntakeData) {
-  const corpus = buildGroundingCorpus(data);
+  // Activity corpus: a SKILL is a claim about the candidate, so it must be
+  // evidenced by what they described doing. Against the full corpus the
+  // employer name did the work — "Corner Kitchen" grounded "Team Coordination"
+  // and "Brightpath Care" grounded "Patient Support", both then printed under
+  // "Strengths the candidate reports include…" when the candidate had reported
+  // nothing at all.
+  const corpus = buildActivityCorpus(data);
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data);
   const occupation = detectOccupationProfile(data);
@@ -1149,7 +1155,7 @@ function occupationToolPhrase(data: IntakeData, max = 2) {
   return ` using ${sentenceList(explicitTools.slice(0, max))}`;
 }
 
-type GroundedBullet = { text: string; when?: RegExp };
+type GroundedBullet = { text: string; when?: RegExp; evidence?: RegExp[] };
 
 /**
  * A bullet assembled clause by clause, where every clause must be evidenced by
@@ -1175,12 +1181,21 @@ function composed(
   const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
   const min = options.min ?? 1;
   if (matched.length < min) return { text: "" };
-  return { text: `${lead} ${sentenceList(matched)}${options.tail ?? ""}.`.replace(/\s+/g, " ") };
+  // `concepts` records exactly what this bullet claims, so a later pass can tell
+  // whether it restates the user or adds something.
+  const evidence = clauses.filter(([test]) => test.test(corpus)).map(([test]) => test);
+  return { text: `${lead} ${sentenceList(matched)}${options.tail ?? ""}.`.replace(/\s+/g, " "), evidence };
 }
 
 
 function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupation: OccupationProfile) {
-  const corpus = buildGroundingCorpus(data);
+  // Activity corpus, not the full grounding corpus: a clause about what the
+  // candidate DID must be evidenced by a description of the work, never by the
+  // job title or the employer's name. Grounding these gates against the full
+  // corpus meant the title "Line Cook" authorised "preparing food" and the
+  // employer "Corner Kitchen" authorised a coworkers claim, so a user who typed
+  // nothing still received two factual bullets.
+  const corpus = buildActivityCorpus(data);
   const toolPhrase = occupationToolPhrase(data);
   const scopes = buildScopeItems(data);
   const customerScope = scopeForBullet(scopes, ["customersServed", "callsHandled", "ticketsHandled"]);
@@ -1443,7 +1458,7 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
   };
 
   const canned = groundedBulletsByOccupation[occupation.id] ?? [];
-  const grounded = canned.filter((bullet) => !bullet.when || bullet.when.test(corpus)).map((bullet) => bullet.text);
+  const grounded = canned.filter((bullet) => !bullet.when || bullet.when.test(corpus));
   // The user's own phrasing LEADS and is never displaced by occupation
   // vocabulary — the comment here used to say this while the code put the
   // canned bullets first, so a sparse line like "carried lumber" was replaced
@@ -1451,12 +1466,46 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
   // additive: they may say something the user's own lines do not, never
   // paraphrase away something they do.
   const userOwn = composeUserBullets(data, data.roleFamily);
-  const combined = compact([...userOwn, ...grounded]);
+  const combined = compact([...userOwn, ...withoutRestatements(userOwn, grounded)]);
   return qualityCheckBullets(combined);
 }
 
+/**
+ * Drop a generated bullet when every concept it claims is already stated by the
+ * user's own wording. Deterministic concept coverage, not fuzzy similarity: a
+ * clause counts as a restatement when the very evidence that authorised it is
+ * present in a user-authored bullet.
+ *
+ * The composer made this necessary — "poured drinks" produced both "Poured
+ * drinks." and "Served guests by preparing drinks.", the same claim twice in the
+ * product's vocabulary rather than the user's. Comparing rendered words would
+ * not catch it, because template phrasing ("served", "preparing") looks new.
+ * Comparing the grounding evidence does. Where a template merely restates the
+ * user, the user's wording wins.
+ */
+function withoutRestatements(userBullets: string[], generated: GroundedBullet[]): string[] {
+  const userText = userBullets.join(" ").toLowerCase();
+  if (!userText.trim()) return generated.map((bullet) => bullet.text);
+  return generated
+    .filter((bullet) => {
+      const evidence = bullet.evidence ?? [];
+      // No recorded evidence (a plain canned bullet): keep it — its `when` gate
+      // already decided, and it carries no clause-level claim to compare.
+      if (!evidence.length) return true;
+      // Survives only if at least one clause rests on evidence the user's own
+      // bullets do not already contain.
+      return evidence.some((test) => !test.test(userText));
+    })
+    .map((bullet) => bullet.text);
+}
+
 function buildOccupationSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
-  const corpus = buildGroundingCorpus(data);
+  // "Strengths the candidate reports include X" attributes a statement to the
+  // user, so X must come from something the user actually described. Grounded
+  // against the full corpus, the employer name supplied it: "Corner Kitchen"
+  // produced "team coordination" and "Brightpath Care" produced "patient
+  // support" for candidates who had reported nothing.
+  const corpus = buildActivityCorpus(data);
   const currentRole = experience[0];
   const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
   const strengths = compact([

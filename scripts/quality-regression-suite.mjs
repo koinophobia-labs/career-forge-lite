@@ -101,6 +101,10 @@ const founderMisclassifications = [
 
 const teacherMisclassifications = ["Warehouse Associate", "Delivery Driver", "Forklift", "Pallet Jack"];
 
+function splitLines(value) {
+  return String(value ?? "").split(/\r?\n|;/).map((line) => line.trim()).filter(Boolean);
+}
+
 function normalize(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -192,7 +196,20 @@ function validatePersona(persona) {
 
   if (!resume.summary || resume.summary.length < 45) failures.push("summary missing or too thin");
   if (!resume.linkedinHeadline || resume.linkedinHeadline.length < 8) failures.push("LinkedIn headline missing");
-  if (bullets.length < 3) failures.push("minimum bullet count not met");
+  // CONTRACT CHANGE (issue #53): three bullets are required only when the
+  // persona actually supplied enough distinct evidence to support three. The
+  // unconditional rule encoded the old "always fill the résumé" expectation,
+  // which is exactly what drove the generator to invent activities the user
+  // never described. Thin evidence is now TRUTHFUL BUT WEAK: it counts as a
+  // weak output (see `weak` below), not a failure.
+  const suppliedEvidence = unique([
+    ...splitLines(persona.intake?.responsibilities ?? ""),
+    ...splitLines(persona.intake?.outcomes ?? ""),
+    ...(persona.intake?.selectedResponsibilities ?? []),
+    ...(persona.intake?.selectedOutcomes ?? [])
+  ].map(normalize).filter(Boolean));
+  if (bullets.length < 3 && suppliedEvidence.length >= 3) failures.push("minimum bullet count not met");
+  if (bullets.length < 3 && suppliedEvidence.length < 3) warnings.push("thin evidence: fewer than three bullets, truthfully");
   if (unique(normalizedBullets).length !== normalizedBullets.length) failures.push("duplicate bullet sentence");
   if (hasThreeNearDuplicates(bullets)) failures.push("three bullets are nearly identical");
   if (missingSkills.length === persona.skills.length) failures.push("no expected transferable skills detected");

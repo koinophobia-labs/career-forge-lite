@@ -571,6 +571,36 @@ for (const scenario of OCCUPATION_CASES) {
     JSON.stringify(produced));
 }
 
+// 5b-ii. Employer NAMES must not ground activity either — an identity is not
+//        evidence of work. "Corner Kitchen" once grounded a coworkers claim and
+//        "Brightpath Care" a "patient support" strength.
+for (const company of ["Sanitation Solutions LLC", "Safety First Staffing", "Accurate Inventory Co", "Customer Care Partners", "Corner Kitchen", "Brightpath Care"]) {
+  const pack = generateResumePackage(builderIntake({ currentTitle: "Line Cook", currentCompany: company, responsibilities: "" }));
+  const surfaces = [...pack.experience.flatMap((r) => r.bullets), ...pack.coreSkills, pack.summary];
+  expect(`employer "${company}" grounds no claim`,
+    pack.experience.flatMap((r) => r.bullets).length === 0 && pack.coreSkills.length === 0 &&
+      !/strengths the candidate reports/i.test(pack.summary),
+    JSON.stringify(surfaces));
+}
+
+// 5b-iii. A generated bullet that merely restates the user is suppressed;
+//         the user's own wording wins.
+for (const [title, typed, restatement] of [
+  ["Bartender", "poured drinks", /preparing drinks/i],
+  ["Construction Laborer", "carried lumber", /moving materials/i],
+  ["Home Health Aide", "drove clients to appointments", /daily routines/i],
+]) {
+  const out = bulletsFor({ currentTitle: title, currentCompany: "Co", responsibilities: typed });
+  L(`  [restatement] "${typed}" -> ${JSON.stringify(out)}`);
+  expect(`"${typed}" is not restated in template vocabulary`, !out.some((b) => restatement.test(b)), JSON.stringify(out));
+  expect(`"${typed}" survives in the user's own words`,
+    out.some((b) => b.toLowerCase().includes(typed.split(" ")[0].toLowerCase())), JSON.stringify(out));
+}
+// …but a template that adds genuinely new evidence is retained.
+const additive = bulletsFor({ currentTitle: "Warehouse Associate", currentCompany: "Cedar", responsibilities: "picked orders\nscanned every label" });
+L(`  [restatement] additive case -> ${JSON.stringify(additive)}`);
+expect("a template contributing new evidence is kept", additive.length > 1, JSON.stringify(additive));
+
 // 5c. Occupation and title ALONE must authorize zero factual bullets.
 for (const scenario of OCCUPATION_CASES) {
   const titleOnly = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: "" });
