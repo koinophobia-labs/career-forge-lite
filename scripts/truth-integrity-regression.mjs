@@ -583,23 +583,42 @@ for (const company of ["Sanitation Solutions LLC", "Safety First Staffing", "Acc
     JSON.stringify(surfaces));
 }
 
-// 5b-iii. A generated bullet that merely restates the user is suppressed;
-//         the user's own wording wins.
-for (const [title, typed, restatement] of [
-  ["Bartender", "poured drinks", /preparing drinks/i],
-  ["Construction Laborer", "carried lumber", /moving materials/i],
-  ["Home Health Aide", "drove clients to appointments", /daily routines/i],
+// 5b-iii. Restatement suppression is REVERTED (independent review of 0eeb3f2:
+//         it deleted a scope metric along with the bullet, and unrelated user
+//         lines suppressed each other through global bag-of-words overlap).
+//         Duplicate truthful wording is a polish problem; deleting a supported
+//         metric is a truth failure. So the contract here is narrower: the
+//         user's own wording must survive, and nothing unsupported may appear.
+//         A template that repeats the user is TOLERATED until suppression is
+//         rebuilt on per-bullet structured evidence dependencies.
+for (const [title, typed, forbidden] of [
+  ["Bartender", "poured drinks", /purchases|returns|high-volume|payments|tabs/i],
+  ["Construction Laborer", "carried lumber", /PPE|safety procedures|next steps|equipment/i],
+  ["Home Health Aide", "drove clients to appointments", /personal care|meals|mobility|care procedures/i],
 ]) {
   const out = bulletsFor({ currentTitle: title, currentCompany: "Co", responsibilities: typed });
-  L(`  [restatement] "${typed}" -> ${JSON.stringify(out)}`);
-  expect(`"${typed}" is not restated in template vocabulary`, !out.some((b) => restatement.test(b)), JSON.stringify(out));
+  L(`  [reverted-suppression] "${typed}" -> ${JSON.stringify(out)}`);
+  expect(`"${typed}" produces no unsupported claim`, !out.some((b) => forbidden.test(b)), JSON.stringify(out));
   expect(`"${typed}" survives in the user's own words`,
     out.some((b) => b.toLowerCase().includes(typed.split(" ")[0].toLowerCase())), JSON.stringify(out));
 }
-// …but a template that adds genuinely new evidence is retained.
-const additive = bulletsFor({ currentTitle: "Warehouse Associate", currentCompany: "Cedar", responsibilities: "picked orders\nscanned every label" });
-L(`  [restatement] additive case -> ${JSON.stringify(additive)}`);
-expect("a template contributing new evidence is kept", additive.length > 1, JSON.stringify(additive));
+// A metric the user supplied must never be lost — the defect that forced the revert.
+const metricOut = bulletsFor({
+  currentTitle: "Warehouse Associate", currentCompany: "Accurate Fulfillment Co",
+  responsibilities: "I picked orders and packed orders.", reportsCreated: "12"
+});
+L(`  [metric-survival] -> ${JSON.stringify(metricOut)}`);
+expect("a supplied metric is not deleted from the package",
+  metricOut.join(" ").includes("12"), JSON.stringify(metricOut));
+
+// Unrelated user lines must not suppress a separately grounded claim.
+const unrelatedOut = bulletsFor({
+  currentTitle: "Bartender", currentCompany: "Corner Tavern",
+  responsibilities: "I stay calm with upset guests.\nThe bar enforces a strict dress code policy."
+});
+L(`  [no-cross-suppression] -> ${JSON.stringify(unrelatedOut)}`);
+expect("a grounded claim is not suppressed by unrelated user lines",
+  unrelatedOut.length >= 2, JSON.stringify(unrelatedOut));
 
 // 5c. Occupation and title ALONE must authorize zero factual bullets.
 for (const scenario of OCCUPATION_CASES) {

@@ -1466,38 +1466,22 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
   // additive: they may say something the user's own lines do not, never
   // paraphrase away something they do.
   const userOwn = composeUserBullets(data, data.roleFamily);
-  const combined = compact([...userOwn, ...withoutRestatements(userOwn, grounded)]);
+  // REVERTED (independent review of 0eeb3f2): restatement suppression used to
+  // drop a generated bullet whose every clause rested on evidence already in a
+  // user line. It destroyed evidence — a scope metric interpolated into a clause
+  // lead ("Handled 12 reports by …") vanished with the bullet, and because the
+  // comparison joined all user bullets into one string, two unrelated user
+  // sentences could suppress a claim neither of them restated.
+  //
+  // Duplicate truthful wording is a polish problem; deleting a supported metric
+  // is a truth-integrity failure. Suppression will return only with per-bullet,
+  // structured evidence dependencies that preserve independently supported
+  // metrics and outcomes. Until then the user's line and the template both
+  // stand.
+  const combined = compact([...userOwn, ...grounded.map((bullet) => bullet.text)]);
   return qualityCheckBullets(combined);
 }
 
-/**
- * Drop a generated bullet when every concept it claims is already stated by the
- * user's own wording. Deterministic concept coverage, not fuzzy similarity: a
- * clause counts as a restatement when the very evidence that authorised it is
- * present in a user-authored bullet.
- *
- * The composer made this necessary — "poured drinks" produced both "Poured
- * drinks." and "Served guests by preparing drinks.", the same claim twice in the
- * product's vocabulary rather than the user's. Comparing rendered words would
- * not catch it, because template phrasing ("served", "preparing") looks new.
- * Comparing the grounding evidence does. Where a template merely restates the
- * user, the user's wording wins.
- */
-function withoutRestatements(userBullets: string[], generated: GroundedBullet[]): string[] {
-  const userText = userBullets.join(" ").toLowerCase();
-  if (!userText.trim()) return generated.map((bullet) => bullet.text);
-  return generated
-    .filter((bullet) => {
-      const evidence = bullet.evidence ?? [];
-      // No recorded evidence (a plain canned bullet): keep it — its `when` gate
-      // already decided, and it carries no clause-level claim to compare.
-      if (!evidence.length) return true;
-      // Survives only if at least one clause rests on evidence the user's own
-      // bullets do not already contain.
-      return evidence.some((test) => !test.test(userText));
-    })
-    .map((bullet) => bullet.text);
-}
 
 function buildOccupationSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
   // "Strengths the candidate reports include X" attributes a statement to the
@@ -1525,7 +1509,13 @@ function buildOccupationSummary(data: IntakeData, target: string, experience: Ex
 }
 
 function buildOccupationLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
-  const corpus = buildGroundingCorpus(data);
+  // "Brings X into ..." asserts a competency, so X must come from work
+  // the user described. Against the full corpus the employer name supplied it:
+  // "Corner Kitchen" produced "team coordination", "Accurate Inventory Co"
+  // produced "inventory", "Safety Solutions Group" produced "safety
+  // procedures" — for candidates who had described nothing. Propagates to
+  // resume-pack linkedinAbout.
+  const corpus = buildActivityCorpus(data);
   const currentRole = experience[0];
   const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
   const strengths = compact([
@@ -1541,7 +1531,11 @@ function buildOccupationLinkedInSummary(data: IntakeData, target: string, experi
 }
 
 function buildOccupationHeadline(data: IntakeData, occupation: OccupationProfile) {
-  const corpus = buildGroundingCorpus(data);
+  // A headline skill is a claim about the candidate. Against the full
+  // corpus "Route Runners LLC" produced "Route Planning" and "Precision
+  // Cleaning Group" produced "Cleaning Standards" from the employer name alone.
+  // Propagates to resume-pack linkedinHeadlines.
+  const corpus = buildActivityCorpus(data);
   const parts = occupation.headline.split("|").map(cleanWhitespace).filter(Boolean);
   const background = parts[0] ?? occupation.headline;
   // Headline strength segments are claims too: only grounded ones survive,
@@ -1582,7 +1576,13 @@ function headlineStrengths(data: IntakeData, skills: string[]) {
     [/safety|procedures/i, "Procedure Follow-Through"],
     [/team coordination/i, "Team Coordination"]
   ];
-  const corpus = buildGroundingCorpus(data);
+  // A headline strength is a claim about the candidate, so it must be grounded
+  // in described work. Against the full corpus the employer name grounded it:
+  // "Accurate Inventory Co" produced the headline strength "Inventory
+  // Accuracy" for a candidate who described nothing. This is the generic
+  // (non-occupation) headline path, reached whenever no occupation profile
+  // matches the title.
+  const corpus = buildActivityCorpus(data);
   const fromEvidence = (evidenceStrengthLabels(data)
     .map((label) => labelMap.find(([pattern]) => pattern.test(label))?.[1])
     .filter(Boolean) as string[])
