@@ -665,6 +665,59 @@ expect("no ungated reliability / attention-to-detail claim is emitted",
   !ungated.some((b) => /reliable coverage|attention to detail|steady job site progress|shared spaces ready/i.test(b)),
   JSON.stringify(ungated));
 
+// ═══ T-7 — proper nouns must survive generation, persistence AND export
+H("T-7 — a user's proper nouns must never be recased anywhere in the pipeline");
+
+// The defect: normalizeResponsibility ran user prose through titleCase(), which
+// lowercases the whole string before re-capitalizing each word. Interior
+// capitals died — "DeKalb"->"Dekalb", "McDonald's"->"Mcdonald's",
+// "O'Hare"->"O'hare", "Coca-Cola"->"Coca-cola" — and readablePhrase then
+// lowercased the rest for the summary, producing "the walla walla distribution
+// center". Both survived JSON persistence and plain-text export, so a falsified
+// place name reached the printed résumé. titleCase and readablePhrase are now
+// confined to taxonomy labels; user prose keeps its own casing.
+//
+// EXACT assertions only. An earlier harness asserted the output *contained* the
+// typed word, which passed "Supported mopped." as preservation of "Mopped."
+const PROPER_NOUN_LINES = [
+  ["Supported the Walla Walla distribution center.", ["Walla Walla"]],
+  ["Covered the Baton Rouge night shift.", ["Baton Rouge"]],
+  ["Trained staff at the O'Hare terminal.", ["O'Hare"]],
+  ["Managed intake for McDonald's franchise orders.", ["McDonald's"]],
+  ["Reported to the DeKalb County office.", ["DeKalb", "County"]],
+  ["Handled returns for Coca-Cola accounts.", ["Coca-Cola"]],
+];
+for (const [line, nouns] of PROPER_NOUN_LINES) {
+  const pkg = generateResumePackage({
+    ...initialIntake, fullName: "S Ito", email: "s@example.com", education: "High school diploma",
+    currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics", currentTime: "2022 - Present",
+    responsibilities: line,
+  });
+  const bullets = pkg.experience.flatMap((role) => role.bullets);
+  // 1. Generation: the line comes back EXACTLY as typed.
+  expect(`generated verbatim: ${line}`, bullets.includes(line), JSON.stringify(bullets));
+  // 2. The summary embeds it without recasing the proper nouns.
+  const narrative = [pkg.summary, pkg.linkedinSummary, pkg.linkedinHeadline].join(" | ");
+  const recasedInNarrative = nouns.filter((noun) => narrative.toLowerCase().includes(noun.toLowerCase()) && !narrative.includes(noun));
+  expect(`narrative keeps proper nouns: ${nouns.join(", ")}`, recasedInNarrative.length === 0, narrative);
+  // 3. Persistence: a JSON round-trip changes nothing.
+  const revived = JSON.parse(JSON.stringify(pkg));
+  expect(`survives JSON persistence: ${line}`,
+    revived.experience.flatMap((role) => role.bullets).includes(line), JSON.stringify(revived.experience));
+  // 4. Export: the printed document carries the exact wording.
+  const exportDossier = { ...emptyDossier(NOW), identity: { ...emptyDossier(NOW).identity, fullName: "S Ito", email: "s@example.com" } };
+  const exported = variantPlainText(exportDossier, revived, ["summary", "skills", "experience", "projects", "education"], "ats");
+  expect(`survives plain-text export: ${line}`, exported.includes(line), exported.slice(0, 260));
+}
+
+// A taxonomy LABEL still normalizes — titleCase was not simply deleted.
+const labelPkg = generateResumePackage({
+  ...initialIntake, fullName: "S Ito", email: "s@example.com", education: "High school diploma",
+  currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics", currentTime: "2022 - Present",
+  selectedResponsibilities: ["inventory management"],
+});
+expect("taxonomy labels are still normalized", JSON.stringify(labelPkg).toLowerCase().includes("inventory"), JSON.stringify(labelPkg.coreSkills));
+
 L();
 L("=".repeat(78));
 L(`Truth integrity regression: ${passes} passed, ${fails} failed`);

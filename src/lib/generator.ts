@@ -794,14 +794,57 @@ function normalizeResponsibility(value: string) {
   if (isWeakFreeText(value)) return "";
   const alias = responsibilityAliases.get(cleanWhitespace(value).toLowerCase());
   if (alias) return alias;
-  const titled = titleCase(value);
-  return titled.replace(/\bCrm\b/g, "CRM").replace(/\bSop\b/g, "SOP").replace(/\bKpi\b/g, "KPI");
+  // Free text the user typed: preserve their casing. titleCase() lowercases the
+  // whole string before re-capitalizing each word, which destroys every
+  // interior capital — "Walla Walla" -> "Walla Walla" only by luck, while
+  // "DeKalb" -> "Dekalb", "McDonald's" -> "Mcdonald's", "O'Hare" -> "O'hare"
+  // and "Coca-Cola" -> "Coca-cola". Those are falsified proper nouns, and they
+  // survived persistence and export. titleCase stays confined to taxonomy
+  // labels, where the input is a known short phrase rather than prose.
+  return cleanWhitespace(value)
+    .replace(/\bcrm\b/gi, "CRM")
+    .replace(/\bsop\b/gi, "SOP")
+    .replace(/\bkpi\b/gi, "KPI");
 }
 
 function readablePhrase(value: string) {
   return value
     .split(" ")
     .map((word) => acronyms.get(word.toLowerCase()) ?? word.toLowerCase())
+    .join(" ");
+}
+
+/**
+ * Case-preserving counterpart of readablePhrase, for text the USER wrote.
+ *
+ * readablePhrase lowercases every word that is not a known acronym. That is
+ * correct for taxonomy and template LABELS ("Team Coordination" -> "team
+ * coordination" reads properly mid-sentence), and destructive for user prose:
+ * "Supported the Walla Walla distribution center." came back as "…the walla
+ * walla distribution center.", a falsified place name that then survived JSON
+ * persistence and plain-text export.
+ *
+ * Acronyms are still normalized, because that is a spelling fix rather than a
+ * meaning change. Nothing else is touched — readablePhrase must stay confined
+ * to labels.
+ */
+/**
+ * Lowercase only the LEADING character, for embedding a user's sentence inside
+ * a larger one ("…, handling supported the Walla Walla distribution center").
+ * A blanket .toLowerCase() on the joined clause was falsifying every proper
+ * noun the user wrote, and the corruption reached the printed résumé.
+ * Left untouched when the first word is an acronym or already all-caps.
+ */
+function midSentence(value: string) {
+  const first = value.split(" ")[0] ?? "";
+  if (!first || first === first.toUpperCase()) return value;
+  return value.charAt(0).toLowerCase() + value.slice(1);
+}
+
+function readableUserPhrase(value: string) {
+  return value
+    .split(" ")
+    .map((word) => acronyms.get(word.toLowerCase()) ?? word)
     .join(" ");
 }
 
@@ -1497,10 +1540,10 @@ function buildOccupationSummary(data: IntakeData, target: string, experience: Ex
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
     ...groundedOnly(occupation.transferables, corpus)
   ]).slice(0, 4);
-  const responsibilities = buildResponsibilityList(data).map(readablePhrase).slice(0, 4);
+  const responsibilities = buildResponsibilityList(data).map(readableUserPhrase).slice(0, 4);
   const aiPhrase = aiWorkflowPhrase(data);
-  const handledClause = responsibilities.length ? `, handling ${sentenceList(responsibilities).toLowerCase()}` : "";
-  const strengthSentence = strengths.length ? ` Strengths the candidate reports include ${sentenceList(strengths.map((item) => item.toLowerCase()))}.` : "";
+  const handledClause = responsibilities.length ? `, handling ${midSentence(sentenceList(responsibilities))}` : "";
+  const strengthSentence = strengths.length ? ` Strengths the candidate reports include ${midSentence(sentenceList(strengths))}.` : "";
 
   return limitSentences(
     `${title} with experience in a ${occupation.environment}${handledClause}.${strengthSentence} Now targeting ${target} roles.${aiPhrase ? ` Uses AI-assisted workflows for ${aiPhrase}.` : ""}`,
@@ -1520,9 +1563,9 @@ function buildOccupationLinkedInSummary(data: IntakeData, target: string, experi
   const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
   const strengths = compact([
     ...groundedOnly(occupation.transferables, corpus),
-    ...buildResponsibilityList(data).map(readablePhrase)
+    ...buildResponsibilityList(data).map(readableUserPhrase)
   ]).slice(0, 4);
-  const strengthClause = strengths.length ? `Brings ${sentenceList(strengths.map((item) => item.toLowerCase()))} into ` : "Moving into ";
+  const strengthClause = strengths.length ? `Brings ${midSentence(sentenceList(strengths))} into ` : "Moving into ";
 
   return limitSentences(
     `${title} with hands-on experience in a ${occupation.environment}. ${strengthClause}${targetRoleFamilyText(data, target)}.`,
@@ -1684,7 +1727,7 @@ function cleanSentence(sentence: string) {
 // at least two grounded activities exist.
 function specificEvidenceBullets(data: IntakeData) {
   const tools = buildToolList(data);
-  const responsibilities = buildResponsibilityList(data).map(readablePhrase);
+  const responsibilities = buildResponsibilityList(data).map(readableUserPhrase);
   const evidence = evidenceText(data).toLowerCase();
   const bullets: string[] = [];
   const groundedParts = (pairs: Array<[RegExp, string]>) => compact(pairs.map(([pattern, phrase]) => (pattern.test(evidence) ? phrase : "")));
@@ -1806,7 +1849,7 @@ function composeUserBullets(data: IntakeData, roleFamily: RoleFamily) {
   const bullets: string[] = [];
 
   if (verbLed.length) {
-    const joined = sentenceList(verbLed.slice(0, 3).map(readablePhrase));
+    const joined = sentenceList(verbLed.slice(0, 3).map(readableUserPhrase));
     // Skip the outcome clause when the phrases already state it (avoids
     // "improved compliance ... to support compliance").
     const outcomeClause = outcome && !joined.toLowerCase().includes(outcome.split(/\s+/)[0].toLowerCase()) ? ` to support ${outcome}` : "";
@@ -1815,11 +1858,11 @@ function composeUserBullets(data: IntakeData, roleFamily: RoleFamily) {
   if (nounLed.length) {
     // "Supported" is deliberately the weakest honest verb for noun-label
     // lists — family verbs like "Tested" would overstate what the user said.
-    bullets.push(capitalizeSentence(`Supported ${sentenceList(nounLed.slice(0, 3).map(readablePhrase))}${toolPhrase}.`));
+    bullets.push(capitalizeSentence(`Supported ${sentenceList(nounLed.slice(0, 3).map(readableUserPhrase))}${toolPhrase}.`));
   }
-  asWritten.slice(0, 3).forEach((line) => bullets.push(capitalizeSentence(`${readablePhrase(line)}.`)));
+  asWritten.slice(0, 3).forEach((line) => bullets.push(capitalizeSentence(`${readableUserPhrase(line)}.`)));
   if (verbLed.length > 3) {
-    bullets.push(capitalizeSentence(`${sentenceList(verbLed.slice(3, 6).map(readablePhrase))}.`));
+    bullets.push(capitalizeSentence(`${sentenceList(verbLed.slice(3, 6).map(readableUserPhrase))}.`));
   }
   const outcomeBullets = userOutcomeBullets(data);
   const scopeOne = scopeForBullet(scopes, ["customersServed", "ticketsHandled", "callsHandled"]);
@@ -1831,7 +1874,7 @@ function composeUserBullets(data: IntakeData, roleFamily: RoleFamily) {
     bullets.push(capitalizeSentence(`Handled ${scopeOne.phrase}${scopeTwo ? ` and ${scopeTwo.phrase}` : ""} as part of regular workload.`));
   }
   if (selectedActions.length) {
-    bullets.push(capitalizeSentence(`${sentenceList(selectedActions.map(readablePhrase))}.`));
+    bullets.push(capitalizeSentence(`${sentenceList(selectedActions.map(readableUserPhrase))}.`));
   }
   bullets.push(...outcomeBullets);
   const aiBullet = aiWorkflowBullet(data);
@@ -1988,7 +2031,7 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   // user's own responsibilities always qualify.
   const strengths = compact([
     ...groundedOnly(domain?.strengths ?? [], corpus),
-    ...responsibilities.map(readablePhrase),
+    ...responsibilities.map(readableUserPhrase),
     ...groundedOnly(strategy.focus, corpus).map(readablePhrase),
     ...buildToolList(data)
   ]).slice(0, 3);
@@ -2008,7 +2051,7 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
   const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
   const strategy = roleStrategies[data.roleFamily];
   const corpus = buildGroundingCorpus(data);
-  const responsibilities = buildResponsibilityList(data).slice(0, 3).map(readablePhrase);
+  const responsibilities = buildResponsibilityList(data).slice(0, 3).map(readableUserPhrase);
   const strengths = compact([
     ...groundedOnly(domain?.strengths ?? [], corpus),
     ...responsibilities,
