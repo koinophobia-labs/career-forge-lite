@@ -1,9 +1,11 @@
+import { classifyEvidenceAdmissibility, isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
   CareerDossier,
   DossierEvidenceRecord,
+  DossierRole,
   ResumeEvidenceReference,
   ResumePack,
   ResumeVariant
@@ -11,6 +13,18 @@ import type {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+/** Why an approved record was kept out of every document, for the receipt. */
+function withheldReason(item: DossierEvidenceRecord): string {
+  if (item.kind === "goal") return "Target preference (never résumé content)";
+  if (item.kind === "constraint") return "Constraint (never résumé content)";
+  const category = classifyEvidenceAdmissibility(item.detail);
+  if (category === "separation_reason") return "Reason for leaving a role (never résumé content)";
+  if (category === "uncertainty") return "Uncertain statement (not evidence)";
+  if (category === "preference") return "Target preference (never résumé content)";
+  if (category === "constraint") return "Constraint (never résumé content)";
+  return "Evidence gap (never résumé content)";
 }
 
 // Approved evidence arrives as the user wrote it — first person, sometimes
@@ -100,7 +114,14 @@ function relevance(item: DossierEvidenceRecord, lane: TargetLane): number {
 }
 
 function approvedEvidence(dossier: CareerDossier): DossierEvidenceRecord[] {
-  return dossier.evidence.filter((item) => item.approved && !item.rejected);
+  // Admissibility is derived, never stored on the record — sanitization does
+  // not rewrite `kind`, so approval alone says nothing about whether a record
+  // may enter career materials. Without this check a quarantined gap statement
+  // or target-role preference kept its original kind, entered the in-memory
+  // résumé, its evidence references and the pack receipt, and rendered in the
+  // /versions editor and evidence drawer. The exported file stayed clean only
+  // because sanitizeResumeForProfessionalUse catches it at the export boundary.
+  return dossier.evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item));
 }
 
 function evidenceByIds(approved: DossierEvidenceRecord[], ids: string[]): DossierEvidenceRecord[] {
@@ -137,6 +158,20 @@ function buildLaneResume(
   const approved = approvedEvidence(dossier);
   const withheldFacts: string[] = [];
   const omittedRoles: string[] = [];
+  // Records the user approved that are not admissible are excluded above, so
+  // nothing downstream can report them. Naming them here keeps the receipt
+  // honest about WHAT was withheld and WHY — quarantine that is invisible is
+  // just a quieter version of deleting the record.
+  //
+  // Only content-shaped records count as "withheld". Goals, constraints and
+  // identity are context by design and were never candidates for a document, so
+  // listing them would turn every ordinary pack receipt into a false refusal.
+  dossier.evidence
+    .filter((item) =>
+      item.approved && !item.rejected &&
+      item.kind !== "goal" && item.kind !== "constraint" && item.kind !== "identity" &&
+      !isProfessionalEvidence(item))
+    .forEach((item) => withheldFacts.push(withheldReason(item)));
   const identityValues = identityValueSet(dossier);
   const isDocumentFact = (item: DossierEvidenceRecord) =>
     !isIdentityFact(item.detail, identityValues) && !looksLikeHeading(item.detail);
@@ -182,9 +217,62 @@ function buildLaneResume(
     : `Career focus: ${lane.title}. Add approved role or project evidence before using this résumé.`;
   mapClaim(summary, summaryEvidence.map((item) => item.id), "transferred");
 
+  // ---------------------------------------------------------------------
+  // Evidence ownership.
+  //
+  // PRIMARY, structural: a record stamped with `roleId` may be cited only by
+  // that role. Nothing about the text matters, so one employer's duties can
+  // never be printed under another — including when both roles legitimately
+  // record the same string, which happens routinely because intakeFromDossier()
+  // prefills the intake form from the GLOBAL dossier pool.
+  //
+  // FALLBACK, for records written before ownership existed: an unowned record
+  // linked to MORE THAN ONE role is ambiguous, and may be used only by a role
+  // that independently records the same detail. Corroboration requires a real
+  // token match, not a substring — a two-word fragment like "customer service"
+  // must not vouch for "Troubleshot Northwind laptops for the customer service
+  // floor". Legacy dossiers are therefore repaired at generation time, with no
+  // migration and without ever guessing an attribution.
+  // ---------------------------------------------------------------------
+  const roleClaimCounts = new Map<string, number>();
+  dossier.roles.forEach((role) => {
+    new Set(role.evidenceIds).forEach((id) => roleClaimCounts.set(id, (roleClaimCounts.get(id) ?? 0) + 1));
+  });
+  const ambiguousEvidenceIds = new Set(
+    [...roleClaimCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+  );
+  const contentTokens = (value: string): Set<string> =>
+    new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2));
+  const roleRecordsDetail = (role: DossierRole, detail: string): boolean => {
+    const needle = contentTokens(detail);
+    if (needle.size === 0) return false;
+    return [...role.responsibilities, ...role.outcomes, ...role.tools].some((text) => {
+      const own = contentTokens(text);
+      // Too short to vouch for anything.
+      if (own.size < 3) return false;
+      const overlap = [...needle].filter((token) => own.has(token)).length;
+      // The role's own wording must account for most of the evidence, in both
+      // directions — a shared phrase is not the same as a shared fact.
+      return overlap / needle.size >= 0.8 && overlap / own.size >= 0.8;
+    });
+  };
+  const roleOwnsEvidence = (role: DossierRole, item: DossierEvidenceRecord): boolean => {
+    if (item.roleId) return item.roleId === role.id;
+    if (!ambiguousEvidenceIds.has(item.id)) return true;
+    return roleRecordsDetail(role, item.detail);
+  };
+  // Any record owned by a role is off-limits to projects and to the loose
+  // accomplishments section, which would otherwise reprint it without an
+  // employer boundary.
+  const roleOwnedEvidenceIds = new Set(
+    dossier.evidence.filter((item) => item.roleId).map((item) => item.id)
+  );
+
   const usedByRoles = new Set<string>();
   const roleEntries = dossier.roles.flatMap((role) => {
-    const support = evidenceByIds(approved, role.evidenceIds).filter((item) => chosenSet.has(item.id));
+    const support = evidenceByIds(approved, role.evidenceIds)
+      .filter((item) => chosenSet.has(item.id))
+      .filter((item) => roleOwnsEvidence(role, item));
     if (!support.length) return [];
     const heading = [role.title, role.employer, [role.startDate, role.endDate].filter(Boolean).join("–")].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));
@@ -217,7 +305,13 @@ function buildLaneResume(
 
   const projectEntries = dossier.projects.flatMap((project) => {
     if (project.defaultPlacement === "omit") return [];
-    const support = evidenceByIds(approved, project.evidenceIds).filter((item) => chosenSet.has(item.id));
+    // A project may not reprint an employer's facts. The intake-derived
+    // independent-work project inherits the current role's evidence ids, and
+    // this section applies neither the role guard nor usedByRoles, so without
+    // this filter the current job's duties were printed again under a project
+    // heading.
+    const support = evidenceByIds(approved, project.evidenceIds)
+      .filter((item) => chosenSet.has(item.id) && !roleOwnedEvidenceIds.has(item.id));
     if (!support.length) return [];
     // A project is not an employer. No fake "Independent project" company
     // label — the organization line is whatever the user actually recorded

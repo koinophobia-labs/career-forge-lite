@@ -85,6 +85,9 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
           kind,
           label: text(item.label) || "Evidence",
           detail,
+          // Must be revived explicitly: this whitelist silently drops any field
+          // it does not name, which would erase ownership on every page load.
+          ...(text(item.roleId) ? { roleId: text(item.roleId) } : {}),
           source: ["guided", "story", "resume-import", "legacy-profile", "manual", "role-sprint"].includes(text(item.source))
             ? text(item.source) as EvidenceSource
             : "manual",
@@ -171,14 +174,20 @@ export function evidenceRecord(
   source: EvidenceSource,
   approved: boolean,
   nowIso: string,
-  options?: { label?: string; sourceText?: string; confidence?: DossierEvidenceRecord["confidence"] }
+  options?: { label?: string; sourceText?: string; confidence?: DossierEvidenceRecord["confidence"]; roleId?: string }
 ): DossierEvidenceRecord {
   const normalized = detail.trim();
   return {
-    id: stableId("evidence", `${kind}|${source}|${normalized.toLowerCase()}`),
+    // Ownership participates in the identity of the record. Two employers can
+    // legitimately record the same responsibility; without this they collapse
+    // to one record, mergeEvidence keeps whichever roleId was written last, and
+    // the other role loses its own fact. Records with no owner keep their
+    // historical id exactly, so nothing already stored changes.
+    id: stableId("evidence", `${kind}|${source}|${options?.roleId ? `${options.roleId}|` : ""}${normalized.toLowerCase()}`),
     kind,
     label: options?.label ?? kind[0].toUpperCase() + kind.slice(1),
     detail: normalized,
+    ...(options?.roleId ? { roleId: options.roleId } : {}),
     source,
     sourceText: options?.sourceText ?? normalized,
     confidence: options?.confidence ?? "high",
@@ -356,7 +365,7 @@ export function mergeIntakeIntoDossier(
     intake.reportsCreated
   ]);
   const proofPoints = compact([...outcomes, ...metrics]);
-  const proposed = [
+  let proposed = [
     ...compact([intake.fullName, intake.email, intake.phone, intake.website]).map((detail) => evidenceRecord("identity", detail, source, approved, nowIso, { sourceText })),
     ...responsibilities.map((detail) => evidenceRecord("responsibility", detail, source, approved, nowIso, { sourceText })),
     ...tools.map((detail) => evidenceRecord("tool", detail, source, approved, nowIso, { sourceText })),
@@ -364,13 +373,45 @@ export function mergeIntakeIntoDossier(
     ...metrics.map((detail) => evidenceRecord("metric", detail, source, approved, nowIso, { sourceText })),
     ...compact([intake.targetJobTitle]).map((detail) => evidenceRecord("goal", detail, source, approved, nowIso, { sourceText }))
   ];
-  const roleEvidenceIds = proposed.filter((item) => item.kind !== "goal").map((item) => item.id);
+  // Intake collects responsibilities, tools, outcomes and metrics for the
+  // CURRENT role only — there are no per-role fields for the previous or
+  // additional employer. Handing every role the same evidence array made the
+  // pack generator print the current job's duties and metrics under a previous,
+  // unrelated employer's name, and the Defensibility Receipt certified those
+  // fabricated bullets as "direct".
+  //
+  // Ownership is now EXPLICIT: every record collected here is stamped with the
+  // id of the role it describes, and resume-pack refuses to let a role cite
+  // evidence it does not own. Text similarity is not used as an ownership
+  // signal — intakeFromDossier() prefills these very fields from the GLOBAL
+  // dossier pool, so after a job change both roles legitimately record the same
+  // strings and a text-matching guard would clear both.
   const roles = [
-    roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, roleEvidenceIds),
-    roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], roleEvidenceIds),
-    roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], roleEvidenceIds)
+    roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, []),
+    roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], []),
+    roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], [])
   ].filter((role): role is DossierRole => role !== null);
-  roles.forEach((role) => proposed.push(evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText })));
+  const currentRole = roles[0] && roles[0].title === intake.currentTitle.trim() && roles[0].employer === intake.currentCompany.trim() ? roles[0] : null;
+  // The role-scoped fields were prefilled from a DIFFERENT job than the one
+  // being submitted: the user changed employer and left the carried-over detail
+  // in the form. Recording it against the new employer would re-create exactly
+  // the cross-attribution this ownership model exists to prevent, so the new
+  // role starts with only its own heading. The text still reaches the global
+  // pools below, where the user can attribute it deliberately on /profile.
+  const prefillMovedEmployer = Boolean(intake.sourceRoleId) && Boolean(currentRole) && intake.sourceRoleId !== currentRole!.id;
+  if (currentRole && !prefillMovedEmployer) {
+    proposed = proposed.map((item) => (item.kind === "goal" || item.kind === "identity" ? item : { ...item, roleId: currentRole.id }));
+  }
+  const currentRoleEvidenceIds = currentRole
+    ? proposed.filter((item) => item.roleId === currentRole.id).map((item) => item.id)
+    : [];
+  if (currentRole) currentRole.evidenceIds = [...currentRoleEvidenceIds];
+  roles.forEach((role) => {
+    const record = evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText, roleId: role.id });
+    proposed.push(record);
+    // Each role owns its own heading record and nothing belonging to another.
+    role.evidenceIds = [...new Set([...role.evidenceIds, record.id])];
+  });
 
   let education: DossierEducation[] = current.education;
   if (intake.education.trim()) {
@@ -406,7 +447,11 @@ export function mergeIntakeIntoDossier(
       metrics,
       links: compact([intake.website]),
       defaultPlacement: "projects",
-      evidenceIds: [record.id, ...roleEvidenceIds]
+      // Independent work is described by the same intake fields as the current
+      // role. Those records are OWNED by that role, and resume-pack refuses to
+      // reprint role-owned evidence under a project heading, so listing them
+      // here is inert — the project renders from its own record only.
+      evidenceIds: [record.id, ...currentRoleEvidenceIds]
     };
     if (!projects.some((item) => item.id === project.id)) projects.push(project);
   }
@@ -464,12 +509,19 @@ export function intakeFromDossier(dossier: CareerDossier, targetTitle = ""): Int
     additionalTitle: additional?.title ?? "",
     additionalCompany: additional?.employer ?? "",
     additionalTime: additional?.startDate ?? "",
-    tools: dossier.tools.join(", "),
-    responsibilities: dossier.responsibilities.join("\n"),
-    selectedResponsibilities: dossier.responsibilities,
+    sourceRoleId: current?.id,
+    // Scoped to the CURRENT role, not the global dossier pool. These fields are
+    // re-submitted as that role's evidence, so prefilling them from every role
+    // the user has ever held meant a job change silently re-recorded the old
+    // employer's duties against the new one — cross-attribution reappearing
+    // through the ordinary /resume-builder flow rather than through the data
+    // model. The wider pools remain available on /profile.
+    tools: (current?.tools ?? []).join(", "),
+    responsibilities: (current?.responsibilities ?? []).join("\n"),
+    selectedResponsibilities: current?.responsibilities ?? [],
     customRoleTransferableSkills: dossier.transferableSkills,
-    selectedOutcomes: dossier.outcomes,
-    outcomes: dossier.outcomes.join("\n"),
+    selectedOutcomes: current?.outcomes ?? [],
+    outcomes: (current?.outcomes ?? []).join("\n"),
     education: dossier.education.map((item) => [item.credential, item.institution].filter(Boolean).join(", ")).join("; ")
   };
 }

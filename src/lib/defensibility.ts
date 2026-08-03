@@ -38,7 +38,11 @@ function isUserAuthoredClaim(variant: ResumeVariant, claimPath: string): boolean
     if (editedPath === "document") return true;
     if (editedPath === claimPath) return true;
     if (editedPath === "coreSkills") return claimPath.startsWith("coreSkills.");
-    const match = editedPath.match(/^experience.(d+).(title|company|time|bullets)$/);
+    // Escaped deliberately: an unescaped `.`/`d` here silently matched nothing,
+    // so a user's own edit to a bullet, title, company or date was never
+    // recognised as user-authored and blocked export instead of downgrading
+    // the receipt. Covered by scripts/truth-integrity-regression.mjs.
+    const match = editedPath.match(/^experience\.(\d+)\.(title|company|time|bullets)$/);
     if (!match) return false;
     const prefix = `experience.${match[1]}.`;
     return match[2] === "bullets"
@@ -48,7 +52,11 @@ function isUserAuthoredClaim(variant: ResumeVariant, claimPath: string): boolean
 }
 
 function yearTokens(value: string): string[] {
-  return value.match(/(?:19|20)d{2}|present|current/gi)?.map((item) => item.toLowerCase()) ?? [];
+  // Same escaping defect as isUserAuthoredClaim: `d{2}` matched a literal "dd",
+  // so no four-digit year was ever extracted and duration verification compared
+  // only the words "present"/"current". Display-only (it never gates export),
+  // but the receipt was reporting durations as verified without checking years.
+  return value.match(/(?:19|20)\d{2}|present|current/gi)?.map((item) => item.toLowerCase()) ?? [];
 }
 
 export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: CareerDossier): DefensibilityReceipt {
