@@ -136,9 +136,11 @@ export function polishResumeSentence(value: string) {
 // a creation claim. Variety is not worth a false verb, and repeated openers are
 // already reported to the user as a suggestion by analyzeResumeQuality.
 export function polishBullets(bullets: string[]) {
-  return unique(bullets.map(polishResumeSentence))
-    .filter((bullet) => bullet.length > 24)
-    .slice(0, 5);
+  // No minimum length. A short line the user actually wrote ("Poured drinks.")
+  // is a true claim; dropping it left a sparse profile with an empty Experience
+  // section and no indication why. Thin evidence stays visible and usable —
+  // judging it belongs to the quality layer, which only suggests.
+  return unique(bullets.map(polishResumeSentence)).slice(0, 5);
 }
 
 // Verbatim-fidelity polish: spelling, acronym casing, sentence case and
@@ -150,9 +152,7 @@ export function polishResumeSentenceVerbatim(value: string) {
 }
 
 export function polishBulletsVerbatim(bullets: string[]) {
-  return unique(bullets.map(polishResumeSentenceVerbatim))
-    .filter((bullet) => bullet.length > 24)
-    .slice(0, 5);
+  return unique(bullets.map(polishResumeSentenceVerbatim)).slice(0, 5);
 }
 
 function polishRole(role: ExperienceRole): ExperienceRole {

@@ -16,6 +16,37 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
 // selected; ungrounded template content is dropped, never emitted.
 // ---------------------------------------------------------------------------
 
+/**
+ * Grounding evidence that describes the WORK, with job titles and employer
+ * names removed. A title says who someone was called, not what they did, so it
+ * must not authorise an activity claim — see buildResponsibilityList.
+ */
+export function buildActivityCorpus(data: IntakeData) {
+  return [
+    data.tools,
+    data.responsibilities,
+    data.outcomes,
+    data.customRoleNotes,
+    data.independentWorkType,
+    data.customersServed,
+    data.ticketsHandled,
+    data.projectsSupported,
+    data.teamSizeSupported,
+    data.callsHandled,
+    data.revenueInfluenced,
+    data.reportsCreated,
+    ...data.selectedResponsibilities,
+    ...data.selectedActions,
+    ...data.selectedOutcomes,
+    ...data.customRoleWorkStyles,
+    ...data.customRoleTransferableSkills,
+    ...data.selectedIndependentWorkSignals,
+    ...data.selectedAiWorkflows
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
 export function buildGroundingCorpus(data: IntakeData) {
   return [
     data.currentTitle,
@@ -86,9 +117,16 @@ const labelGrounding = new Map<string, RegExp>([
   ["cash handling", /\b(cash|registers?|payments?|tabs?|drawer|transactions?|checkout|pos|deposits?|withdrawals?|wagers?)\b/],
   ["payment processing", /\b(payments?|cash|registers?|transactions?|checkout|pos|tabs?|wagers?)\b/],
   ["conflict resolution", /\b(upset|angry|complaints?|conflict|de-?escalat\w*|calm(?:ed|ing|ly)?|tense|frustrated)\b/],
-  ["time management", /\b(time-sensitive|rush(?:es)?|busy|deadlines?|fast-paced|on time|timing|peak|delays?)\b/],
+  // "We were busy" describes the ENVIRONMENT; it does not evidence that the
+  // candidate managed time. Only evidence about their own time performance
+  // authorises the competency.
+  ["time management", /\b(deadlines?|on time|prioriti\w*|multitask\w*|juggl\w*|time management|scheduled around)\b/],
   ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?|kitchen)\b/],
-  ["attention to detail", /\b(accurate|accuracy|checked|details?|errors?|labels?|dates|mismatch\w*)\b/],
+  // Performing a checking TASK ("checked labels") is not the same claim as
+  // possessing the QUALITY. This is the same over-claim as the ungated canned
+  // bullets that asserted "attention to detail" and were removed; the label
+  // now needs language about the quality itself or about errors actually caught.
+  ["attention to detail", /\b(attention to detail|double-?check\w*|meticulous\w*|careful\w*|caught (?:errors?|mistakes?|discrepanc\w*)|mismatch\w*)\b/],
   ["order accuracy", /\b(orders?|accuracy|accurate)\b/],
   ["problem solving", /\b(problems?|issues?|resolved?|fixed|solved?|troubleshoot|troubleshot)\b/],
   ["patient support", /\b(patients?|residents?|clients?|care)\b/],
@@ -836,8 +874,13 @@ function buildResponsibilityList(data: IntakeData) {
   const userResponsibilities = buildUserResponsibilityList(data);
   const occupation = detectOccupationProfile(data);
   if (occupation) {
-    // Occupation taxonomy survives ONLY where the user's own words evidence it.
-    const corpus = buildGroundingCorpus(data);
+    // Occupation taxonomy survives ONLY where the user's own words evidence it,
+    // and a JOB TITLE is not such a word. Grounding against the full corpus let
+    // the title do the work: "Custodian" grounded the task claim "sanitation"
+    // through an alias group, so a user who typed nothing still got
+    // "Supported sanitation." on their résumé. A title states identity; only a
+    // description of the work states activity.
+    const corpus = buildActivityCorpus(data);
     return dedupeNearIdentical(
       compact([
         ...userResponsibilities,
@@ -1148,16 +1191,27 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
   // task claims beyond the detected occupation title itself.
   const groundedBulletsByOccupation: Record<string, GroundedBullet[]> = {
     bartender: [
-      {
-        text: customerScope
-          ? `Assisted ${customerScope.phrase} while maintaining accuracy during high-volume service periods.`
-          : "Assisted guests throughout service while maintaining accuracy during high-volume periods.",
-        when: /\b(guests?|customers?|served?|serving|bar)\b/
-      },
-      { text: `Processed payments, managed tabs or orders, and followed cash handling procedures${toolPhrase}.`, when: /\b(payments?|cash|tabs?|registers?|pos|checkout)\b/ },
-      { text: "Resolved guest concerns with calm communication and policy-aware judgment.", when: /\b(upset|angry|complaints?|calm\w*|concerns?|de-?escalat\w*|ids?)\b/ },
-      { text: "Coordinated with coworkers to keep service flow moving efficiently during busy shifts.", when: /\b(coworkers?|team|busy|rush\w*|shifts?)\b/ },
-      { text: "Maintained clean, stocked, and organized work areas to support reliable service.", when: /\b(clean\w*|stock\w*|restock\w*|organiz\w*|sanit\w*)\b/ }
+      composed(corpus, `Served ${customerScope ? customerScope.phrase : "guests"} by`, [
+        [/\bdrinks?\b|\bcocktails?\b|\bpour\w*|\bmixed\b/, "preparing drinks"],
+        [/\borders?\b|\btabs?\b/, "taking orders"],
+        [/\bbusy\b|\brush\w*|\bhigh-?volume\b|\bpeak\b/, "keeping pace during high-volume periods"]
+      ]),
+      composed(corpus, "Handled", [
+        [/\bpayments?\b|\bcards?\b/, "payments"],
+        [/\bcash\b/, "cash"],
+        [/\btabs?\b/, "tabs"],
+        [/\bregisters?\b|\bpos\b|\bcheckout\b/, "register transactions"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Resolved guest concerns using", [
+        [/\bcalm\w*|\bde-?escalat\w*/, "calm communication"],
+        [/\bpolic(?:y|ies)\b|\bids?\b|\brules?\b/, "policy-aware judgment"]
+      ]),
+      { text: "Coordinated with coworkers during service.", when: /\b(coworkers?|team|handoffs?)\b/ },
+      composed(corpus, "Kept work areas", [
+        [/\bclean\w*|\bsanit\w*|\bwiped?\b/, "clean"],
+        [/\bstock\w*|\brestock\w*/, "stocked"],
+        [/\borganiz\w*/, "organized"]
+      ])
     ],
     retail: [
       // Each clause's evidence names the SAME concept as its phrase. A loose
@@ -1178,7 +1232,7 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bdisplays?\b|\bpresentation|\bfacing|\bmerchandis\w*/, "maintaining store presentation"],
         [/\binventory\b|\bshelves\b|\bshelf\b|\bbackroom\b/, "organizing inventory areas"]
       ]),
-      { text: "Escalated larger customer issues to leads or managers with clear context.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
+      { text: "Escalated customer issues to leads or managers.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
       composed(corpus, "Balanced", [
         [/\bregisters?\b|\baccura\w*/, "register accuracy"],
         [/\bcustomers?\b|\bservice\b/, "customer service"],
@@ -1201,7 +1255,7 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bsafety\b|\bsafe\b|\bppe\b/, "safety procedures"],
         [/\bclean\w*|\borganiz\w*/, "housekeeping standards"]
       ]),
-      { text: "Coordinated with coworkers during handoffs to keep packages, materials, or stock moving efficiently.", when: /\b(coworkers?|crew|team|handoffs?|shifts?)\b/ },
+      { text: "Coordinated with coworkers during shift handoffs.", when: /\b(coworkers?|crew|team|handoffs?|shifts?)\b/ },
       composed(corpus, "Checked", [
         [/\blabels?\b|\bbarcodes?\b/, "labels"],
         [/\bdates\b|\bexpir\w*/, "dates"],
@@ -1209,15 +1263,23 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       ])
     ],
     security: [
-      { text: "Monitored site activity, access points, or visitor flow while following safety procedures.", when: /\b(monitor\w*|watch\w*|doors?|access|patrol\w*|surveillance|site)\b/ },
-      { text: "Communicated calmly with visitors, staff, and supervisors during routine questions or tense situations.", when: /\b(visitors?|questions?|calm\w*|tense|upset|staff)\b/ },
-      {
-        text: operationsScope
-          ? `Documented ${operationsScope.phrase} so handoffs stayed clear and accurate.`
-          : "Documented incidents, observations, or shift notes so handoffs stayed clear and accurate.",
-        when: /\b(incidents?|notes?|logs?|logged|wrote|report\w*|document\w*)\b/
-      },
-      { text: "Used judgment to escalate concerns while staying aligned with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
+      composed(corpus, "Monitored", [
+        [/\bpatrol\w*|\brounds?\b|\bperimeter\b|\bwalked\b/, "site activity"],
+        [/\bdoors?\b|\baccess\b|\bbadges?\b|\bentry\b/, "access points"],
+        [/\bvisitors?\b|\bguests?\b|\bsign-?in\b/, "visitor flow"],
+        [/\bcameras?\b|\bsurveillance\b|\bmonitors?\b/, "camera feeds"]
+      ]),
+      composed(corpus, "Communicated with", [
+        [/\bvisitors?\b|\bguests?\b/, "visitors"],
+        [/\bstaff\b|\bemployees?\b|\btenants?\b/, "staff"],
+        [/\bsupervisors?\b|\bmanagers?\b|\bdispatch\b/, "supervisors"]
+      ]),
+      composed(corpus, `Documented ${operationsScope ? operationsScope.phrase : "shift activity"} including`, [
+        [/\bincidents?\b/, "incidents"],
+        [/\bobservations?\b|\bnoticed\b/, "observations"],
+        [/\bnotes?\b|\blogs?\b|\blogged\b|\bwrote\b|\breport\w*/, "shift notes"]
+      ]),
+      { text: "Escalated concerns in line with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
       // (ungated canned bullet removed: it asserted reliability / attention to
       // detail with nothing in the user's corpus behind it, and could be the ONLY
       // experience bullet on the résumé. A role with nothing grounded renders
@@ -1235,8 +1297,15 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         })(),
         when: /\b(deliver\w*|time-sensitive)\b/
       },
-      { text: `Used delivery and navigation tools to coordinate deliveries and route decisions${toolPhrase}.`, when: /\b(apps?|navigation|gps)\b/ },
-      { text: "Communicated delays, substitutions, or order issues so customers had clear updates.", when: /\b(delays?|substitutions?|messag\w*|updates?)\b/ },
+      composed(corpus, "Used", [
+        [/\bapps?\b|\bplatforms?\b/, "delivery apps"],
+        [/\bnavigation\b|\bgps\b|\bmaps?\b/, "navigation tools"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Communicated", [
+        [/\bdelays?\b|\blate\b|\btraffic\b/, "delays"],
+        [/\bsubstitutions?\b|\bout of stock\b|\bunavailable\b/, "substitutions"],
+        [/\bissues?\b|\bproblems?\b|\bwrong\b/, "order issues"]
+      ]),
       {
         text: (() => {
           const parts = compact([
@@ -1261,80 +1330,129 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       }
     ],
     janitor: [
-      { text: "Maintained clean, stocked, and safe spaces by completing routine cleaning and upkeep tasks.", when: /\b(clean\w*|mopp?\w*|sweep\w*|sanit\w*|upkeep)\b/ },
-      { text: `Used cleaning supplies, equipment, or basic tools to support daily facility standards${toolPhrase}.`, when: /\b(supplies|equipment|tools?|mops?|chemicals?)\b/ },
-      { text: "Reported broken fixtures, supply needs, or safety concerns so issues could be addressed.", when: /\b(report\w*|broken|fixtures?|supply|supplies|concerns?)\b/ },
-      {
-        text: (() => {
-          const parts = compact([
-            /\b(sanit\w*|clean\w*|mop\w*)\b/.test(corpus) ? "sanitation" : "",
-            /\b(safety|safe|ppe)\b/.test(corpus) ? "safety" : ""
-          ]);
-          return parts.length ? `Followed ${parts.join(" and ")} procedures while moving through assigned areas consistently.` : "";
-        })(),
-        when: /\b(sanit\w*|clean\w*|safety|safe|ppe)\b/
-      },
+      composed(corpus, "Maintained assigned spaces by", [
+        [/\bclean\w*|\bmopp?\w*|\bsweep\w*|\bvacuum\w*/, "cleaning"],
+        [/\bstock\w*|\brestock\w*|\bsupplies\b/, "restocking supplies"],
+        [/\bsanit\w*|\bdisinfect\w*/, "sanitizing"],
+        [/\bupkeep\b|\brepairs?\b|\bmaintenance\b/, "routine upkeep"]
+      ]),
+      composed(corpus, "Used", [
+        [/\bsupplies\b|\bchemicals?\b/, "cleaning supplies"],
+        [/\bequipment\b|\bmachines?\b|\bbuffers?\b/, "equipment"],
+        [/\bmops?\b|\btools?\b|\bcarts?\b/, "basic tools"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Reported", [
+        [/\bbroken\b|\bfixtures?\b|\bdamage\w*/, "broken fixtures"],
+        [/\bsupply\b|\bsupplies\b|\breorder\w*/, "supply needs"],
+        [/\bsafety\b|\bhazards?\b|\bconcerns?\b/, "safety concerns"]
+      ]),
+      composed(corpus, "Followed", [
+        [/\bsanit\w*|\bclean\w*|\bmop\w*/, "sanitation procedures"],
+        [/\bsafety\b|\bsafe\b|\bppe\b/, "safety procedures"]
+      ]),
     ],
     "food-service": [
-      {
-        text: customerScope
-          ? `Prepared orders and assisted ${customerScope.phrase} while balancing speed, accuracy, and service quality.`
-          : "Prepared orders and assisted guests while balancing speed, accuracy, and service quality.",
-        when: /\b(orders?|drinks?|food|prepared?|customers?|guests?)\b/
-      },
-      {
-        // Composed claim-by-claim: only evidenced activities are named.
-        text: (() => {
-          const parts = compact([
-            /\b(registers?|pos|payments?|cash)\b/.test(corpus) ? "register use" : "",
-            /\b(restock\w*|stock\w*|supplies)\b/.test(corpus) ? "restocking" : "",
-            /\b(clean\w*|sanit\w*|wiped?)\b/.test(corpus) ? "cleaning" : ""
-          ]);
-          return parts.length ? `Followed shift procedures for ${sentenceList(parts)} within the food service flow${toolPhrase}.` : "";
-        })(),
-        when: /\b(registers?|pos|restock\w*|stock\w*|clean\w*|sanit\w*|payments?|cash)\b/
-      },
-      { text: "Kept work areas clean and organized while following sanitation expectations.", when: /\b(clean\w*|sanit\w*|wiped?|station)\b/ },
-      { text: "Coordinated with coworkers during rushes to keep orders moving and reduce service delays.", when: /\b(coworkers?|team|kitchen|rush\w*|busy)\b/ },
-      { text: "Handled customer questions or order issues with clear communication and steady follow-through.", when: /\b(questions?|issues?|complaints?|customers?|guests?)\b/ }
+      composed(corpus, `Served ${customerScope ? customerScope.phrase : "guests"} by`, [
+        [/\borders?\b|\bprepared?\b|\bmade\b/, "preparing orders"],
+        [/\bdrinks?\b|\bcoffee\b|\bbeverages?\b/, "making drinks"],
+        [/\bfood\b|\bcook\w*|\bgrill\w*|\bfr(?:y|ied|ying)\b/, "preparing food"],
+        [/\bbusy\b|\brush\w*|\bpeak\b|\bfast\b/, "keeping pace during rushes"]
+      ]),
+      composed(corpus, "Followed shift procedures for", [
+        [/\bregisters?\b|\bpos\b|\bpayments?\b|\bcash\b/, "register use"],
+        [/\brestock\w*|\bstock\w*|\bsupplies\b/, "restocking"],
+        [/\bclean\w*|\bsanit\w*|\bwiped?\b/, "cleaning"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Kept work areas", [
+        [/\bclean\w*|\bwiped?\b/, "clean"],
+        [/\borganiz\w*|\bstation\b|\bstocked\b/, "organized"]
+      ]),
+      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|team|kitchen)\b/ },
+      composed(corpus, "Handled", [
+        [/\bquestions?\b|\basked\b/, "customer questions"],
+        [/\bissues?\b|\bcomplaints?\b|\bwrong\b|\bremade?\b/, "order issues"]
+      ])
     ],
     caregiver: [
-      { text: "Supported clients with daily routines while maintaining patience, safety awareness, and respect.", when: /\b(clients?|residents?|patients?|routines?|care)\b/ },
-      { text: `Kept care notes, reminders, or schedule details organized${toolPhrase}.`, when: /\b(notes?|reminders?|schedul\w*|records?)\b/ },
-      { text: "Communicated updates to families, supervisors, or care teams when routines or needs changed.", when: /\b(famil\w*|updates?|nurses?|supervisors?|texted|called)\b/ },
-      { text: "Followed safety and care procedures while helping with meals, mobility, reminders, or light household tasks.", when: /\b(meals?|mobility|safety|reminders?|cleaning|household)\b/ },
-      { text: "Built trust through consistent attendance, calm communication, and dependable follow-through.", when: /\b(trust|reliab\w*|showed up|on time|consistent\w*)\b/ }
+      composed(corpus, "Supported clients with", [
+        [/\broutines?\b|\bdaily\b|\bschedules?\b/, "daily routines"],
+        [/\bbath\w*|\bdress\w*|\bgroom\w*|\bhygiene\b|\btoilet\w*/, "personal care"],
+        [/\bmeals?\b|\bfeed\w*|\bcook\w*/, "meals"],
+        [/\bmobility\b|\btransfers?\b|\bwalk\w*|\bwheelchairs?\b/, "mobility"]
+      ]),
+      composed(corpus, "Kept", [
+        [/\bnotes?\b|\bcharts?\b|\brecords?\b/, "care notes"],
+        [/\breminders?\b|\bmedications?\b|\bmeds\b/, "reminders"],
+        [/\bschedul\w*|\bappointments?\b/, "schedule details"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Communicated updates to", [
+        [/\bfamil\w*|\brelatives?\b/, "families"],
+        [/\bsupervisors?\b|\bmanagers?\b|\bagency\b/, "supervisors"],
+        [/\bnurses?\b|\bcare teams?\b|\bdoctors?\b/, "care teams"]
+      ]),
+      composed(corpus, "Followed", [
+        [/\bsafety\b|\bsafe\b|\bfalls?\b/, "safety procedures"],
+        [/\bcare plans?\b|\bprocedures?\b|\bprotocols?\b/, "care procedures"]
+      ]),
+      composed(corpus, "Built trust through", [
+        [/\battendance\b|\bshowed up\b|\bon time\b|\bpunctual\w*/, "consistent attendance"],
+        [/\bcalm\w*|\bpatien\w*/, "calm communication"],
+        [/\breliab\w*|\bdependab\w*|\bconsistent\w*|\bfollow-?through\b/, "dependable follow-through"]
+      ], { min: 2 })
     ],
     receptionist: [
-      {
-        text: customerScope
-          ? `Managed ${customerScope.phrase} while welcoming visitors, answering questions, and routing requests.`
-          : "Welcomed visitors or callers, answered questions, and routed requests to the right person or next step.",
-        when: /\b(visitors?|callers?|calls?|greet\w*|questions?|routed?)\b/
-      },
-      { text: `Supported scheduling, records, and front desk communication${toolPhrase}.`, when: /\b(schedul\w*|appointments?|records?|front desk|calendars?)\b/ },
-      { text: "Kept office details organized so appointments, messages, and handoffs stayed accurate.", when: /\b(appointments?|messages?|organiz\w*|records?)\b/ },
-      { text: "Handled interruptions and competing requests while maintaining a professional front desk experience.", when: /\b(interruptions?|busy|competing|priorit\w*)\b/ },
+      composed(corpus, `Handled ${customerScope ? customerScope.phrase : "front desk traffic"} by`, [
+        [/\bvisitors?\b|\bgreet\w*|\bwelcom\w*|\bsign-?in\b/, "welcoming visitors"],
+        [/\bcalls?\b|\bcallers?\b|\bphones?\b/, "answering calls"],
+        [/\bquestions?\b|\binquir\w*/, "answering questions"],
+        [/\brouted?\b|\brouting\b|\btransferr\w*|\bdirected\b/, "routing requests"]
+      ]),
+      composed(corpus, "Supported", [
+        [/\bschedul\w*|\bappointments?\b|\bcalendars?\b|\bbooking\w*/, "scheduling"],
+        [/\brecords?\b|\bfiles?\b|\bfiling\b|\bdata entry\b/, "records"],
+        [/\bemails?\b|\bmessages?\b|\bmail\b|\bcorrespondence\b/, "front desk communication"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Kept", [
+        [/\bappointments?\b|\bschedul\w*/, "appointments"],
+        [/\bmessages?\b|\bvoicemail\w*/, "messages"],
+        [/\bhandoffs?\b|\borganiz\w*|\brecords?\b/, "handoffs"]
+      ]),
+      { text: "Handled interruptions and competing requests.", when: /\b(interruptions?|competing|priorit\w*)\b/ },
     ],
     construction: [
-      { text: "Moved materials, prepared work areas, and supported crews with hands-on job site tasks.", when: /\b(materials?|crews?|job sites?|carried|moved|set ?up)\b/ },
-      { text: `Used tools, equipment, or PPE to complete assigned work safely and consistently${toolPhrase}.`, when: /\b(tools?|equipment|ppe|drills?|saws?)\b/ },
-      { text: "Followed safety procedures while keeping work areas clean, organized, and ready for crews.", when: /\b(safety|safe|clean\w*|rules|directions)\b/ },
-      {
-        text: teamScope
-          ? `Communicated issues, material needs, or next steps across a ${teamScope.phrase}.`
-          : "Communicated issues, material needs, or next steps to coworkers, leads, or foremen.",
-        when: /\b(foreman|foremen|leads?|crews?|coworkers?|reported)\b/
-      },
+      composed(corpus, "Supported job site work by", [
+        [/\bmaterials?\b|\bcarried\b|\bmoved\b|\bhauled\b|\bloaded\b/, "moving materials"],
+        [/\bset ?up\b|\bprepar\w*|\bstaging\b|\bclear\w*/, "preparing work areas"],
+        [/\bcrews?\b|\bteams?\b|\bhelped\b/, "assisting crews"]
+      ]),
+      composed(corpus, "Used", [
+        [/\btools?\b|\bdrills?\b|\bsaws?\b|\bhammers?\b/, "hand and power tools"],
+        [/\bequipment\b|\bmachines?\b|\blifts?\b/, "equipment"],
+        [/\bppe\b|\bhard ?hats?\b|\bharness\w*|\bgoggles?\b/, "PPE"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Followed", [
+        [/\bsafety\b|\bsafe\b|\bosha\b/, "safety procedures"],
+        [/\bclean\w*|\borganiz\w*|\bswept\b/, "site housekeeping standards"]
+      ]),
+      composed(corpus, `Communicated with ${teamScope ? teamScope.phrase : "coworkers, leads, or foremen"} about`, [
+        [/\bissues?\b|\bproblems?\b|\bdelays?\b/, "issues"],
+        [/\bmaterials?\b|\bsupplies\b|\border\w*/, "material needs"],
+        [/\bnext steps?\b|\bschedul\w*|\bsequence\b|\bplans?\b/, "next steps"]
+      ]),
     ]
   };
 
   const canned = groundedBulletsByOccupation[occupation.id] ?? [];
   const grounded = canned.filter((bullet) => !bullet.when || bullet.when.test(corpus)).map((bullet) => bullet.text);
-  // The user's own phrases always take priority; grounded canned bullets fill
-  // in polished phrasing for evidence they actually gave.
-  const combined = compact([...grounded, ...composeUserBullets(data, data.roleFamily)]);
-  return qualityCheckBullets(combined, ["Assisted", "Handled", "Resolved", "Coordinated", "Maintained"]);
+  // The user's own phrasing LEADS and is never displaced by occupation
+  // vocabulary — the comment here used to say this while the code put the
+  // canned bullets first, so a sparse line like "carried lumber" was replaced
+  // by "Supported job site work by moving materials." Occupation bullets are
+  // additive: they may say something the user's own lines do not, never
+  // paraphrase away something they do.
+  const userOwn = composeUserBullets(data, data.roleFamily);
+  const combined = compact([...userOwn, ...grounded]);
+  return qualityCheckBullets(combined);
 }
 
 function buildOccupationSummary(data: IntakeData, target: string, experience: ExperienceRole[], occupation: OccupationProfile) {
@@ -1588,7 +1706,7 @@ function buildBeautyServiceBullets(data: IntakeData) {
     ...composeUserBullets(data, data.roleFamily)
   ];
 
-  return qualityCheckBullets(compact(bullets), ["Served", "Built", "Managed"]);
+  return qualityCheckBullets(compact(bullets));
 }
 
 const verbLedPhrase =
@@ -1653,7 +1771,6 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
   // as title/company/dates only.
   if (roleIndex > 0) return [];
 
-  const verbs = roleStrategies[data.roleFamily].verbs;
   const domain = detectDomain(role) ?? fallbackDomainProfile(data);
 
   if (domain?.name === "product-builder") {
@@ -1675,7 +1792,7 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
       }
     ];
     const grounded = canned.filter((bullet) => bullet.text && (!bullet.when || bullet.when.test(corpus))).map((bullet) => bullet.text);
-    return qualityCheckBullets(compact([...grounded, ...composeUserBullets(data, data.roleFamily)]), verbs);
+    return qualityCheckBullets(compact([...composeUserBullets(data, data.roleFamily), ...grounded]));
   }
 
   const occupation = detectOccupationProfile(data, role);
@@ -1687,7 +1804,7 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
     return buildBeautyServiceBullets(data);
   }
 
-  return qualityCheckBullets(compact([...composeUserBullets(data, data.roleFamily), ...specificEvidenceBullets(data)]), verbs);
+  return qualityCheckBullets(compact([...composeUserBullets(data, data.roleFamily), ...specificEvidenceBullets(data)]));
 }
 
 function buildExperience(data: IntakeData): ExperienceRole[] {
@@ -1729,22 +1846,29 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
   }));
 }
 
-function qualityCheckBullets(bullets: string[], fallbackVerbs: string[]) {
-  const usedOpeners = new Set<string>();
-
+// Two behaviours were removed here, both of which silently rewrote or discarded
+// the user's own words:
+//
+//   Opening-verb rotation — a second copy of the diversifyOpeningVerbs defect.
+//   It replaced the first word of any bullet whose opener had been used, so
+//   "Supported job site work…" became "Assisted job site work…". A résumé may
+//   repeat a verb; it may not attribute one the user did not choose.
+//
+//   A `length > 30` filter — which dropped short, TRUE lines outright.
+//   "Drove clients to appointments." is exactly 30 characters and vanished, so
+//   a user who wrote one sparse sentence got an empty Experience section. Thin
+//   evidence must stay visible and usable; judging it is the quality layer's
+//   job, and that layer only ever suggests.
+function qualityCheckBullets(bullets: string[]) {
+  const seen = new Set<string>();
   return compact(bullets)
     .map(cleanSentence)
-    .map((bullet) => {
-      const opener = bullet.split(" ")[0];
-      if (!usedOpeners.has(opener.toLowerCase())) {
-        usedOpeners.add(opener.toLowerCase());
-        return bullet;
-      }
-      const replacement = fallbackVerbs.find((verb) => !usedOpeners.has(verb.toLowerCase())) ?? "Supported";
-      usedOpeners.add(replacement.toLowerCase());
-      return bullet.replace(/^\w+/, replacement);
+    .filter((bullet) => {
+      const key = bullet.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
     })
-    .filter((bullet) => bullet.length > 30)
     .slice(0, 5);
 }
 
@@ -1859,7 +1983,7 @@ function buildHeadline(data: IntakeData, target: string, skills: string[], exper
 function qualityCheckResume(resume: ResumePackage): ResumePackage {
   const experience = resume.experience.map((role) => ({
     ...role,
-    bullets: qualityCheckBullets(role.bullets, ["Supported", "Documented", "Maintained"]).filter(
+    bullets: qualityCheckBullets(role.bullets).filter(
       (bullet, index, bullets) => bullets.findIndex((item) => item.toLowerCase() === bullet.toLowerCase()) === index
     )
   }));

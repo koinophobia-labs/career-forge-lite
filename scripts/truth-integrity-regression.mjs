@@ -541,6 +541,50 @@ for (const invented of ["scanning", "picking", "packing", "forklift", "safety pr
     JSON.stringify(thinWarehouse));
 }
 
+// 5b. Multi-occupation: a sparse line must survive unchanged, and must not
+//     acquire any activity the occupation bank could have supplied.
+const OCCUPATION_CASES = [
+  { occupation: "bartender", title: "Bartender", company: "The Anchor", typed: "poured drinks",
+    forbidden: ["payments", "cash", "tabs", "register", "policy-aware", "stocked", "organized"] },
+  { occupation: "security", title: "Security Officer", company: "Meridian Facilities", typed: "walked the perimeter",
+    forbidden: ["access points", "visitor flow", "camera feeds", "incidents", "shift notes", "reliable coverage"] },
+  { occupation: "caregiver", title: "Home Health Aide", company: "Brightpath Care", typed: "drove clients to appointments",
+    forbidden: ["personal care", "mobility", "care notes", "reminders", "safety procedures", "calm communication"] },
+  { occupation: "construction", title: "Construction Laborer", company: "Rowan Builders", typed: "carried lumber",
+    forbidden: ["PPE", "equipment", "safety procedures", "housekeeping", "next steps", "material needs"] },
+  { occupation: "receptionist", title: "Front Desk Receptionist", company: "Halden Clinic", typed: "answered the phone",
+    forbidden: ["welcoming visitors", "routing requests", "scheduling", "records", "appointments", "handoffs"] },
+  { occupation: "janitor", title: "Custodian", company: "Northline Schools", typed: "mopped the halls",
+    forbidden: ["restocking supplies", "equipment", "basic tools", "broken fixtures", "supply needs", "safety concerns"] },
+];
+for (const scenario of OCCUPATION_CASES) {
+  const produced = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: scenario.typed });
+  L(`  [${scenario.occupation}] typed "${scenario.typed}" -> ${JSON.stringify(produced)}`);
+  const leaked = scenario.forbidden.filter((phrase) =>
+    produced.some((b) => b.toLowerCase().includes(phrase.toLowerCase())));
+  expect(`[${scenario.occupation}] a sparse line acquires no unevidenced activity`,
+    leaked.length === 0, leaked.join(", "));
+  // Criterion: sparse user wording is PRESERVED, not silently dropped.
+  const head = scenario.typed.split(" ")[0].toLowerCase();
+  expect(`[${scenario.occupation}] the user's own wording survives`,
+    produced.some((b) => b.toLowerCase().includes(head)),
+    JSON.stringify(produced));
+}
+
+// 5c. Occupation and title ALONE must authorize zero factual bullets.
+for (const scenario of OCCUPATION_CASES) {
+  const titleOnly = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: "" });
+  L(`  [${scenario.occupation}] title only -> ${JSON.stringify(titleOnly)}`);
+  expect(`[${scenario.occupation}] title and occupation alone produce no factual bullet`,
+    titleOnly.length === 0, JSON.stringify(titleOnly));
+}
+
+// 5d. A competency label needs evidence of the competency, not of the setting.
+expect('"busy" alone does not authorise a time-management claim',
+  !bulletsFor({ responsibilities: "worked busy shifts" }).some((b) => /time management/i.test(b)));
+expect('"checked labels" alone does not authorise an attention-to-detail claim',
+  !bulletsFor({ responsibilities: "checked labels on boxes" }).some((b) => /attention to detail/i.test(b)));
+
 // 6. A canned bullet may not assert personal qualities with nothing behind them.
 const ungated = bulletsFor({
   currentTitle: "Security Officer", currentCompany: "Meridian Facilities",
