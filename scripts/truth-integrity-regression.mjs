@@ -519,7 +519,29 @@ expect('"a user group" is not corrupted to "an user group"',
   !article.some((b) => /\ban user\b/i.test(b)),
   JSON.stringify(article));
 
-// 5. A canned bullet may not assert personal qualities with nothing behind them.
+// 5. A single evidenced token may authorise at most a clause about that token.
+//    "helped customers" must never acquire purchases, returns, transactions or
+//    accuracy — the expansion this issue exists to remove.
+const thin = bulletsFor({ responsibilities: "helped customers" });
+L(`  typed "helped customers" -> ${JSON.stringify(thin)}`);
+for (const invented of ["purchases", "returns", "transactions accurate", "keeping transactions"]) {
+  expect(`"helped customers" does not acquire "${invented}"`,
+    !thin.some((b) => b.toLowerCase().includes(invented)),
+    JSON.stringify(thin));
+}
+// …and the same holds in a second occupation, so the fix is not customer-service specific.
+const thinWarehouse = bulletsFor({
+  currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics",
+  responsibilities: "moved boxes",
+});
+L(`  typed "moved boxes" (warehouse) -> ${JSON.stringify(thinWarehouse)}`);
+for (const invented of ["scanning", "picking", "packing", "forklift", "safety procedures"]) {
+  expect(`"moved boxes" does not acquire "${invented}"`,
+    !thinWarehouse.some((b) => b.toLowerCase().includes(invented)),
+    JSON.stringify(thinWarehouse));
+}
+
+// 6. A canned bullet may not assert personal qualities with nothing behind them.
 const ungated = bulletsFor({
   currentTitle: "Security Officer", currentCompany: "Meridian Facilities",
   responsibilities: "Walked the perimeter each hour",

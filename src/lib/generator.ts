@@ -1108,6 +1108,34 @@ function occupationToolPhrase(data: IntakeData, max = 2) {
 
 type GroundedBullet = { text: string; when?: RegExp };
 
+/**
+ * A bullet assembled clause by clause, where every clause must be evidenced by
+ * the user's own words before it appears.
+ *
+ * The occupation bank previously held fixed multi-claim sentences behind a
+ * single-token gate: the word "customers" alone emitted "Assisted customers
+ * with purchases, returns, and questions while keeping transactions accurate",
+ * asserting four activities from one. One evidenced token may authorise exactly
+ * one clause about that token, and nothing else.
+ *
+ * `clauses` are [evidence, phrase] pairs. `min` is how many must match before
+ * the sentence is worth emitting at all — below it the bullet is dropped, and
+ * the missing clauses become material for a targeted question instead of
+ * silently becoming résumé content.
+ */
+function composed(
+  corpus: string,
+  lead: string,
+  clauses: Array<[RegExp, string]>,
+  options: { min?: number; tail?: string } = {}
+): GroundedBullet {
+  const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
+  const min = options.min ?? 1;
+  if (matched.length < min) return { text: "" };
+  return { text: `${lead} ${sentenceList(matched)}${options.tail ?? ""}.`.replace(/\s+/g, " ") };
+}
+
+
 function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupation: OccupationProfile) {
   const corpus = buildGroundingCorpus(data);
   const toolPhrase = occupationToolPhrase(data);
@@ -1132,28 +1160,53 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       { text: "Maintained clean, stocked, and organized work areas to support reliable service.", when: /\b(clean\w*|stock\w*|restock\w*|organiz\w*|sanit\w*)\b/ }
     ],
     retail: [
-      {
-        text: customerScope
-          ? `Assisted ${customerScope.phrase} with purchases, returns, and questions while keeping transactions accurate.`
-          : "Assisted customers with purchases, returns, and questions while keeping transactions accurate.",
-        when: /\b(customers?|guests?|shoppers?|returns?|questions?)\b/
-      },
-      { text: `Processed checkout activity and supported front-end store operations${toolPhrase}.`, when: /\b(checkout|registers?|pos|cash|payments?|rang)\b/ },
-      { text: "Restocked merchandise, maintained store presentation, and helped keep inventory areas organized.", when: /\b(stock\w*|restock\w*|inventory|shelves|shelf|merchandis\w*)\b/ },
+      // Each clause's evidence names the SAME concept as its phrase. A loose
+      // synonym ("helped" licensing "questions") is how one typed word turns
+      // into a specific activity the user never described.
+      composed(corpus, `Assisted ${customerScope ? customerScope.phrase : "customers"} with`, [
+        [/\bpurchase\w*|\bsales?\b|\bbought\b|\bbuying\b/, "purchases"],
+        [/\breturns?\b|\bexchang\w*|\brefund\w*/, "returns"],
+        [/\bquestions?\b|\basked\b|\binquir\w*/, "questions"],
+        [/\bfind\w*|\blocat\w*|\bproducts?\b|\bmerchandis\w*/, "locating products"]
+      ]),
+      composed(corpus, "Processed", [
+        [/\bcheckout|\bregisters?\b|\brang\b/, "checkout activity"],
+        [/\bcash\b|\bpayments?\b|\bpos\b|\bcards?\b/, "payments"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Kept the sales floor stocked by", [
+        [/\brestock\w*|\bstock\w*/, "restocking merchandise"],
+        [/\bdisplays?\b|\bpresentation|\bfacing|\bmerchandis\w*/, "maintaining store presentation"],
+        [/\binventory\b|\bshelves\b|\bshelf\b|\bbackroom\b/, "organizing inventory areas"]
+      ]),
       { text: "Escalated larger customer issues to leads or managers with clear context.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
-      { text: "Balanced register accuracy, customer service, and shift responsibilities during busy periods.", when: /\b(registers?|busy|rush\w*|accurate|accuracy)\b/ }
+      composed(corpus, "Balanced", [
+        [/\bregisters?\b|\baccura\w*/, "register accuracy"],
+        [/\bcustomers?\b|\bservice\b/, "customer service"],
+        [/\bshifts?\b|\bbusy\b|\brush\w*/, "shift responsibilities during busy periods"]
+      ], { min: 2 })
     ],
     warehouse: [
-      {
-        text: operationsScope
-          ? `Picked, packed, scanned, or moved ${operationsScope.phrase} while protecting accuracy in a fast-paced fulfillment setting.`
-          : "Picked, packed, scanned, or moved orders while protecting accuracy in a fast-paced fulfillment setting.",
-        when: /\b(pick\w*|pack\w*|scan\w*|moved|loading|loaded|unloaded|sort\w*)\b/
-      },
-      { text: `Used warehouse tools and equipment to support inventory movement and order flow${toolPhrase}.`, when: /\b(scanners?|forklifts?|pallets?|equipment|tools?|carts?)\b/ },
-      { text: "Followed safety procedures while keeping work areas clean, organized, and ready for the next task.", when: /\b(safety|safe|ppe|clean\w*|organiz\w*)\b/ },
+      composed(corpus, `Handled ${operationsScope ? operationsScope.phrase : "orders"} by`, [
+        [/\bpick\w*/, "picking"],
+        [/\bpack\w*/, "packing"],
+        [/\bscan\w*/, "scanning"],
+        [/\bmoved\b|\bloading\b|\bloaded\b|\bunloaded\b|\bsort\w*/, "moving stock"]
+      ]),
+      composed(corpus, "Used", [
+        [/\bscanners?\b/, "handheld scanners"],
+        [/\bforklifts?\b|\bpallet ?jacks?\b/, "powered equipment"],
+        [/\bpallets?\b|\bcarts?\b/, "pallets and carts"]
+      ], { tail: toolPhrase }),
+      composed(corpus, "Followed", [
+        [/\bsafety\b|\bsafe\b|\bppe\b/, "safety procedures"],
+        [/\bclean\w*|\borganiz\w*/, "housekeeping standards"]
+      ]),
       { text: "Coordinated with coworkers during handoffs to keep packages, materials, or stock moving efficiently.", when: /\b(coworkers?|crew|team|handoffs?|shifts?)\b/ },
-      { text: "Maintained attention to detail across repetitive, time-sensitive work.", when: /\b(accura\w*|checked|labels?|detail\w*|dates)\b/ }
+      composed(corpus, "Checked", [
+        [/\blabels?\b|\bbarcodes?\b/, "labels"],
+        [/\bdates\b|\bexpir\w*/, "dates"],
+        [/\bcounts?\b|\bquantit\w*|\baccura\w*/, "counts"]
+      ])
     ],
     security: [
       { text: "Monitored site activity, access points, or visitor flow while following safety procedures.", when: /\b(monitor\w*|watch\w*|doors?|access|patrol\w*|surveillance|site)\b/ },
