@@ -1,3 +1,4 @@
+import { classifyEvidenceAdmissibility, isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
@@ -12,6 +13,18 @@ import type {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+/** Why an approved record was kept out of every document, for the receipt. */
+function withheldReason(item: DossierEvidenceRecord): string {
+  if (item.kind === "goal") return "Target preference (never résumé content)";
+  if (item.kind === "constraint") return "Constraint (never résumé content)";
+  const category = classifyEvidenceAdmissibility(item.detail);
+  if (category === "separation_reason") return "Reason for leaving a role (never résumé content)";
+  if (category === "uncertainty") return "Uncertain statement (not evidence)";
+  if (category === "preference") return "Target preference (never résumé content)";
+  if (category === "constraint") return "Constraint (never résumé content)";
+  return "Evidence gap (never résumé content)";
 }
 
 // Approved evidence arrives as the user wrote it — first person, sometimes
@@ -101,7 +114,14 @@ function relevance(item: DossierEvidenceRecord, lane: TargetLane): number {
 }
 
 function approvedEvidence(dossier: CareerDossier): DossierEvidenceRecord[] {
-  return dossier.evidence.filter((item) => item.approved && !item.rejected);
+  // Admissibility is derived, never stored on the record — sanitization does
+  // not rewrite `kind`, so approval alone says nothing about whether a record
+  // may enter career materials. Without this check a quarantined gap statement
+  // or target-role preference kept its original kind, entered the in-memory
+  // résumé, its evidence references and the pack receipt, and rendered in the
+  // /versions editor and evidence drawer. The exported file stayed clean only
+  // because sanitizeResumeForProfessionalUse catches it at the export boundary.
+  return dossier.evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item));
 }
 
 function evidenceByIds(approved: DossierEvidenceRecord[], ids: string[]): DossierEvidenceRecord[] {
@@ -138,6 +158,20 @@ function buildLaneResume(
   const approved = approvedEvidence(dossier);
   const withheldFacts: string[] = [];
   const omittedRoles: string[] = [];
+  // Records the user approved that are not admissible are excluded above, so
+  // nothing downstream can report them. Naming them here keeps the receipt
+  // honest about WHAT was withheld and WHY — quarantine that is invisible is
+  // just a quieter version of deleting the record.
+  //
+  // Only content-shaped records count as "withheld". Goals, constraints and
+  // identity are context by design and were never candidates for a document, so
+  // listing them would turn every ordinary pack receipt into a false refusal.
+  dossier.evidence
+    .filter((item) =>
+      item.approved && !item.rejected &&
+      item.kind !== "goal" && item.kind !== "constraint" && item.kind !== "identity" &&
+      !isProfessionalEvidence(item))
+    .forEach((item) => withheldFacts.push(withheldReason(item)));
   const identityValues = identityValueSet(dossier);
   const isDocumentFact = (item: DossierEvidenceRecord) =>
     !isIdentityFact(item.detail, identityValues) && !looksLikeHeading(item.detail);

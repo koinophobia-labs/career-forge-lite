@@ -388,6 +388,84 @@ expect("an independent-work project does not reprint the employer's facts",
   !(indieProject?.bullets ?? []).some((b) => /Coordinated inbound shipments|ticket resolution/i.test(b)),
   JSON.stringify(indieProject?.bullets));
 
+// ═══ T-5 — admissibility must be checked by every VISIBLE surface, not just export
+H("T-5 — a quarantined record must reach no surface, on screen or in a file");
+
+// The defect this covers: sanitization stopped rewriting `kind` (correctly —
+// that rewrite was irreversible), and two consumers were still using `kind` as
+// a shortcut for admissibility. Contaminants stored under innocuous kinds then
+// entered the in-memory résumé, its evidenceReferences and the pack receipt,
+// and rendered in the /versions editor and evidence drawer. The exported file
+// stayed clean because sanitizeResumeForProfessionalUse catches it at the export
+// boundary — so an export-only assertion would have passed while the user was
+// looking at the contamination on screen. Every surface is checked here.
+const CONTAMINANTS = [
+  ["proof", "No reliable numerical performance metrics", "No reliable numerical"],
+  ["proof", "Managed vendor contracts worth $2M annually until I was laid off in June 2026", "laid off"],
+  ["metric", "I don't know my exact ticket numbers", "I don't know"],
+  ["responsibility", "Target roles: Product Operations Specialist", "Target roles:"],
+  ["responsibility", "Currently do not have leadership experience", "do not have leadership"],
+];
+const CLEAN_FACT = "Resolved customer escalations and documented the outcome";
+const contaminatedEvidence = [
+  ...CONTAMINANTS.map(([kind, detail]) => ({ ...evidenceRecord(kind, detail, "manual", true, NOW), roleId: "role-contam" })),
+  { ...evidenceRecord("responsibility", CLEAN_FACT, "manual", true, NOW), roleId: "role-contam" },
+];
+const contaminatedDossier = {
+  ...emptyDossier(NOW),
+  identity: { ...emptyDossier(NOW).identity, fullName: "Dana Ruiz", email: "dana@example.com" },
+  roles: [{
+    id: "role-contam", title: "Operations Associate", employer: "Harbor Logistics",
+    startDate: "2021", endDate: "", current: true,
+    responsibilities: [...CONTAMINANTS.map(([, detail]) => detail), CLEAN_FACT],
+    tools: [], outcomes: [], evidenceIds: contaminatedEvidence.map((item) => item.id),
+  }],
+  evidence: contaminatedEvidence,
+  approvedClaims: [...CONTAMINANTS.map(([, detail]) => detail), CLEAN_FACT],
+  proofPoints: [...CONTAMINANTS.map(([, detail]) => detail), CLEAN_FACT],
+};
+const contamLane = [{ id: "lane-contam", title: "Operations Coordinator", status: "active", whyFit: "x", resumeAngle: "y", proof: [], gaps: [], keywords: [], source: "library", createdAt: NOW }];
+// Exactly what the app does on every read and write.
+const liveDossier = sanitizeCareerDossier(contaminatedDossier).dossier;
+const contamPack = generateResumePack(liveDossier, contamLane, NOW);
+const contamVariant = contamPack.variants[0];
+const SURFACES = {
+  "in-memory résumé (rendered in the /versions editor)": JSON.stringify(contamPack.variants.map((v) => v.resume)),
+  "evidence references (rendered in the evidence drawer)": JSON.stringify(contamPack.variants.map((v) => v.evidenceReferences)),
+  "pack receipt": JSON.stringify(contamPack.receipt ?? {}),
+  "exported plain text": variantPlainText(liveDossier, contamVariant.resume, contamVariant.sectionOrder, contamVariant.kind),
+  "early-win preview": JSON.stringify(earlyWinBullets(liveDossier)?.bullets ?? []),
+};
+for (const [surface, text] of Object.entries(SURFACES)) {
+  const found = CONTAMINANTS.map(([, , marker]) => marker).filter((marker) => text.toLowerCase().includes(marker.toLowerCase()));
+  expect(`no contaminant on: ${surface}`, found.length === 0, found.join(", "));
+}
+expect("the clean fact still reaches the résumé",
+  SURFACES["exported plain text"].includes(CLEAN_FACT.slice(0, 30)));
+
+// …and the fix must not re-create self-sealing quarantine: correcting the
+// wording has to make the record usable again all the way through to output,
+// not merely re-classify it in isolation.
+const repairedEvidence = liveDossier.evidence.map((item) =>
+  item.detail === "Currently do not have leadership experience"
+    ? { ...item, detail: "Led the weekly dispatch stand-up for six drivers" }
+    : item);
+const repairedLive = sanitizeCareerDossier({
+  ...liveDossier,
+  evidence: repairedEvidence,
+  roles: liveDossier.roles.map((role) => ({
+    ...role,
+    responsibilities: role.responsibilities.map((line) =>
+      line === "Currently do not have leadership experience" ? "Led the weekly dispatch stand-up for six drivers" : line),
+  })),
+  approvedClaims: [...liveDossier.approvedClaims, "Led the weekly dispatch stand-up for six drivers"],
+}).dossier;
+const repairedPack = generateResumePack(repairedLive, contamLane, NOW);
+const repairedText = variantPlainText(repairedLive, repairedPack.variants[0].resume, repairedPack.variants[0].sectionOrder, repairedPack.variants[0].kind);
+expect("corrected wording becomes usable output again (no self-sealing quarantine)",
+  repairedText.includes("Led the weekly dispatch stand-up"),
+  repairedText.slice(0, 220));
+
 L();
 L("=".repeat(78));
 L(`Truth integrity regression: ${passes} passed, ${fails} failed`);

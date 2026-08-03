@@ -1,3 +1,4 @@
+import { isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { polishBulletsVerbatim } from "@/lib/resume-intelligence";
 import type { CareerDossier } from "@/types/dossier";
 
@@ -23,7 +24,12 @@ export function earlyWinBullets(dossier: CareerDossier): EarlyWinPreview | null 
     ...project.outcomes
   ]);
   const approvedBullets = dossier.evidence
-    .filter((item) => item.approved && !item.rejected && (item.kind === "responsibility" || item.kind === "metric" || item.kind === "proof"))
+    // `kind` selects which records are bullet-shaped; isProfessionalEvidence
+    // decides whether they may be shown at all. The two are not the same, and
+    // treating them as one showed the user their own quarantined gap statement
+    // back under a panel headed "Nothing here was invented".
+    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)
+      && (item.kind === "responsibility" || item.kind === "metric" || item.kind === "proof"))
     .map((item) => item.detail);
   const seen = new Set<string>();
   const raw = [...roleBullets, ...projectBullets, ...approvedBullets].filter((line) => {
