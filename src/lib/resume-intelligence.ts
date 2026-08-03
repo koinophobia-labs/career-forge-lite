@@ -176,7 +176,25 @@ function diversifyOpeningVerbs(bullets: string[]) {
 }
 
 export function polishBullets(bullets: string[]) {
-  return unique(diversifyOpeningVerbs(bullets.map(polishResumeSentence)))
+  // Dedupe BEFORE diversifying. The previous order let diversifyOpeningVerbs
+  // rewrite a duplicate's opening verb first, which changed the string enough
+  // that unique() could no longer drop it — so an identical input line came
+  // back twice, the second copy carrying a verb the user never wrote.
+  return diversifyOpeningVerbs(unique(bullets.map(polishResumeSentence)))
+    .filter((bullet) => bullet.length > 24)
+    .slice(0, 5);
+}
+
+// Verbatim-fidelity polish: spelling, acronym casing, sentence case and
+// punctuation only. No weak-language expansion and no opening-verb
+// diversification, because both replace words the user did not write. Use this
+// anywhere the surface promises the user their own approved wording back.
+export function polishResumeSentenceVerbatim(value: string) {
+  return normalizePunctuation(sentenceCase(applySpellingAndCapitalization(value)));
+}
+
+export function polishBulletsVerbatim(bullets: string[]) {
+  return unique(bullets.map(polishResumeSentenceVerbatim))
     .filter((bullet) => bullet.length > 24)
     .slice(0, 5);
 }

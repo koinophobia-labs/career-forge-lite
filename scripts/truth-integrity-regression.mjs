@@ -1,0 +1,271 @@
+// Truth-integrity regression.
+//
+// Every check here reproduces a defect that shipped, driving the REAL modules
+// rather than re-implementing them. Each one failed before the truth-integrity
+// recovery and must never fail again:
+//
+//   CF-P0-01  ordinary compliance/security phrasing was classified as a
+//             self-declared gap, and the sanitizer — which runs on every state
+//             READ — deleted the approved record, dropped its owning role, and
+//             emptied the résumé Experience section built from it.
+//   CF-P0-02  every role received the same evidence-id array, so the pack
+//             generator printed the current job's duties and metrics under a
+//             previous, unrelated employer, and the Defensibility Receipt
+//             certified those bullets as "direct".
+//   CF-P1-01  the early-win preview emitted a bullet the user never wrote,
+//             under copy reading "Nothing here was invented".
+//   CF-P1-04  a malformed regex meant a user's own edit was never recognised as
+//             user-authored, so editing a bullet disabled export for the pack.
+//
+// Run directly:  node scripts/truth-integrity-regression.mjs
+
+import fs from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(path.join(root, "package.json"));
+const ts = require("typescript");
+const cache = new Map();
+
+function load(fp) {
+  const a = path.resolve(fp);
+  if (cache.has(a)) return cache.get(a).exports;
+  const { outputText } = ts.transpileModule(fs.readFileSync(a, "utf8"), {
+    compilerOptions: { esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: a,
+  });
+  const m = { exports: {} };
+  cache.set(a, m);
+  const d = path.dirname(a);
+  const lr = (r) =>
+    r.startsWith("@/") ? load(path.join(root, "src", r.slice(2) + ".ts"))
+    : r.startsWith(".") ? load(path.resolve(d, r.endsWith(".ts") ? r : r + ".ts"))
+    : require(r);
+  new Function("require", "module", "exports", "__dirname", "__filename", outputText)(lr, m, m.exports, d, a);
+  return m.exports;
+}
+
+const { classifyEvidenceAdmissibility, sanitizeCareerDossier, sanitizeResumeForProfessionalUse } = load("src/lib/evidence-admissibility.ts");
+const { emptyDossier, mergeIntakeIntoDossier, evidenceRecord } = load("src/lib/dossier.ts");
+const { generateResumePack, updatePackVariant } = load("src/lib/resume-pack.ts");
+const { initialIntake } = load("src/lib/career-data.ts");
+const { earlyWinBullets } = load("src/lib/early-win.ts");
+const { deriveDefensibilityReceipt } = load("src/lib/defensibility.ts");
+const { variantPlainText } = load("src/lib/pack-export.ts");
+
+const NOW = "2026-08-03T12:00:00.000Z";
+const L = (s = "") => console.log(s);
+const H = (t) => { L(); L("=".repeat(78)); L(t); L("=".repeat(78)); };
+
+let fails = 0;
+let passes = 0;
+function expect(label, ok, detail = "") {
+  if (ok) { passes += 1; console.log(`PASS ${label}`); }
+  else { fails += 1; console.error(`FAIL ${label}${detail ? ` — ${detail}` : ""}`); }
+}
+
+// ───────────────────────────────────────────────────────── CF-P0-01
+H("CF-P0-01 — compliance phrasing must not destroy approved evidence");
+
+const COMPLIANCE = [
+  "Ensured contractors did not work without a valid permit",
+  "Verified that unauthorized visitors did not have building access",
+  "Documented incidents so auditors did not have to reconstruct the timeline",
+];
+for (const phrase of COMPLIANCE) {
+  const c = classifyEvidenceAdmissibility(phrase);
+  expect(`classified as claim, not gap: "${phrase.slice(0, 52)}…"  => ${c}`, c === "claim");
+}
+// A genuine self-reported gap must STILL be caught.
+// A genuine self-report must still be withheld (gap or uncertainty — either way, not a claim).
+const REAL_GAPS = ["I do not have leadership experience", "Did not manage a team", "Lacks formal certifications", "I have not managed a budget"];
+for (const phrase of REAL_GAPS) {
+  const c = classifyEvidenceAdmissibility(phrase);
+  expect(`still withheld (not a claim): "${phrase}"  => ${c}`, c !== "claim");
+}
+
+const secId = "ev-sec-1";
+const sec2Id = "ev-sec-2";
+const secDossier = {
+  ...emptyDossier(NOW),
+  roles: [{
+    id: "role-sec", title: "Security Supervisor", employer: "Meridian Facilities",
+    start: "2019", end: "Present", responsibilities: COMPLIANCE.slice(0, 2), tools: ["Incident logs"],
+    outcomes: [], evidenceIds: [secId, sec2Id], createdAt: NOW, updatedAt: NOW,
+  }],
+  evidence: [
+    evidenceRecord("responsibility", COMPLIANCE[0], "manual", true, NOW),
+    evidenceRecord("responsibility", COMPLIANCE[1], "manual", true, NOW),
+  ].map((r, i) => ({ ...r, id: i === 0 ? secId : sec2Id })),
+};
+const sanitized = sanitizeCareerDossier(secDossier);
+expect(`approved evidence survives sanitize (${sanitized.dossier.evidence.filter((e) => e.approved && !e.rejected).length} approved)`,
+  sanitized.dossier.evidence.filter((e) => e.approved && !e.rejected).length === 2);
+expect(`owning role survives sanitize (${sanitized.dossier.roles.length} roles)`, sanitized.dossier.roles.length === 1);
+expect(`role keeps its responsibilities (${sanitized.dossier.roles[0]?.responsibilities.length ?? 0})`,
+  (sanitized.dossier.roles[0]?.responsibilities.length ?? 0) === 2);
+expect(`nothing quarantined (${sanitized.quarantinedEvidenceIds.length})`, sanitized.quarantinedEvidenceIds.length === 0);
+
+const secResume = {
+  summary: "Security Supervisor with permit-compliance and access-control responsibility.",
+  coreSkills: ["Access control", "Incident reporting"],
+  experience: [{ title: "Security Supervisor", company: "Meridian Facilities", time: "2019 - Present", bullets: COMPLIANCE.slice(0, 2), kind: "role" }],
+  education: "", linkedinHeadline: "Security Supervisor", linkedinSummary: "",
+};
+const safeResume = sanitizeResumeForProfessionalUse(secResume);
+expect(`Experience section survives export sanitize (${safeResume.experience.length} roles)`, safeResume.experience.length === 1);
+expect(`bullets survive (${safeResume.experience[0]?.bullets.length ?? 0} of 2)`, (safeResume.experience[0]?.bullets.length ?? 0) === 2);
+
+// ───────────────────────────────────────────────────────── CF-P0-02
+H("CF-P0-02 — one employer's duties must never appear under another");
+
+const twoJob = {
+  ...initialIntake,
+  fullName: "Jordan Reyes", email: "jordan@example.com", targetJobTitle: "IT Support Specialist",
+  currentTitle: "Help Desk Technician", currentCompany: "Northwind IT", currentTime: "2024 - Present",
+  previousTitle: "Security Guard", previousCompany: "Sentinel Group", previousTime: "2020 - 2024",
+  tools: "Jira, Okta",
+  responsibilities: "Troubleshot laptops\nReset passwords\nDocumented tickets",
+  outcomes: "Cut average ticket resolution time in half",
+  customersServed: "40 tickets a week",
+  education: "Associate degree",
+};
+const twoJobDossier = mergeIntakeIntoDossier(emptyDossier(NOW), twoJob, "guided", true, "guided", NOW);
+const roleById = Object.fromEntries(twoJobDossier.roles.map((r) => [r.title, r]));
+const current = roleById["Help Desk Technician"];
+const previous = roleById["Security Guard"];
+L(`  roles: ${twoJobDossier.roles.map((r) => `${r.title}(${r.evidenceIds.length} ev)`).join(", ")}`);
+const prevOwnEvidence = twoJobDossier.evidence.filter((e) => (previous?.evidenceIds ?? []).includes(e.id));
+expect("previous role carries only its own heading record",
+  prevOwnEvidence.length === 1 && prevOwnEvidence[0].kind === "role" && prevOwnEvidence[0].detail.includes("Sentinel Group"),
+  `holds ${prevOwnEvidence.map((e) => `${e.kind}:${e.detail}`).join(", ")}`);
+expect("current role carries the intake evidence", (current?.evidenceIds.length ?? 0) > 0);
+expect("the two roles share no evidence id",
+  !(previous?.evidenceIds ?? []).some((id) => (current?.evidenceIds ?? []).includes(id)));
+
+const lanes = [{ id: "lane-0", title: "IT Support Specialist", status: "active", whyFit: "x", resumeAngle: "y", proof: [], gaps: [], keywords: ["Jira"], source: "library", createdAt: NOW }];
+const twoJobPack = generateResumePack(twoJobDossier, lanes, NOW);
+const atsVariant = twoJobPack.variants[0];
+const printed = variantPlainText(twoJobDossier, atsVariant.resume, atsVariant.sectionOrder, atsVariant.kind);
+const prevBlock = atsVariant.resume.experience.find((r) => r.company === "Sentinel Group");
+L(`  exported experience rows: ${atsVariant.resume.experience.map((r) => `${r.title}@${r.company}[${r.bullets.length}]`).join(", ")}`);
+if (prevBlock) prevBlock.bullets.forEach((b) => L(`    Sentinel Group bullet: ${b}`));
+const LEAKED = ["Troubleshot laptops", "Reset passwords", "Documented tickets", "40 tickets a week", "Cut average ticket resolution"];
+const leaks = LEAKED.filter((t) => (prevBlock?.bullets ?? []).some((b) => b.toLowerCase().includes(t.toLowerCase().slice(0, 18))));
+expect(`no help-desk duty printed under Sentinel Group (leaks: ${leaks.length})`, leaks.length === 0, leaks.join(" | "));
+const sentinelIdx = printed.indexOf("Sentinel Group");
+const tailAfterSentinel = sentinelIdx >= 0 ? printed.slice(sentinelIdx, sentinelIdx + 400) : "";
+expect("plain-text export shows no leaked duty after the Sentinel heading",
+  !/Troubleshot|Reset passwords|Documented tickets/i.test(tailAfterSentinel));
+// The honest outcome: an employer with no evidence of its own is OMITTED from
+// the résumé rather than filled with another job's duties.
+expect("unsupported employer is omitted, not fabricated", !prevBlock,
+  prevBlock ? `Sentinel Group still rendered with ${prevBlock.bullets.length} bullets` : "");
+expect("the supported employer keeps its own duties",
+  (atsVariant.resume.experience.find((r) => r.company === "Northwind IT")?.bullets.length ?? 0) > 0);
+
+// ───────────────────────────────────────────────────────── CF-P1-01
+H("CF-P1-01 — early-win preview must invent nothing");
+
+function roleDossierFrom(lines) {
+  // Replicates src/app/profile/page.tsx addRole(): responsibilities are stored
+  // BOTH on the role record and as approved responsibility evidence.
+  const ev = lines.map((line, i) => ({ ...evidenceRecord("responsibility", line, "manual", true, NOW), id: `ev-${i}` }));
+  return {
+    ...emptyDossier(NOW),
+    roles: [{
+      id: "role-1", title: "Support Lead", employer: "Brightline", start: "2022", end: "Present",
+      responsibilities: lines, tools: [], outcomes: [], evidenceIds: ev.map((e) => e.id), createdAt: NOW, updatedAt: NOW,
+    }],
+    evidence: ev,
+  };
+}
+
+const CASES = [
+  ["Trained six new support agents during onboarding"],
+  ["Resolved customer issues for a regional territory", "Explained products to customers in plain language"],
+  ["Resolved escalated billing disputes within one business day", "Resolved account access problems for enterprise clients"],
+];
+for (const lines of CASES) {
+  const preview = earlyWinBullets(roleDossierFrom(lines));
+  const bullets = preview?.bullets ?? [];
+  L(`  typed(${lines.length}): ${JSON.stringify(lines)}`);
+  L(`  shown(${bullets.length}): ${JSON.stringify(bullets)}`);
+  const norm = (s) => s.toLowerCase().replace(/[.,;:]/g, "").trim();
+  const approved = lines.map(norm);
+  const unsupported = bullets.filter((b) => !approved.some((a) => a.includes(norm(b)) || norm(b).includes(a)));
+  expect(`every shown bullet traces to typed input (${unsupported.length} unsupported)`, unsupported.length === 0, unsupported.join(" | "));
+  expect(`no more bullets than the user typed (${bullets.length} <= ${lines.length})`, bullets.length <= lines.length);
+  const firstWords = bullets.map((b) => b.split(" ")[0].toLowerCase());
+  const typedFirst = lines.map((l) => l.split(" ")[0].toLowerCase());
+  expect(`no opening verb was rewritten`, firstWords.every((w) => typedFirst.includes(w)),
+    `shown openers ${JSON.stringify(firstWords)} vs typed ${JSON.stringify(typedFirst)}`);
+}
+
+// ───────────────────────────────────────────────────────── CF-P1-04
+H("CF-P1-04 — a user's own edit must not disable export");
+
+const editDossier = mergeIntakeIntoDossier(emptyDossier(NOW), {
+  ...initialIntake, fullName: "Sam Ito", email: "sam@example.com", targetJobTitle: "Operations Coordinator",
+  currentTitle: "Operations Associate", currentCompany: "Harbor Logistics", currentTime: "2021 - Present",
+  tools: "Excel", responsibilities: "Coordinated inbound shipments\nMaintained carrier records",
+  outcomes: "Reduced misrouted freight", education: "BA",
+}, "guided", true, "guided", NOW);
+const editLanes = [{ id: "lane-e", title: "Operations Coordinator", status: "active", whyFit: "x", resumeAngle: "y", proof: [], gaps: [], keywords: ["Excel"], source: "library", createdAt: NOW }];
+const editPack = generateResumePack(editDossier, editLanes, NOW);
+const before = deriveDefensibilityReceipt(editPack.variants[0], editDossier);
+L(`  before edit: missingProvenance=${before.missingProvenance} status="${before.status}"`);
+expect("clean pack has no missing provenance", before.missingProvenance === 0);
+
+for (const editedPath of ["experience.0.bullets", "experience.0.title", "experience.0.company", "experience.0.time"]) {
+  const v0 = editPack.variants[0];
+  const edited = { ...v0.resume };
+  if (editedPath.endsWith("bullets")) {
+    edited.experience = edited.experience.map((r, i) => (i === 0 ? { ...r, bullets: [...r.bullets.slice(0, -1), "Coordinated inbound shipments across three carriers."] } : r));
+  }
+  const nextPack = updatePackVariant(editPack, v0.id, edited, NOW, [editedPath]);
+  const after = deriveDefensibilityReceipt(nextPack.variants.find((v) => v.id === v0.id), editDossier);
+  L(`  edited "${editedPath}": missingProvenance=${after.missingProvenance} status="${after.status}"`);
+  expect(`export not blocked after editing ${editedPath}`, after.missingProvenance === 0,
+    `missingProvenance became ${after.missingProvenance}`);
+  expect(`receipt shows a human-recheck status for ${editedPath}`, /user-edited|recheck/i.test(after.status), after.status);
+}
+
+// ─────────────────────────────────────────── extra: duration token regex
+H("EXTRA — duration verification regex (discovered while implementing)");
+const durVariant = editPack.variants[0];
+const durReceipt = deriveDefensibilityReceipt(durVariant, editDossier);
+const hasYear = durVariant.resume.experience.some((r) => /(?:19|20)\d{2}/.test(r.time ?? ""));
+L(`  a role time contains a 4-digit year: ${hasYear}`);
+L(`  verifiedDurations=${durReceipt.verifiedDurations} unverifiedDurations=${durReceipt.unverifiedDurations}`);
+expect("a dated role is counted as a duration claim", hasYear ? (durReceipt.verifiedDurations + durReceipt.unverifiedDurations) > 0 : true);
+
+// ───────────────────────────────── legacy data already saved in localStorage
+H("CF-P0-02 (legacy) — a dossier already saved with a shared evidence array");
+
+// Dossiers written before the fix gave every role the SAME evidence ids. The
+// structural ownership guard in resume-pack must repair those at generation
+// time, without a migration and without guessing an attribution.
+const sharedIds = twoJobDossier.evidence.filter((e) => e.kind !== "goal" && e.kind !== "role").map((e) => e.id);
+const legacyDossier = {
+  ...twoJobDossier,
+  roles: twoJobDossier.roles.map((r) => ({ ...r, evidenceIds: [...sharedIds] })),
+};
+const legacyPack = generateResumePack(legacyDossier, lanes, NOW);
+const legacyExp = legacyPack.variants[0].resume.experience;
+L(`  legacy experience rows: ${legacyExp.map((r) => `${r.title}@${r.company}[${r.bullets.length}]`).join(", ") || "(none)"}`);
+const legacySentinel = legacyExp.find((r) => r.company === "Sentinel Group");
+expect("legacy shared-evidence dossier does not print duties under the wrong employer", !legacySentinel,
+  legacySentinel ? `Sentinel Group rendered ${legacySentinel.bullets.length} bullets` : "");
+const legacyCurrent = legacyExp.find((r) => r.company === "Northwind IT");
+expect("legacy dossier still renders the employer that genuinely recorded the work",
+  (legacyCurrent?.bullets.length ?? 0) > 0,
+  "the role whose own responsibilities/outcomes corroborate the evidence must survive");
+
+L();
+L("=".repeat(78));
+L(`Truth integrity regression: ${passes} passed, ${fails} failed`);
+L("=".repeat(78));
+if (fails > 0) process.exit(1);

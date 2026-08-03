@@ -40,6 +40,7 @@ function loadTsModule(filePath) {
 
 const {
   classifyEvidenceAdmissibility,
+  isProfessionalEvidence,
   mergeSafeImportProposals,
   parseResumePackToSafeProposals,
   sanitizeCareerDossier,
@@ -132,8 +133,21 @@ const dirtyDossier = {
     evidenceIds: [unsafeEvidence.id]
   }]
 };
-const cleaned = sanitizeCareerDossier(dirtyDossier).dossier;
-check("existing unsafe proof is migrated out of evidence", !cleaned.evidence.some((item) => item.id === unsafeEvidence.id));
+const cleanedSanitization = sanitizeCareerDossier(dirtyDossier);
+const cleaned = cleanedSanitization.dossier;
+// CONTRACT CHANGE (truth-integrity recovery): sanitization QUARANTINES an
+// approved-but-unsafe record instead of deleting it. Sanitization runs on every
+// state read, so deleting made a classifier false positive silently destroy
+// real approved work history with no name, no diff and no undo. The safety
+// property is unchanged and asserted below: the record can never reach
+// approvedClaims, the proof bank, or any generated material.
+const quarantined = cleaned.evidence.find((item) => item.id === unsafeEvidence.id);
+check("existing unsafe proof is retained, not destroyed", Boolean(quarantined));
+check("existing unsafe proof keeps the user's exact wording", quarantined?.detail === noMetrics);
+check("existing unsafe proof is relabelled as context-only", quarantined?.kind === "constraint");
+check("existing unsafe proof is reported as quarantined", cleanedSanitization.quarantinedEvidenceIds.includes(unsafeEvidence.id));
+check("existing unsafe proof can no longer be used as professional evidence", !isProfessionalEvidence(quarantined));
+check("existing unsafe proof is removed from approved claims", !cleaned.approvedClaims.includes(noMetrics));
 check("existing unsafe proof is removed from proof bank", !cleaned.proofPoints.includes(noMetrics));
 check("fake negative project is removed", cleaned.projects.length === 0);
 check("safe proof remains usable", cleaned.approvedClaims.includes(safeEvidence.detail));

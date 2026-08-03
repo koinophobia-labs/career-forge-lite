@@ -49,10 +49,26 @@ const TARGET_PREFERENCE_PATTERNS = [
   /^\s*i\s+(?:want|would like|hope)\s+to\b/i
 ];
 
+// Verbs whose negation, when the CANDIDATE THEMSELVES is the subject, reads as
+// a self-declared gap. Inflections are matched so "have not managed" is caught.
+const GAP_VERBS = "manage|own|lead|implement|hold|have|work|use|track|measure";
+const GAP_VERB_FORMS = `(?:${GAP_VERBS})(?:d|s|es|ed|ing|n)?`;
+
+// A negation only signals a gap when it is the candidate reporting about
+// themselves — i.e. at the start of a sentence, or with an explicit first-person
+// subject. Ordinary security, compliance and operations accomplishments put the
+// negation inside a subordinate clause about a THIRD PARTY:
+//   "Ensured contractors did not work without a valid permit"
+//   "Verified that unauthorized visitors did not have building access"
+//   "Documented incidents so auditors did not have to reconstruct the timeline"
+// Those are achievements, not gaps. Matching them destroyed real work history.
+const SELF_REPORT_LEAD = "(?:^|[.;!?]\\s+)(?:i|we)?\\s*";
 const GAP_PATTERNS = [
   /^\s*no\s+(?![-\s]?code\b)(?=.*\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certifications?|degree|qualification|background|history|saas|software\s+implementation|project[-\s]?management)\b)/i,
-  /\b(?:do|does|did|have|has)\s+not\s+(?:manage|own|lead|implement|hold|have|work|use|track|measure)\b/i,
-  /\b(?:don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t)\s+(?:manage|own|lead|implement|hold|have|work|use|track|measure)\b/i,
+  new RegExp(`${SELF_REPORT_LEAD}(?:do|does|did|have|has)\\s+not\\s+${GAP_VERB_FORMS}\\b`, "i"),
+  new RegExp(`\\b(?:i|we)\\s+(?:do|does|did|have|has)\\s+not\\s+${GAP_VERB_FORMS}\\b`, "i"),
+  new RegExp(`${SELF_REPORT_LEAD}(?:don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t)\\s+${GAP_VERB_FORMS}\\b`, "i"),
+  new RegExp(`\\b(?:i|we)\\s+(?:don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t)\\s+${GAP_VERB_FORMS}\\b`, "i"),
   /\b(?:lack|lacks|lacking|without)\s+(?:formal\s+)?(?:experience|metrics?|outcomes?|credentials?|certifications?|degree|leadership|ownership|qualification)\b/i,
   /\bnot\s+(?:yet\s+)?(?:experienced|certified|qualified|credentialed)\b/i,
   /\b(?:not|never)\s+responsible\s+for\b/i
@@ -158,7 +174,13 @@ function normalizeProjectSemantics(project: DossierProject): DossierProject {
 
 export type DossierSanitization = {
   dossier: CareerDossier;
-  removedEvidenceIds: string[];
+  /**
+   * Approved records reclassified as context-only. They are QUARANTINED, not
+   * deleted: the record and the user's exact wording stay in `dossier.evidence`
+   * under a context label so the user can see it and correct it. Nothing here
+   * can reach generated career materials.
+   */
+  quarantinedEvidenceIds: string[];
   contextItems: string[];
 };
 
@@ -167,17 +189,23 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
     (item) => item.approved && !item.rejected && contextCategory(item.kind, item.detail) !== "claim"
   );
   const contextItems = approvedContext.map((item) => item.detail);
-  const removedEvidenceIds = approvedContext.map((item) => item.id);
+  const quarantinedEvidenceIds = approvedContext.map((item) => item.id);
 
-  const evidence = dossier.evidence.flatMap((item): DossierEvidenceRecord[] => {
+  // Sanitization runs on every state READ (see use-command-center.ts), so it
+  // must never destroy user data. Previously an approved record that failed
+  // classification was dropped outright, which — combined with a
+  // false-positive gap pattern — silently erased real approved work history,
+  // its owning role, and the résumé Experience section built from it, with no
+  // name, no diff and no undo. Now the record is relabelled and retained; only
+  // its ELIGIBILITY for career materials changes.
+  const evidence = dossier.evidence.map((item): DossierEvidenceRecord => {
     const category = contextCategory(item.kind, item.detail);
-    if (item.approved && !item.rejected && category !== "claim") return [];
-    if (category === "claim") return [item];
-    return [{
+    if (category === "claim") return item;
+    return {
       ...item,
       kind: category === "preference" ? "goal" : "constraint",
       label: contextLabel(category)
-    }];
+    };
   });
 
   const approvedProfessionalIds = new Set(
@@ -192,8 +220,12 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
     const employer = sanitizeProfessionalLine(role.employer);
     const heading = [title, employer].filter(Boolean).join(" · ");
     const evidenceIds = role.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
+    // A role is kept whenever it still has a heading. Dropping it because its
+    // evidence links were filtered deleted genuine employment history on a read
+    // path; an unsupported role simply renders no bullets (see resume-pack.ts,
+    // which already omits roles with nothing defensible from the RÉSUMÉ without
+    // erasing them from the DOSSIER).
     if (!heading) return [];
-    if (role.evidenceIds.length > 0 && evidenceIds.length === 0) return [];
     return [{
       ...role,
       title,
@@ -211,8 +243,8 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
     const organization = sanitizeProfessionalLine(normalized.organization);
     const description = sanitizeProfessionalParagraph(normalized.description);
     const evidenceIds = normalized.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
+    // Kept whenever it still has a usable name — see the role comment above.
     if (!name) return [];
-    if (normalized.evidenceIds.length > 0 && evidenceIds.length === 0) return [];
     return [{
       ...normalized,
       name,
@@ -231,19 +263,19 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
     const institution = sanitizeProfessionalLine(item.institution);
     const field = sanitizeProfessionalLine(item.field);
     const evidenceIds = item.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
+    // Kept whenever it still names a credential or institution.
     if (!credential && !institution) return [];
-    if (item.evidenceIds.length > 0 && evidenceIds.length === 0) return [];
     return [{ ...item, credential, institution, field, evidenceIds }];
   });
 
   const preferences = approvedContext.filter((item) => contextCategory(item.kind, item.detail) === "preference");
   const constraints = approvedContext.filter((item) => contextCategory(item.kind, item.detail) !== "preference");
-  const safetyNote = removedEvidenceIds.length
+  const safetyNote = quarantinedEvidenceIds.length
     ? "Context-only import items were separated from professional evidence and cannot enter generated career materials."
     : "";
 
   return {
-    removedEvidenceIds,
+    quarantinedEvidenceIds,
     contextItems,
     dossier: {
       ...dossier,
@@ -503,7 +535,7 @@ export function sanitizeCommandCenterState(
 ): CommandCenterState {
   const pendingImportReviews = reconcilePendingReviews(previous?.pendingImportReviews, next.pendingImportReviews);
   const sanitized = sanitizeCareerDossier(next.dossier);
-  const forceReview = sanitized.removedEvidenceIds.length > 0;
+  const forceReview = sanitized.quarantinedEvidenceIds.length > 0;
   const dossier = sanitized.dossier;
   const profile = projectProfileFromDossier(dossier);
   profile.constraints = unique(

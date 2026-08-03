@@ -4,6 +4,7 @@ import type { TargetLane } from "@/types/command-center";
 import type {
   CareerDossier,
   DossierEvidenceRecord,
+  DossierRole,
   ResumeEvidenceReference,
   ResumePack,
   ResumeVariant
@@ -182,9 +183,34 @@ function buildLaneResume(
     : `Career focus: ${lane.title}. Add approved role or project evidence before using this résumé.`;
   mapClaim(summary, summaryEvidence.map((item) => item.id), "transferred");
 
+  // Structural ownership guard. Evidence linked to MORE THAN ONE role has
+  // ambiguous ownership — nothing in the data says which employer it belongs
+  // to — so it may only be used by a role that independently records the same
+  // detail in its own responsibilities/outcomes/tools. This makes it impossible
+  // for one employer's duties to be printed under another, and it repairs
+  // dossiers already saved in localStorage with a shared evidence array,
+  // without a migration and without ever guessing an attribution.
+  const roleClaimCounts = new Map<string, number>();
+  dossier.roles.forEach((role) => {
+    new Set(role.evidenceIds).forEach((id) => roleClaimCounts.set(id, (roleClaimCounts.get(id) ?? 0) + 1));
+  });
+  const ambiguousEvidenceIds = new Set(
+    [...roleClaimCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+  );
+  const roleRecordsDetail = (role: DossierRole, detail: string): boolean => {
+    const needle = detail.trim().toLowerCase();
+    if (!needle) return false;
+    return [...role.responsibilities, ...role.outcomes, ...role.tools].some((text) => {
+      const own = text.trim().toLowerCase();
+      return Boolean(own) && (own.includes(needle) || needle.includes(own));
+    });
+  };
+
   const usedByRoles = new Set<string>();
   const roleEntries = dossier.roles.flatMap((role) => {
-    const support = evidenceByIds(approved, role.evidenceIds).filter((item) => chosenSet.has(item.id));
+    const support = evidenceByIds(approved, role.evidenceIds)
+      .filter((item) => chosenSet.has(item.id))
+      .filter((item) => !ambiguousEvidenceIds.has(item.id) || roleRecordsDetail(role, item.detail));
     if (!support.length) return [];
     const heading = [role.title, role.employer, [role.startDate, role.endDate].filter(Boolean).join("–")].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));

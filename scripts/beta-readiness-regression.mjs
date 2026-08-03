@@ -43,7 +43,7 @@ const prep = loadTsModule(path.join(root, "src/lib/interview-prep.ts"));
 
 const NOW = "2026-07-19T12:00:00.000Z";
 let passed = 0;
-function check(label, condition) { if (!condition) throw new Error(`FAIL ${label}`); passed += 1; console.log(`PASS ${label}`); }
+function check(label, condition, detail = "") { if (!condition) throw new Error(`FAIL ${label}${detail ? ` — ${detail}` : ""}`); passed += 1; console.log(`PASS ${label}`); }
 
 function dossierWith(records, extra = {}) {
   const base = dossierLib.emptyDossier(NOW);
@@ -62,15 +62,31 @@ const win1 = earlyWin.earlyWinBullets(importedDossier);
 check("update-resume: import produces an early-win preview", win1 !== null && win1.bullets.length >= 2);
 check("update-resume: preview is capped at three bullets", win1.bullets.length <= 3);
 check("update-resume: preview names the source experience", win1.source.includes("Senior Operations Coordinator"));
-// Truthfulness: every preview bullet must trace to a substring of approved input.
+// Truthfulness: every preview bullet must trace to approved input INCLUDING its
+// first word. The previous version of this check stripped the opening word
+// before comparing, with the comment "Allow the polisher's opening-verb
+// diversification" — which is precisely the behavior that invented bullets
+// ("Trained six new support agents…" also emitted as "Built six new support
+// agents…"). The preview promises the user "Nothing here was invented", so the
+// assertion now holds it to that promise verbatim.
 const approvedText = imported.filter((e) => ["metric", "proof", "responsibility"].includes(e.kind)).map((e) => e.detail.toLowerCase());
+const normalizePreview = (value) => value.replace(/[.]+$/, "").toLowerCase().trim();
 const invented = win1.bullets.filter((bullet) => {
-  const core = bullet.replace(/[.]+$/, "").toLowerCase();
-  // Allow the polisher's opening-verb diversification: match on the distinctive tail.
-  const tail = core.split(" ").slice(1).join(" ");
-  return !approvedText.some((src) => src.includes(tail.slice(0, 24)));
+  const core = normalizePreview(bullet);
+  return !approvedText.some((src) => src.includes(core) || core.includes(src));
 });
-check("update-resume: preview invents no bullet without approved backing", invented.length === 0);
+check("update-resume: preview invents no bullet without approved backing", invented.length === 0, invented.join(" | "));
+check(
+  "update-resume: preview never emits more bullets than the approved input it drew from",
+  win1.bullets.length <= approvedText.length
+);
+const previewOpeners = win1.bullets.map((bullet) => normalizePreview(bullet).split(" ")[0]);
+const approvedOpeners = new Set(approvedText.map((src) => src.split(" ")[0]));
+check(
+  "update-resume: preview never substitutes an opening verb the user did not write",
+  previewOpeners.every((word) => approvedOpeners.has(word)),
+  `preview openers ${JSON.stringify(previewOpeners)} vs approved ${JSON.stringify([...approvedOpeners])}`
+);
 
 // --- Path 2: Build My First Résumé — a single manual role yields a preview ---
 const firstRoleDossier = dossierWith(

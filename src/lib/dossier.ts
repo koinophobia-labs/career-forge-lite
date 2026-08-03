@@ -364,13 +364,26 @@ export function mergeIntakeIntoDossier(
     ...metrics.map((detail) => evidenceRecord("metric", detail, source, approved, nowIso, { sourceText })),
     ...compact([intake.targetJobTitle]).map((detail) => evidenceRecord("goal", detail, source, approved, nowIso, { sourceText }))
   ];
-  const roleEvidenceIds = proposed.filter((item) => item.kind !== "goal").map((item) => item.id);
+  // Intake collects responsibilities, tools, outcomes and metrics for the
+  // CURRENT role only — there are no per-role fields for the previous or
+  // additional employer. Handing every role the same evidence array made the
+  // pack generator print the current job's duties and metrics under a previous,
+  // unrelated employer's name, and the Defensibility Receipt certified those
+  // fabricated bullets as "direct". Evidence is therefore scoped to the role it
+  // was actually collected for; the other roles carry only their own heading
+  // until the user records detail for them on /profile.
+  const currentRoleEvidenceIds = proposed.filter((item) => item.kind !== "goal").map((item) => item.id);
   const roles = [
-    roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, roleEvidenceIds),
-    roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], roleEvidenceIds),
-    roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], roleEvidenceIds)
+    roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, currentRoleEvidenceIds),
+    roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], []),
+    roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], [])
   ].filter((role): role is DossierRole => role !== null);
-  roles.forEach((role) => proposed.push(evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText })));
+  roles.forEach((role) => {
+    const record = evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText });
+    proposed.push(record);
+    // Each role owns its own heading record and nothing belonging to another.
+    role.evidenceIds = [...new Set([...role.evidenceIds, record.id])];
+  });
 
   let education: DossierEducation[] = current.education;
   if (intake.education.trim()) {
@@ -406,7 +419,10 @@ export function mergeIntakeIntoDossier(
       metrics,
       links: compact([intake.website]),
       defaultPlacement: "projects",
-      evidenceIds: [record.id, ...roleEvidenceIds]
+      // Independent work is described by the same intake fields as the current
+      // role, so it legitimately shares that evidence. resume-pack gives roles
+      // precedence (see usedByRoles) so the same fact is never printed twice.
+      evidenceIds: [record.id, ...currentRoleEvidenceIds]
     };
     if (!projects.some((item) => item.id === project.id)) projects.push(project);
   }
