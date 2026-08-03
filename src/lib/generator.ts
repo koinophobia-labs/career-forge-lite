@@ -576,7 +576,9 @@ const acronyms = new Map([
   ["hubspot", "HubSpot"],
   ["javascript", "JavaScript"],
   ["typescript", "TypeScript"],
-  ["it", "IT"],
+  // No ["it", "IT"]. "it" is an ordinary pronoun far more often than an
+  // acronym, and the rule rewrote the user's sentence: "Checked every shipment
+  // before it left the dock" rendered as "…before IT left the dock".
   ["kpi", "KPI"],
   ["macos", "macOS"],
   ["pos", "POS"],
@@ -1163,7 +1165,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         when: /\b(incidents?|notes?|logs?|logged|wrote|report\w*|document\w*)\b/
       },
       { text: "Used judgment to escalate concerns while staying aligned with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
-      { text: "Maintained reliable coverage and attention to detail across public-facing security responsibilities." }
+      // (ungated canned bullet removed: it asserted reliability / attention to
+      // detail with nothing in the user's corpus behind it, and could be the ONLY
+      // experience bullet on the résumé. A role with nothing grounded renders
+      // heading-only instead.)
     ],
     delivery: [
       {
@@ -1216,7 +1221,6 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         })(),
         when: /\b(sanit\w*|clean\w*|safety|safe|ppe)\b/
       },
-      { text: "Supported daily operations by keeping shared spaces ready for staff, customers, students, or visitors." }
     ],
     "food-service": [
       {
@@ -1258,7 +1262,6 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       { text: `Supported scheduling, records, and front desk communication${toolPhrase}.`, when: /\b(schedul\w*|appointments?|records?|front desk|calendars?)\b/ },
       { text: "Kept office details organized so appointments, messages, and handoffs stayed accurate.", when: /\b(appointments?|messages?|organiz\w*|records?)\b/ },
       { text: "Handled interruptions and competing requests while maintaining a professional front desk experience.", when: /\b(interruptions?|busy|competing|priorit\w*)\b/ },
-      { text: "Protected reliability and attention to detail across daily administrative support tasks." }
     ],
     construction: [
       { text: "Moved materials, prepared work areas, and supported crews with hands-on job site tasks.", when: /\b(materials?|crews?|job sites?|carried|moved|set ?up)\b/ },
@@ -1270,7 +1273,6 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
           : "Communicated issues, material needs, or next steps to coworkers, leads, or foremen.",
         when: /\b(foreman|foremen|leads?|crews?|coworkers?|reported)\b/
       },
-      { text: "Supported steady job site progress through reliability, physical effort, and attention to task details." }
     ]
   };
 
@@ -1437,8 +1439,13 @@ function cleanSentence(sentence: string) {
     .replace(/\s+([,.])/g, "$1")
     .replace(/\s+\./g, ".")
     .replace(/ ,/g, ",")
-    .replace(/\b(\w+)\s+\1\b/gi, "$1")
-    .replace(/\ba ([aeiou])/gi, "an $1")
+    // Repetition is collapsed only for stopwords, where a genuine double is
+    // always a typo. The unrestricted version deleted real repeated words:
+    // "Walla Walla distribution center" became "walla distribution center", a
+    // falsified place name. The `a` -> `an` rule is gone with it — the correct
+    // article follows the vowel SOUND ("a user group", "a unique path"), which
+    // a regex cannot determine, so the user's own article stands.
+    .replace(/\b(the|and|of|to|a|an|in|on|for|that|is|was)\s+\1\b/gi, "$1")
     .replace(/\bwhile ([a-z]+ing)\b/gi, "while $1")
     .replace(/\bwhile ([a-z]+ tickets|[a-z]+ communication|[a-z]+ coordination|[a-z]+ tracking|[a-z]+ reporting)\b/gi, "while handling $1")
     .replace(/\bdocumented documentation\b/gi, "Created documentation")

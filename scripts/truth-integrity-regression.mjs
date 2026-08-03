@@ -466,6 +466,69 @@ expect("corrected wording becomes usable output again (no self-sealing quarantin
   repairedText.includes("Led the weekly dispatch stand-up"),
   repairedText.slice(0, 220));
 
+// ═══ T-6 — the polish layer must not invent, escalate, or alter the user's words
+H("T-6 — /resume-builder output asserts only what the user wrote (issue #53)");
+
+// generateResumePackage ends in polishResumePackage, so everything below reaches
+// the résumé a user prints from /resume-builder and /versions/view.
+const { generateResumePackage } = load("src/lib/generator.ts");
+const builderIntake = (over) => ({
+  ...initialIntake, fullName: "Sam Ito", email: "s@e.com", education: "High school diploma",
+  currentTitle: "Store Associate", currentCompany: "Bellview Market", currentTime: "2022 - Present", ...over,
+});
+const bulletsFor = (over) =>
+  generateResumePackage(builderIntake(over)).experience.flatMap((role) => role.bullets);
+
+// 1. A thin phrase must not be expanded into activities the user never named.
+const expanded = bulletsFor({ responsibilities: "sorted the mail, answered phones" });
+L(`  typed "sorted the mail, answered phones" -> ${JSON.stringify(expanded)}`);
+expect("a thin phrase is not expanded into invented activities",
+  !expanded.some((b) => /assisting customers|routing requests|inbound calls/i.test(b)),
+  JSON.stringify(expanded));
+
+// 2. The user's verb must not be swapped for a stronger one.
+const escalated = bulletsFor({ responsibilities: "handled the returns desk on weekends\nresponsible for the opening float" });
+L(`  typed "handled …" / "responsible for …" -> ${JSON.stringify(escalated)}`);
+expect("a user's verb is not escalated to 'Managed'",
+  !escalated.some((b) => /^Managed\b/.test(b)),
+  JSON.stringify(escalated));
+
+// 3. Distinct bullets sharing an opener keep their own verb.
+const repeated = bulletsFor({
+  currentTitle: "Site Safety Coordinator",
+  responsibilities: "Maintained the county permit binder for four job sites\nMaintained the safety incident log for four job sites",
+});
+L(`  three "Maintained …" lines -> ${JSON.stringify(repeated)}`);
+expect("an opening verb is never substituted from a global action-verb list",
+  !repeated.some((b) => /^(Built|Developed|Created|Implemented)\b/.test(b)),
+  JSON.stringify(repeated));
+
+// 4. Word-altering rules must leave the user's wording intact.
+const pronoun = bulletsFor({ responsibilities: "Checked every shipment before it left the dock" });
+expect('the pronoun "it" is not rewritten to the acronym "IT"',
+  pronoun.some((b) => /before it left the dock/.test(b)) && !pronoun.some((b) => /before IT left/.test(b)),
+  JSON.stringify(pronoun));
+
+const placeName = bulletsFor({ responsibilities: "Supported the Walla Walla distribution center inventory reconciliation" });
+expect("a genuine repeated word is not deleted (Walla Walla survives)",
+  placeName.some((b) => /walla walla/i.test(b)),
+  JSON.stringify(placeName));
+
+const article = bulletsFor({ responsibilities: "Trained a user group on the new returns policy" });
+expect('"a user group" is not corrupted to "an user group"',
+  !article.some((b) => /\ban user\b/i.test(b)),
+  JSON.stringify(article));
+
+// 5. A canned bullet may not assert personal qualities with nothing behind them.
+const ungated = bulletsFor({
+  currentTitle: "Security Officer", currentCompany: "Meridian Facilities",
+  responsibilities: "Walked the perimeter each hour",
+});
+L(`  security title + one line -> ${JSON.stringify(ungated)}`);
+expect("no ungated reliability / attention-to-detail claim is emitted",
+  !ungated.some((b) => /reliable coverage|attention to detail|steady job site progress|shared spaces ready/i.test(b)),
+  JSON.stringify(ungated));
+
 L();
 L("=".repeat(78));
 L(`Truth integrity regression: ${passes} passed, ${fails} failed`);
