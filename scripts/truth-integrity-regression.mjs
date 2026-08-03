@@ -620,6 +620,27 @@ L(`  [no-cross-suppression] -> ${JSON.stringify(unrelatedOut)}`);
 expect("a grounded claim is not suppressed by unrelated user lines",
   unrelatedOut.length >= 2, JSON.stringify(unrelatedOut));
 
+// 5b-iv. Sparse user wording must survive EXACTLY, apart from safe
+//        capitalization and punctuation. Two defects made this necessary:
+//        composeUserBullets classified any verb outside a closed whitelist as a
+//        noun label and wrapped it in an invented lead ("Mopped." ->
+//        "Supported mopped."), and it drew from buildResponsibilityList, which
+//        also carries derived labels, so a typed line was joined with template
+//        vocabulary ("Mopped." -> "Mopped and cleaning standards.").
+//
+//        These assert EXACT output. The earlier harness asserted only that the
+//        output CONTAINED the typed word, and "Supported mopped." contains
+//        "mopped" — so it certified the distortion as preservation across every
+//        probe. Substring assertions do not test preservation.
+for (const typed of ["Mopped.", "Poured drinks.", "Wiped tables.", "Swept the floors.",
+                     "Dusted shelves.", "Vacuumed the lobby.", "Checked labels.", "Carried lumber."]) {
+  const out = bulletsFor({ currentTitle: "Custodian", currentCompany: "Northline Schools", responsibilities: typed });
+  expect(`sparse line survives exactly: ${JSON.stringify(typed)}`, out.includes(typed), JSON.stringify(out));
+  expect(`no invented lead on ${JSON.stringify(typed)}`,
+    !out.some((b) => /^Supported /.test(b) && b.toLowerCase().includes(typed.toLowerCase().replace(/\.$/, ""))),
+    JSON.stringify(out));
+}
+
 // 5c. Occupation and title ALONE must authorize zero factual bullets.
 for (const scenario of OCCUPATION_CASES) {
   const titleOnly = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: "" });

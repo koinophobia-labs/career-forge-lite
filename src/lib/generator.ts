@@ -1759,7 +1759,25 @@ function buildBeautyServiceBullets(data: IntakeData) {
 }
 
 const verbLedPhrase =
-  /^(handled|helped|managed|supported|answered|made|processed|prepared|cleaned|stocked|restocked|checked|planned|delivered|drove|built|created|tested|wrote|fixed|resolved|coordinated|organized|scheduled|tracked|documented|maintained|trained|coached|served|greeted|rang|counted|updated|assisted|picked|packed|scanned|loaded|unloaded|sorted|monitored|patrolled|escalated|followed|improved|reduced|increased|launched|shipped|booked|styled|repaired|operated|entered|filed|routed|explained|communicated|took|kept|used)\b/i;
+  /^(handled|helped|managed|supported|answered|made|processed|prepared|cleaned|stocked|restocked|checked|planned|delivered|drove|built|created|tested|wrote|fixed|resolved|coordinated|organized|scheduled|tracked|documented|maintained|trained|coached|served|greeted|rang|counted|updated|assisted|picked|packed|scanned|loaded|unloaded|sorted|monitored|patrolled|escalated|followed|improved|reduced|increased|launched|shipped|booked|styled|repaired|operated|entered|filed|routed|explained|communicated|took|kept|used|swept|held|led|sold|taught|spoke|brought|met|paid|set|sat|won|dealt|sent|ran|went|put|read|grew|cut|drew|fed|felt|found|gave|got|left|lost|rose|showed|told|wore)\b/i;
+
+// A user's line is verb-led when the whitelist matches OR the first word is a
+// regular past tense / gerund. The whitelist alone cannot be complete — every
+// verb missing from it ("mopped", "poured", "wiped", "vacuumed", "dusted") was
+// misread as a noun label and wrapped in an invented "Supported " lead, so
+// "Mopped." rendered as "Supported mopped."
+function isVerbLed(line: string) {
+  const first = cleanWhitespace(line).split(/\s+/)[0] ?? "";
+  return verbLedPhrase.test(line) || /^[a-z]{3,}(ed|ing)$/i.test(first);
+}
+
+// A line may take the "Supported …" lead ONLY when it is unmistakably a bare
+// noun label — a short fragment with no verb of its own. Anything else is the
+// user's own sentence and is emitted as written. Never guess a lead.
+function isNounLabel(line: string) {
+  const words = cleanWhitespace(line).split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= 4 && !isVerbLed(line);
+}
 
 function capitalizeSentence(value: string) {
   const cleaned = cleanWhitespace(value);
@@ -1769,9 +1787,17 @@ function capitalizeSentence(value: string) {
 // Bullets composed strictly from what the user said: their own phrases, their
 // numbers, their selected actions/outcomes, their tools. No template claims.
 function composeUserBullets(data: IntakeData, roleFamily: RoleFamily) {
-  const responsibilities = buildResponsibilityList(data);
-  const verbLed = responsibilities.filter((item) => verbLedPhrase.test(item));
-  const nounLed = responsibilities.filter((item) => !verbLedPhrase.test(item));
+  // The USER's own lines only. buildResponsibilityList also carries
+  // occupation- and label-derived entries, and joining those into the same
+  // sentence rewrote the user: a typed "Mopped." came back as "Mopped and
+  // cleaning standards." Bullets composed strictly from what the user said must
+  // draw strictly from what the user said.
+  const responsibilities = buildUserResponsibilityList(data);
+  const verbLed = responsibilities.filter((item) => isVerbLed(item));
+  const nounLed = responsibilities.filter((item) => !isVerbLed(item) && isNounLabel(item));
+  // Neither a recognised verb nor a bare noun label: the user's own sentence.
+  // It is emitted exactly as written rather than given a guessed lead.
+  const asWritten = responsibilities.filter((item) => !isVerbLed(item) && !isNounLabel(item));
   const tools = buildToolList(data);
   const scopes = buildScopeItems(data);
   const outcome = buildOutcomeSupport(data);
@@ -1791,6 +1817,7 @@ function composeUserBullets(data: IntakeData, roleFamily: RoleFamily) {
     // lists — family verbs like "Tested" would overstate what the user said.
     bullets.push(capitalizeSentence(`Supported ${sentenceList(nounLed.slice(0, 3).map(readablePhrase))}${toolPhrase}.`));
   }
+  asWritten.slice(0, 3).forEach((line) => bullets.push(capitalizeSentence(`${readablePhrase(line)}.`)));
   if (verbLed.length > 3) {
     bullets.push(capitalizeSentence(`${sentenceList(verbLed.slice(3, 6).map(readablePhrase))}.`));
   }
