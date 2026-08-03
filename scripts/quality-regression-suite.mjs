@@ -192,7 +192,31 @@ function validatePersona(persona) {
 
   if (!resume.summary || resume.summary.length < 45) failures.push("summary missing or too thin");
   if (!resume.linkedinHeadline || resume.linkedinHeadline.length < 8) failures.push("LinkedIn headline missing");
-  if (bullets.length < 3) failures.push("minimum bullet count not met");
+  // CONTRACT CHANGE (issue #53): three bullets are required only when the
+  // persona actually supplied enough evidence to support three. The
+  // unconditional rule encoded the old "always fill the résumé" expectation,
+  // which is what drove the generator to invent activities the user never
+  // described. Thin evidence is TRUTHFUL BUT WEAK: a weak output, not a failure.
+  //
+  // Counted from GROUNDED CONTENT UNITS in the persona's only evidence field —
+  // `description`, which the harness feeds in as `responsibilities` at line 152.
+  // Deliberately NOT counted: title, company, targetRole, roleFamily and skills,
+  // which are identity or aspiration rather than described work; and not raw
+  // line count, so one clause split across three lines cannot inflate it.
+  //
+  // The first version of this gate read `persona.intake?.*`. No persona in
+  // quality-regression-dataset.mjs has an `intake` property — 0 of 82 — so it
+  // was always empty, the failure branch could never fire, and every thin row
+  // was relabelled weak regardless of evidence. Any gate here must be asserted
+  // against the real fixture schema before it is trusted.
+  const groundedUnits = unique(
+    String(persona.description ?? "")
+      .split(/[.;\n]|,\s+(?=(?:and|then|also)\b)/i)
+      .map((clause) => normalize(clause))
+      .filter((clause) => clause && clause.split(/\s+/).filter(Boolean).length >= 3)
+  );
+  if (bullets.length < 3 && groundedUnits.length >= 3) failures.push("minimum bullet count not met");
+  if (bullets.length < 3 && groundedUnits.length < 3) warnings.push(`thin evidence: ${groundedUnits.length} grounded unit(s), fewer than three bullets, truthfully`);
   if (unique(normalizedBullets).length !== normalizedBullets.length) failures.push("duplicate bullet sentence");
   if (hasThreeNearDuplicates(bullets)) failures.push("three bullets are nearly identical");
   if (missingSkills.length === persona.skills.length) failures.push("no expected transferable skills detected");

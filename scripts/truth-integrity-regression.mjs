@@ -466,6 +466,258 @@ expect("corrected wording becomes usable output again (no self-sealing quarantin
   repairedText.includes("Led the weekly dispatch stand-up"),
   repairedText.slice(0, 220));
 
+// ═══ T-6 — the polish layer must not invent, escalate, or alter the user's words
+H("T-6 — /resume-builder output asserts only what the user wrote (issue #53)");
+
+// generateResumePackage ends in polishResumePackage, so everything below reaches
+// the résumé a user prints from /resume-builder and /versions/view.
+const { generateResumePackage } = load("src/lib/generator.ts");
+const builderIntake = (over) => ({
+  ...initialIntake, fullName: "Sam Ito", email: "s@e.com", education: "High school diploma",
+  currentTitle: "Store Associate", currentCompany: "Bellview Market", currentTime: "2022 - Present", ...over,
+});
+const bulletsFor = (over) =>
+  generateResumePackage(builderIntake(over)).experience.flatMap((role) => role.bullets);
+
+// 1. A thin phrase must not be expanded into activities the user never named.
+const expanded = bulletsFor({ responsibilities: "sorted the mail, answered phones" });
+L(`  typed "sorted the mail, answered phones" -> ${JSON.stringify(expanded)}`);
+expect("a thin phrase is not expanded into invented activities",
+  !expanded.some((b) => /assisting customers|routing requests|inbound calls/i.test(b)),
+  JSON.stringify(expanded));
+
+// 2. The user's verb must not be swapped for a stronger one.
+const escalated = bulletsFor({ responsibilities: "handled the returns desk on weekends\nresponsible for the opening float" });
+L(`  typed "handled …" / "responsible for …" -> ${JSON.stringify(escalated)}`);
+expect("a user's verb is not escalated to 'Managed'",
+  !escalated.some((b) => /^Managed\b/.test(b)),
+  JSON.stringify(escalated));
+
+// 3. Distinct bullets sharing an opener keep their own verb.
+const repeated = bulletsFor({
+  currentTitle: "Site Safety Coordinator",
+  responsibilities: "Maintained the county permit binder for four job sites\nMaintained the safety incident log for four job sites",
+});
+L(`  three "Maintained …" lines -> ${JSON.stringify(repeated)}`);
+expect("an opening verb is never substituted from a global action-verb list",
+  !repeated.some((b) => /^(Built|Developed|Created|Implemented)\b/.test(b)),
+  JSON.stringify(repeated));
+
+// 4. Word-altering rules must leave the user's wording intact.
+const pronoun = bulletsFor({ responsibilities: "Checked every shipment before it left the dock" });
+expect('the pronoun "it" is not rewritten to the acronym "IT"',
+  pronoun.some((b) => /before it left the dock/.test(b)) && !pronoun.some((b) => /before IT left/.test(b)),
+  JSON.stringify(pronoun));
+
+const placeName = bulletsFor({ responsibilities: "Supported the Walla Walla distribution center inventory reconciliation" });
+expect("a genuine repeated word is not deleted (Walla Walla survives)",
+  placeName.some((b) => /walla walla/i.test(b)),
+  JSON.stringify(placeName));
+
+const article = bulletsFor({ responsibilities: "Trained a user group on the new returns policy" });
+expect('"a user group" is not corrupted to "an user group"',
+  !article.some((b) => /\ban user\b/i.test(b)),
+  JSON.stringify(article));
+
+// 5. A single evidenced token may authorise at most a clause about that token.
+//    "helped customers" must never acquire purchases, returns, transactions or
+//    accuracy — the expansion this issue exists to remove.
+const thin = bulletsFor({ responsibilities: "helped customers" });
+L(`  typed "helped customers" -> ${JSON.stringify(thin)}`);
+for (const invented of ["purchases", "returns", "transactions accurate", "keeping transactions"]) {
+  expect(`"helped customers" does not acquire "${invented}"`,
+    !thin.some((b) => b.toLowerCase().includes(invented)),
+    JSON.stringify(thin));
+}
+// …and the same holds in a second occupation, so the fix is not customer-service specific.
+const thinWarehouse = bulletsFor({
+  currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics",
+  responsibilities: "moved boxes",
+});
+L(`  typed "moved boxes" (warehouse) -> ${JSON.stringify(thinWarehouse)}`);
+for (const invented of ["scanning", "picking", "packing", "forklift", "safety procedures"]) {
+  expect(`"moved boxes" does not acquire "${invented}"`,
+    !thinWarehouse.some((b) => b.toLowerCase().includes(invented)),
+    JSON.stringify(thinWarehouse));
+}
+
+// 5b. Multi-occupation: a sparse line must survive unchanged, and must not
+//     acquire any activity the occupation bank could have supplied.
+const OCCUPATION_CASES = [
+  { occupation: "bartender", title: "Bartender", company: "The Anchor", typed: "poured drinks",
+    forbidden: ["payments", "cash", "tabs", "register", "policy-aware", "stocked", "organized"] },
+  { occupation: "security", title: "Security Officer", company: "Meridian Facilities", typed: "walked the perimeter",
+    forbidden: ["access points", "visitor flow", "camera feeds", "incidents", "shift notes", "reliable coverage"] },
+  { occupation: "caregiver", title: "Home Health Aide", company: "Brightpath Care", typed: "drove clients to appointments",
+    forbidden: ["personal care", "mobility", "care notes", "reminders", "safety procedures", "calm communication"] },
+  { occupation: "construction", title: "Construction Laborer", company: "Rowan Builders", typed: "carried lumber",
+    forbidden: ["PPE", "equipment", "safety procedures", "housekeeping", "next steps", "material needs"] },
+  { occupation: "receptionist", title: "Front Desk Receptionist", company: "Halden Clinic", typed: "answered the phone",
+    forbidden: ["welcoming visitors", "routing requests", "scheduling", "records", "appointments", "handoffs"] },
+  { occupation: "janitor", title: "Custodian", company: "Northline Schools", typed: "mopped the halls",
+    forbidden: ["restocking supplies", "equipment", "basic tools", "broken fixtures", "supply needs", "safety concerns"] },
+];
+for (const scenario of OCCUPATION_CASES) {
+  const produced = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: scenario.typed });
+  L(`  [${scenario.occupation}] typed "${scenario.typed}" -> ${JSON.stringify(produced)}`);
+  const leaked = scenario.forbidden.filter((phrase) =>
+    produced.some((b) => b.toLowerCase().includes(phrase.toLowerCase())));
+  expect(`[${scenario.occupation}] a sparse line acquires no unevidenced activity`,
+    leaked.length === 0, leaked.join(", "));
+  // Criterion: sparse user wording is PRESERVED, not silently dropped.
+  const head = scenario.typed.split(" ")[0].toLowerCase();
+  expect(`[${scenario.occupation}] the user's own wording survives`,
+    produced.some((b) => b.toLowerCase().includes(head)),
+    JSON.stringify(produced));
+}
+
+// 5b-ii. Employer NAMES must not ground activity either — an identity is not
+//        evidence of work. "Corner Kitchen" once grounded a coworkers claim and
+//        "Brightpath Care" a "patient support" strength.
+for (const company of ["Sanitation Solutions LLC", "Safety First Staffing", "Accurate Inventory Co", "Customer Care Partners", "Corner Kitchen", "Brightpath Care"]) {
+  const pack = generateResumePackage(builderIntake({ currentTitle: "Line Cook", currentCompany: company, responsibilities: "" }));
+  const surfaces = [...pack.experience.flatMap((r) => r.bullets), ...pack.coreSkills, pack.summary];
+  expect(`employer "${company}" grounds no claim`,
+    pack.experience.flatMap((r) => r.bullets).length === 0 && pack.coreSkills.length === 0 &&
+      !/strengths the candidate reports/i.test(pack.summary),
+    JSON.stringify(surfaces));
+}
+
+// 5b-iii. Restatement suppression is REVERTED (independent review of 0eeb3f2:
+//         it deleted a scope metric along with the bullet, and unrelated user
+//         lines suppressed each other through global bag-of-words overlap).
+//         Duplicate truthful wording is a polish problem; deleting a supported
+//         metric is a truth failure. So the contract here is narrower: the
+//         user's own wording must survive, and nothing unsupported may appear.
+//         A template that repeats the user is TOLERATED until suppression is
+//         rebuilt on per-bullet structured evidence dependencies.
+for (const [title, typed, forbidden] of [
+  ["Bartender", "poured drinks", /purchases|returns|high-volume|payments|tabs/i],
+  ["Construction Laborer", "carried lumber", /PPE|safety procedures|next steps|equipment/i],
+  ["Home Health Aide", "drove clients to appointments", /personal care|meals|mobility|care procedures/i],
+]) {
+  const out = bulletsFor({ currentTitle: title, currentCompany: "Co", responsibilities: typed });
+  L(`  [reverted-suppression] "${typed}" -> ${JSON.stringify(out)}`);
+  expect(`"${typed}" produces no unsupported claim`, !out.some((b) => forbidden.test(b)), JSON.stringify(out));
+  expect(`"${typed}" survives in the user's own words`,
+    out.some((b) => b.toLowerCase().includes(typed.split(" ")[0].toLowerCase())), JSON.stringify(out));
+}
+// A metric the user supplied must never be lost — the defect that forced the revert.
+const metricOut = bulletsFor({
+  currentTitle: "Warehouse Associate", currentCompany: "Accurate Fulfillment Co",
+  responsibilities: "I picked orders and packed orders.", reportsCreated: "12"
+});
+L(`  [metric-survival] -> ${JSON.stringify(metricOut)}`);
+expect("a supplied metric is not deleted from the package",
+  metricOut.join(" ").includes("12"), JSON.stringify(metricOut));
+
+// Unrelated user lines must not suppress a separately grounded claim.
+const unrelatedOut = bulletsFor({
+  currentTitle: "Bartender", currentCompany: "Corner Tavern",
+  responsibilities: "I stay calm with upset guests.\nThe bar enforces a strict dress code policy."
+});
+L(`  [no-cross-suppression] -> ${JSON.stringify(unrelatedOut)}`);
+expect("a grounded claim is not suppressed by unrelated user lines",
+  unrelatedOut.length >= 2, JSON.stringify(unrelatedOut));
+
+// 5b-iv. Sparse user wording must survive EXACTLY, apart from safe
+//        capitalization and punctuation. Two defects made this necessary:
+//        composeUserBullets classified any verb outside a closed whitelist as a
+//        noun label and wrapped it in an invented lead ("Mopped." ->
+//        "Supported mopped."), and it drew from buildResponsibilityList, which
+//        also carries derived labels, so a typed line was joined with template
+//        vocabulary ("Mopped." -> "Mopped and cleaning standards.").
+//
+//        These assert EXACT output. The earlier harness asserted only that the
+//        output CONTAINED the typed word, and "Supported mopped." contains
+//        "mopped" — so it certified the distortion as preservation across every
+//        probe. Substring assertions do not test preservation.
+for (const typed of ["Mopped.", "Poured drinks.", "Wiped tables.", "Swept the floors.",
+                     "Dusted shelves.", "Vacuumed the lobby.", "Checked labels.", "Carried lumber."]) {
+  const out = bulletsFor({ currentTitle: "Custodian", currentCompany: "Northline Schools", responsibilities: typed });
+  expect(`sparse line survives exactly: ${JSON.stringify(typed)}`, out.includes(typed), JSON.stringify(out));
+  expect(`no invented lead on ${JSON.stringify(typed)}`,
+    !out.some((b) => /^Supported /.test(b) && b.toLowerCase().includes(typed.toLowerCase().replace(/\.$/, ""))),
+    JSON.stringify(out));
+}
+
+// 5c. Occupation and title ALONE must authorize zero factual bullets.
+for (const scenario of OCCUPATION_CASES) {
+  const titleOnly = bulletsFor({ currentTitle: scenario.title, currentCompany: scenario.company, responsibilities: "" });
+  L(`  [${scenario.occupation}] title only -> ${JSON.stringify(titleOnly)}`);
+  expect(`[${scenario.occupation}] title and occupation alone produce no factual bullet`,
+    titleOnly.length === 0, JSON.stringify(titleOnly));
+}
+
+// 5d. A competency label needs evidence of the competency, not of the setting.
+expect('"busy" alone does not authorise a time-management claim',
+  !bulletsFor({ responsibilities: "worked busy shifts" }).some((b) => /time management/i.test(b)));
+expect('"checked labels" alone does not authorise an attention-to-detail claim',
+  !bulletsFor({ responsibilities: "checked labels on boxes" }).some((b) => /attention to detail/i.test(b)));
+
+// 6. A canned bullet may not assert personal qualities with nothing behind them.
+const ungated = bulletsFor({
+  currentTitle: "Security Officer", currentCompany: "Meridian Facilities",
+  responsibilities: "Walked the perimeter each hour",
+});
+L(`  security title + one line -> ${JSON.stringify(ungated)}`);
+expect("no ungated reliability / attention-to-detail claim is emitted",
+  !ungated.some((b) => /reliable coverage|attention to detail|steady job site progress|shared spaces ready/i.test(b)),
+  JSON.stringify(ungated));
+
+// ═══ T-7 — proper nouns must survive generation, persistence AND export
+H("T-7 — a user's proper nouns must never be recased anywhere in the pipeline");
+
+// The defect: normalizeResponsibility ran user prose through titleCase(), which
+// lowercases the whole string before re-capitalizing each word. Interior
+// capitals died — "DeKalb"->"Dekalb", "McDonald's"->"Mcdonald's",
+// "O'Hare"->"O'hare", "Coca-Cola"->"Coca-cola" — and readablePhrase then
+// lowercased the rest for the summary, producing "the walla walla distribution
+// center". Both survived JSON persistence and plain-text export, so a falsified
+// place name reached the printed résumé. titleCase and readablePhrase are now
+// confined to taxonomy labels; user prose keeps its own casing.
+//
+// EXACT assertions only. An earlier harness asserted the output *contained* the
+// typed word, which passed "Supported mopped." as preservation of "Mopped."
+const PROPER_NOUN_LINES = [
+  ["Supported the Walla Walla distribution center.", ["Walla Walla"]],
+  ["Covered the Baton Rouge night shift.", ["Baton Rouge"]],
+  ["Trained staff at the O'Hare terminal.", ["O'Hare"]],
+  ["Managed intake for McDonald's franchise orders.", ["McDonald's"]],
+  ["Reported to the DeKalb County office.", ["DeKalb", "County"]],
+  ["Handled returns for Coca-Cola accounts.", ["Coca-Cola"]],
+];
+for (const [line, nouns] of PROPER_NOUN_LINES) {
+  const pkg = generateResumePackage({
+    ...initialIntake, fullName: "S Ito", email: "s@example.com", education: "High school diploma",
+    currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics", currentTime: "2022 - Present",
+    responsibilities: line,
+  });
+  const bullets = pkg.experience.flatMap((role) => role.bullets);
+  // 1. Generation: the line comes back EXACTLY as typed.
+  expect(`generated verbatim: ${line}`, bullets.includes(line), JSON.stringify(bullets));
+  // 2. The summary embeds it without recasing the proper nouns.
+  const narrative = [pkg.summary, pkg.linkedinSummary, pkg.linkedinHeadline].join(" | ");
+  const recasedInNarrative = nouns.filter((noun) => narrative.toLowerCase().includes(noun.toLowerCase()) && !narrative.includes(noun));
+  expect(`narrative keeps proper nouns: ${nouns.join(", ")}`, recasedInNarrative.length === 0, narrative);
+  // 3. Persistence: a JSON round-trip changes nothing.
+  const revived = JSON.parse(JSON.stringify(pkg));
+  expect(`survives JSON persistence: ${line}`,
+    revived.experience.flatMap((role) => role.bullets).includes(line), JSON.stringify(revived.experience));
+  // 4. Export: the printed document carries the exact wording.
+  const exportDossier = { ...emptyDossier(NOW), identity: { ...emptyDossier(NOW).identity, fullName: "S Ito", email: "s@example.com" } };
+  const exported = variantPlainText(exportDossier, revived, ["summary", "skills", "experience", "projects", "education"], "ats");
+  expect(`survives plain-text export: ${line}`, exported.includes(line), exported.slice(0, 260));
+}
+
+// A taxonomy LABEL still normalizes — titleCase was not simply deleted.
+const labelPkg = generateResumePackage({
+  ...initialIntake, fullName: "S Ito", email: "s@example.com", education: "High school diploma",
+  currentTitle: "Warehouse Associate", currentCompany: "Cedar Logistics", currentTime: "2022 - Present",
+  selectedResponsibilities: ["inventory management"],
+});
+expect("taxonomy labels are still normalized", JSON.stringify(labelPkg).toLowerCase().includes("inventory"), JSON.stringify(labelPkg.coreSkills));
+
 L();
 L("=".repeat(78));
 L(`Truth integrity regression: ${passes} passed, ${fails} failed`);

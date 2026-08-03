@@ -10,45 +10,6 @@ export type ResumeQualityAnalysis = {
   suggestedImprovements: string[];
 };
 
-const actionVerbs = [
-  "Built",
-  "Developed",
-  "Created",
-  "Implemented",
-  "Led",
-  "Supported",
-  "Coordinated",
-  "Designed",
-  "Resolved",
-  "Maintained",
-  "Executed",
-  "Improved",
-  "Analyzed",
-  "Automated",
-  "Optimized",
-  "Configured",
-  "Collaborated",
-  "Produced",
-  "Delivered",
-  "Generated",
-  "Assisted",
-  "Documented",
-  "Tracked",
-  "Communicated"
-];
-
-const weakOpeners: Array<[RegExp, string]> = [
-  [/^helped customers\b/i, "Assisted customers"],
-  [/^helped users\b/i, "Assisted users"],
-  [/^helped\b/i, "Supported"],
-  [/^did\b/i, "Completed"],
-  [/^worked on\b/i, "Supported"],
-  [/^responsible for\b/i, "Managed"],
-  [/^handled\b/i, "Managed"],
-  [/^made\b/i, "Created"],
-  [/^built\b/i, "Built"]
-];
-
 const weakTerms = [
   /\bstuff\b/gi,
   /\bthings\b/gi,
@@ -73,7 +34,11 @@ const acronymFixes: Array<[RegExp, string]> = [
   [/\bcrm\b/gi, "CRM"],
   [/\bats\b/gi, "ATS"],
   [/\bsql\b/gi, "SQL"],
-  [/\bit\b/gi, "IT"],
+  // No `it` -> `IT` rule. "it" is an ordinary English pronoun far more often
+  // than an acronym, so the rule rewrote the user's sentence: "Checked every
+  // shipment before it left the dock" rendered as "…before IT left the dock".
+  // A casing table cannot disambiguate this; the cost of being wrong is a
+  // corrupted sentence in a document the user sends to an employer.
   [/\bapi\b/gi, "API"],
   [/\bkpi\b/gi, "KPI"],
   [/\brf\b/gi, "RF"],
@@ -106,14 +71,23 @@ function sentenceCase(value: string) {
   return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "";
 }
 
+// Punctuation and spacing only — it must not change the user's words.
+// Three rules were removed because they did:
+//   /\b(\w+)\s+\1\b/  deleted ANY repeated word, so "Walla Walla distribution
+//                     center" became "walla distribution center" — a falsified
+//                     place name — and "had had" lost a verb. Repetition is now
+//                     collapsed only for a closed list of stopwords, where a
+//                     genuine double is always a typo.
+//   /\ba ([aeiou])/   rewrote correct English: "a user group" -> "an user
+//                     group", "a unique path" -> "an unique path". Correct
+//                     article choice follows the vowel SOUND, which a regex
+//                     cannot determine, so the user's own article stands.
+//   /\s+(and|or|with)$/ silently truncated the last word of a bullet.
 function normalizePunctuation(value: string) {
   let cleaned = cleanWhitespace(value)
     .replace(/\s+([,.!?;:])/g, "$1")
     .replace(/([,.!?;:]){2,}/g, "$1")
-    .replace(/\b(\w+)\s+\1\b/gi, "$1")
-    .replace(/\ba ([aeiou])/gi, "an $1")
-    .replace(/\s+(and|or|with)$/i, "")
-    .replace(/\s+(and|or|with)\.$/i, ".");
+    .replace(/\b(the|and|of|to|a|an|in|on|for|that|is|was)\s+\1\b/gi, "$1");
 
   if (cleaned && !/[.!?]$/.test(cleaned)) cleaned += ".";
   return cleaned;
@@ -130,26 +104,24 @@ function applySpellingAndCapitalization(value: string) {
   return next;
 }
 
+// Voice normalisation ONLY. This function may remove filler and drop a leading
+// first-person pronoun; it may not add an activity, and it may not swap the
+// user's verb for a stronger one.
+//
+// It previously expanded a thin phrase into a multi-claim sentence — "answered
+// phones" became "Managed inbound calls while assisting customers and routing
+// requests appropriately", asserting two activities the user never mentioned —
+// and mapped "handled"/"responsible for" onto "Managed", which escalates the
+// claim. Both reached the résumé a user prints from /resume-builder.
+//
+// A phrase too thin for a résumé is a coaching problem, not a rewriting
+// problem: analyzeResumeQuality already surfaces weak openers as a suggestion,
+// which leaves the sentence — and the claim — the user's own.
 function replaceWeakLanguage(value: string) {
-  let next = value
-    .replace(/^(i|we)\s+/i, "")
-    .replace(/\banswered phones\.?$/i, "Managed inbound calls while assisting customers and routing requests appropriately.")
-    .replace(/\bdid cash register\.?$/i, "Processed customer transactions accurately using point-of-sale systems.")
-    .replace(/\bstocked shelves\.?$/i, "Maintained organized inventory and restocked merchandise to support daily operations.");
-  weakOpeners.forEach(([pattern, replacement]) => {
-    next = next.replace(pattern, replacement);
-  });
+  let next = value.replace(/^(i|we)\s+/i, "");
   weakTerms.forEach((pattern) => {
     next = next.replace(pattern, "");
   });
-
-  next = next
-    .replace(/\bAssisted customers\.?$/i, "Assisted customers by resolving questions and providing accurate support.")
-    .replace(/\bAnswered phones\.?$/i, "Managed inbound calls while assisting customers and routing requests appropriately.")
-    .replace(/\bDid cash register\.?$/i, "Processed customer transactions accurately using point-of-sale systems.")
-    .replace(/\bMaintained shelves\.?$/i, "Maintained organized inventory and restocked merchandise to support daily operations.")
-    .replace(/\bstocked shelves\.?$/i, "Maintained organized inventory and restocked merchandise to support daily operations.");
-
   return cleanWhitespace(next);
 }
 
@@ -157,32 +129,18 @@ export function polishResumeSentence(value: string) {
   return normalizePunctuation(sentenceCase(replaceWeakLanguage(applySpellingAndCapitalization(value))));
 }
 
-function diversifyOpeningVerbs(bullets: string[]) {
-  const used = new Set<string>();
-
-  return bullets.map((bullet) => {
-    const opener = bullet.split(" ")[0] ?? "";
-    const openerKey = opener.toLowerCase();
-    if (!used.has(openerKey)) {
-      used.add(openerKey);
-      return bullet;
-    }
-
-    const replacement = actionVerbs.find((verb) => !used.has(verb.toLowerCase()));
-    if (!replacement) return bullet;
-    used.add(replacement.toLowerCase());
-    return bullet.replace(/^\w+/, replacement);
-  });
-}
-
+// Opening-verb diversification is gone. It replaced the first word of any bullet
+// whose opener had already been used with the next unused entry of a global
+// action-verb list — so three lines the user opened with "Maintained" came back
+// as "Maintained …", "Built …", "Developed …", turning a maintenance claim into
+// a creation claim. Variety is not worth a false verb, and repeated openers are
+// already reported to the user as a suggestion by analyzeResumeQuality.
 export function polishBullets(bullets: string[]) {
-  // Dedupe BEFORE diversifying. The previous order let diversifyOpeningVerbs
-  // rewrite a duplicate's opening verb first, which changed the string enough
-  // that unique() could no longer drop it — so an identical input line came
-  // back twice, the second copy carrying a verb the user never wrote.
-  return diversifyOpeningVerbs(unique(bullets.map(polishResumeSentence)))
-    .filter((bullet) => bullet.length > 24)
-    .slice(0, 5);
+  // No minimum length. A short line the user actually wrote ("Poured drinks.")
+  // is a true claim; dropping it left a sparse profile with an empty Experience
+  // section and no indication why. Thin evidence stays visible and usable —
+  // judging it belongs to the quality layer, which only suggests.
+  return unique(bullets.map(polishResumeSentence)).slice(0, 5);
 }
 
 // Verbatim-fidelity polish: spelling, acronym casing, sentence case and
@@ -194,9 +152,7 @@ export function polishResumeSentenceVerbatim(value: string) {
 }
 
 export function polishBulletsVerbatim(bullets: string[]) {
-  return unique(bullets.map(polishResumeSentenceVerbatim))
-    .filter((bullet) => bullet.length > 24)
-    .slice(0, 5);
+  return unique(bullets.map(polishResumeSentenceVerbatim)).slice(0, 5);
 }
 
 function polishRole(role: ExperienceRole): ExperienceRole {
