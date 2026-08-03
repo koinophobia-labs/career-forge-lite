@@ -24,6 +24,13 @@ export type DossierEvidenceRecord = {
   kind: EvidenceKind;
   label: string;
   detail: string;
+  /**
+   * The role this fact was collected for, when it is known. Explicit ownership:
+   * a résumé role may only cite evidence it owns, so one employer's duties can
+   * never be printed under another. Absent on records written before ownership
+   * existed — those fall back to the ambiguity guard in resume-pack.ts.
+   */
+  roleId?: string;
   source: EvidenceSource;
   sourceText: string;
   confidence: "high" | "medium" | "low";

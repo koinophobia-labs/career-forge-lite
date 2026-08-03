@@ -1,3 +1,4 @@
+import { isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { matchRequirement } from "@/lib/job-post-analyzer";
 import type { ApplicationRecord, CareerProfile, TargetLane } from "@/types/command-center";
 import type { CareerDossier, DossierEvidenceRecord } from "@/types/dossier";
@@ -369,7 +370,11 @@ function makeId(category: PrepCategory, index: number): string {
 }
 
 function approvedEvidence(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
-  return dossier?.evidence.filter((item) => item.approved && !item.rejected) ?? [];
+  // Admissibility is derived, never stored on the record (sanitization does not
+  // rewrite `kind`), so every consumer that feeds a generated artifact has to
+  // ask. Without this, a separation reason or gap statement keeps its original
+  // kind and seeds an interview question.
+  return dossier?.evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)) ?? [];
 }
 
 const QUANTIFIED = /[\d$%]/;

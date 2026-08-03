@@ -183,13 +183,23 @@ function buildLaneResume(
     : `Career focus: ${lane.title}. Add approved role or project evidence before using this résumé.`;
   mapClaim(summary, summaryEvidence.map((item) => item.id), "transferred");
 
-  // Structural ownership guard. Evidence linked to MORE THAN ONE role has
-  // ambiguous ownership — nothing in the data says which employer it belongs
-  // to — so it may only be used by a role that independently records the same
-  // detail in its own responsibilities/outcomes/tools. This makes it impossible
-  // for one employer's duties to be printed under another, and it repairs
-  // dossiers already saved in localStorage with a shared evidence array,
-  // without a migration and without ever guessing an attribution.
+  // ---------------------------------------------------------------------
+  // Evidence ownership.
+  //
+  // PRIMARY, structural: a record stamped with `roleId` may be cited only by
+  // that role. Nothing about the text matters, so one employer's duties can
+  // never be printed under another — including when both roles legitimately
+  // record the same string, which happens routinely because intakeFromDossier()
+  // prefills the intake form from the GLOBAL dossier pool.
+  //
+  // FALLBACK, for records written before ownership existed: an unowned record
+  // linked to MORE THAN ONE role is ambiguous, and may be used only by a role
+  // that independently records the same detail. Corroboration requires a real
+  // token match, not a substring — a two-word fragment like "customer service"
+  // must not vouch for "Troubleshot Northwind laptops for the customer service
+  // floor". Legacy dossiers are therefore repaired at generation time, with no
+  // migration and without ever guessing an attribution.
+  // ---------------------------------------------------------------------
   const roleClaimCounts = new Map<string, number>();
   dossier.roles.forEach((role) => {
     new Set(role.evidenceIds).forEach((id) => roleClaimCounts.set(id, (roleClaimCounts.get(id) ?? 0) + 1));
@@ -197,20 +207,38 @@ function buildLaneResume(
   const ambiguousEvidenceIds = new Set(
     [...roleClaimCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
   );
+  const contentTokens = (value: string): Set<string> =>
+    new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2));
   const roleRecordsDetail = (role: DossierRole, detail: string): boolean => {
-    const needle = detail.trim().toLowerCase();
-    if (!needle) return false;
+    const needle = contentTokens(detail);
+    if (needle.size === 0) return false;
     return [...role.responsibilities, ...role.outcomes, ...role.tools].some((text) => {
-      const own = text.trim().toLowerCase();
-      return Boolean(own) && (own.includes(needle) || needle.includes(own));
+      const own = contentTokens(text);
+      // Too short to vouch for anything.
+      if (own.size < 3) return false;
+      const overlap = [...needle].filter((token) => own.has(token)).length;
+      // The role's own wording must account for most of the evidence, in both
+      // directions — a shared phrase is not the same as a shared fact.
+      return overlap / needle.size >= 0.8 && overlap / own.size >= 0.8;
     });
   };
+  const roleOwnsEvidence = (role: DossierRole, item: DossierEvidenceRecord): boolean => {
+    if (item.roleId) return item.roleId === role.id;
+    if (!ambiguousEvidenceIds.has(item.id)) return true;
+    return roleRecordsDetail(role, item.detail);
+  };
+  // Any record owned by a role is off-limits to projects and to the loose
+  // accomplishments section, which would otherwise reprint it without an
+  // employer boundary.
+  const roleOwnedEvidenceIds = new Set(
+    dossier.evidence.filter((item) => item.roleId).map((item) => item.id)
+  );
 
   const usedByRoles = new Set<string>();
   const roleEntries = dossier.roles.flatMap((role) => {
     const support = evidenceByIds(approved, role.evidenceIds)
       .filter((item) => chosenSet.has(item.id))
-      .filter((item) => !ambiguousEvidenceIds.has(item.id) || roleRecordsDetail(role, item.detail));
+      .filter((item) => roleOwnsEvidence(role, item));
     if (!support.length) return [];
     const heading = [role.title, role.employer, [role.startDate, role.endDate].filter(Boolean).join("–")].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));
@@ -243,7 +271,13 @@ function buildLaneResume(
 
   const projectEntries = dossier.projects.flatMap((project) => {
     if (project.defaultPlacement === "omit") return [];
-    const support = evidenceByIds(approved, project.evidenceIds).filter((item) => chosenSet.has(item.id));
+    // A project may not reprint an employer's facts. The intake-derived
+    // independent-work project inherits the current role's evidence ids, and
+    // this section applies neither the role guard nor usedByRoles, so without
+    // this filter the current job's duties were printed again under a project
+    // heading.
+    const support = evidenceByIds(approved, project.evidenceIds)
+      .filter((item) => chosenSet.has(item.id) && !roleOwnedEvidenceIds.has(item.id));
     if (!support.length) return [];
     // A project is not an employer. No fake "Independent project" company
     // label — the organization line is whatever the user actually recorded

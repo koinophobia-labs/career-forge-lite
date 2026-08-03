@@ -13,6 +13,14 @@ export type RoleFamily =
 export type TemplateStyle = "Corporate" | "Modern ATS" | "Tech ATS";
 
 export type IntakeData = {
+  /**
+   * The role whose detail was prefilled into the role-scoped fields
+   * (responsibilities / tools / outcomes). Set by intakeFromDossier. If the
+   * submitted current role is a DIFFERENT job, that carried-over detail is not
+   * re-attributed to the new employer — the prefill must never silently move
+   * one employer's duties to another.
+   */
+  sourceRoleId?: string;
   fullName: string;
   email: string;
   phone: string;

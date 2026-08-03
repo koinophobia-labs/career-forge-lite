@@ -48,7 +48,7 @@ function load(fp) {
 }
 
 const { classifyEvidenceAdmissibility, sanitizeCareerDossier, sanitizeResumeForProfessionalUse } = load("src/lib/evidence-admissibility.ts");
-const { emptyDossier, mergeIntakeIntoDossier, evidenceRecord } = load("src/lib/dossier.ts");
+const { emptyDossier, mergeIntakeIntoDossier, evidenceRecord, intakeFromDossier } = load("src/lib/dossier.ts");
 const { generateResumePack, updatePackVariant } = load("src/lib/resume-pack.ts");
 const { initialIntake } = load("src/lib/career-data.ts");
 const { earlyWinBullets } = load("src/lib/early-win.ts");
@@ -263,6 +263,130 @@ const legacyCurrent = legacyExp.find((r) => r.company === "Northwind IT");
 expect("legacy dossier still renders the employer that genuinely recorded the work",
   (legacyCurrent?.bullets.length ?? 0) > 0,
   "the role whose own responsibilities/outcomes corroborate the evidence must survive");
+
+// ═════════════════ REVIEW ROUND 2 — defects found reviewing the first fix ═══
+// Every check below failed against the first truth-integrity attempt. They stay
+// here because that attempt passed its own tests: the fixtures had been written
+// by the author of the fix and happened to match the shapes the fix handled.
+
+H("T-1 — self-declared gaps must never become claims, whatever precedes them");
+// The first fix anchored gap detection to sentence position, so any adverb in
+// front turned a gap into an exportable claim — strictly worse than the bug it
+// replaced, because the résumé then PRINTED the user's stated gap.
+const MUST_WITHHOLD = [
+  "Currently do not have leadership experience",
+  "Honestly do not have any metrics for this",
+  "Unfortunately did not manage anyone directly",
+  "Right now do not have a degree",
+  "So far have not led a team",
+  "Truthfully do not own any certifications",
+  "In that role did not manage people",
+  "Generally do not track metrics",
+  "Sadly did not measure results",
+  "I have not managed a budget",
+  "Did not manage a team",
+  "Lacks formal certifications",
+];
+for (const phrase of MUST_WITHHOLD) {
+  const category = classifyEvidenceAdmissibility(phrase);
+  expect(`withheld: "${phrase}" => ${category}`, category !== "claim");
+}
+// …while ordinary achievements phrased with a negation stay usable. A third
+// party doing something is not the candidate lacking something, and negating a
+// BAD OUTCOME ("did not have a breach") is an accomplishment.
+const MUST_REMAIN_USABLE = [
+  "Ensured contractors did not work without a valid permit",
+  "Verified that unauthorized visitors did not have building access",
+  "Documented incidents so auditors did not have to reconstruct the timeline",
+  "We did not have a single security breach in 18 months",
+  "We did not have a late shipment during peak season",
+  "We do not have turnover on the admin team since I rewrote onboarding",
+  "We do not use paper logs anymore since I moved intake to the digital form",
+  "Ran the fall-risk protocol. Did not have a patient fall on my unit in 14 months.",
+  "Built the runbook so we did not have repeat outages",
+  "Maintained a clean security record for 18 months",
+];
+for (const phrase of MUST_REMAIN_USABLE) {
+  const category = classifyEvidenceAdmissibility(phrase);
+  expect(`usable: "${phrase.slice(0, 58)}…" => ${category}`, category === "claim");
+}
+
+H("T-3 — sanitize must be idempotent and reversible, never a persisted mutation");
+const gapRecord = evidenceRecord("responsibility", "Currently do not have leadership experience", "manual", true, NOW);
+const pass1 = sanitizeCareerDossier({ ...emptyDossier(NOW), evidence: [gapRecord] });
+const pass2 = sanitizeCareerDossier(pass1.dossier);
+expect("the user's record is returned byte-identical", JSON.stringify(pass1.dossier.evidence[0]) === JSON.stringify(gapRecord));
+expect("sanitize is a fixed point (no second persisted state)", JSON.stringify(pass2.dossier) === JSON.stringify(pass1.dossier));
+expect("the quarantine names a reason for the UI", Boolean(pass1.quarantined[0]?.reason));
+expect("quarantined evidence is excluded from approvedClaims", !pass1.dossier.approvedClaims.includes(gapRecord.detail));
+// Reversibility: correcting the wording must bring the record back.
+const corrected = { ...pass1.dossier.evidence[0], detail: "Led the weekly dispatch stand-up for six drivers" };
+const repaired = sanitizeCareerDossier({ ...pass1.dossier, evidence: [corrected] });
+expect("correcting the wording restores the record as usable evidence",
+  repaired.quarantinedEvidenceIds.length === 0 && repaired.dossier.approvedClaims.includes(corrected.detail));
+
+H("T-2 — the polluted job-change flow must not cross-attribute");
+// intakeFromDossier prefills the intake form from the GLOBAL dossier pool, so
+// re-running guided setup after a job change records the OLD duties against the
+// NEW role. Text similarity therefore cannot be an ownership signal.
+const session1 = mergeIntakeIntoDossier(emptyDossier(NOW), {
+  ...initialIntake, fullName: "Jordan Reyes", email: "j@e.com", targetJobTitle: "IT Support Specialist",
+  currentTitle: "Help Desk Technician", currentCompany: "Northwind IT", currentTime: "2024 - Present",
+  tools: "Okta", responsibilities: "Troubleshot laptops for the Northwind service desk\nReset passwords in Okta",
+  outcomes: "Cut average ticket resolution time in half", education: "AA",
+}, "guided", true, "g", NOW);
+// The user changes jobs and reopens /resume-builder: the form is prefilled from
+// the dossier, and they type the new employer over the old one.
+const prefilled = intakeFromDossier(session1, "Operations Coordinator");
+const session2 = mergeIntakeIntoDossier(session1, {
+  ...prefilled, currentTitle: "Operations Coordinator", currentCompany: "Harbor Logistics", currentTime: "2026 - Present",
+  previousTitle: "Help Desk Technician", previousCompany: "Northwind IT", previousTime: "2024 - 2026",
+}, "guided", true, "g", NOW);
+const jobChangeLanes = [{ id: "lane-jc", title: "Operations Coordinator", status: "active", whyFit: "x", resumeAngle: "y", proof: [], gaps: [], keywords: [], source: "library", createdAt: NOW }];
+const jobChangePack = generateResumePack(session2, jobChangeLanes, NOW);
+const harbor = jobChangePack.variants[0].resume.experience.find((r) => r.company === "Harbor Logistics");
+const northwind = jobChangePack.variants[0].resume.experience.find((r) => r.company === "Northwind IT");
+L(`  rendered: ${jobChangePack.variants[0].resume.experience.map((r) => `${r.title}@${r.company}[${r.bullets.length}]`).join(", ") || "(none)"}`);
+expect("the new employer does not inherit the previous job's duties",
+  !(harbor?.bullets ?? []).some((b) => /Northwind service desk|Okta/i.test(b)),
+  JSON.stringify(harbor?.bullets));
+expect("evidence carries an explicit owning roleId",
+  session2.evidence.some((item) => typeof item.roleId === "string" && item.roleId.length > 0));
+expect("no evidence record is owned by two roles",
+  new Set(session2.evidence.filter((e) => e.roleId).map((e) => e.id)).size === session2.evidence.filter((e) => e.roleId).length);
+void northwind;
+
+H("T-4 — corroboration, projects, and the recovery path");
+// Two legitimate employers recording the SAME responsibility must each keep
+// their own record: identity includes ownership, so they do not collapse.
+const twoOwners = ["role-alpha", "role-beta"].map((rid) =>
+  evidenceRecord("responsibility", "Managed inbound shipments and carrier handoffs", "manual", true, NOW, { roleId: rid }));
+expect("identical text at two employers yields two distinct owned records",
+  twoOwners[0].id !== twoOwners[1].id && twoOwners[0].roleId !== twoOwners[1].roleId);
+
+// A short corroborating fragment must not vouch for a longer foreign fact.
+const legacyShared = { ...evidenceRecord("responsibility", "Troubleshot Northwind laptops for the customer service floor", "manual", true, NOW), id: "ev-legacy" };
+const legacyRoles = [
+  { id: "r-now", title: "Help Desk Technician", employer: "Northwind IT", startDate: "2024", endDate: "", current: true, responsibilities: ["Troubleshot Northwind laptops for the customer service floor"], tools: [], outcomes: [], evidenceIds: ["ev-legacy"] },
+  { id: "r-old", title: "Security Guard", employer: "Sentinel Group", startDate: "2020", endDate: "2024", current: false, responsibilities: ["customer service"], tools: [], outcomes: [], evidenceIds: ["ev-legacy"] },
+];
+const legacyPack2 = generateResumePack({ ...emptyDossier(NOW), roles: legacyRoles, evidence: [legacyShared], approvedClaims: [legacyShared.detail] }, jobChangeLanes, NOW);
+const sentinel2 = legacyPack2.variants[0].resume.experience.find((r) => r.company === "Sentinel Group");
+expect("a two-word fragment cannot corroborate a foreign fact", !sentinel2,
+  sentinel2 ? `Sentinel Group prints ${JSON.stringify(sentinel2.bullets)}` : "");
+
+// A project must not reprint an employer's owned facts.
+const indieIntake = { ...initialIntake, fullName: "Sam Ito", email: "s@e.com", targetJobTitle: "Operations Coordinator",
+  currentTitle: "Operations Associate", currentCompany: "Harbor Logistics", currentTime: "2021 - Present",
+  responsibilities: "Coordinated inbound shipments", outcomes: "Cut average ticket resolution time in half",
+  independentWorkType: "Dog walking side business", education: "BA" };
+const indieDossier = mergeIntakeIntoDossier(emptyDossier(NOW), indieIntake, "guided", true, "g", NOW);
+const indiePack = generateResumePack(indieDossier, jobChangeLanes, NOW);
+const indieProject = indiePack.variants[0].resume.experience.find((r) => r.kind === "project");
+L(`  project bullets: ${JSON.stringify(indieProject?.bullets ?? null)}`);
+expect("an independent-work project does not reprint the employer's facts",
+  !(indieProject?.bullets ?? []).some((b) => /Coordinated inbound shipments|ticket resolution/i.test(b)),
+  JSON.stringify(indieProject?.bullets));
 
 L();
 L("=".repeat(78));

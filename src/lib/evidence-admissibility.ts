@@ -49,29 +49,101 @@ const TARGET_PREFERENCE_PATTERNS = [
   /^\s*i\s+(?:want|would like|hope)\s+to\b/i
 ];
 
-// Verbs whose negation, when the CANDIDATE THEMSELVES is the subject, reads as
-// a self-declared gap. Inflections are matched so "have not managed" is caught.
-const GAP_VERBS = "manage|own|lead|implement|hold|have|work|use|track|measure";
-const GAP_VERB_FORMS = `(?:${GAP_VERBS})(?:d|s|es|ed|ing|n)?`;
+// ---------------------------------------------------------------------------
+// Self-declared gap detection
+//
+// Two failure modes have to be avoided at once, and an earlier attempt at this
+// traded one for the other:
+//
+//   FALSE POSITIVE — an ordinary achievement is read as a gap and withheld:
+//     "Ensured contractors did not work without a valid permit"
+//     "We did not have a single security breach in 18 months"
+//   FALSE NEGATIVE — a genuine self-reported gap is treated as a claim and
+//   printed on the résumé, which is far worse:
+//     "Currently do not have leadership experience"
+//     "Unfortunately did not manage anyone directly"
+//
+// Sentence position is the wrong signal: an adverb in front ("Currently…",
+// "Honestly…") defeats a leading anchor. Two signals are used instead, and BOTH
+// must hold:
+//   1. SUBJECT — the negation is about the candidate, not a third party. The
+//      word immediately before the auxiliary decides it; adverbs are skipped.
+//   2. OBJECT — what is negated is evidence, a credential, or people managed.
+//      "did not have a security breach" negates a bad outcome (an achievement);
+//      "do not have a degree" negates a credential (a gap).
+// ---------------------------------------------------------------------------
 
-// A negation only signals a gap when it is the candidate reporting about
-// themselves — i.e. at the start of a sentence, or with an explicit first-person
-// subject. Ordinary security, compliance and operations accomplishments put the
-// negation inside a subordinate clause about a THIRD PARTY:
-//   "Ensured contractors did not work without a valid permit"
-//   "Verified that unauthorized visitors did not have building access"
-//   "Documented incidents so auditors did not have to reconstruct the timeline"
-// Those are achievements, not gaps. Matching them destroyed real work history.
-const SELF_REPORT_LEAD = "(?:^|[.;!?]\\s+)(?:i|we)?\\s*";
+const GAP_VERBS = "manage|own|lead|implement|hold|have|work|use|track|measure|supervise|report";
+// Regular inflections plus the irregular past forms of lead/hold/have, which a
+// suffix rule cannot reach ("have not led a team").
+const GAP_VERB_FORMS = `(?:(?:${GAP_VERBS})(?:d|s|es|ed|ing|n)?|led|held|had)`;
+const AUXILIARIES = "do|does|did|have|has|don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t";
+
+// Nouns whose ABSENCE is a gap in a candidate's evidence.
+const GAP_OBJECTS =
+  /\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certifications?|certificate|degree|diploma|qualifications?|licen[cs]e[sd]?|background|history|training|education|supervis\w*|budget|p&l|team|teams|reports?|anyone|anybody|people|staff|direct\s+reports?|numbers?|data|saas|software\s+implementation|project[-\s]?management)\b/i;
+
+// Words that may sit between the subject and the auxiliary without changing who
+// the subject is. Adverbs are open-class, so anything ending in -ly counts too.
+const SUBJECT_SKIP = /^(?:currently|honestly|truthfully|unfortunately|sadly|generally|really|still|yet|ever|also|now|today|personally|admittedly|frankly|so|far|right|just|simply|even|actually)$/i;
+const FIRST_PERSON = /^(?:i|we|my|our|me|us)$/i;
+// A subordinator before the auxiliary means the clause subject is elided from
+// the candidate's own sentence, e.g. "Built the runbook so we did not have…".
+const SUBORDINATOR = /^(?:that|so|because|since|until|till|when|where|which|who|whom|whose|while|after|before|if|and|but|or|then|thus)$/i;
+const DETERMINER = /^(?:the|that|this|these|those|a|an|my|our|his|her|their|its)$/i;
+const PREPOSITION = /^(?:in|at|on|during|for|with|from|by|under|over|across|after|before|since|throughout|within)$/i;
+
+/**
+ * True when a negated clause is the CANDIDATE reporting a gap in their own
+ * evidence, rather than an accomplishment described with a negation.
+ */
+function hasSelfDeclaredGapClause(value: string): boolean {
+  const pattern = new RegExp(`\\b(${AUXILIARIES})\\b(\\s+not)?\\s+(${GAP_VERB_FORMS})\\b`, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value)) !== null) {
+    const auxiliary = match[1] ?? "";
+    const negated = Boolean(match[2]) || /n['’]?t$/i.test(auxiliary);
+    if (!negated) continue;
+
+    // --- 1. Whose gap is it? Walk left, skipping adverbs, to find the subject.
+    const before = value.slice(0, match.index).trim().split(/\s+/).filter(Boolean);
+    const wordAt = (i: number) => (before[i] ?? "").replace(/[^A-Za-z'’&]/g, "");
+    let subject = "";
+    for (let i = before.length - 1; i >= 0; i -= 1) {
+      const word = wordAt(i);
+      if (!word) continue;
+      if (SUBJECT_SKIP.test(word) || /ly$/i.test(word)) continue;
+      // A leading adverbial phrase is not a subject: in "In that role did not
+      // manage people", "role" is the object of a preposition, and the real
+      // subject is the elided candidate.
+      if (DETERMINER.test(wordAt(i - 1)) && PREPOSITION.test(wordAt(i - 2))) { i -= 2; continue; }
+      if (PREPOSITION.test(wordAt(i - 1))) { i -= 1; continue; }
+      subject = word;
+      break;
+    }
+    // No subject at all (clause start, or only adverbs) = the candidate.
+    // A first-person subject is the candidate. A subordinator means the subject
+    // was elided, which in practice is still the candidate speaking.
+    // Anything else — "contractors", "visitors", "auditors", "they" — is a third
+    // party, and negating THEIR action is an accomplishment, not a gap.
+    const selfReported = subject === "" || FIRST_PERSON.test(subject) || SUBORDINATOR.test(subject);
+    if (!selfReported) continue;
+
+    // --- 2. Is evidence being negated, or a bad outcome? Read the object up to
+    // the next preposition, which usually starts a qualifying phrase.
+    const rest = value.slice(match.index + match[0].length);
+    const object = rest.split(/\b(?:on|in|at|for|during|since|with|without|across|over|under|from|to|by)\b/i)[0] ?? rest;
+    if (GAP_OBJECTS.test(object)) return true;
+  }
+  return false;
+}
+
 const GAP_PATTERNS = [
   /^\s*no\s+(?![-\s]?code\b)(?=.*\b(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certifications?|degree|qualification|background|history|saas|software\s+implementation|project[-\s]?management)\b)/i,
-  new RegExp(`${SELF_REPORT_LEAD}(?:do|does|did|have|has)\\s+not\\s+${GAP_VERB_FORMS}\\b`, "i"),
-  new RegExp(`\\b(?:i|we)\\s+(?:do|does|did|have|has)\\s+not\\s+${GAP_VERB_FORMS}\\b`, "i"),
-  new RegExp(`${SELF_REPORT_LEAD}(?:don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t)\\s+${GAP_VERB_FORMS}\\b`, "i"),
-  new RegExp(`\\b(?:i|we)\\s+(?:don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t)\\s+${GAP_VERB_FORMS}\\b`, "i"),
+  /\b(?:i|we)\s+(?:lack|lacks|lacking)\b/i,
   /\b(?:lack|lacks|lacking|without)\s+(?:formal\s+)?(?:experience|metrics?|outcomes?|credentials?|certifications?|degree|leadership|ownership|qualification)\b/i,
   /\bnot\s+(?:yet\s+)?(?:experienced|certified|qualified|credentialed)\b/i,
-  /\b(?:not|never)\s+responsible\s+for\b/i
+  /\b(?:i|we)\s+(?:am|are|was|were)\s+(?:not|never)\s+responsible\s+for\b/i
 ];
 
 const CONSTRAINT_PATTERNS = [
@@ -98,7 +170,7 @@ export function classifyEvidenceAdmissibility(text: string): EvidenceAdmissibili
   if (isUncertaintyStatement(value)) return "uncertainty";
   if (containsTerminationReason(value)) return "separation_reason";
   if (TARGET_PREFERENCE_PATTERNS.some((pattern) => pattern.test(value))) return "preference";
-  if (GAP_PATTERNS.some((pattern) => pattern.test(value))) return "gap";
+  if (GAP_PATTERNS.some((pattern) => pattern.test(value)) || hasSelfDeclaredGapClause(value)) return "gap";
   if (CONSTRAINT_PATTERNS.some((pattern) => pattern.test(value))) return "constraint";
   return "claim";
 }
@@ -172,15 +244,29 @@ function normalizeProjectSemantics(project: DossierProject): DossierProject {
   return { ...project, name: organization, organization: type };
 }
 
+/** A record the user approved that is not eligible for career materials. */
+export type QuarantinedEvidence = {
+  id: string;
+  /** The user's exact wording, unmodified. */
+  detail: string;
+  /** The kind the user's record still carries — sanitization does not change it. */
+  kind: EvidenceKind;
+  category: Exclude<EvidenceAdmissibility, "claim">;
+  /** Human-readable reason, for the UI to show the user what was withheld and why. */
+  reason: string;
+};
+
 export type DossierSanitization = {
   dossier: CareerDossier;
   /**
-   * Approved records reclassified as context-only. They are QUARANTINED, not
-   * deleted: the record and the user's exact wording stay in `dossier.evidence`
-   * under a context label so the user can see it and correct it. Nothing here
-   * can reach generated career materials.
+   * Approved records that are not eligible for career materials. They are
+   * QUARANTINED, not deleted and not rewritten: the record stays in
+   * `dossier.evidence` exactly as the user left it. Eligibility is DERIVED on
+   * every read, so correcting the wording restores the record automatically.
    */
   quarantinedEvidenceIds: string[];
+  /** Same set with the reason attached, so a surface can name what was withheld. */
+  quarantined: QuarantinedEvidence[];
   contextItems: string[];
 };
 
@@ -190,23 +276,27 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
   );
   const contextItems = approvedContext.map((item) => item.detail);
   const quarantinedEvidenceIds = approvedContext.map((item) => item.id);
-
-  // Sanitization runs on every state READ (see use-command-center.ts), so it
-  // must never destroy user data. Previously an approved record that failed
-  // classification was dropped outright, which — combined with a
-  // false-positive gap pattern — silently erased real approved work history,
-  // its owning role, and the résumé Experience section built from it, with no
-  // name, no diff and no undo. Now the record is relabelled and retained; only
-  // its ELIGIBILITY for career materials changes.
-  const evidence = dossier.evidence.map((item): DossierEvidenceRecord => {
-    const category = contextCategory(item.kind, item.detail);
-    if (category === "claim") return item;
-    return {
-      ...item,
-      kind: category === "preference" ? "goal" : "constraint",
-      label: contextLabel(category)
-    };
+  const quarantined: QuarantinedEvidence[] = approvedContext.map((item) => {
+    const category = contextCategory(item.kind, item.detail) as Exclude<EvidenceAdmissibility, "claim">;
+    return { id: item.id, detail: item.detail, kind: item.kind, category, reason: contextLabel(category) };
   });
+
+  // Sanitization runs on every state READ (see use-command-center.ts, which
+  // persists the result), so it must not mutate the user's record at all.
+  //
+  // Two earlier designs were wrong. Deleting an approved record erased real
+  // work history. Rewriting its `kind` to "constraint" was silently
+  // irreversible: contextCategory() short-circuits on kind before it ever
+  // classifies the text, so a quarantined record could never be reclassified —
+  // correcting the wording did nothing, and the label churned between two
+  // values on successive reads, persisting a different state each time.
+  //
+  // Admissibility is now DERIVED, never stored. The record is returned exactly
+  // as the user left it; only its ELIGIBILITY for career materials is computed,
+  // and that computation re-runs from the current text on every read. Fixing a
+  // misclassification — in the user's wording or in GAP_PATTERNS — restores the
+  // record automatically, including for dossiers already on disk.
+  const evidence = dossier.evidence;
 
   const approvedProfessionalIds = new Set(
     evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)).map((item) => item.id)
@@ -276,6 +366,7 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
 
   return {
     quarantinedEvidenceIds,
+    quarantined,
     contextItems,
     dossier: {
       ...dossier,

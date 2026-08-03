@@ -160,10 +160,13 @@ export default function DossierPage() {
     if (!role.title.trim() && !role.employer.trim()) return;
     const now = new Date().toISOString();
     const responsibilities = values(role.responsibilities);
-    const roleEvidence = evidenceRecord("role", [role.title, role.employer, role.dates].filter(Boolean).join(" · "), "manual", true, now, { label: "Employment record" });
-    const responsibilityEvidence = responsibilities.map((item) => evidenceRecord("responsibility", item, "manual", true, now, { label: "Role responsibility" }));
+    // The role id is minted first so every record collected here can be stamped
+    // with its owner — a résumé role may only cite evidence it owns.
+    const roleId = createId("role");
+    const roleEvidence = evidenceRecord("role", [role.title, role.employer, role.dates].filter(Boolean).join(" · "), "manual", true, now, { label: "Employment record", roleId });
+    const responsibilityEvidence = responsibilities.map((item) => evidenceRecord("responsibility", item, "manual", true, now, { label: "Role responsibility", roleId }));
     const record: DossierRole = {
-      id: createId("role"), title: role.title.trim(), employer: role.employer.trim(), startDate: role.dates.trim(), endDate: "",
+      id: roleId, title: role.title.trim(), employer: role.employer.trim(), startDate: role.dates.trim(), endDate: "",
       current: /present|current|now/i.test(role.dates), responsibilities, tools: [], outcomes: [],
       evidenceIds: [roleEvidence.id, ...responsibilityEvidence.map((item) => item.id)]
     };
@@ -351,10 +354,28 @@ export default function DossierPage() {
   }
 
   function editRole(id: string, form: FormData) {
-    save({ ...dossier, roles: dossier.roles.map((item) => item.id === id ? {
-      ...item, title: String(form.get("title") ?? "").trim(), employer: String(form.get("employer") ?? "").trim(),
-      startDate: String(form.get("dates") ?? "").trim(), responsibilities: values(String(form.get("responsibilities") ?? ""))
-    } : item) });
+    const now = new Date().toISOString();
+    const responsibilities = values(String(form.get("responsibilities") ?? ""));
+    // Typing a responsibility here must actually create evidence owned by this
+    // role. Previously this wrote the text onto the role but minted nothing, so
+    // an employer carrying no evidence of its own could never be brought back
+    // into the résumé — the role stayed bullet-less no matter what the user did.
+    const responsibilityEvidence = responsibilities.map((detail) =>
+      evidenceRecord("responsibility", detail, "manual", true, now, { label: "Role responsibility", roleId: id })
+    );
+    const known = new Set(dossier.evidence.map((item) => item.id));
+    const additions = responsibilityEvidence.filter((item) => !known.has(item.id));
+    save({
+      ...dossier,
+      roles: dossier.roles.map((item) => item.id === id ? {
+        ...item, title: String(form.get("title") ?? "").trim(), employer: String(form.get("employer") ?? "").trim(),
+        startDate: String(form.get("dates") ?? "").trim(), responsibilities,
+        evidenceIds: [...new Set([...item.evidenceIds, ...responsibilityEvidence.map((record) => record.id)])]
+      } : item),
+      responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])],
+      evidence: [...dossier.evidence, ...additions],
+      approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])]
+    });
   }
 
   function editProject(id: string, form: FormData) {
