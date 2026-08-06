@@ -10,7 +10,7 @@ import {
   isProfessionalEvidence,
   sanitizeResumeForProfessionalUse
 } from "@/lib/evidence-admissibility";
-import { stripTerminationReasons } from "@/lib/truth-guards";
+import { possibleDisclosure } from "@/lib/truth-guards";
 
 export type PackExportFormat = "pdf" | "docx";
 export type SectionKey = ResumeVariant["sectionOrder"][number];
@@ -28,7 +28,14 @@ function sourceContainsWithheldFact(resume: ResumePackage): boolean {
     resume.linkedinSummary,
     ...resume.experience.flatMap((role) => [role.title, role.company, ...role.bullets])
   ];
-  return values.some((value) => stripTerminationReasons(value ?? "").withheld);
+  // A separation sentence dropped from product-authored prose must still be
+  // REPORTED. Silent withholding is exactly what the review lifecycle exists
+  // to prevent — the user is told what was left out, always.
+  return values.some((value) =>
+    (value ?? "")
+      .split(/(?<!\.\.)(?<=[.!?])\s+/)
+      .some((sentence) => possibleDisclosure(sentence)?.reason === "separation")
+  );
 }
 
 // One render plan for PDF, DOCX, and plain text. The resume is sanitized at the

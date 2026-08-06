@@ -26,6 +26,14 @@ export type IntakeData = {
   phone: string;
   website: string;
   targetJobTitle: string;
+  /**
+   * Sentences the user REVIEWED and chose to keep despite a disclosure flag.
+   * Generation withholds a flagged sentence unless it appears here, so the
+   * safe default holds even when the generator is called directly with no
+   * dossier: no record to ask against means the sentence waits, it is never
+   * deleted and never rewritten.
+   */
+  disclosureApproved?: string[];
   roleFamily: RoleFamily;
   currentTitle: string;
   currentCompany: string;

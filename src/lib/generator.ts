@@ -7,7 +7,7 @@ import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
 import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
-import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
+import { isUncertaintyStatement, possibleDisclosure, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
 // ---------------------------------------------------------------------------
@@ -944,8 +944,8 @@ function buildScopeItems(data: IntakeData) {
 
 // Free-text responsibilities become phrase fragments. Fragments that read as
 // role statements or third-party narration are dropped rather than templated.
-function splitResponsibilityText(value: string) {
-  const { text } = stripTerminationReasons(value);
+function splitResponsibilityText(value: string, data?: IntakeData) {
+  const text = value;
   // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
   // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
   // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
@@ -963,14 +963,42 @@ function splitResponsibilityText(value: string) {
     // took." reached the résumé, summary and LinkedIn summary as one bullet.
     // Look back TWO characters instead: a run of dots means an ellipsis.
     .split(/\n|;|(?<!\.\.)(?<=[.!?])\s+/)
-    .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
+    .map((item) => normalizeSentenceItem(item))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
+    // A sentence the classifier flagged waits for the user. It is NOT altered
+    // and NOT removed from their intake — it simply does not enter the draft
+    // until they resolve it. An explicit keep puts it straight back.
+    .filter((item) => {
+      if (!possibleDisclosure(item)) return true;
+      // Both sides MUST run through the same normalizer. They did not: the
+      // approval list carries the user's raw sentence ("I was laid off after I
+      // completed the certification.") while `item` has already had its leading
+      // "I " and terminal period stripped. The two could never be equal, so an
+      // explicit Keep authorised nothing and the sentence stayed withheld —
+      // silently, which is the failure mode this lifecycle exists to prevent.
+      const approved = (data?.disclosureApproved ?? []).map((entry) =>
+        normalizeSentenceItem(entry).toLowerCase()
+      );
+      return approved.includes(item.toLowerCase());
+    })
     .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
     // The narration filter that used to sit here DELETED any sentence mentioning
     // "my manager", "they", "me" and so on. It destroyed true statements —
     // "Reported to my manager and the shift lead." vanished from every surface —
     // while the leftover token "manager" separately authorised an unrelated
     // canned claim. Narration is the user's own wording and is kept.
+}
+
+/**
+ * The single canonical form for a typed sentence. Used both when splitting the
+ * user's intake into items and when matching their Keep decisions against those
+ * items, so the two can never drift apart.
+ */
+function normalizeSentenceItem(item: string) {
+  return cleanWhitespace(item)
+    .replace(/[.!?]+$/, "")
+    .replace(/^(i|we)\s+(also\s+)?/i, "")
+    .replace(/^(and|or|plus|also)\s+/i, "");
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
@@ -997,7 +1025,7 @@ function buildUserResponsibilityList(data: IntakeData) {
     // names a sector, not a duty — rendering it as a responsibility produced
     // fused fake bullets like "Supported Escalation handling, Retail, and the
     // shift lead."
-    ...splitResponsibilityText(data.responsibilities).map(normalizeResponsibility)
+    ...splitResponsibilityText(data.responsibilities, data).map(normalizeResponsibility)
   ])
     .filter((item) => !looksLikeNarrationFragment(item))
     .slice(0, 10);
@@ -1212,7 +1240,7 @@ function buildOutcomeSupport(data: IntakeData) {
   // clause; longer outcome text becomes its own bullet instead (never spliced
   // mid-sentence), and uncertainty statements never become claims.
   const selected = compact(data.selectedOutcomes.filter((outcome) => outcome.split(/\s+/).length <= 4).map((outcome) => outcome.toLowerCase()));
-  const custom = cleanWhitespace(stripTerminationReasons(data.outcomes).text).replace(/^improved\s+/i, "");
+  const custom = cleanWhitespace(data.outcomes).replace(/^improved\s+/i, "");
   if (selected.length) return sentenceList(selected.slice(0, 2));
   if (custom && custom.length <= 60 && !isWeakFreeText(custom) && !isUncertaintyStatement(custom)) return custom;
   return "";
@@ -1221,7 +1249,7 @@ function buildOutcomeSupport(data: IntakeData) {
 // Sentence-like outcome text the user wrote becomes standalone bullets in
 // resume voice (first-person stripped, termination reasons withheld).
 function userOutcomeBullets(data: IntakeData) {
-  const { text } = stripTerminationReasons(data.outcomes);
+  const text = data.outcomes;
   return text
     .split(/(?<=[.!?])\s+|\n+/)
     .map((sentence) => cleanWhitespace(sentence))
@@ -2383,12 +2411,14 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   // surface, even if it slipped through a free-text field.
   const withGuards = (resume: ResumePackage): ResumePackage => ({
     ...resume,
-    summary: stripTerminationReasons(resume.summary).text,
-    linkedinSummary: stripTerminationReasons(resume.linkedinSummary).text,
-    linkedinHeadline: stripTerminationReasons(resume.linkedinHeadline).text,
+    // Product-authored prose only. The bullets below keep the user's own
+    // sentences exactly as they wrote and resolved them.
+    summary: withholdSeparationFromGeneratedProse(resume.summary),
+    linkedinSummary: withholdSeparationFromGeneratedProse(resume.linkedinSummary),
+    linkedinHeadline: withholdSeparationFromGeneratedProse(resume.linkedinHeadline),
     experience: resume.experience.map((role) => ({
       ...role,
-      bullets: role.bullets.map((bullet) => stripTerminationReasons(bullet).text).filter(Boolean)
+      bullets: role.bullets.filter(Boolean)
     }))
   });
 

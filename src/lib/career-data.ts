@@ -231,6 +231,7 @@ export const initialIntake: IntakeData = {
   phone: "",
   website: "",
   targetJobTitle: "",
+  disclosureApproved: [],
   roleFamily: "Customer Success",
   currentTitle: "",
   currentCompany: "",

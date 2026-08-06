@@ -144,91 +144,125 @@ function finishClause(value: string): string {
 
 // Removes termination-reason clauses from a sentence while keeping the rest
 // usable. Returns the cleaned text and whether anything was withheld.
-export type WithheldCategory = "separation" | "personal";
+/**
+ * WHY THIS FUNCTION NO LONGER CUTS ANYTHING
+ * -----------------------------------------
+ * It used to strip "sensitive" clauses out of the user's sentences. Seven
+ * review rounds established that a lexical classifier cannot decide whose
+ * situation a sentence describes, and the damage landed on this product's core
+ * audience:
+ *
+ *   "I set up my treatment room before every client arrives."   -> deleted
+ *   "I cover the front desk at my surgery on a Saturday."       -> deleted
+ *   "I keep my health and safety training up to date."          -> deleted
+ *   "I had to look after the whole floor when we were short."   -> deleted
+ *   "One of my residents got sick and I called the nurse."      -> deleted
+ *
+ * A receptionist's surgery is a clinic. A therapist's treatment room is a
+ * room. Health and safety is a certificate. Three successive narrowings each
+ * traded one amputation for another.
+ *
+ * Partial stripping was worse than the deletions: the residue was handed an
+ * invented lead verb, so "I dropped out of my nursing degree after one
+ * semester." exported as the bullet "Supported one semester."
+ *
+ * THE RULE NOW: the classifier RAISES ITS HAND, it does not swing the axe. It
+ * returns the text untouched plus a possible-disclosure flag. Only the user
+ * resolves it. See possibleDisclosure() below and the needs_review lifecycle
+ * in src/lib/dossier.ts.
+ */
+export type DisclosureReason = "health" | "separation" | "education" | "financial";
 
-/** Which category caused a withholding, so the receipt can say so truthfully. */
-export function withheldCategory(text: string): WithheldCategory | null {
-  if (containsTerminationReason(text)) return "separation";
-  if (containsSensitiveDisclosure(text)) return "personal";
+export type DisclosureFlag = { reason: DisclosureReason };
+
+const disclosurePatterns: Array<[DisclosureReason, RegExp]> = [
+  ["separation", /\b(?:was|were|got|been)\s+(?:laid\s+off|let\s+go|terminated|fired|dismissed|sacked|made\s+redundant)\b/i],
+  ["separation", /\blaid\s+off\b/i],
+  ["separation", /\b(?:left|quit|resigned)\s+(?:the\s+)?(?:job|company|role|position|post)\b/i],
+  ["separation", /\b(?:left|quit|resigned)\b[^.!?]{0,50}?\bbecause\b/i],
+  ["separation", /\b(?:contract|role|position)\s+(?:was\s+)?not\s+renewed\b/i],
+  // Organisational-separation phrasings. These were in the original guard and
+  // I dropped them when rewriting the classifier; they still need to raise a
+  // hand, they just no longer cut. "Managed the reorganization of the
+  // stockroom shelving" is deliberately NOT matched — the subject must be the
+  // employer or a unit of it, not a thing the user organised.
+  ["separation", /\b(?:company|employer|organi[sz]ation|department|team|division|group|unit|store|site|branch)\s+(?:was\s+|were\s+|later\s+|then\s+)*(?:closed|shut\s+down|folded|went\s+under|downsized|reorganiz\w*|reorganis\w*|restructur\w*|dissolved|eliminated)\b/i],
+  ["separation", /\b(?:company|employer|organi[sz]ation|department|team|division)\s+(?:underwent|went\s+through|had|announced)\s+(?:a\s+)?(?:round\s+of\s+)?layoffs?\b/i],
+  ["separation", /\bleadership\s+(?:decided\s+to\s+)?eliminat\w*\s+(?:the\s+)?(?:role|position|team|department)\b/i],
+  ["separation", /\b(?:role|position|job|department|team)\s+(?:was\s+)?eliminated\b/i],
+  ["separation", /\breduction\s+in\s+force\b/i],
+  // More phrasings dropped when the classifier was rewritten. Each was caught
+  // by a test, which is why the suite is adjudicated rather than normalised.
+  ["separation", /\blost\s+(?:my|the)\s+(?:job|role|position)\b/i],
+  ["separation", /\b(?:asked|forced|pushed)\s+to\s+resign\b/i],
+  ["separation", /\b(?:my|our|the)\s+(?:hours|shifts)\s+(?:were|was)\s+cut\b/i],
+  // Caught by the rewritten assertions: this phrasing was matched by NOTHING,
+  // and flowed verbatim into the summary ("Brings My position was cut because
+  // I flagged the billing error with a transition focus toward…").
+  ["separation", /\b(?:my|our|the)\s+(?:position|role|job|post)\s+(?:was|were)\s+(?:cut|eliminated|abolished|removed)\b/i],
+  ["health", /\bon\s+(?:medical|sick|disability|stress)\s+leave\b/i],
+  ["health", /\b(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b[^.!?]{0,40}?\b(?:sick|ill|unwell|injured|diagnosed|surgery|hospital)\b/i],
+  ["health", /\bhad\s+to\s+(?:care\s+for|look\s+after)\s+(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b/i],
+  ["health", /\b(?:maternity|paternity|parental|bereavement|sick)\s+leave\b/i],
+  ["health", /\bmy\s+own\s+(?:health|illness|diagnosis|disability|recovery)\b/i],
+  ["education", /\b(?:dropped\s+out|flunked\s+out)\b/i],
+  ["education", /\bhad\s+to\s+(?:drop\s+out|withdraw|leave)\b[^.!?]{0,30}\b(?:school|college|university|degree|program|course)\b/i],
+  ["financial", /\b(?:could\s*n[o']?t|couldn't)\s+afford\b/i],
+  ["financial", /\b(?:financial|money)\s+(?:reasons|hardship|trouble|problems)\b/i]
+];
+
+/**
+ * Raises a hand. Returns a reason when the sentence MIGHT be a personal
+ * disclosure — never a verdict, and never a reason to change the text.
+ * Deliberately imprecise in the safe direction: a false flag costs the user
+ * one review decision, while a missed flag costs them only what they already
+ * chose to type.
+ */
+export function possibleDisclosure(text: string): DisclosureFlag | null {
+  for (const [reason, pattern] of disclosurePatterns) {
+    if (pattern.test(text)) return { reason };
+  }
   return null;
 }
 
-export function stripTerminationReasons(text: string): { text: string; withheld: boolean; category?: WithheldCategory } {
-  if (!containsTerminationReason(text) && !containsSensitiveDisclosure(text)) return { text, withheld: false };
-  const category: WithheldCategory = containsTerminationReason(text) ? "separation" : "personal";
+export const DISCLOSURE_REASON_LABEL: Record<DisclosureReason, string> = {
+  health: "possible health or personal circumstance",
+  separation: "possible separation or departure",
+  education: "possible education interruption",
+  financial: "possible financial circumstance"
+};
 
-  const cleanedSentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => {
-      if (!containsTerminationReason(sentence) && !containsSensitiveDisclosure(sentence)) return sentence;
+/**
+ * Export-time safety net for text the PRODUCT wrote — summaries, headlines,
+ * LinkedIn prose. This is not user evidence, so removing a sentence here does
+ * not delete anything the user authored; it stops the product from asserting a
+ * separation in its own voice.
+ *
+ * WHOLE SENTENCES ONLY. Partial stripping is retired everywhere: it was what
+ * turned "I dropped out of my nursing degree after one semester." into the
+ * fabricated bullet "Supported one semester." Nothing here ever emits a
+ * fragment.
+ *
+ * User bullets are NOT passed through this. If the user reviewed a flagged
+ * sentence and chose to keep it, it is theirs and it stays.
+ */
+export function withholdSeparationFromGeneratedProse(text: string): string {
+  if (!text) return text;
+  const sentences = text.split(/(?<!\.\.)(?<=[.!?])\s+/);
+  const kept = sentences.filter((sentence) => {
+    const flag = possibleDisclosure(sentence);
+    return !flag || flag.reason !== "separation";
+  });
+  return kept.join(" ").replace(/\s{2,}/g, " ").trim();
+}
 
-      // First: if the sentence already has comma/semicolon/dash-separated
-      // clauses, drop only the ones that carry the reason. A comma between
-      // digits is a thousands separator ("4,000 tickets"), never a clause
-      // boundary — splitting there once mangled a summary to "Resolved 4".
-      const punctuationClauses = sentence.split(/(?<!\d),|,(?!\d)|;|\s+—\s+|\s+-\s+/);
-      if (punctuationClauses.length > 1) {
-        const kept = punctuationClauses.filter((clause) => !isUnsafeClause(clause));
-        if (kept.length > 0) return finishClause(kept.join(", "));
-      }
-
-      // Second: no punctuation isolated the reason (e.g. "I managed vendor
-      // contracts worth $2M annually until I was laid off in June 2026" is
-      // one clause with no comma) — a temporal/causal conjunction almost
-      // always introduces the reason as a trailing dependent clause, so
-      // split there instead of discarding safe content along with it.
-      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(until|because|since|whenever|when|after|while|though|although|before)\b\s+(.*)$/i);
-      if (conjunctionMatch) {
-        const [, before, conjunction, after] = conjunctionMatch;
-        const beforeUnsafe = isUnsafeClause(before);
-        const afterUnsafe = isUnsafeClause(after);
-        // Keeping the clause BEFORE the conjunction is safe: it states
-        // something that happened, and the conjunction only bounds when it
-        // stopped. "Managed vendor contracts until I was laid off" → the
-        // contracts were managed.
-        if (!beforeUnsafe && afterUnsafe && before.trim()) return finishClause(before);
-        // Whether the clause AFTER the conjunction may be kept depends on WHICH
-        // conjunction it is — the relation, not merely the presence of one.
-        // Subordinators do not behave alike here:
-        //
-        //   ASSERTING — the dependent clause definitely happened, so deleting
-        //   it amputates a true accomplishment from the résumé:
-        //     "I was laid off AFTER I completed the certification."   → completed
-        //     "I was fired BECAUSE I reported the discrepancy."       → reported
-        //     "I was dismissed WHEN I refused to falsify records."    → refused
-        //     "I was laid off WHILE I ran the night audit."           → ran it
-        //     "Although I was laid off, I completed the audit."       → completed
-        //
-        //   NON-ASSERTING — the clause describes something the termination
-        //   pre-empted, so promoting it asserts the opposite of what was said:
-        //     "I was laid off BEFORE I trained the new hires."        → never trained
-        //     "I was terminated UNTIL I ran the weekly close."        → not assertable
-        //
-        // Treating every subordinator as non-asserting traded fabrication for
-        // silent amputation, which is its own truth failure.
-        const assertsDependentClause = /^(?:after|because|when|whenever|while|since|though|although)$/i.test(conjunction);
-        if (assertsDependentClause && !afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
-      }
-
-      // A sentence-initial concessive puts the asserted clause last with no
-      // clause before the conjunction for the pattern above to match:
-      // "Although I was let go, I finished the audit." Without this the whole
-      // sentence would be withheld and a true accomplishment lost.
-      const leadingConcessive = sentence.match(/^\s*\b(?:though|although)\b\s+(.*)$/i);
-      if (leadingConcessive) {
-        const remainder = leadingConcessive[1];
-        const split = remainder.match(/^(.*?)(?<!\d),\s*(.*)$/);
-        if (split && isUnsafeClause(split[1]) && !isUnsafeClause(split[2]) && split[2].trim()) {
-          return finishClause(split[2]);
-        }
-      }
-
-      // Nothing in the sentence is independently safe from the reason.
-      return "";
-    })
-    .filter(Boolean);
-
-  return { text: cleanedSentences.join(" ").replace(/\s{2,}/g, " ").trim(), withheld: true, category };
+/**
+ * Kept so existing call sites keep compiling, but it NO LONGER MUTATES.
+ * The text comes back exactly as it went in. `withheld` is always false —
+ * nothing is withheld by a heuristic any more; the user decides.
+ */
+export function stripTerminationReasons(text: string): { text: string; withheld: boolean } {
+  return { text, withheld: false };
 }
 
 // First-person framing that reads fine in an intake box but wrong in a

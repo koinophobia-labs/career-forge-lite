@@ -1,5 +1,5 @@
 import type { ExperienceRole, ResumePackage } from "@/types/career";
-import { stripTerminationReasons } from "@/lib/truth-guards";
+import { withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 
 // Structural subset of IntakeData/ResumeSnapshot: everything the plain-text
 // export needs, so saved snapshots serialize without a full intake object.
@@ -47,7 +47,10 @@ export function resumeToText(data: ResumeContactFields, resume: ResumePackage) {
   const contact = [data.email, data.phone, data.website].filter(Boolean).join(" | ");
   // Export-time safety net: termination reasons are never résumé content even
   // if one slipped past the generation-side filter.
-  const summary = stripTerminationReasons(resume.summary).text;
+  // The SUMMARY is product-authored prose, so the export-time net still
+  // applies to it. User bullets below are untouched — they are the user's own
+  // words, already resolved through the disclosure-review lifecycle.
+  const summary = withholdSeparationFromGeneratedProse(resume.summary);
   const sections = [
     `${normalizeHeaderName(data.fullName)}${contact ? `\n${contact}` : ""}`,
     summary.trim() ? `SUMMARY\n${summary.trim()}` : "",

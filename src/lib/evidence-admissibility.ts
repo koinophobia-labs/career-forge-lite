@@ -6,7 +6,7 @@ import {
 import {
   containsTerminationReason,
   isUncertaintyStatement,
-  stripTerminationReasons
+  withholdSeparationFromGeneratedProse
 } from "@/lib/truth-guards";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
@@ -29,6 +29,47 @@ export type EvidenceAdmissibility =
   | "gap"
   | "separation_reason"
   | "uncertainty";
+
+/**
+ * Usable in a generated document.
+ *
+ * A record flagged as a possible disclosure is NOT usable until the user has
+ * resolved it: "needs_review" waits for them, "exclude" is their decision to
+ * leave it off, "keep" is their confirmation that it describes their work.
+ * The record is never deleted and its text is never altered — the only thing
+ * the flag changes is whether generation may draw on it yet.
+ */
+type ReviewableEvidence = {
+  approved: boolean;
+  rejected: boolean;
+  detail?: string;
+  disclosureReview?: string;
+  disclosureReviewedText?: string;
+};
+
+/**
+ * A resolution is STALE when the text has changed since the user reviewed it.
+ * Keeping a sentence and then editing it into something newly sensitive must
+ * not inherit the old approval — the decision belonged to the words that were
+ * on screen.
+ */
+export function disclosureResolutionIsStale(item: ReviewableEvidence): boolean {
+  if (item.disclosureReview !== "keep" && item.disclosureReview !== "exclude") return false;
+  if (item.disclosureReviewedText === undefined) return false;
+  return item.disclosureReviewedText !== (item.detail ?? "");
+}
+
+export function isUsableEvidence(item: ReviewableEvidence): boolean {
+  if (!item.approved || item.rejected) return false;
+  if (item.disclosureReview === "needs_review" || item.disclosureReview === "exclude") return false;
+  // A stale "keep" is not a keep.
+  return !disclosureResolutionIsStale(item);
+}
+
+/** Flagged and still undecided — an export must surface these, not guess. */
+export function needsDisclosureReview(item: ReviewableEvidence): boolean {
+  return item.disclosureReview === "needs_review" || disclosureResolutionIsStale(item);
+}
 
 const PROFESSIONAL_KINDS = new Set<EvidenceKind>([
   "role",
@@ -267,7 +308,10 @@ function targetRoleValues(detail: string): string[] {
 }
 
 export function sanitizeProfessionalLine(value: string): string {
-  const stripped = stripTerminationReasons(value).text.trim();
+  // Sanitization runs over STORED product artifacts during migration, where no
+  // user is present to resolve a flag — so a separation sentence is dropped
+  // whole rather than trimmed down to a salvaged clause.
+  const stripped = withholdSeparationFromGeneratedProse(value).trim();
   if (!stripped) return "";
   return classifyEvidenceAdmissibility(stripped) === "claim" ? stripped : "";
 }
@@ -325,7 +369,7 @@ export type DossierSanitization = {
 
 export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitization {
   const approvedContext = dossier.evidence.filter(
-    (item) => item.approved && !item.rejected && contextCategory(item.kind, item.detail) !== "claim"
+    (item) => isUsableEvidence(item) && contextCategory(item.kind, item.detail) !== "claim"
   );
   const contextItems = approvedContext.map((item) => item.detail);
   const quarantinedEvidenceIds = approvedContext.map((item) => item.id);
@@ -352,10 +396,10 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
   const evidence = dossier.evidence;
 
   const approvedProfessionalIds = new Set(
-    evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)).map((item) => item.id)
+    evidence.filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item)).map((item) => item.id)
   );
   const approvedProfessional = evidence.filter(
-    (item) => item.approved && !item.rejected && isProfessionalEvidence(item)
+    (item) => isUsableEvidence(item) && isProfessionalEvidence(item)
   );
 
   const roles = dossier.roles.flatMap((role) => {
@@ -569,13 +613,13 @@ function sanitizeVariant(
 function sanitizePack(pack: ResumePack, dossier: CareerDossier, forceReview: boolean): ResumePack {
   const validEvidenceIds = new Set(
     dossier.evidence
-      .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+      .filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item))
       .map((item) => item.id)
   );
   const variants = pack.variants.map((variant) => sanitizeVariant(variant, validEvidenceIds, forceReview));
   const first = variants.find((variant) => variant.kind === "recruiter")?.resume ?? variants[0]?.resume;
   const approvedFacts = dossier.evidence
-    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+    .filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item))
     .map((item) => sanitizeProfessionalParagraph(item.detail))
     .filter(Boolean);
   const lanePacks = pack.lanePacks.map((lanePack) => ({

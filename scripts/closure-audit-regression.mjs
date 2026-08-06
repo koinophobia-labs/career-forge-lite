@@ -42,6 +42,11 @@ function loadTsModule(filePath) {
 const { generateResumePackage } = loadTsModule(path.join(root, "src/lib/generator.ts"));
 const { toResumeVoice } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts"));
+const { emptyDossier, evidenceRecord, resolveDisclosure, intakeEligibleForGeneration, pendingDisclosureReviews } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
+const { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } = loadTsModule(path.join(root, "src/lib/evidence-admissibility.ts"));
+const { mergeIntakeIntoDossier } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
+const { resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
+const { withholdSeparationFromGeneratedProse, possibleDisclosure } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -582,6 +587,143 @@ check(
     "the field label still promises one per line",
     /One recurring responsibility per line/.test(profileSource)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Resolution belongs to the evidence VERSION the user reviewed, not to an id
+// that can later contain different text. Blake's regression, run verbatim:
+//
+//   1. Enter flagged evidence in guided intake.
+//   2. Resolve Keep.
+//   3. Generate.
+//   4. Edit the source sentence.
+//   5. Make the edit newly sensitive.
+//   6. Confirm the old Keep decision does not silently authorize the changed
+//      evidence.
+//
+// The failure this prevents is the quiet one: a stale "keep" waving through a
+// sentence the user has never seen, because the id matched.
+{
+  const ORIGINAL = "I was laid off after I completed the certification.";
+  const EDITED = "I was laid off after my cancer treatment ended.";
+  const role = { currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025" };
+
+  // 1. Flagged evidence enters through guided intake.
+  let dossier = emptyDossier();
+  const record = evidenceRecord("responsibility", ORIGINAL, "guided", true, "2026-08-05T00:00:00.000Z", { roleId: "role-1" });
+  dossier = { ...dossier, evidence: [record] };
+  check("1. guided intake flags the sentence for review", needsDisclosureReview(dossier.evidence[0]) && !isUsableEvidence(dossier.evidence[0]));
+  check("   and it is withheld from generation until resolved",
+    !JSON.stringify(generateResumePackage(intake({ ...role, responsibilities: ORIGINAL,
+      ...intakeEligibleForGeneration({ ...initialIntake, ...role, responsibilities: ORIGINAL }, dossier) }))).includes("completed the certification"));
+
+  // 2. The user resolves Keep.
+  dossier = resolveDisclosure(dossier, record.id, "keep", "2026-08-06T00:00:00.000Z");
+  check("2. Keep marks the evidence usable", isUsableEvidence(dossier.evidence[0]) && !needsDisclosureReview(dossier.evidence[0]));
+
+  // 3. Generation now includes their own words.
+  const keptIntake = intakeEligibleForGeneration({ ...initialIntake, ...role, responsibilities: ORIGINAL }, dossier);
+  check("3. the kept sentence reaches the document",
+    JSON.stringify(generateResumePackage(intake({ ...keptIntake, ...role }))).includes("completed the certification"),
+    JSON.stringify(keptIntake.disclosureApproved));
+
+  // 4 + 5. The user edits the source sentence, and the edit is newly sensitive.
+  dossier = { ...dossier, evidence: [{ ...dossier.evidence[0], detail: EDITED }] };
+
+  // 6. The old decision must NOT carry over to text the user never reviewed.
+  check("6. the stale Keep is detected", disclosureResolutionIsStale(dossier.evidence[0]));
+  check("   the edited sentence is NOT authorized by it", !isUsableEvidence(dossier.evidence[0]));
+  check("   it returns to the review queue", needsDisclosureReview(dossier.evidence[0]) && pendingDisclosureReviews(dossier).length === 1);
+  const staleIntake = intakeEligibleForGeneration({ ...initialIntake, ...role, responsibilities: EDITED }, dossier);
+  const staleOut = JSON.stringify(generateResumePackage(intake({ ...staleIntake, ...role })));
+  check("   and nothing from it is published", !/cancer treatment/i.test(staleOut), staleOut.slice(0, 200));
+  check("   while the user's own text is left untouched in storage", dossier.evidence[0].detail === EDITED);
+
+  // Re-resolving the NEW version authorizes the new version only.
+  dossier = resolveDisclosure(dossier, record.id, "keep", "2026-08-06T01:00:00.000Z");
+  check("   re-reviewing the new version restores it", isUsableEvidence(dossier.evidence[0]) && !disclosureResolutionIsStale(dossier.evidence[0]));
+}
+
+// ---------------------------------------------------------------------------
+// The ten invariants pinned for the guided path entering the canonical
+// evidence lifecycle. Asserted rather than asserted-to-be-true.
+{
+  const FLAGGED = "I was laid off after I completed the certification.";
+  const CLEAN = "Resolved customer escalations and documented the outcome.";
+  const NOW = "2026-08-06T00:00:00.000Z";
+  const role = { currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025" };
+  const guidedIntake = { ...initialIntake, ...role, responsibilities: `${FLAGGED}\n${CLEAN}` };
+
+  // I1. Every meaningful guided statement gets a stable evidence ID before generation.
+  const merged = mergeIntakeIntoDossier(emptyDossier(NOW), guidedIntake, "guided", true, "", NOW);
+  const flaggedRec = merged.evidence.find((e) => e.detail === FLAGGED);
+  const cleanRec = merged.evidence.find((e) => e.detail === CLEAN);
+  check("I1. guided statements become identified evidence before generation",
+    Boolean(flaggedRec?.id && cleanRec?.id) && flaggedRec.id !== cleanRec.id,
+    JSON.stringify(merged.evidence.map((e) => [e.id, e.detail])));
+
+  // I2. Flagging never mutates its text.
+  check("I2. flagging leaves the user's text byte-identical", flaggedRec.detail === FLAGGED, flaggedRec.detail);
+
+  // I3. needs_review survives a serialization round trip (refresh / navigation).
+  const rehydrated = JSON.parse(JSON.stringify(merged));
+  check("I3. needs_review persists across a refresh",
+    needsDisclosureReview(rehydrated.evidence.find((e) => e.detail === FLAGGED)),
+    JSON.stringify(rehydrated.evidence.find((e) => e.detail === FLAGGED)));
+
+  // I4. An unresolved record reaches NONE of the five downstream surfaces.
+  const eligible = intakeEligibleForGeneration(guidedIntake, merged);
+  const pkg = generateResumePackage(eligible);
+  const surfaces = {
+    "résumé": JSON.stringify(pkg.experience) + pkg.summary,
+    "LinkedIn": `${pkg.linkedinHeadline}\n${pkg.linkedinSummary}`,
+    "skills": JSON.stringify(pkg.coreSkills),
+    "export text": resumeToText(eligible, pkg),
+    "cover-letter source": JSON.stringify(eligible)
+  };
+  for (const [name, text] of Object.entries(surfaces)) {
+    check(`I4. unresolved evidence never reaches ${name}`, !/laid off|completed the certification/i.test(text), text.slice(0, 160));
+  }
+  check("I4. …while the unflagged statement still comes through",
+    /escalations/i.test(surfaces["résumé"]), surfaces["résumé"].slice(0, 200));
+
+  // I5. Keep makes THAT evidence eligible.
+  const keptDossier = resolveDisclosure(merged, flaggedRec.id, "keep", NOW);
+  check("I5. Keep makes that exact evidence eligible",
+    isUsableEvidence(keptDossier.evidence.find((e) => e.id === flaggedRec.id))
+      && /completed the certification/i.test(JSON.stringify(generateResumePackage({ ...initialIntake, ...role, ...intakeEligibleForGeneration(guidedIntake, keptDossier) }))));
+
+  // I6. Exclude keeps the record but marks it ineligible.
+  const excludedDossier = resolveDisclosure(merged, flaggedRec.id, "exclude", NOW);
+  const excludedRec = excludedDossier.evidence.find((e) => e.id === flaggedRec.id);
+  check("I6. Exclude retains the record but makes it ineligible",
+    Boolean(excludedRec) && excludedRec.detail === FLAGGED && !isUsableEvidence(excludedRec),
+    JSON.stringify(excludedRec));
+
+  // I7. Editing the text reruns classification instead of inheriting a resolution.
+  const editedAfterKeep = { ...keptDossier, evidence: keptDossier.evidence.map((e) => e.id === flaggedRec.id ? { ...e, detail: "I was laid off after my treatment ended." } : e) };
+  check("I7. an edit does not inherit the old resolution",
+    disclosureResolutionIsStale(editedAfterKeep.evidence.find((e) => e.id === flaggedRec.id)),
+    JSON.stringify(editedAfterKeep.evidence.find((e) => e.id === flaggedRec.id)));
+
+  // I8. Generated-output withholding is a SEPARATE downstream mechanism: it
+  //     acts on product prose regardless of any review state.
+  check("I8. generated-prose withholding is independent of review state",
+    withholdSeparationFromGeneratedProse(`${FLAGGED} ${CLEAN}`).trim() === CLEAN,
+    withholdSeparationFromGeneratedProse(`${FLAGGED} ${CLEAN}`));
+
+  // I9. Receipts keep the three-way distinction.
+  const receiptKeys = fs.readFileSync(path.join(root, "src/types/dossier.ts"), "utf8");
+  check("I9. receipts distinguish user-excluded / awaiting-review / export-withheld",
+    /itemsExcludedByUser/.test(receiptKeys) && /itemsAwaitingReview/.test(receiptKeys) && /generatedSentencesWithheld/.test(receiptKeys));
+
+  // I10. Dossier and guided flows agree on eligibility for equivalent evidence.
+  const dossierSide = mergeIntakeIntoDossier(emptyDossier(NOW), { ...initialIntake, ...role, responsibilities: FLAGGED }, "manual", true, "", NOW);
+  const guidedSide = mergeIntakeIntoDossier(emptyDossier(NOW), { ...initialIntake, ...role, responsibilities: FLAGGED }, "guided", true, "", NOW);
+  const eligibilityOf = (d) => d.evidence.filter((e) => e.detail === FLAGGED).map((e) => [isUsableEvidence(e), needsDisclosureReview(e)]);
+  check("I10. dossier and guided produce identical eligibility for equivalent evidence",
+    JSON.stringify(eligibilityOf(dossierSide)) === JSON.stringify(eligibilityOf(guidedSide)),
+    `${JSON.stringify(eligibilityOf(dossierSide))} vs ${JSON.stringify(eligibilityOf(guidedSide))}`);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);
