@@ -285,3 +285,59 @@ The honest summary: Career Forge's *evidence model* is close to release quality 
 | `closure-audit-regression` (new) | **29/29**, every assertion proven to fail pre-fix |
 | Adversarial verification of P0/P1 findings | 37 CONFIRMED, 3 DOWNGRADE, 1 UPGRADE, **0 REFUTED** |
 | Independent review of #57 | 48 reviewer-authored fixtures; 1 PR-introduced P0 found and fixed |
+
+
+---
+
+# ADDENDUM — Launch-closure queue execution (2026-08-06)
+
+Work done against the founder's six-item queue. Branch: `integration/launch-closure` (PR #59), which supersedes #57 and #58.
+
+## Queue status
+
+| # | Item | Status |
+| --- | --- | --- |
+| 1 | Integrate #57 and #58 without losing either generator repair | **DONE** — clean merge, all seven repair markers verified present, both suites green on the result |
+| 2 | Adversarially review #58 (narration, negation, gaps, unsupported claims) | **DONE** — 218 reviewer-authored fixtures, 4 lenses, **FAIL on 3**; every defect repaired |
+| 3 | Fix remaining P1s, editing surface first | **DONE for the named cluster** — DS-03, DS-02, DS-01/RELY-01, plus RELY-09 and an input-boundary defect found by re-running the journey |
+| 4 | Choose the commerce posture | **CODE DONE** — PE-04, PE-01 closed; **one env var still to change on Vercel** |
+| 5 | Resolve Stripe issue #55 | **KIT PREPARED** — cannot be done from the repo; execution steps + evidence template posted to the issue |
+| 6 | Five-user gate | **PROTOCOL READY, NOT RUN** — `docs/FIVE_USER_LAUNCH_GATE.md`; 7 of 8 readiness preconditions pass |
+
+## What the second review changed about the verdict
+
+It found **two P0s that this audit's own repairs had introduced**, plus six lesser regressions. That is the single most important result in this addendum: the first review caught one introduced P0, the second caught two more. **Every repair round to the truth surface has introduced a defect that only an independent reviewer with their own fixtures found.**
+
+It also exposed a systemic pre-existing P0 that both earlier passes missed: **grounding had no notion of polarity anywhere.** `"I never handled cash"` produced the core skill *Cash Handling* and the summary line *"Strengths the candidate reports include cash Handling"*. This is now fixed at the corpus level, with a positive control asserted alongside every denial fixture.
+
+## Validation at `8394214`
+
+| Check | Result |
+| --- | --- |
+| `npm run test:unit` | **exit 0 — 1813 PASS** |
+| `generator-truth-regression` | **93/93** — RA-P0-04 + RA-P0-05 hold 43 reviewer-authored fixtures |
+| `closure-audit-regression` | **60/60** |
+| `dossier-pack-regression` | **58/58** |
+| `truth-integrity-regression` | **172/172** |
+| `quality-regression-suite` | **94/100**, 0 hallucinations, weak outputs 31 → 24 |
+| `typecheck` / `build` | clean / succeeds |
+
+## Verdict change
+
+**NOT READY FOR RELEASE → READY AFTER LISTED BLOCKERS**, with exactly three blockers remaining, none of which is a code defect:
+
+1. **Set `NEXT_PUBLIC_COMMERCE_MODE=off` on the Vercel production environment and redeploy.** Until then production still shows $49 locks that dead-end at a closed checkout. One setting; no code change.
+2. **Close issue #55** — deactivate the stray live Stripe Payment Link and record the evidence. Needs Stripe dashboard access.
+3. **Run the five-user gate** and meet every criterion.
+
+Two verification steps must accompany them: an independent adversarial review of this integration branch (the pattern has found an introduced P0 every single time), and re-running the §1 readiness preconditions immediately before the gate.
+
+## Still open, and deliberately not fixed here
+
+Recorded so they are not rediscovered as surprises:
+
+- The `composed()` cross-concept gate fix is **a one-off patch in the retail pool** — the same shape survives in roughly 25 clause pairs across other occupation profiles (LENS-C2). Highest-value remaining truth work.
+- An employer name plus a target job title can still manufacture a bullet and a summary strength with no user text at all (LENS-C4); the beauty-service lane is ungated (LENS-C5).
+- The guided and pack stacks still produce different documents from identical input.
+- Interview transcripts and prep drafts still fail to save silently when storage is full (RELY-02); the capture surface still holds drafts in unpersisted React state (DS-04).
+- `"I was laid off before I trained the new hires."` still exports `"Trained the new hires."` — the termination-reason splitter keeps the dependent clause and re-asserts it (lens A, pre-existing P0). **This one is a genuine P0 and belongs at the top of the next queue.**
