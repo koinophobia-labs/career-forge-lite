@@ -932,7 +932,15 @@ function splitResponsibilityText(value: string) {
     // An ellipsis is not a sentence boundary. Splitting on its final dot tore
     // "Closed, counted, locked up... every single night." into two claims,
     // deleted the "...", and rejoined the halves with an invented "and".
-    .split(/\n|;|(?<![.!?])(?<=[.!?])\s+/)
+    //
+    // The first attempt at this wrote (?<![.!?])(?<=[.!?]) — two lookbehinds
+    // evaluated at the SAME position, asserting the preceding character both
+    // is and is not terminal punctuation. It can never match, so this stopped
+    // splitting sentences AT ALL: every per-item filter below only ever saw
+    // sentence #1, and "Answered the phones. I do not know how many calls I
+    // took." reached the résumé, summary and LinkedIn summary as one bullet.
+    // Look back TWO characters instead: a run of dots means an ellipsis.
+    .split(/\n|;|(?<!\.\.)(?<=[.!?])\s+/)
     .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
     .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
@@ -1298,7 +1306,14 @@ function leadIsEvidenced(corpus: string, lead: string): boolean {
   if (!first) return true;
   const override = LEAD_STEM_OVERRIDES.get(first);
   const stem = override ?? first.replace(/(?:ed|d)$/, "");
-  if (stem.length < 3) return true;
+  // A short stem must fall back to the WHOLE word, never to an unconditional
+  // pass. "Used" stems to "us" (2 chars) and took this early return, so every
+  // "Used …" bullet skipped the gate entirely: "The tools were locked in the
+  // gang box overnight." licensed "Used hand and power tools." for a user who
+  // never said they touched one.
+  if (stem.length < 3) {
+    return new RegExp(`\\b${first}\\w*`, "i").test(corpus);
+  }
   const occurrence = new RegExp(`\\b(?:${stem})\\w*`, "gi");
   let hit: RegExpExecArray | null;
   while ((hit = occurrence.exec(corpus)) !== null) {
@@ -1319,7 +1334,19 @@ function composed(
   clauses: Array<[RegExp, string]>,
   options: { min?: number; tail?: string } = {}
 ): GroundedBullet {
-  const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
+  // DOUBLE GATE. The trigger regex says a related word appeared; it does not
+  // say the PHRASE is true. Gating on the trigger alone is a cross-concept
+  // licence, and an audit of all 111 clause pairs found roughly 30 asserting
+  // an activity the trigger never evidenced — "I cleaned the toilets on my
+  // hall." licensing "Supported clients with personal care.", "I walked the
+  // halls checking doors." licensing "…with mobility.", "I logged exchanges in
+  // the binder." licensing "…with returns." Patching individual pairs treated
+  // a structural defect as a list, so the phrase must now be grounded in the
+  // corpus in its OWN right, by the same isGroundedClaim() every other derived
+  // claim answers to.
+  const matched = clauses
+    .filter(([evidence, phrase]) => evidence.test(corpus) && isGroundedClaim(phrase, corpus))
+    .map(([, phrase]) => phrase);
   const min = options.min ?? 1;
   if (matched.length < min) return { text: "" };
   // The LEAD carries a claim too. Gating only the clauses meant "Maintained the
@@ -1329,7 +1356,9 @@ function composed(
   if (!leadIsEvidenced(corpus, lead)) return { text: "" };
   // `concepts` records exactly what this bullet claims, so a later pass can tell
   // whether it restates the user or adds something.
-  const evidence = clauses.filter(([test]) => test.test(corpus)).map(([test]) => test);
+  const evidence = clauses
+    .filter(([test, phrase]) => test.test(corpus) && isGroundedClaim(phrase, corpus))
+    .map(([test]) => test);
   return { text: `${lead} ${sentenceList(matched)}${options.tail ?? ""}.`.replace(/\s+/g, " "), evidence };
 }
 

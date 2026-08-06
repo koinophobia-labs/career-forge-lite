@@ -415,6 +415,73 @@ for (const [typed, mustSurvive] of [
   expect(`not treated as a termination: "${typed}"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
 }
 
+// ═══════════════════════════════════════════════ RA-P0-07
+// Fixtures from the THIRD independent adversarial review (of PR #59). It
+// returned FAIL and found two more defects introduced by my own repairs, plus
+// proved the composed() cross-concept problem is STRUCTURAL — 111 clauses in
+// 10 occupation pools, ~30 asserting an activity their trigger never
+// evidenced — rather than the finite list two earlier patches assumed.
+H("RA-P0-07 — findings from the third independent review");
+
+// (a) INTRODUCED: the "ellipsis-safe" split was an UNSATISFIABLE regex —
+// (?<![.!?])(?<=[.!?]) asserts the preceding character both is and is not
+// terminal punctuation. splitResponsibilityText therefore stopped splitting
+// sentences at all, so every per-item filter below it only ever saw sentence
+// #1 and the rest of the paragraph rode into the résumé unfiltered.
+for (const [typed, mustKeep, mustDrop] of [
+  ["Answered the phones at the front desk. I do not know how many calls I took.", /answered the phones/i, /do not know how many calls/i],
+  ["Cleaned the pumps. Worked at a gas station for two years.", /cleaned the pumps/i, /worked at a gas station/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Receptionist", currentCompany: "Halbrook", currentTime: "2022 - 2025", responsibilities: typed }));
+  const whole = JSON.stringify(pkg);
+  expect(`sentences are still split: "${typed.slice(0, 40)}…"`, mustKeep.test(whole), whole.slice(0, 220));
+  expect(`  the unusable sentence does not ride along`, !mustDrop.test(whole), whole.slice(0, 220));
+}
+// …and the ellipsis the change was written for is still one claim.
+{
+  const out = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Closed, counted, locked up... every single night." });
+  expect("an ellipsis is still not a sentence boundary", out.length === 1, JSON.stringify(out));
+}
+
+// (b) INTRODUCED: leadIsEvidenced early-returned true for any stem under three
+// characters. "Used" stems to "us", so every "Used …" bullet skipped the gate.
+for (const [title, typed, fabricated] of [
+  ["General Laborer", "The tools were locked in the gang box overnight.", /Used hand and power tools/i],
+  ["Warehouse Associate", "Walked past forklifts on my way to the break room.", /Used powered equipment/i],
+  ["Custodian", "The tools belonged to the building engineer.", /Used basic tools/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Vantage", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`short-stem lead is still gated: "${typed.slice(0, 40)}…"`, !fabricated.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 220));
+}
+
+// (c) STRUCTURAL: a clause's trigger regex says a related word appeared. It
+// does not say the PHRASE is true. The phrase must be grounded in its own
+// right, or a cross-concept licence fabricates a specific activity — including
+// clinical claims a care worker never made.
+for (const [title, typed, fabricated] of [
+  ["Caregiver", "Supported the housekeeping team. I cleaned the toilets on my hall.", /personal care/i],
+  ["Caregiver", "Supported the activities director. I walked the halls checking doors.", /with mobility/i],
+  ["Cashier", "Assisted at the service desk. I logged exchanges in the binder.", /with returns/i],
+  ["Cashier", "I swept the sales floor before open.", /with purchases/i],
+  ["Cashier", "My manager asked me to stay late.", /with questions/i],
+  ["Cashier", "I scanned merchandise into the system.", /locating products/i],
+  ["Cashier", "I hung gift cards on the rack.", /Processed payments/i],
+  ["Cashier", "Kept the backroom door locked.", /organizing inventory areas/i],
+  ["Custodian", "Maintained my cart and my keys. I called maintenance when something broke.", /routine upkeep/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`cross-concept licence refused: "${typed.slice(0, 44)}…"`, !fabricated.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
+}
+// …without amputating the real thing when the user DID describe it.
+for (const [title, typed, mustSurvive] of [
+  ["Cashier", "Processed customer returns at the service desk every shift.", /returns/i],
+  ["Caregiver", "Provided personal care and bathing help to residents each morning.", /personal care/i],
+  ["Cashier", "Processed cash and card payments at the register all day.", /payments/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`genuine work still reaches the résumé: "${typed.slice(0, 44)}…"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
+}
+
 L();
 L("=".repeat(78));
 L(`Generator truth regression: ${passes} passed, ${fails} failed`);
