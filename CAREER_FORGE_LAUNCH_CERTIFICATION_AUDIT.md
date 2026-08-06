@@ -376,3 +376,52 @@ In every case a NOUN naming something *near* the person grounds a COMPETENCY cla
 **Deliberately not repaired in the same pass that found it.** Four consecutive rounds have shown that a repair written without independent review introduces a new defect, and a fifth unreviewed repair to the grounding layer is exactly the pattern that keeps failing. The fourth review is running with an independent eight-category fixture inventory for this layer; the class will be repaired once with that inventory rather than piecemeal.
 
 Severity: **P0** — a fabricated competency, attributed to the user, in an exported document.
+
+---
+
+## ROUND 7 — NOT CERTIFIED. The disclosure guard is a second lexical classifier with the same defect class.
+
+Frozen head `b42e5ea`. Five lenses, ~350 reviewer-authored fixtures written in real-user language. **Zero P0/P1 was required. Eight blocking defects found**, six of them introduced by my own repairs.
+
+### The finding that matters
+
+The sensitive-disclosure guard silently deletes ordinary work. Reproduced directly:
+
+| The user typed | Result |
+| --- | --- |
+| "I set up my treatment room before every client arrives." | **deleted** |
+| "I cover the front desk at my surgery on a Saturday." | **deleted** |
+| "I completed my disability awareness training last year." | **deleted** |
+| "I keep my health and safety training up to date every year." | **deleted** — and the whole role dropped, leaving an empty résumé |
+| "I had to look after the whole floor on my own when we were short." | **deleted** |
+| "One of my residents got sick on shift and I called the nurse." | **deleted** |
+| "I cover the ward when someone is on maternity leave." | **"Supported cover the ward."** |
+
+A UK GP receptionist's *surgery* is a clinic. A beauty therapist's *treatment room* is a room. *Health and safety* is a certificate. *Maternity leave cover* is a duty. *Had to look after the floor* is how short-staffed care workers describe their shift — and that phrasing was made mandatory by my own Round 5 repair, which traded one amputation for another.
+
+It also fabricates from the residue of what it strips:
+
+- "I dropped out of my nursing degree after one semester." → **"Supported one semester."**
+- "I was laid off in June 2025 when the home closed." → **"Supported the home closed."**
+- "I quit in March 2024 because I could not afford the childcare." → **"Supported quit in March 2024."**
+
+And the receipt then reports a care assistant's safety certificate as *"Personal circumstances (never résumé content)"* — a false statement about their own document.
+
+### The structural diagnosis
+
+**This is the occupation-template failure in mirror image.** That layer was a lexical classifier that could not determine *who performed an action*, and it fabricated. This one is a lexical classifier that cannot determine *whose situation is being described*, and it amputates. Both fail on the same thing: vocabulary cannot carry context.
+
+Three successive narrowings of this guard each traded one amputation for another. That is not convergence, and the population it damages is precisely this product's core audience — care workers, cleaners, therapists, receptionists.
+
+### Recommendation, for the founder's decision
+
+Apply the same treatment that worked for occupation templates, in the opposite direction: **retire automatic deletion; flag for review instead.**
+
+- The user's sentence is **kept**, never silently removed.
+- It is **flagged** in the review surface the product already has: *"This looks like personal information. Employers do not need it — remove it, or keep it if it is part of your job."*
+- Withholding stays possible, but as **the user's choice**, not the classifier's guess.
+- Partial stripping is abandoned entirely — whole sentence or nothing — which removes the fabricated-residue class at the root.
+
+Only the user knows whether "my surgery" is where they work or what they had. This is the same principle the five-user gate already encodes: *the participant is the only person who can say whether a claim is theirs.*
+
+**Verdict: NOT CERTIFIED. NOT READY FOR RELEASE.** No repair applied — the head remains frozen at `b42e5ea` pending the architectural decision, because a fourth narrowing of the same regex is the sixth labyrinth, not a fix.
