@@ -43,7 +43,18 @@
  * its history. Turning this on outside a research context reopens every
  * fabrication class listed above.
  */
+/**
+ * Two independent conditions, both of which must hold. Default-off is not
+ * enough on its own: NEXT_PUBLIC_* values are inlined at BUILD time, so a
+ * stray variable in a deployment environment would bake the layer into a
+ * production bundle with nothing at runtime able to stop it. The NODE_ENV
+ * check makes a production build refuse regardless of how the variable is set.
+ *
+ * Consequence, stated so it cannot surprise anyone: the research flag has NO
+ * effect in a production build. Research work runs in development or test.
+ */
 export const OCCUPATION_TEMPLATES_ENABLED =
+  process.env.NODE_ENV !== "production" &&
   process.env.NEXT_PUBLIC_ENABLE_OCCUPATION_TEMPLATES === "research";
 
 /** Explicit name for the launch posture, for assertions and tests. */

@@ -572,6 +572,14 @@ H("RA-P0-09 — the occupation-template layer is retired");
 {
   const flags = fs.readFileSync(path.join(root, "src/lib/occupation-templates.ts"), "utf8");
   expect("the layer is off unless explicitly set to research", /=== "research"/.test(flags), flags.slice(0, 200));
+  // Default-off is not enough on its own: NEXT_PUBLIC_* is inlined at BUILD
+  // time, so a stray variable in a deployment environment would bake the layer
+  // into a production bundle. A production build must refuse regardless.
+  expect(
+    "a production build cannot enable the layer at all",
+    /process\.env\.NODE_ENV !== "production" &&/.test(flags),
+    flags.slice(0, 400)
+  );
   const source = fs.readFileSync(path.join(root, "src/lib/generator.ts"), "utf8");
   expect("the generator gates on the retirement flag", (source.match(/OCCUPATION_TEMPLATES_ENABLED/g) || []).length >= 8, "too few gates");
 }
