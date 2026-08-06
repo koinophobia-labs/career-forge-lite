@@ -36,7 +36,7 @@ export default function PrivacyPage() {
           </section>
           <section>
             <h2 className="text-lg font-bold text-paper">Deleting app data</h2>
-            <p className="mt-2"><Link href="/settings" className="text-cyan underline hover:text-gold">Settings → Clear local data</Link> removes every Career Forge record from this browser. Clearing the site&apos;s browser storage does the same. Human-service files follow the separate deletion policy above.</p>
+            <p className="mt-2"><Link href="/settings" className="text-cyan underline hover:text-gold">Settings → Clear local data</Link> removes every Career Forge record from this browser — dossier, résumé packs, applications, outreach, export history, interview transcripts and practice answers, and feedback drafts. An access code activated on this device is deliberately kept so you do not lose paid access; clearing the site&apos;s browser storage removes that too. Human-service files follow the separate deletion policy above.</p>
           </section>
         </div>
       </section>

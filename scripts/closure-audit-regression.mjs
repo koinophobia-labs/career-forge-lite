@@ -151,5 +151,89 @@ check(
   JSON.stringify(toResumeVoice("I managed the front end."))
 );
 
+// --- 5. "Clear local data" clears every registered key ------------------------------
+// Pre-fix, the settings page enumerated five keys by hand: interview
+// transcripts, practice answers, beta feedback (with self-identifying
+// testimonials), and application activity survived a clear the privacy page
+// describes as removing every Career Forge record.
+{
+  const { CAREER_DATA_KEYS, IDENTITY_BOUND_KEYS, PRESERVED_KEYS, clearCareerDataKeys, clearIdentityBoundKeys } =
+    loadTsModule(path.join(root, "src/lib/local-keys.ts"));
+
+  const store = new Map();
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key)
+    }
+  };
+
+  // Every key any module actually persists, discovered from source so a newly
+  // added key that is never registered fails this test instead of leaking
+  // silently. Only constants passed to a localStorage call count — a DOM event
+  // name or a JSON schema string that happens to start "career-forge-" is not
+  // a storage key.
+  const sourceFiles = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(entry.name)) sourceFiles.push(full);
+    }
+  };
+  walk(path.join(root, "src"));
+
+  const constantValues = new Map();
+  const usedInStorage = new Set();
+  const literalKeys = new Set();
+  for (const file of sourceFiles) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const m of source.matchAll(/(?:export\s+)?const\s+(\w+)\s*=\s*"(career-forge-[a-z0-9-]+)"/g)) {
+      constantValues.set(m[1], m[2]);
+    }
+    for (const m of source.matchAll(/localStorage\.(?:get|set|remove)Item\(\s*(?:(\w+)|"(career-forge-[a-z0-9-]+)")/g)) {
+      if (m[1]) usedInStorage.add(m[1]);
+      if (m[2]) literalKeys.add(m[2]);
+    }
+  }
+  const declaredKeys = new Set([
+    ...literalKeys,
+    ...[...usedInStorage].map((name) => constantValues.get(name)).filter(Boolean)
+  ]);
+  check("the key scan found the known storage keys", declaredKeys.size >= 8, `found: ${[...declaredKeys].join(", ")}`);
+  const registered = new Set([...CAREER_DATA_KEYS, ...PRESERVED_KEYS]);
+  const unregistered = [...declaredKeys].filter((key) => !registered.has(key));
+  check(
+    "every career-forge-* key in src/lib is registered in local-keys.ts",
+    unregistered.length === 0,
+    `unregistered: ${unregistered.join(", ")}`
+  );
+
+  for (const key of declaredKeys) store.set(key, JSON.stringify({ sensitive: "termination and immigration details" }));
+  clearCareerDataKeys();
+
+  const survivors = [...store.keys()];
+  check(
+    "clearing leaves only the license key",
+    survivors.length === PRESERVED_KEYS.length && survivors.every((key) => PRESERVED_KEYS.includes(key)),
+    `survivors: ${survivors.join(", ")}`
+  );
+  check("interview practice answers do not survive a clear", !store.has("career-forge-prep-drafts-v1"));
+  check("beta feedback and testimonials do not survive a clear", !store.has("career-forge-beta-feedback-v1"));
+  check("application activity does not survive a clear", !store.has("career-forge-application-activity-v1"));
+  check("an activated license IS preserved by a clear", store.has("career-forge-license-v1"));
+
+  // --- 6. Restore does not leave the previous person's own words behind -------------
+  for (const key of declaredKeys) store.set(key, JSON.stringify({ owner: "Alex Rivera", detail: "terminated from Acme" }));
+  clearIdentityBoundKeys();
+  for (const key of IDENTITY_BOUND_KEYS) {
+    check(`restore clears identity-bound key ${key}`, !store.has(key));
+  }
+  check("restore does not clear the license", store.has("career-forge-license-v1"));
+
+  delete globalThis.window;
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
