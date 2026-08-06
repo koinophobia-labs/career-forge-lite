@@ -1,6 +1,7 @@
 import { initialIntake } from "@/lib/career-data";
 import { possibleDisclosure } from "@/lib/truth-guards";
 import { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } from "@/lib/evidence-admissibility";
+import { getUsableEvidenceForRole, isUsable } from "@/lib/evidence-read";
 import type { IntakeData } from "@/types/career";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
 import type { DisclosureReason } from "@/lib/truth-guards";
@@ -103,6 +104,16 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
             : {}),
           ...(["health", "separation", "education", "financial"].includes(text(item.disclosureReason))
             ? { disclosureReason: text(item.disclosureReason) as DisclosureReason }
+            : {}),
+          // The reviewed-text fingerprint MUST survive the round trip. Dropping
+          // it here meant the staleness guard only worked inside one un-reloaded
+          // session: keep a sentence, reload, edit it into something newly
+          // sensitive, and the old approval silently authorised the new words.
+          // The canonical reader now treats a resolution with no fingerprint as
+          // stale, so losing it fails closed rather than open — but it should
+          // not be lost at all.
+          ...(typeof item.disclosureReviewedText === "string"
+            ? { disclosureReviewedText: item.disclosureReviewedText }
             : {}),
           source: ["guided", "story", "resume-import", "legacy-profile", "manual", "role-sprint"].includes(text(item.source))
             ? text(item.source) as EvidenceSource
@@ -567,6 +578,28 @@ export function mergeIntakeIntoDossier(
   };
 }
 
+/**
+ * The user's facts for one role, read through the eligibility gate. Ineligible
+ * records are withheld, never deleted — they stay in the store and in the
+ * review queue. The denormalized role pool is used only as a fallback for
+ * dossiers written before evidence records existed, and is itself filtered
+ * against anything the store says is ineligible.
+ */
+function roleFacts(
+  dossier: CareerDossier,
+  role: DossierRole | undefined,
+  kind: EvidenceKind,
+  fallback: string[] | undefined
+): string[] {
+  if (!role) return [];
+  const owned = getUsableEvidenceForRole(dossier, role.id, { kinds: [kind] }).map((item) => item.detail);
+  if (owned.length) return owned;
+  const blocked = new Set(
+    dossier.evidence.filter((item) => !isUsable(item)).map((item) => item.detail.trim().toLowerCase())
+  );
+  return (fallback ?? []).filter((entry) => !blocked.has(entry.trim().toLowerCase()));
+}
+
 export function intakeFromDossier(dossier: CareerDossier, targetTitle = ""): IntakeData {
   const [current, previous, additional] = dossier.roles;
   return {
@@ -593,11 +626,19 @@ export function intakeFromDossier(dossier: CareerDossier, targetTitle = ""): Int
     // through the ordinary /resume-builder flow rather than through the data
     // model. The wider pools remain available on /profile.
     tools: (current?.tools ?? []).join(", "),
-    responsibilities: (current?.responsibilities ?? []).join("\n"),
-    selectedResponsibilities: current?.responsibilities ?? [],
+    // These prefill fields are a READ of the user's career facts, so they
+    // resolve through the canonical reader rather than through the role's
+    // denormalized string pools. Those pools carry no review state, which is
+    // how an EXCLUDED disclosure printed in the summary, a bullet and the
+    // LinkedIn summary after a single reload: intakeFromDossier refilled the
+    // selected* arrays from them on every mount, and the generator read the
+    // arrays raw. Falling back to the pool only when the role owns no evidence
+    // records at all keeps pre-evidence dossiers working.
+    responsibilities: roleFacts(dossier, current, "responsibility", current?.responsibilities).join("\n"),
+    selectedResponsibilities: roleFacts(dossier, current, "responsibility", current?.responsibilities),
     customRoleTransferableSkills: dossier.transferableSkills,
-    selectedOutcomes: current?.outcomes ?? [],
-    outcomes: (current?.outcomes ?? []).join("\n"),
+    selectedOutcomes: roleFacts(dossier, current, "metric", current?.outcomes),
+    outcomes: roleFacts(dossier, current, "metric", current?.outcomes).join("\n"),
     education: dossier.education.map((item) => [item.credential, item.institution].filter(Boolean).join(", ")).join("; ")
   };
 }

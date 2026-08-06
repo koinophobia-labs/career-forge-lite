@@ -8,6 +8,7 @@ import {
   isUncertaintyStatement,
   // (no truth-guard withholding on this path -- see sanitizeProfessionalLine)
 } from "@/lib/truth-guards";
+import { eligibleUserText, evidenceEligibility, isUsable, resolutionIsStale } from "@/lib/evidence-read";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
 import type {
@@ -48,27 +49,22 @@ type ReviewableEvidence = {
 };
 
 /**
- * A resolution is STALE when the text has changed since the user reviewed it.
- * Keeping a sentence and then editing it into something newly sensitive must
- * not inherit the old approval — the decision belonged to the words that were
- * on screen.
+ * These three now DELEGATE to the canonical reader in evidence-read.ts. They
+ * are kept as named predicates because call sites read well, but there is only
+ * one definition of eligibility in the product and it is not this one.
  */
 export function disclosureResolutionIsStale(item: ReviewableEvidence): boolean {
-  if (item.disclosureReview !== "keep" && item.disclosureReview !== "exclude") return false;
-  if (item.disclosureReviewedText === undefined) return false;
-  return item.disclosureReviewedText !== (item.detail ?? "");
+  return resolutionIsStale(item as Parameters<typeof resolutionIsStale>[0]);
 }
 
 export function isUsableEvidence(item: ReviewableEvidence): boolean {
-  if (!item.approved || item.rejected) return false;
-  if (item.disclosureReview === "needs_review" || item.disclosureReview === "exclude") return false;
-  // A stale "keep" is not a keep.
-  return !disclosureResolutionIsStale(item);
+  return isUsable(item as Parameters<typeof isUsable>[0]);
 }
 
 /** Flagged and still undecided — an export must surface these, not guess. */
 export function needsDisclosureReview(item: ReviewableEvidence): boolean {
-  return item.disclosureReview === "needs_review" || disclosureResolutionIsStale(item);
+  const reason = evidenceEligibility(item as Parameters<typeof evidenceEligibility>[0]).reason;
+  return reason === "awaiting_review" || reason === "stale_resolution" || reason === "unreviewed_disclosure";
 }
 
 const PROFESSIONAL_KINDS = new Set<EvidenceKind>([
@@ -681,7 +677,17 @@ function sanitizeVersion(version: ResumeVersionRecord, forceReview: boolean): Re
     const lines = version.resumeText.split(/\r?\n/).flatMap((line): string[] => {
       if (!line.trim()) return [""];
       const bullet = line.match(/^([-•]\s*)/i)?.[1] ?? "";
-      const cleaned = sanitizeProfessionalParagraph(line.replace(/^[-•]\s*/, ""));
+      // A saved version is a RENDERED product artifact, not the user's live
+      // bullets — their evidence is untouched in the store and can be
+      // regenerated. So it gets the eligibility-aware text read with an empty
+      // approval set: nobody is present to resolve a flag on a document
+      // written months ago. Applied HERE and not inside
+      // sanitizeProfessionalParagraph, which is shared with
+      // sanitizeResumeForProfessionalUse — putting whole-sentence withholding
+      // on that shared path deleted a bullet the user had kept, and with it the
+      // employer whose only bullet it was.
+      const eligible = eligibleUserText(line.replace(/^[-•]\s*/, ""), new Set<string>());
+      const cleaned = sanitizeProfessionalParagraph(eligible);
       return cleaned ? [`${bullet}${cleaned}`] : [];
     });
     return {

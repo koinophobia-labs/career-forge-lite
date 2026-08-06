@@ -7,6 +7,7 @@ import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
 import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
+import { getUsableIntake } from "@/lib/evidence-read";
 import { isUncertaintyStatement, possibleDisclosure, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
@@ -965,22 +966,10 @@ function splitResponsibilityText(value: string, data?: IntakeData) {
     .split(/\n|;|(?<!\.\.)(?<=[.!?])\s+/)
     .map((item) => normalizeSentenceItem(item))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
-    // A sentence the classifier flagged waits for the user. It is NOT altered
-    // and NOT removed from their intake — it simply does not enter the draft
-    // until they resolve it. An explicit keep puts it straight back.
-    .filter((item) => {
-      if (!possibleDisclosure(item)) return true;
-      // Both sides MUST run through the same normalizer. They did not: the
-      // approval list carries the user's raw sentence ("I was laid off after I
-      // completed the certification.") while `item` has already had its leading
-      // "I " and terminal period stripped. The two could never be equal, so an
-      // explicit Keep authorised nothing and the sentence stayed withheld —
-      // silently, which is the failure mode this lifecycle exists to prevent.
-      const approved = (data?.disclosureApproved ?? []).map((entry) =>
-        normalizeSentenceItem(entry).toLowerCase()
-      );
-      return approved.includes(item.toLowerCase());
-    })
+    // Disclosure eligibility is NOT decided here any more. It is decided once,
+    // for every field, by getUsableIntake at the generator boundary. A second
+    // copy of the rule in this function is how the approval keys drifted apart
+    // and an explicit Keep silently authorised nothing.
     .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
     // The narration filter that used to sit here DELETED any sentence mentioning
     // "my manager", "they", "me" and so on. It destroyed true statements —
@@ -2401,7 +2390,17 @@ function qualityCheckResume(resume: ResumePackage): ResumePackage {
   };
 }
 
-export function generateResumePackage(data: IntakeData): ResumePackage {
+export function generateResumePackage(rawIntake: IntakeData): ResumePackage {
+  // THE eligibility-aware read for the text representation. Every field the
+  // generator consumes is narrowed here, once, before any of the ~22 internal
+  // read sites see it. Round 8's B1 and B2 were both "one more field nobody
+  // remembered to filter" — selected* arrays refilled from storage on mount,
+  // and the outcomes lane, which had no filter at all. Gating at the boundary
+  // instead of per-lane means a lane added later is covered by default.
+  //
+  // The user's stored intake is untouched: this is a narrowed copy, and a
+  // withheld sentence remains in their record, visible and restorable.
+  const data = getUsableIntake(rawIntake);
   const target = normalizeTargetRole(data);
   const skills = buildSkillList(data);
   const experience = buildExperience(data);
