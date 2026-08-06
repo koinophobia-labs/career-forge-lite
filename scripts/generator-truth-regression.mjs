@@ -340,38 +340,79 @@ for (const achievement of [
 }
 
 // ═══════════════════════════════════════════════ RA-P0-06
-// A termination reason GOVERNS the clause attached to it. Promoting that
-// clause to a standalone bullet asserted the opposite of what the user wrote:
-// "I was laid off before I trained the new hires." exported as "Trained the
-// new hires." Fixed as a CLASS, not for one sentence — every temporal/causal
-// subordinator behaves the same way.
-H("RA-P0-06 — a governed clause is never promoted to a standalone claim");
+// A termination reason in the MAIN clause governs the clause attached to it —
+// but subordinators do NOT behave alike, and an earlier version of this fix
+// treated them as if they did. That traded fabrication for silent amputation:
+// "I was laid off AFTER I completed the certification." lost the completion.
+// Extraction has to be RELATION-AWARE.
+H("RA-P0-06 — relation-aware extraction around a termination reason");
 
+const TERMINATION_WORDS = /\b(laid off|let go|terminated|fired|dismissed|sacked|downsized|redundant|not renewed|lost my job|asked to resign)\b/i;
+
+// NON-ASSERTING: the termination pre-empted the event, so promoting the clause
+// asserts the opposite of what the user wrote.
 for (const [typed, inverted] of [
+  ["I was laid off before I completed the certification.", /completed the certification/i],
   ["I was laid off before I trained the new hires.", /trained the new hires/i],
-  ["I was let go before I completed the safety certification.", /completed the safety certification/i],
-  ["I was terminated until I ran the weekly close.", /ran the weekly close/i],
-  ["I was fired when I rebuilt the vendor list.", /rebuilt the vendor list/i],
-  ["I was let go after I finished the audit.", /finished the audit/i],
-  ["I was laid off because I refused the transfer.", /refused the transfer/i]
+  ["I was terminated until I ran the weekly close.", /ran the weekly close/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`pre-empted event is NOT asserted: "${typed}"`, !inverted.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
+}
+
+// ASSERTING: the event definitely happened. Deleting it amputates a true
+// accomplishment — as much a truth failure as inventing one.
+for (const [typed, mustSurvive] of [
+  ["I was laid off after I completed the certification.", /completed the certification/i],
+  ["I was fired because I reported the accounting discrepancy.", /reported the accounting discrepancy/i],
+  ["I was dismissed when I refused to falsify the records.", /refused to falsify the records/i],
+  ["I was laid off while I ran the night audit.", /ran the night audit/i],
+  ["My contract was not renewed after I delivered the migration.", /delivered the migration/i],
+  ["My position was cut because I flagged the billing error.", /flagged the billing error/i],
+  ["Although I was laid off, I completed the safety certification.", /completed the safety certification/i]
 ]) {
   const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
   const whole = JSON.stringify(pkg);
-  expect(`governed clause is not asserted: "${typed}"`, !inverted.test(whole), whole.slice(0, 260));
+  expect(`asserted event SURVIVES: "${typed}"`, mustSurvive.test(whole), whole.slice(0, 240));
+  // …and the termination reason itself never rides along with it. This is the
+  // assertion that caught "Was dismissed when I refused to falsify the
+  // records." being exported whole, because "dismissed" was missing from the
+  // termination patterns entirely.
+  expect(`  the termination reason itself is not exported`, !TERMINATION_WORDS.test(whole), whole.slice(0, 240));
 }
 
-// The opposite direction must keep working, or the guard has simply become a
-// deletion machine — withholding a true accomplishment is its own failure.
+// The clause BEFORE the conjunction states something that happened; the
+// conjunction only bounds when it stopped.
 {
   const kept = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Managed vendor contracts worth $2M annually until I was laid off in June 2026." });
   expect("an accomplishment bounded by a termination is KEPT", kept.includes("Managed vendor contracts worth $2M annually."), JSON.stringify(kept));
-  expect("  the termination reason itself is not exported", !JSON.stringify(kept).toLowerCase().includes("laid off"), JSON.stringify(kept));
+  expect("  the termination reason itself is not exported", !TERMINATION_WORDS.test(JSON.stringify(kept)), JSON.stringify(kept));
 }
-{
-  // A concessive genuinely DOES assert the second clause.
-  const kept = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Although I was laid off, I completed the safety certification." });
-  expect("a concessive keeps the asserted accomplishment", kept.includes("Completed the safety certification."), JSON.stringify(kept));
-  expect("  the termination reason itself is not exported", !JSON.stringify(kept).toLowerCase().includes("laid off"), JSON.stringify(kept));
+
+// Termination phrasings the original pattern list missed entirely, so the
+// sentence was never recognised and printed verbatim.
+for (const phrasing of [
+  "I was dismissed in March.",
+  "I was sacked in March.",
+  "My contract was not renewed.",
+  "My position was cut.",
+  "I lost my job in March.",
+  "I was asked to resign."
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: `Ran the weekly inventory count. ${phrasing}` }));
+  const whole = JSON.stringify(pkg);
+  expect(`termination phrasing is recognised: "${phrasing}"`, !TERMINATION_WORDS.test(whole), whole.slice(0, 200));
+  expect(`  the surrounding true work survives`, /weekly inventory count/i.test(whole), whole.slice(0, 200));
+}
+
+// …without over-deleting: an honourable discharge is a credential, and a
+// reassignment is not a termination.
+for (const [typed, mustSurvive] of [
+  ["Honorably discharged after four years of service.", /Honorably discharged/i],
+  ["I was released to the day shift crew.", /day shift crew/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`not treated as a termination: "${typed}"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
 }
 
 L();

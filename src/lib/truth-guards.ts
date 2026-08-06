@@ -32,6 +32,22 @@ export function isUncertaintyStatement(text: string): boolean {
 const terminationPatterns: RegExp[] = [
   /\b(was|were|got|getting|been)\s+(laid\s+off|let\s+go|terminated|fired|downsized|made\s+redundant)\b/i,
   /\blaid\s+off\b/i,
+  // Six phrasings people actually use that the original list missed entirely,
+  // so the sentence was never recognised as a termination reason at all and
+  // printed verbatim: "Was dismissed when I refused to falsify the records."
+  // announced a firing on the résumé.
+  // "honorably/medically discharged" is a credential, not a termination
+  // reason, and must stay on the résumé.
+  // "released" is deliberately absent: "I was released to the day shift crew"
+  // is a reassignment, and deleting it would amputate real work. Over-deleting
+  // is as much a truth failure as leaking.
+  /\b(was|were|got|getting|been)\s+(dismissed|sacked|ousted)\b/i,
+  /\b(was|were|got|been)\s+(?!honorabl|medicall|general\s)(\w+\s+)?discharged\b/i,
+  /\b(was|were|been)\s+separated\s+from\s+(the\s+)?(company|employer|organi[sz]ation|role|position)\b/i,
+  /\b(contract|role|position|job)\s+(was\s+)?not\s+renewed\b/i,
+  /\b(my|the)\s+(role|position|job|hours)\s+(was|were)\s+cut\b/i,
+  /\blost\s+(my|the)\s+(job|role|position)\b/i,
+  /\b(asked|forced)\s+to\s+resign\b/i,
   /\b(company|employer|org(anization)?|department|team|division)\s+(closed|shut\s+down|folded|went\s+under|downsized|reorganized|restructured)\b/i,
   /\b(role|position|job|department|team)\s+(was\s+)?eliminated\b/i,
   /\buntil\s+(i\s+was\s+)?(laid\s+off|let\s+go|terminated|fired)\b/i,
@@ -86,7 +102,7 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       // one clause with no comma) — a temporal/causal conjunction almost
       // always introduces the reason as a trailing dependent clause, so
       // split there instead of discarding safe content along with it.
-      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(until|because|since|when|after|though|although|before)\b\s+(.*)$/i);
+      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(until|because|since|whenever|when|after|while|though|although|before)\b\s+(.*)$/i);
       if (conjunctionMatch) {
         const [, before, conjunction, after] = conjunctionMatch;
         const beforeUnsafe = containsTerminationReason(before);
@@ -96,15 +112,27 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
         // stopped. "Managed vendor contracts until I was laid off" → the
         // contracts were managed.
         if (!beforeUnsafe && afterUnsafe && before.trim()) return finishClause(before);
-        // Keeping the clause AFTER it is NOT safe in general, because a
-        // subordinating conjunction makes that clause's factual status depend
-        // on the main clause. "I was laid off BEFORE I trained the new hires"
-        // says the training never happened — promoting the dependent clause
-        // exported "Trained the new hires." as an accomplishment, asserting the
-        // opposite of what the user wrote. Only a CONCESSIVE conjunction
-        // ("although I was laid off, I completed X") actually asserts it.
-        const concessive = /^(?:though|although)$/i.test(conjunction);
-        if (concessive && !afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
+        // Whether the clause AFTER the conjunction may be kept depends on WHICH
+        // conjunction it is — the relation, not merely the presence of one.
+        // Subordinators do not behave alike here:
+        //
+        //   ASSERTING — the dependent clause definitely happened, so deleting
+        //   it amputates a true accomplishment from the résumé:
+        //     "I was laid off AFTER I completed the certification."   → completed
+        //     "I was fired BECAUSE I reported the discrepancy."       → reported
+        //     "I was dismissed WHEN I refused to falsify records."    → refused
+        //     "I was laid off WHILE I ran the night audit."           → ran it
+        //     "Although I was laid off, I completed the audit."       → completed
+        //
+        //   NON-ASSERTING — the clause describes something the termination
+        //   pre-empted, so promoting it asserts the opposite of what was said:
+        //     "I was laid off BEFORE I trained the new hires."        → never trained
+        //     "I was terminated UNTIL I ran the weekly close."        → not assertable
+        //
+        // Treating every subordinator as non-asserting traded fabrication for
+        // silent amputation, which is its own truth failure.
+        const assertsDependentClause = /^(?:after|because|when|whenever|while|since|though|although)$/i.test(conjunction);
+        if (assertsDependentClause && !afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
       }
 
       // A sentence-initial concessive puts the asserted clause last with no
