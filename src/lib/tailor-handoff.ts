@@ -145,13 +145,19 @@ export function saveHandoff(handoff: TailorHandoff): void {
   window.localStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff));
 }
 
-// Consume-once: reading removes the blob so a later, unrelated visit to the
-// builder starts clean.
-export function consumeHandoff(nowIso: string): TailorHandoff | null {
+// Peek-and-retain: reading does NOT remove the blob, so an accidental refresh
+// or away-and-back navigation resumes the same tailored session instead of
+// silently downgrading to a generic builder session. The blob is removed by
+// clearHandoff() when the session actually ends — tailored version recorded,
+// user exits the session — or ignored by parseHandoff once the TTL lapses.
+export function peekHandoff(nowIso: string): TailorHandoff | null {
   if (typeof window === "undefined") return null;
-  const serialized = window.localStorage.getItem(HANDOFF_KEY);
-  if (serialized !== null) window.localStorage.removeItem(HANDOFF_KEY);
-  return parseHandoff(serialized, nowIso);
+  return parseHandoff(window.localStorage.getItem(HANDOFF_KEY), nowIso);
+}
+
+export function clearHandoff(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(HANDOFF_KEY);
 }
 
 // Records a tailored resume version and links it back to the source
@@ -162,9 +168,12 @@ export function recordTailoredResumeVersion(
   nowIso: string,
   influenceSummary = "",
   resumeText = "",
-  resumeSnapshot: ResumeSnapshot | null = null
+  resumeSnapshot: ResumeSnapshot | null = null,
+  // Supplied by the caller when it needs to write later edits back to this
+  // same record; generated here otherwise.
+  providedVersionId?: string
 ): CommandCenterState {
-  const versionId = createId("resume");
+  const versionId = providedVersionId ?? createId("resume");
   const target = handoff.company ? `${handoff.roleTitle} @ ${handoff.company}` : handoff.roleTitle;
 
   const version = {

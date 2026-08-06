@@ -49,7 +49,14 @@ export function contextFromHandoff(handoff: TailorHandoff): TailoredResumeContex
 
 export function buildEvidenceCorpus(intake: IntakeData, extraEvidence = ""): string {
   return [
-    intake.targetJobTitle,
+    // intake.targetJobTitle is deliberately ABSENT. In a tailored session it
+    // IS the posting's own title, so including it let the job description
+    // supply its own evidence: applying to "Assistant Store Manager" made
+    // "store manager" a matched keyword, added "Store Manager" to CORE SKILLS,
+    // and put "hands-on experience in store manager" in the summary — a skill
+    // and an experience claim sourced from the employer's ad, not the user.
+    // Education is out for the same reason: a credential is not a description
+    // of work performed.
     intake.currentTitle,
     intake.previousTitle,
     intake.additionalTitle,
@@ -66,7 +73,6 @@ export function buildEvidenceCorpus(intake: IntakeData, extraEvidence = ""): str
     intake.customRoleNotes,
     intake.outcomes,
     intake.selectedOutcomes.join(" "),
-    intake.education,
     extraEvidence
   ]
     .join(" ")

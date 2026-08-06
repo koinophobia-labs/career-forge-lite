@@ -386,11 +386,53 @@ export function mergeIntakeIntoDossier(
   // signal — intakeFromDossier() prefills these very fields from the GLOBAL
   // dossier pool, so after a job change both roles legitimately record the same
   // strings and a text-matching guard would clear both.
-  const roles = [
+  const intakeLanes = [
     roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, []),
     roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], []),
     roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], [])
   ].filter((role): role is DossierRole => role !== null);
+  // Roles created on /profile carry ids from their own creation path, so a
+  // stableId derived from intake text will not match them. An unmatched id
+  // means the SAME employment lands as a second role (and the id mismatch
+  // spuriously trips prefillMovedEmployer below, un-stamping ownership).
+  // Adopt the existing role's id whenever title+employer already exist, and
+  // drop heading-only lanes that duplicate an already-recorded role — the
+  // previous/additional lanes are heading-only by design and must never
+  // shadow a recorded role with an empty copy.
+  const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const adoptExisting = (role: DossierRole): DossierRole => {
+    // DATES ARE PART OF THE IDENTITY. Matching on title+employer alone fused
+    // two genuinely separate stints at one employer — "Associate, Jun 2021 -
+    // Dec 2023" and "Associate, Jan 2024 - present" — into one record, and the
+    // later stint's work was exported under the earlier stint's dates.
+    const existing = current.roles.find(
+      (item) =>
+        sameText(item.title, role.title) &&
+        sameText(item.employer, role.employer) &&
+        sameText(item.startDate, role.startDate)
+    );
+    if (!existing) return role;
+    // MERGE onto the stored role rather than replacing it. Overwriting wiped
+    // the end date, tools, outcomes and any duties recorded on /profile that
+    // this intake pass did not happen to carry.
+    return {
+      ...existing,
+      title: role.title || existing.title,
+      employer: role.employer || existing.employer,
+      startDate: role.startDate || existing.startDate,
+      current: role.current || existing.current,
+      responsibilities: compact([...existing.responsibilities, ...role.responsibilities]),
+      tools: compact([...existing.tools, ...role.tools]),
+      outcomes: compact([...existing.outcomes, ...role.outcomes]),
+      evidenceIds: [...new Set([...existing.evidenceIds, ...role.evidenceIds])]
+    };
+  };
+  const roles = intakeLanes.map(adoptExisting).filter((role, index, all) => {
+    const alreadyRecorded = current.roles.some((item) => item.id === role.id);
+    const headingOnly = !role.responsibilities.length && !role.tools.length && !role.outcomes.length;
+    if (alreadyRecorded && headingOnly) return false;
+    return all.findIndex((other) => other.id === role.id) === index;
+  });
   const currentRole = roles[0] && roles[0].title === intake.currentTitle.trim() && roles[0].employer === intake.currentCompany.trim() ? roles[0] : null;
   // The role-scoped fields were prefilled from a DIFFERENT job than the one
   // being submitted: the user changed employer and left the carried-over detail
@@ -405,7 +447,9 @@ export function mergeIntakeIntoDossier(
   const currentRoleEvidenceIds = currentRole
     ? proposed.filter((item) => item.roleId === currentRole.id).map((item) => item.id)
     : [];
-  if (currentRole) currentRole.evidenceIds = [...currentRoleEvidenceIds];
+  // Union, never overwrite: an adopted role keeps the evidence links it earned
+  // on /profile in addition to the records this merge just stamped.
+  if (currentRole) currentRole.evidenceIds = [...new Set([...currentRole.evidenceIds, ...currentRoleEvidenceIds])];
   roles.forEach((role) => {
     const record = evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText, roleId: role.id });
     proposed.push(record);
@@ -470,7 +514,15 @@ export function mergeIntakeIntoDossier(
       phone: intake.phone.trim() || current.identity.phone,
       links: compact([...current.identity.links, intake.website])
     },
-    roles: [...current.roles.filter((item) => !roles.some((role) => role.id === item.id)), ...roles],
+    // Order is meaning: a résumé's employment history is read top-down.
+    // Appending updated roles to the end inverted it — one unedited re-run of
+    // the builder moved the previous job above the current one, and the
+    // builder then prefilled the old job as "current". Roles the dossier
+    // already knows keep their position; only genuinely new ones are appended.
+    roles: [
+      ...current.roles.map((item) => roles.find((role) => role.id === item.id) ?? item),
+      ...roles.filter((role) => !current.roles.some((item) => item.id === role.id))
+    ],
     projects,
     education,
     responsibilities: compact([...current.responsibilities, ...responsibilities]),
@@ -781,6 +833,95 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
     proofPoints: compact([...dossier.proofPoints, ...proofPoints]),
     evidence,
     approvedClaims: compact(evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail)),
+    updatedAt: nowIso
+  };
+}
+
+/**
+ * Applies an edit to one role's responsibility list, keeping the role's
+ * EVIDENCE in step with it.
+ *
+ * A role's duties live in two places: `role.responsibilities` (what the
+ * editor writes) and role-owned evidence records (what the generator reads).
+ * The editor used to write only the first, so a duty the user deleted
+ * survived as an approved record and the next forge printed it again — with
+ * the Defensibility Receipt certifying the resurrected bullet as "direct".
+ *
+ * Removed duties are marked rejected rather than deleted: that is the
+ * reversible path the Truth Inbox already understands, so the record stays
+ * visible and restorable instead of being destroyed.
+ */
+export function withRoleResponsibilitiesEdited(
+  dossier: CareerDossier,
+  roleId: string,
+  responsibilities: string[],
+  nowIso = new Date().toISOString(),
+  roleFields: { title?: string; employer?: string; startDate?: string } = {}
+): CareerDossier {
+  const norm = (value: string) => value.trim().toLowerCase();
+  const keptText = new Set(responsibilities.map(norm));
+  const role = dossier.roles.find((item) => item.id === roleId);
+  const ownedByThisRole = new Set(role?.evidenceIds ?? []);
+
+  const added = responsibilities.map((detail) =>
+    evidenceRecord("responsibility", detail, "manual", true, nowIso, { label: "Role responsibility", roleId })
+  );
+  const known = new Set(dossier.evidence.map((item) => item.id));
+  const additions = added.filter((item) => !known.has(item.id));
+  // Retyping a duty that was previously removed must bring it back. The record
+  // already exists, so it is not in `additions`; without this it stayed
+  // rejected and the retyped text silently failed to appear.
+  const revivedIds = new Set(added.filter((item) => known.has(item.id)).map((item) => item.id));
+
+  // Ownership must be EXCLUSIVE before a record may be rejected here. The
+  // first version also swept in anything listed in this role's evidenceIds,
+  // so editing one job rejected evidence stamped to a DIFFERENT employer —
+  // the user edited their current role and lost bullets from a previous one.
+  // A record with no owner at all is only claimed when no other role lists it.
+  const listedElsewhere = new Set(
+    dossier.roles.filter((role) => role.id !== roleId).flatMap((role) => role.evidenceIds)
+  );
+  const removed = dossier.evidence.filter((item) => {
+    if (item.kind !== "responsibility" || item.rejected) return false;
+    if (keptText.has(norm(item.detail))) return false;
+    if (item.roleId) return item.roleId === roleId;
+    return ownedByThisRole.has(item.id) && !listedElsewhere.has(item.id);
+  });
+  const removedIds = new Set(removed.map((item) => item.id));
+  const removedText = new Set(removed.map((item) => norm(item.detail)));
+
+  return {
+    ...dossier,
+    roles: dossier.roles.map((item) =>
+      item.id === roleId
+        ? {
+            ...item,
+            title: roleFields.title ?? item.title,
+            employer: roleFields.employer ?? item.employer,
+            startDate: roleFields.startDate ?? item.startDate,
+            responsibilities,
+            // The link is KEPT even for a removed duty. Stripping the id
+            // orphaned the record: "Restore and approve" flipped it back to
+            // approved but nothing re-linked it, so the restored duty never
+            // reached the résumé again and the user could not recover their
+            // own text by any documented path. Exclusion is carried by the
+            // rejected flag alone — every consumer already filters on
+            // `approved && !rejected` — so restoring is a single flag flip.
+            evidenceIds: [...new Set([...item.evidenceIds, ...added.map((record) => record.id)])]
+          }
+        : item
+    ),
+    responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])].filter(
+      (item) => !removedText.has(norm(item))
+    ),
+    evidence: [...dossier.evidence, ...additions].map((item) => {
+      if (removedIds.has(item.id)) return { ...item, rejected: true, approved: false };
+      if (revivedIds.has(item.id) && item.rejected) return { ...item, rejected: false, approved: true };
+      return item;
+    }),
+    approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])].filter(
+      (item) => !removedText.has(norm(item))
+    ),
     updatedAt: nowIso
   };
 }

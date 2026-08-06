@@ -219,7 +219,14 @@ function validatePersona(persona) {
   if (bullets.length < 3 && groundedUnits.length < 3) warnings.push(`thin evidence: ${groundedUnits.length} grounded unit(s), fewer than three bullets, truthfully`);
   if (unique(normalizedBullets).length !== normalizedBullets.length) failures.push("duplicate bullet sentence");
   if (hasThreeNearDuplicates(bullets)) failures.push("three bullets are nearly identical");
-  if (missingSkills.length === persona.skills.length) failures.push("no expected transferable skills detected");
+  // The occupation-template layer is RETIRED on the launch path
+  // (src/lib/occupation-templates.ts), so CORE SKILLS is no longer populated
+  // from taxonomy — a derived label was how "The cash office was next to my
+  // register." became the skill Cash Handling. This expectation therefore
+  // tests a retired feature and is recorded as a WARNING, not a failure:
+  // fewer decorative skills is the intended, honest reduction. What still
+  // fails the suite is fabrication, duplication and thin bullets.
+  if (missingSkills.length === persona.skills.length) warnings.push("no taxonomy-derived transferable skills (expected: layer retired)");
   if (persona.story && parsedRoleFamily !== persona.roleFamily) failures.push(`story role family mismatch: expected ${persona.roleFamily}, got ${parsedRoleFamily}`);
 
   for (const forbidden of persona.forbidden) {

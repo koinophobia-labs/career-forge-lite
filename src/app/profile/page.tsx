@@ -10,6 +10,7 @@ import {
   assessDossierReadiness,
   evidenceRecord,
   parseResumePackToProposals,
+  withRoleResponsibilitiesEdited,
   withUpdatedDossier
 } from "@/lib/dossier";
 import { extractLocalResumeFiles } from "@/lib/local-resume-import";
@@ -27,12 +28,20 @@ import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { syncRoleSprintsWithEvidence } from "@/lib/role-sprint";
 import { earlyWinBullets } from "@/lib/early-win";
 import { useCommandCenter } from "@/lib/use-command-center";
+import { IDENTITY_CALLOUT_DISMISSED_KEY } from "@/lib/local-keys";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
-
-const IDENTITY_CALLOUT_DISMISSED_KEY = "career-forge-identity-callout-dismissed-v1";
 
 function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
+}
+
+// Responsibilities are entered one per LINE — the field says so. Splitting them
+// on commas too shredded ordinary sentences: "Mopped, swept, wiped the front
+// end." became three records, and the résumé printed the fragments "Mopped" and
+// "Swept" while the rest fell off the bullet cap. A sentence the user wrote is
+// one claim, at input as well as at generation.
+function lines(text: string): string[] {
+  return [...new Set(text.split(/\n/).map((item) => item.trim()).filter(Boolean))];
 }
 
 function MetricCard({ label, value }: { label: string; value: number }) {
@@ -159,7 +168,7 @@ export default function DossierPage() {
   function addRole() {
     if (!role.title.trim() && !role.employer.trim()) return;
     const now = new Date().toISOString();
-    const responsibilities = values(role.responsibilities);
+    const responsibilities = lines(role.responsibilities);
     // The role id is minted first so every record collected here can be stamped
     // with its owner — a résumé role may only cite evidence it owns.
     const roleId = createId("role");
@@ -355,34 +364,25 @@ export default function DossierPage() {
 
   function editRole(id: string, form: FormData) {
     const now = new Date().toISOString();
-    const responsibilities = values(String(form.get("responsibilities") ?? ""));
-    // Typing a responsibility here must actually create evidence owned by this
-    // role. Previously this wrote the text onto the role but minted nothing, so
-    // an employer carrying no evidence of its own could never be brought back
-    // into the résumé — the role stayed bullet-less no matter what the user did.
-    const responsibilityEvidence = responsibilities.map((detail) =>
-      evidenceRecord("responsibility", detail, "manual", true, now, { label: "Role responsibility", roleId: id })
+    const responsibilities = lines(String(form.get("responsibilities") ?? ""));
+    // Duties live in two places — role.responsibilities and role-owned
+    // evidence records — and the generator reads both. withRoleResponsibilitiesEdited
+    // keeps them in step, so a duty removed here actually stops printing
+    // instead of being resurrected by the next forge.
+    save(
+      withRoleResponsibilitiesEdited(dossier, id, responsibilities, now, {
+        title: String(form.get("title") ?? "").trim(),
+        employer: String(form.get("employer") ?? "").trim(),
+        startDate: String(form.get("dates") ?? "").trim()
+      })
     );
-    const known = new Set(dossier.evidence.map((item) => item.id));
-    const additions = responsibilityEvidence.filter((item) => !known.has(item.id));
-    save({
-      ...dossier,
-      roles: dossier.roles.map((item) => item.id === id ? {
-        ...item, title: String(form.get("title") ?? "").trim(), employer: String(form.get("employer") ?? "").trim(),
-        startDate: String(form.get("dates") ?? "").trim(), responsibilities,
-        evidenceIds: [...new Set([...item.evidenceIds, ...responsibilityEvidence.map((record) => record.id)])]
-      } : item),
-      responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])],
-      evidence: [...dossier.evidence, ...additions],
-      approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])]
-    });
   }
 
   function editProject(id: string, form: FormData) {
     save({ ...dossier, projects: dossier.projects.map((item) => item.id === id ? {
       ...item, name: String(form.get("name") ?? "").trim(), organization: String(form.get("organization") ?? "").trim(),
       dates: String(form.get("dates") ?? "").trim(), description: String(form.get("description") ?? "").trim(),
-      responsibilities: values(String(form.get("responsibilities") ?? "")), tools: values(String(form.get("tools") ?? "")),
+      responsibilities: lines(String(form.get("responsibilities") ?? "")), tools: values(String(form.get("tools") ?? "")),
       outcomes: values(String(form.get("outcomes") ?? "")), metrics: values(String(form.get("metrics") ?? "")),
       links: values(String(form.get("links") ?? "")),
       defaultPlacement: String(form.get("placement")) as DossierProject["defaultPlacement"]

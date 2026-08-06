@@ -181,5 +181,121 @@ check("unknown lanes fall back to a human label, never a raw lane id", noLaneRea
 const analyticsSource = fs.readFileSync(path.join(root, "src/lib/analytics.ts"), "utf8");
 check("career workflow analytics are event-name only", /function trackCareerEvent[\s\S]*?track\(event\)/.test(analyticsSource) && !/trackCareerEvent[\s\S]*?properties/.test(analyticsSource));
 
+// --- Guided write-back must not duplicate or hollow out profile-created roles -------
+// Repro of the closure-audit contamination: roles created on /profile carry ids
+// from the profile path; a guided session prefilled via intakeFromDossier and
+// merged back with mergeIntakeIntoDossier must UPDATE those roles in place —
+// never add a same-employment role under a new id, never shadow a recorded
+// role with an empty heading-only copy, and never drop earned evidence links.
+{
+  const profileDossier = {
+    ...emptyState().dossier,
+    roles: [
+      {
+        id: "role-profile-fmg",
+        title: "Shift Supervisor",
+        employer: "Fresh Market Grocery",
+        startDate: "2021–2024",
+        endDate: "",
+        current: false,
+        responsibilities: [
+          "It was my job to reconcile the drawer.",
+          "Reported to my manager and the shift lead.",
+          "Trained 4 new cashiers on the register system.",
+          "Made weekly schedules for a team of 6.",
+          "Handled customer complaints and refunds."
+        ],
+        tools: [],
+        outcomes: [],
+        evidenceIds: ["evidence-fmg-1", "evidence-fmg-2"]
+      },
+      {
+        id: "role-profile-quickstop",
+        title: "Cashier",
+        employer: "QuickStop Convenience",
+        startDate: "2019–2021",
+        endDate: "",
+        current: false,
+        responsibilities: ["Answered phones.", "Rang up purchases and bagged groceries.", "Counted the till at closing."],
+        tools: [],
+        outcomes: [],
+        evidenceIds: ["evidence-qs-1"]
+      }
+    ]
+  };
+
+  const prefilled = intakeFromDossier(profileDossier, "Assistant Store Manager");
+  const mergedOnce = mergeIntakeIntoDossier(profileDossier, prefilled, "guided", true, "guided write-back", NOW);
+  const mergedTwice = mergeIntakeIntoDossier(mergedOnce, intakeFromDossier(mergedOnce, "Assistant Store Manager"), "guided", true, "guided write-back again", NOW);
+
+  check("guided write-back keeps exactly the two recorded roles", mergedOnce.roles.length === 2, `roles=${mergedOnce.roles.map((r) => `${r.title}@${r.employer}#${r.id}(${r.responsibilities.length})`).join(", ")}`);
+  check("guided write-back reuses the profile role ids", mergedOnce.roles.every((r) => ["role-profile-fmg", "role-profile-quickstop"].includes(r.id)));
+  check("no two roles share an id after write-back", new Set(mergedOnce.roles.map((r) => r.id)).size === mergedOnce.roles.length);
+  check(
+    "no recorded role is hollowed out by a heading-only lane",
+    mergedOnce.roles.every((r) => r.responsibilities.length > 0),
+    JSON.stringify(mergedOnce.roles.map((r) => [r.employer, r.responsibilities.length]))
+  );
+  check(
+    "the current role keeps the evidence links it earned on /profile",
+    (() => {
+      const fmg = mergedOnce.roles.find((r) => r.id === "role-profile-fmg");
+      return fmg && fmg.evidenceIds.includes("evidence-fmg-1") && fmg.evidenceIds.includes("evidence-fmg-2");
+    })()
+  );
+  check("a second guided write-back is idempotent on role count", mergedTwice.roles.length === 2, `roles=${mergedTwice.roles.length}`);
+  check(
+    "a genuinely new previous employer still becomes a new role",
+    (() => {
+      const withNew = mergeIntakeIntoDossier(
+        profileDossier,
+        { ...prefilled, previousTitle: "Stocker", previousCompany: "Valley Hardware", previousTime: "2018–2019" },
+        "guided",
+        true,
+        "typed a new employer",
+        NOW
+      );
+      return withNew.roles.length === 3 && withNew.roles.some((r) => r.employer === "Valley Hardware");
+    })()
+  );
+}
+
+// --- Role identity, ordering and merge fidelity (second-review regressions) ---------
+// All three were INTRODUCED by the first version of the id-adoption fix and
+// found by the independent review of PR #58.
+{
+  const NOW2 = "2026-08-06T00:00:00.000Z";
+  const base = (o) => ({ ...intake, ...o });
+
+  // Dates are part of a role's identity: two stints at one employer must stay
+  // two records, or one stint's work is exported under the other's dates.
+  let d = mergeIntakeIntoDossier(emptyState().dossier, base({ currentTitle: "Associate", currentCompany: "Northwind", currentTime: "Jun 2021 - Dec 2023", responsibilities: "Answered the overnight support line." }), "guided", true, "", NOW2);
+  d = mergeIntakeIntoDossier(d, base({ currentTitle: "Associate", currentCompany: "Northwind", currentTime: "Jan 2024 - present", responsibilities: "Reconciled the vendor invoice queue every Friday." }), "guided", true, "", NOW2);
+  check("two stints at one employer stay two roles", d.roles.length === 2, JSON.stringify(d.roles.map((r) => [r.employer, r.startDate])));
+  check(
+    "each stint keeps its own dates",
+    d.roles.some((r) => r.startDate === "Jun 2021 - Dec 2023") && d.roles.some((r) => r.startDate === "Jan 2024 - present"),
+    JSON.stringify(d.roles.map((r) => r.startDate))
+  );
+
+  // Employment order is meaning; an unedited re-run must not invert it.
+  let e = mergeIntakeIntoDossier(emptyState().dossier, base({ currentTitle: "Barista", currentCompany: "Bean Street", currentTime: "2023-present", responsibilities: "Pulled espresso shots.", previousTitle: "Cashier", previousCompany: "Fresh Market", previousTime: "2021-2023" }), "guided", true, "", NOW2);
+  const orderBefore = e.roles.map((r) => `${r.title}·${r.employer}`).join("|");
+  e = mergeIntakeIntoDossier(e, intakeFromDossier(e, "Operations"), "guided", true, "", NOW2);
+  check("an unedited re-run preserves employment order", e.roles.map((r) => `${r.title}·${r.employer}`).join("|") === orderBefore, `${orderBefore} -> ${e.roles.map((r) => `${r.title}·${r.employer}`).join("|")}`);
+
+  // Adoption must MERGE onto the stored role, not replace it.
+  const stored = {
+    ...emptyState().dossier,
+    roles: [{ id: "role-x", title: "Shift Lead", employer: "Fresh Market", startDate: "Mar 2021", endDate: "Aug 2024", current: false, responsibilities: ["Counted the safe at close", "Ran the morning huddle"], tools: ["POS", "Kronos"], outcomes: ["Cut shrink 8%"], evidenceIds: ["ev1"] }]
+  };
+  const merged = mergeIntakeIntoDossier(stored, base({ currentTitle: "Shift Lead", currentCompany: "Fresh Market", currentTime: "Mar 2021", responsibilities: "Counted the safe at close" }), "guided", true, "", NOW2);
+  const kept = merged.roles.find((r) => r.id === "role-x");
+  check("adoption preserves the stored end date", kept && kept.endDate === "Aug 2024", JSON.stringify(kept && kept.endDate));
+  check("adoption preserves stored tools and outcomes", kept && kept.tools.includes("POS") && kept.outcomes.includes("Cut shrink 8%"), JSON.stringify(kept && [kept.tools, kept.outcomes]));
+  check("adoption preserves duties the intake pass did not carry", kept && kept.responsibilities.includes("Ran the morning huddle"), JSON.stringify(kept && kept.responsibilities));
+  check("adoption preserves earned evidence links", kept && kept.evidenceIds.includes("ev1"), JSON.stringify(kept && kept.evidenceIds));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

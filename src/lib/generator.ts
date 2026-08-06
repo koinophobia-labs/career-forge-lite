@@ -6,6 +6,7 @@ import { educationPlaceholder } from "@/lib/resume-export";
 import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
+import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
@@ -21,9 +22,58 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
  * names removed. A title says who someone was called, not what they did, so it
  * must not authorise an activity claim — see buildResponsibilityList.
  */
+// A negation marker. The apostrophe in a contraction is REQUIRED: an earlier
+// version wrote n['’]?t with the apostrophe OPTIONAL, which made every
+// English word ending in "nt" a negation — management, equipment, front,
+// different, important, consistent, department, assistant, restaurant, client.
+// That silently stripped ordinary true sentences out of the grounding corpus
+// and emptied CORE SKILLS for real users.
+// Only VERB negation strips a clause from the grounding corpus. "no",
+// "without" and "none" negate a NOUN, and the action still happened:
+//   "I cleaned the east wing WITHOUT supervision."   -> the cleaning happened
+//   "I packed 200 orders WITHOUT a single mistake."  -> the packing happened
+//   "I had NO complaints from customers in two years." -> an achievement
+// Stripping those emptied CORE SKILLS entirely — one "without" removed the
+// whole section from the exported résumé. Absence-of-evidence phrasing ("I
+// have no supervisory experience") is handled upstream by the admissibility
+// layer's GAP_PATTERNS/ADVERBIAL_NO pair, which quarantines the record before
+// it can reach this corpus at all, so nothing is lost by narrowing here.
+const NEGATION_MARKER = new RegExp(
+  String.raw`\b(?:not|never|neither|nor)\b|\b(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need|ai)n['’]?t\b`,
+  "i"
+);
+
+/**
+ * Removes NEGATED clauses before text is used as grounding evidence.
+ *
+ * Grounding matched raw text with no notion of polarity, so a denial licensed
+ * the very claim it denied: "I never handled cash" produced the skill Cash
+ * Handling and the summary line "Strengths the candidate reports include cash
+ * Handling"; "I am not forklift certified" produced Equipment Operation; "I
+ * never had to escalate a single ticket" produced "Escalated customer issues
+ * to leads or managers." The words are the user's, but the claim is its
+ * opposite.
+ *
+ * A clause carrying not / never / no / n't contributes nothing to grounding.
+ * Its text still reaches the résumé verbatim through the responsibility path —
+ * this only stops it AUTHORISING derived claims. Dropping a clause can at
+ * worst under-claim, which is the safe direction.
+ */
+export function withoutNegatedClauses(text: string): string {
+  if (!text) return "";
+  return text
+    .split(/(?<=[.!?;:,])\s+|\n|\s+\b(?:and|but|though|although|however|while|because|so)\b\s+/i)
+    .filter((clause) => !NEGATION_MARKER.test(clause))
+    .join(" ");
+}
+
 export function buildActivityCorpus(data: IntakeData) {
   return [
-    data.tools,
+    // data.tools is deliberately ABSENT. Naming a tool says what was in reach,
+    // not what was done with it: "POS Systems, Cash Drawer" was grounding
+    // "Processed payments" and the skill "Cash Handling" for a user who never
+    // described handling payments. Tools still reach output as tool phrases
+    // ("… using X") and the Tools section, which is what naming one supports.
     data.responsibilities,
     data.outcomes,
     data.customRoleNotes,
@@ -43,6 +93,7 @@ export function buildActivityCorpus(data: IntakeData) {
     ...data.selectedIndependentWorkSignals,
     ...data.selectedAiWorkflows
   ]
+    .map((value) => withoutNegatedClauses(value ?? ""))
     .join(" ")
     .toLowerCase();
 }
@@ -92,7 +143,12 @@ const groundingAliasGroups: string[][] = [
   ["schedul", "appointment", "calendar", "booking", "shift", "coverage"],
   ["document", "note", "record", "log", "report", "paperwork", "file", "wrote", "writ"],
   ["deliver", "route", "courier", "dispatch", "doordash", "driver", "driving", "drove", "trip"],
-  ["conflict", "de-escalat", "deescalat", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  // Situation words (conflict, upset customers, tense moments) may ground
+  // resolution claims, but never the de-escalation ACTION — being near tense
+  // moments is not performing de-escalation, so that stem only grounds when
+  // the user described de-escalating or defusing themselves (RA-P0-03).
+  ["conflict", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  ["de-escalat", "deescalat", "defus"],
   ["team", "coworker", "crew", "staff", "colleague", "kitchen staff", "servers"],
   ["safety", "safe", "ppe", "osha", "hazard"],
   ["order", "ticket", "request", "case", "wager", "issue"],
@@ -121,7 +177,9 @@ const labelGrounding = new Map<string, RegExp>([
   // candidate managed time. Only evidence about their own time performance
   // authorises the competency.
   ["time management", /\b(deadlines?|on time|prioriti\w*|multitask\w*|juggl\w*|time management|scheduled around)\b/],
-  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?|kitchen)\b/],
+  // A room is not a team: "kitchen" was grounding Team Coordination for a
+  // user who described cleaning it alone. People words only.
+  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?)\b/],
   // Performing a checking TASK ("checked labels") is not the same claim as
   // possessing the QUALITY. This is the same over-claim as the ungated canned
   // bullets that asserted "attention to detail" and were removed; the label
@@ -130,7 +188,9 @@ const labelGrounding = new Map<string, RegExp>([
   ["order accuracy", /\b(orders?|accuracy|accurate)\b/],
   ["problem solving", /\b(problems?|issues?|resolved?|fixed|solved?|troubleshoot|troubleshot)\b/],
   ["patient support", /\b(patients?|residents?|clients?|care)\b/],
-  ["safety procedures", /\b(safety|safe|ppe|osha|sanitation)\b/],
+  // "The dock always felt safe" describes how a place felt, not that the
+  // candidate followed safety procedures. The bare adjective is out.
+  ["safety procedures", /\b(safety|ppe|osha|sanitation)\b/],
   ["inventory", /\b(inventory|stock(?:ed|ing|er)?|restock\w*|shelves|shelf|shipments?|supplies|pallets?)\b/],
   ["documentation", /\b(document\w*|notes?|records?|logs?|reports?|paperwork|wrote)\b/],
   ["reliability", /\b(reliab\w*|on time|showed up|never missed|attendance|dependab\w*|consistent\w*|covered shifts?)\b/],
@@ -886,18 +946,45 @@ function buildScopeItems(data: IntakeData) {
 // role statements or third-party narration are dropped rather than templated.
 function splitResponsibilityText(value: string) {
   const { text } = stripTerminationReasons(value);
+  // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
+  // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
+  // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
+  // is one claim and stays one claim.
   return text
-    .split(/,|\n|;|\.|\band\b/i)
-    .map((item) => cleanWhitespace(item).replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
+    // An ellipsis is not a sentence boundary. Splitting on its final dot tore
+    // "Closed, counted, locked up... every single night." into two claims,
+    // deleted the "...", and rejoined the halves with an invented "and".
+    //
+    // The first attempt at this wrote (?<![.!?])(?<=[.!?]) — two lookbehinds
+    // evaluated at the SAME position, asserting the preceding character both
+    // is and is not terminal punctuation. It can never match, so this stopped
+    // splitting sentences AT ALL: every per-item filter below only ever saw
+    // sentence #1, and "Answered the phones. I do not know how many calls I
+    // took." reached the résumé, summary and LinkedIn summary as one bullet.
+    // Look back TWO characters instead: a run of dots means an ellipsis.
+    .split(/\n|;|(?<!\.\.)(?<=[.!?])\s+/)
+    .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
-    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item))
-    .filter((item) => !/\b(me|they|them|it was|i was|i am|my manager|my boss)\b/i.test(item));
+    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
+    // The narration filter that used to sit here DELETED any sentence mentioning
+    // "my manager", "they", "me" and so on. It destroyed true statements —
+    // "Reported to my manager and the shift lead." vanished from every surface —
+    // while the leftover token "manager" separately authorised an unrelated
+    // canned claim. Narration is the user's own wording and is kept.
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
-// not responsibilities; they are dropped rather than templated.
+// not responsibilities; they are dropped rather than templated. Only
+// title-cased heading fragments match: a sentence the user actually wrote is
+// sentence-cased and is a claim, not an artifact — "It was my job to
+// reconcile the drawer." and "They told me to cover the front desk." must
+// survive verbatim (RA-P0-03).
 function looksLikeNarrationFragment(item: string) {
-  return /\b(they|them|about what|it was|i was)\b/i.test(item);
+  if (!/\b(they|them|about what|it was|i was)\b/i.test(item)) return false;
+  const words = item.split(/\s+/).filter((word) => /[a-z]/i.test(word));
+  if (words.length < 3) return true;
+  const capitalized = words.filter((word) => /^[A-Z]/.test(word));
+  return capitalized.length >= Math.ceil(words.length * 0.8);
 }
 
 function buildUserResponsibilityList(data: IntakeData) {
@@ -906,7 +993,10 @@ function buildUserResponsibilityList(data: IntakeData) {
     ...data.customRoleTransferableSkills.map(normalizeResponsibility),
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
     ...data.selectedResponsibilities.map(normalizeResponsibility),
-    normalizeResponsibility(data.customRoleIndustry),
+    // customRoleIndustry is deliberately absent: an industry chip ("Retail")
+    // names a sector, not a duty — rendering it as a responsibility produced
+    // fused fake bullets like "Supported Escalation handling, Retail, and the
+    // shift lead."
     ...splitResponsibilityText(data.responsibilities).map(normalizeResponsibility)
   ])
     .filter((item) => !looksLikeNarrationFragment(item))
@@ -927,7 +1017,12 @@ function buildResponsibilityList(data: IntakeData) {
     return dedupeNearIdentical(
       compact([
         ...userResponsibilities,
-        ...groundedOnly([...occupation.dailyTasks, ...occupation.communication, ...occupation.challenges], corpus)
+        // Occupation taxonomy is retired from the launch path: a grounded
+        // token proves a WORD appeared, never that this candidate performed
+        // the task. See src/lib/occupation-templates.ts.
+        ...(OCCUPATION_TEMPLATES_ENABLED
+          ? groundedOnly([...occupation.dailyTasks, ...occupation.communication, ...occupation.challenges], corpus)
+          : [])
       ])
     ).slice(0, 10);
   }
@@ -979,6 +1074,9 @@ function looksLikeSkillLabel(skill: string) {
   if (/^(i|we|my|our)\b/i.test(skill)) return false;
   if (skill.split(/\s+/).length > 5) return false;
   if (/\b(me|them|they|was|were|about|because)\b/i.test(skill)) return false;
+  // A denial is never a skill. "I never handled cash" was reaching CORE SKILLS
+  // as the literal entry "never handled cash".
+  if (NEGATION_MARKER.test(skill)) return false;
   return true;
 }
 
@@ -1002,7 +1100,11 @@ function buildSkillList(data: IntakeData) {
       ? occupation.transferables
       : [...roleIntelligence[data.roleFamily].skills, ...workflowSkillsByFamily[data.roleFamily]];
   const skillPool = [
-    ...groundedOnly(taxonomy, corpus).map(normalizeResponsibility),
+    // Derived competency labels are retired with the rest of the layer. A noun
+    // in the user's sentence licensed a competency ABOUT them — "The cash
+    // office was next to my register." minted Cash Handling, and the summary
+    // then read "Strengths the candidate reports include cash Handling."
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(taxonomy, corpus).map(normalizeResponsibility) : []),
     ...responsibilities.slice(0, 8),
     ...data.selectedResponsibilities.map(normalizeResponsibility).slice(0, 6),
     ...data.selectedActions.map(normalizeResponsibility).slice(0, 3),
@@ -1063,8 +1165,8 @@ function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
     const corpus = buildGroundingCorpus(data);
     // Arsenal taxonomy is gated the same way as occupation taxonomy: only
     // grounded skills/workflows may describe the user.
-    const groundedArsenalSkills = groundedOnly(arsenal.skills, corpus);
-    const groundedArsenalWorkflows = groundedOnly(arsenal.workflows, corpus);
+    const groundedArsenalSkills = OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(arsenal.skills, corpus) : [];
+    const groundedArsenalWorkflows = OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(arsenal.workflows, corpus) : [];
     return {
       name: independentCategory.toLowerCase(),
       keywords: [independentCategory, ...arsenal.domainLanguage],
@@ -1215,18 +1317,79 @@ type GroundedBullet = { text: string; when?: RegExp; evidence?: RegExp[] };
  * the missing clauses become material for a targeted question instead of
  * silently becoming résumé content.
  */
+
+const THIRD_PARTY_DETERMINER = /^(?:the|a|an|our|their|his|her|its|this|that|these|those|every|each)$/i;
+
+// Irregular leads a suffix rule cannot stem.
+const LEAD_STEM_OVERRIDES = new Map<string, string>([
+  ["kept", "keep|kept"], ["held", "hold|held"], ["led", "lead|led"], ["built", "build|built"],
+  ["ran", "run|ran"], ["made", "make|made"], ["took", "take|took"], ["drove", "drive|drove"],
+  ["sent", "send|sent"], ["met", "meet|met"], ["set", "set"], ["put", "put"],
+]);
+
+/**
+ * True when the corpus evidences the ACT named by a composed bullet's lead verb.
+ * Derived from the lead's own first word so every call site is covered without
+ * each one restating its verb.
+ */
+function leadIsEvidenced(corpus: string, lead: string): boolean {
+  const first = (lead.trim().split(/\s+/)[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!first) return true;
+  const override = LEAD_STEM_OVERRIDES.get(first);
+  const stem = override ?? first.replace(/(?:ed|d)$/, "");
+  // A short stem must fall back to the WHOLE word, never to an unconditional
+  // pass. "Used" stems to "us" (2 chars) and took this early return, so every
+  // "Used …" bullet skipped the gate entirely: "The tools were locked in the
+  // gang box overnight." licensed "Used hand and power tools." for a user who
+  // never said they touched one.
+  if (stem.length < 3) {
+    return new RegExp(`\\b${first}\\w*`, "i").test(corpus);
+  }
+  const occurrence = new RegExp(`\\b(?:${stem})\\w*`, "gi");
+  let hit: RegExpExecArray | null;
+  while ((hit = occurrence.exec(corpus)) !== null) {
+    // The act has to be the CANDIDATE'S. "The facility keeps care notes"
+    // evidences the word "keeps" but attributes it to the employer, so it is no
+    // licence for the résumé to claim "Kept care notes." A third-party subject
+    // immediately before the verb disqualifies that occurrence.
+    const preceding = corpus.slice(0, hit.index).trimEnd().split(/\s+/).slice(-2);
+    const thirdParty = preceding.length === 2 && THIRD_PARTY_DETERMINER.test(preceding[0] ?? "");
+    if (!thirdParty) return true;
+  }
+  return false;
+}
+
 function composed(
   corpus: string,
   lead: string,
   clauses: Array<[RegExp, string]>,
   options: { min?: number; tail?: string } = {}
 ): GroundedBullet {
-  const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
+  // DOUBLE GATE. The trigger regex says a related word appeared; it does not
+  // say the PHRASE is true. Gating on the trigger alone is a cross-concept
+  // licence, and an audit of all 111 clause pairs found roughly 30 asserting
+  // an activity the trigger never evidenced — "I cleaned the toilets on my
+  // hall." licensing "Supported clients with personal care.", "I walked the
+  // halls checking doors." licensing "…with mobility.", "I logged exchanges in
+  // the binder." licensing "…with returns." Patching individual pairs treated
+  // a structural defect as a list, so the phrase must now be grounded in the
+  // corpus in its OWN right, by the same isGroundedClaim() every other derived
+  // claim answers to.
+  const matched = clauses
+    .filter(([evidence, phrase]) => evidence.test(corpus) && isGroundedClaim(phrase, corpus))
+    .map(([, phrase]) => phrase);
   const min = options.min ?? 1;
   if (matched.length < min) return { text: "" };
+  // The LEAD carries a claim too. Gating only the clauses meant "Maintained the
+  // safety log" emitted "Reported safety concerns." — a correctly grounded
+  // clause bolted to a verb the user never used. A gated clause attached to an
+  // invented verb is still fabrication, so the lead must be evidenced as well.
+  if (!leadIsEvidenced(corpus, lead)) return { text: "" };
   // `concepts` records exactly what this bullet claims, so a later pass can tell
   // whether it restates the user or adds something.
-  const evidence = clauses.filter(([test]) => test.test(corpus)).map(([test]) => test);
+  const evidence = clauses
+    .filter(([test, phrase]) => test.test(corpus) && isGroundedClaim(phrase, corpus))
+    .map(([test]) => test);
   return { text: `${lead} ${sentenceList(matched)}${options.tail ?? ""}.`.replace(/\s+/g, " "), evidence };
 }
 
@@ -1277,7 +1440,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       // into a specific activity the user never described.
       composed(corpus, `Assisted ${customerScope ? customerScope.phrase : "customers"} with`, [
         [/\bpurchase\w*|\bsales?\b|\bbought\b|\bbuying\b/, "purchases"],
-        [/\breturns?\b|\bexchang\w*|\brefund\w*/, "returns"],
+        // "returns" and "refunds" are different activities: a user who wrote
+        // "Handled customer complaints and refunds." never described returns.
+        [/\breturns?\b|\bexchang\w*/, "returns"],
+        [/\brefund\w*/, "refunds"],
         [/\bquestions?\b|\basked\b|\binquir\w*/, "questions"],
         [/\bfind\w*|\blocat\w*|\bproducts?\b|\bmerchandis\w*/, "locating products"]
       ]),
@@ -1290,7 +1456,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bdisplays?\b|\bpresentation|\bfacing|\bmerchandis\w*/, "maintaining store presentation"],
         [/\binventory\b|\bshelves\b|\bshelf\b|\bbackroom\b/, "organizing inventory areas"]
       ]),
-      { text: "Escalated customer issues to leads or managers.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
+      // The gate names the ACTION only. "my manager" says who was nearby, not
+      // that anything was escalated; "de-escalated" is the opposite action and
+      // must not match through the hyphen boundary.
+      { text: "Escalated customer issues to leads or managers.", when: /(?<!de[\s-])\bescalat\w*/i },
       composed(corpus, "Balanced", [
         [/\bregisters?\b|\baccura\w*/, "register accuracy"],
         [/\bcustomers?\b|\bservice\b/, "customer service"],
@@ -1337,7 +1506,9 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bobservations?\b|\bnoticed\b/, "observations"],
         [/\bnotes?\b|\blogs?\b|\blogged\b|\bwrote\b|\breport\w*/, "shift notes"]
       ]),
-      { text: "Escalated concerns in line with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
+      // Same rule: only escalation language grounds an escalation claim.
+      // "called" (phoning anyone) and "policies" (existing) did not.
+      { text: "Escalated concerns in line with site policies.", when: /(?<!de[\s-])\bescalat\w*/i },
       // (ungated canned bullet removed: it asserted reliability / attention to
       // detail with nothing in the user's corpus behind it, and could be the ONLY
       // experience bullet on the résumé. A role with nothing grounded renders
@@ -1425,7 +1596,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bclean\w*|\bwiped?\b/, "clean"],
         [/\borganiz\w*|\bstation\b|\bstocked\b/, "organized"]
       ]),
-      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|team|kitchen)\b/ },
+      // "kitchen" is a room, not collaboration: "Scrubbed the kitchen floors
+      // after close." described solo work and was grounding a two-claim
+      // coordination bullet. The gate names people, not places.
+      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|teammates?|team|crew|servers?|expo)\b/ },
       composed(corpus, "Handled", [
         [/\bquestions?\b|\basked\b/, "customer questions"],
         [/\bissues?\b|\bcomplaints?\b|\bwrong\b|\bremade?\b/, "order issues"]
@@ -1536,9 +1710,13 @@ function buildOccupationSummary(data: IntakeData, target: string, experience: Ex
   const currentRole = experience[0];
   const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
   const strengths = compact([
+    // Only what the user SELECTED or TYPED may be attributed to them. The
+    // taxonomy branch is retired: a noun in their sentence produced
+    // "Strengths the candidate reports include cash Handling." for someone
+    // who reported no such thing.
     ...data.customRoleTransferableSkills.map(normalizeResponsibility),
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
-    ...groundedOnly(occupation.transferables, corpus)
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(occupation.transferables, corpus) : [])
   ]).slice(0, 4);
   const responsibilities = buildResponsibilityList(data).map(readableUserPhrase).slice(0, 4);
   const aiPhrase = aiWorkflowPhrase(data);
@@ -1726,6 +1904,11 @@ function cleanSentence(sentence: string) {
 // the sentence must be individually evidenced, and a bullet only renders when
 // at least two grounded activities exist.
 function specificEvidenceBullets(data: IntakeData) {
+  // Same mechanism as the occupation templates under a different name: a
+  // vocabulary match licenses a composed activity claim ("Maintained safety
+  // coverage by monitoring access points and documenting incidents."). It
+  // cannot tell whose activity it was either, so it retires with the layer.
+  if (!OCCUPATION_TEMPLATES_ENABLED) return [];
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data).map(readableUserPhrase);
   const evidence = evidenceText(data).toLowerCase();
@@ -1810,16 +1993,38 @@ const verbLedPhrase =
 // misread as a noun label and wrapped in an invented "Supported " lead, so
 // "Mopped." rendered as "Supported mopped."
 function isVerbLed(line: string) {
-  const first = cleanWhitespace(line).split(/\s+/)[0] ?? "";
+  // Strip punctuation clinging to the first word before testing it. A user who
+  // writes a comma-separated list — "Mopped, swept, wiped." — gives a first
+  // token of "Mopped," and the -ed/-ing test, being anchored at $, failed on
+  // the comma. The line was then judged a bare noun label and shipped as the
+  // fabricated bullet "Supported Mopped, swept, wiped." Those verbs are
+  // precisely the ones the suffix fallback exists to catch.
+  const first = (cleanWhitespace(line).split(/\s+/)[0] ?? "").replace(/[^A-Za-z'’-]/g, "");
   return verbLedPhrase.test(line) || /^[a-z]{3,}(ed|ing)$/i.test(first);
 }
 
+// A clause has a subject and/or a copula: "It was hectic.", "They promoted
+// me twice.", "was the closer". A word count cannot tell these from a chip
+// label, and treating them as labels produced fabricated leads like
+// "Supported It was hectic." Detected structurally — no verb whitelist.
+function readsAsClause(line: string) {
+  return (
+    /\b(?:it|they|them|we|he|she|you|i)\b/i.test(line) ||
+    /\b(?:is|was|were|are|am|be|been|being)\b/i.test(line) ||
+    // A negation is a statement about what did NOT happen, never a chip label.
+    // "never handled cash" was short enough to pass as a bare label and came
+    // back as the fabricated bullet "Supported never handled cash."
+    NEGATION_MARKER.test(line)
+  );
+}
+
 // A line may take the "Supported …" lead ONLY when it is unmistakably a bare
-// noun label — a short fragment with no verb of its own. Anything else is the
-// user's own sentence and is emitted as written. Never guess a lead.
+// noun label — a short fragment with no verb and no clause structure of its
+// own. Anything else is the user's own sentence and is emitted as written.
+// Never guess a lead.
 function isNounLabel(line: string) {
   const words = cleanWhitespace(line).split(/\s+/).filter(Boolean);
-  return words.length > 0 && words.length <= 4 && !isVerbLed(line);
+  return words.length > 0 && words.length <= 4 && !isVerbLed(line) && !readsAsClause(line);
 }
 
 function capitalizeSentence(value: string) {
@@ -1910,16 +2115,22 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
         when: /\b(launch\w*|shipp\w*|deploy\w*|document\w*|built)\b/
       }
     ];
-    const grounded = canned.filter((bullet) => bullet.text && (!bullet.when || bullet.when.test(corpus))).map((bullet) => bullet.text);
+    const grounded = OCCUPATION_TEMPLATES_ENABLED
+      ? canned.filter((bullet) => bullet.text && (!bullet.when || bullet.when.test(corpus))).map((bullet) => bullet.text)
+      : [];
     return qualityCheckBullets(compact([...composeUserBullets(data, data.roleFamily), ...grounded]));
   }
 
-  const occupation = detectOccupationProfile(data, role);
+  // RETIRED from the launch path. Occupation templates asserted activities on
+  // the strength of vocabulary alone and could not tell whose activity it was
+  // — see src/lib/occupation-templates.ts. The user's own evidence path below
+  // handles every profile now.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED ? detectOccupationProfile(data, role) : null;
   if (occupation) {
     return buildOccupationBullets(data, role, occupation);
   }
 
-  if (isBeautyServiceProfile(data, role)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && isBeautyServiceProfile(data, role)) {
     return buildBeautyServiceBullets(data);
   }
 
@@ -2000,13 +2211,18 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   const roleFamily = data.roleFamily;
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
-  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
+  // The occupation summary asserts an ENVIRONMENT ("a retail service
+  // environment") drawn from the taxonomy rather than from the user, so it
+  // retires with the layer.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data))
+    : null;
   const strategy = roleStrategies[roleFamily];
   const responsibilities = buildResponsibilityList(data);
   if (occupation) {
     return buildOccupationSummary(data, target, experience, occupation);
   }
-  if (currentRole && isBeautyServiceProfile(data, currentRole)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` serving ${volume}` : "";
     const evidence = evidenceStrengthLabels(data);
@@ -2025,14 +2241,17 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   }
   const corpus = buildGroundingCorpus(data);
   const background = currentRole
-    ? `${currentRole.title} with experience in ${domain?.environment ?? strategy.environment}`
+    // The environment phrase is taxonomy too. Without it the sentence states
+    // only what the user gave: their title.
+    ? `${currentRole.title}${OCCUPATION_TEMPLATES_ENABLED ? ` with experience in ${domain?.environment ?? strategy.environment}` : ""}`
     : `Early-career professional with ${roleFamily.toLowerCase()} experience`;
-  // Domain/family strengths are template taxonomy: grounded entries only. The
-  // user's own responsibilities always qualify.
+  // Domain/family strengths are template taxonomy and retire with the layer:
+  // a grounded token proved a WORD appeared, never that this candidate has
+  // the competency. The user's own responsibilities and tools remain.
   const strengths = compact([
-    ...groundedOnly(domain?.strengths ?? [], corpus),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(domain?.strengths ?? [], corpus) : []),
     ...responsibilities.map(readableUserPhrase),
-    ...groundedOnly(strategy.focus, corpus).map(readablePhrase),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(strategy.focus, corpus).map(readablePhrase) : []),
     ...buildToolList(data)
   ]).slice(0, 3);
   const aiPhrase = aiWorkflowPhrase(data);
@@ -2048,21 +2267,27 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
 function buildLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
-  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
+  // Retired with the layer — this path asserted an environment and taxonomy
+  // strengths ("Brings cash Handling …") that the user never stated.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data))
+    : null;
   const strategy = roleStrategies[data.roleFamily];
   const corpus = buildGroundingCorpus(data);
   const responsibilities = buildResponsibilityList(data).slice(0, 3).map(readableUserPhrase);
   const strengths = compact([
-    ...groundedOnly(domain?.strengths ?? [], corpus),
+    // Domain and strategy taxonomy retire with the layer; the user's own
+    // responsibilities and tools remain.
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(domain?.strengths ?? [], corpus) : []),
     ...responsibilities,
-    ...groundedOnly(strategy.focus, corpus).map(readablePhrase),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(strategy.focus, corpus).map(readablePhrase) : []),
     ...buildToolList(data)
   ]).slice(0, 3);
   const environment = domain?.environment ?? strategy.environment;
   if (occupation) {
     return buildOccupationLinkedInSummary(data, target, experience, occupation);
   }
-  if (currentRole && isBeautyServiceProfile(data, currentRole)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` ${volume},` : "";
     const beautyStrengths = compact([
@@ -2081,21 +2306,52 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
   const aiPhrase = aiWorkflowPhrase(data);
   const aiSentence = aiPhrase ? ` Uses AI-assisted workflows for ${aiPhrase}.` : "";
 
-  return limitSentences(`${target} candidate with hands-on experience in ${environment}. Strongest reported areas include ${strengthText}.${aiSentence}`, 3);
+  // The environment phrase is taxonomy, gated out of buildSummary already and
+  // left live here. Same rule on every surface.
+  const environmentClause = OCCUPATION_TEMPLATES_ENABLED ? ` with hands-on experience in ${environment}` : "";
+  return limitSentences(`${target} candidate${environmentClause}. Strongest reported areas include ${strengthText}.${aiSentence}`, 3);
+}
+
+/**
+ * Headline skills the USER owns: typed tools, selected responsibilities and
+ * transferable skills they picked. No taxonomy, no derived competency.
+ */
+function userOwnedHeadlineSkills(data: IntakeData, skills: string[]): string[] {
+  const owned = new Set(
+    compact([
+      ...data.customRoleTransferableSkills,
+      ...data.customRoleWorkStyles,
+      ...data.selectedResponsibilities,
+      ...data.selectedActions,
+      ...buildToolList(data)
+    ]).map((item) => item.toLowerCase())
+  );
+  return skills.filter((skill) => owned.has(skill.toLowerCase())).slice(0, 3);
 }
 
 function buildHeadline(data: IntakeData, target: string, skills: string[], experience: ExperienceRole[]) {
   const background = cleanWhitespace(experience[0]?.title ?? "") || cleanWhitespace(data.currentTitle) || "Career Switcher";
-  const occupation = experience[0] ? detectOccupationProfile(data, experience[0]) : detectOccupationProfile(data);
+  // The headline was the surface the retirement missed. buildOccupationHeadline
+  // rewrote a user's actual job title into a taxonomy label and appended a
+  // competency: "Cashier" became "Retail Associate | Customer Service" for
+  // someone who stated a title and an employer and nothing else — and it still
+  // committed the attribution error the retirement exists to close ("The night
+  // crew kept the care notes for me." -> "… | Documentation").
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (experience[0] ? detectOccupationProfile(data, experience[0]) : detectOccupationProfile(data))
+    : null;
   if (occupation) {
     return buildOccupationHeadline(data, occupation);
   }
-  const strengths = headlineStrengths(data, skills);
+  const strengths = OCCUPATION_TEMPLATES_ENABLED ? headlineStrengths(data, skills) : userOwnedHeadlineSkills(data, skills);
   const direction = directionLabel(data, target);
   // Same-title moves would otherwise read "CSM | CSM | ..." — collapse
   // duplicate segments.
   const lead = background.toLowerCase() === direction.toLowerCase() ? [background] : [background, direction];
-  const headline = `${lead.join(" | ")} | ${strengths.join(", ") || roleStrategies[data.roleFamily].valueArea}`;
+  // The value-area fallback is taxonomy too: with no user-owned skill the
+  // headline states the title and the target only.
+  const tail = strengths.join(", ") || (OCCUPATION_TEMPLATES_ENABLED ? roleStrategies[data.roleFamily].valueArea : "");
+  const headline = tail ? `${lead.join(" | ")} | ${tail}` : lead.join(" | ");
   return headline.length > 115 ? `${lead.join(" | ")} | ${strengths.slice(0, 2).join(", ")}` : headline;
 }
 
