@@ -27,8 +27,18 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
 // different, important, consistent, department, assistant, restaurant, client.
 // That silently stripped ordinary true sentences out of the grounding corpus
 // and emptied CORE SKILLS for real users.
+// Only VERB negation strips a clause from the grounding corpus. "no",
+// "without" and "none" negate a NOUN, and the action still happened:
+//   "I cleaned the east wing WITHOUT supervision."   -> the cleaning happened
+//   "I packed 200 orders WITHOUT a single mistake."  -> the packing happened
+//   "I had NO complaints from customers in two years." -> an achievement
+// Stripping those emptied CORE SKILLS entirely — one "without" removed the
+// whole section from the exported résumé. Absence-of-evidence phrasing ("I
+// have no supervisory experience") is handled upstream by the admissibility
+// layer's GAP_PATTERNS/ADVERBIAL_NO pair, which quarantines the record before
+// it can reach this corpus at all, so nothing is lost by narrowing here.
 const NEGATION_MARKER = new RegExp(
-  String.raw`\b(?:not|never|no|none|neither|nor|without)\b|\b(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need|ai)n['’]?t\b`,
+  String.raw`\b(?:not|never|neither|nor)\b|\b(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need|ai)n['’]?t\b`,
   "i"
 );
 
