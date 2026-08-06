@@ -2306,21 +2306,52 @@ function buildLinkedInSummary(data: IntakeData, target: string, experience: Expe
   const aiPhrase = aiWorkflowPhrase(data);
   const aiSentence = aiPhrase ? ` Uses AI-assisted workflows for ${aiPhrase}.` : "";
 
-  return limitSentences(`${target} candidate with hands-on experience in ${environment}. Strongest reported areas include ${strengthText}.${aiSentence}`, 3);
+  // The environment phrase is taxonomy, gated out of buildSummary already and
+  // left live here. Same rule on every surface.
+  const environmentClause = OCCUPATION_TEMPLATES_ENABLED ? ` with hands-on experience in ${environment}` : "";
+  return limitSentences(`${target} candidate${environmentClause}. Strongest reported areas include ${strengthText}.${aiSentence}`, 3);
+}
+
+/**
+ * Headline skills the USER owns: typed tools, selected responsibilities and
+ * transferable skills they picked. No taxonomy, no derived competency.
+ */
+function userOwnedHeadlineSkills(data: IntakeData, skills: string[]): string[] {
+  const owned = new Set(
+    compact([
+      ...data.customRoleTransferableSkills,
+      ...data.customRoleWorkStyles,
+      ...data.selectedResponsibilities,
+      ...data.selectedActions,
+      ...buildToolList(data)
+    ]).map((item) => item.toLowerCase())
+  );
+  return skills.filter((skill) => owned.has(skill.toLowerCase())).slice(0, 3);
 }
 
 function buildHeadline(data: IntakeData, target: string, skills: string[], experience: ExperienceRole[]) {
   const background = cleanWhitespace(experience[0]?.title ?? "") || cleanWhitespace(data.currentTitle) || "Career Switcher";
-  const occupation = experience[0] ? detectOccupationProfile(data, experience[0]) : detectOccupationProfile(data);
+  // The headline was the surface the retirement missed. buildOccupationHeadline
+  // rewrote a user's actual job title into a taxonomy label and appended a
+  // competency: "Cashier" became "Retail Associate | Customer Service" for
+  // someone who stated a title and an employer and nothing else — and it still
+  // committed the attribution error the retirement exists to close ("The night
+  // crew kept the care notes for me." -> "… | Documentation").
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (experience[0] ? detectOccupationProfile(data, experience[0]) : detectOccupationProfile(data))
+    : null;
   if (occupation) {
     return buildOccupationHeadline(data, occupation);
   }
-  const strengths = headlineStrengths(data, skills);
+  const strengths = OCCUPATION_TEMPLATES_ENABLED ? headlineStrengths(data, skills) : userOwnedHeadlineSkills(data, skills);
   const direction = directionLabel(data, target);
   // Same-title moves would otherwise read "CSM | CSM | ..." — collapse
   // duplicate segments.
   const lead = background.toLowerCase() === direction.toLowerCase() ? [background] : [background, direction];
-  const headline = `${lead.join(" | ")} | ${strengths.join(", ") || roleStrategies[data.roleFamily].valueArea}`;
+  // The value-area fallback is taxonomy too: with no user-owned skill the
+  // headline states the title and the target only.
+  const tail = strengths.join(", ") || (OCCUPATION_TEMPLATES_ENABLED ? roleStrategies[data.roleFamily].valueArea : "");
+  const headline = tail ? `${lead.join(" | ")} | ${tail}` : lead.join(" | ");
   return headline.length > 115 ? `${lead.join(" | ")} | ${strengths.slice(0, 2).join(", ")}` : headline;
 }
 

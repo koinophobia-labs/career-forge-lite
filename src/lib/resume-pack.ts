@@ -31,12 +31,19 @@ function withheldReason(item: DossierEvidenceRecord): string {
 // with the reason a job ended. Documents get the same fact in résumé voice,
 // and termination reasons are withheld (and reported as withheld, so the
 // omission is visibly deliberate).
-function cleanFact(detail: string): { text: string; withheld: boolean } {
+function cleanFact(detail: string): { text: string; withheld: boolean; withheldLabel?: string } {
   const stripped = stripTerminationReasons(detail);
   const voiced = toResumeVoice(stripped.text)
     .replace(/\s{2,}/g, " ")
     .replace(/[.;,\s]+$/, "");
-  return { text: voiced, withheld: stripped.withheld };
+  // The receipt must name the ACTUAL reason. Every withholding was labelled
+  // "Reason for leaving a role", so a home-care duty removed by the personal
+  // disclosure guard was reported to the user as a separation reason — a lie
+  // about their own document.
+  const withheldLabel = stripped.category === "personal"
+    ? "Personal circumstances (never résumé content)"
+    : "Reason for leaving a role (never résumé content)";
+  return { text: voiced, withheld: stripped.withheld, withheldLabel };
 }
 
 // "Tools: Workday, Kronos, and some Excel from class" is ONE evidence record
@@ -90,7 +97,7 @@ function bulletsFromEvidence(item: DossierEvidenceRecord, withheld: string[]): s
     .slice(0, 3)
     .flatMap((line) => {
       const cleaned = cleanFact(line);
-      if (cleaned.withheld) withheld.push("Reason for leaving a role (never résumé content)");
+      if (cleaned.withheld) withheld.push(cleaned.withheldLabel ?? "Withheld from this document");
       if (!cleaned.text || cleaned.text.split(/\s+/).length < 2) return [];
       return [cleaned.text];
     });
@@ -207,7 +214,7 @@ function buildLaneResume(
   const summaryEvidence = proof.slice(0, kind === "ats" ? 2 : 3);
   const summaryFacts = summaryEvidence.flatMap((item) => {
     const cleaned = cleanFact(item.detail.split(/\n/)[0]);
-    if (cleaned.withheld) withheldFacts.push("Reason for leaving a role (never résumé content)");
+    if (cleaned.withheld) withheldFacts.push(cleaned.withheldLabel ?? "Withheld from this document");
     return cleaned.text ? [cleaned.text] : [];
   });
   const summary = summaryFacts.length
@@ -283,7 +290,7 @@ function buildLaneResume(
       const exact = support.filter((item) => item.detail.toLowerCase().includes(bullet.toLowerCase()) || bullet.toLowerCase().includes(item.detail.toLowerCase()));
       if (!exact.length) return [];
       const cleaned = cleanFact(bullet);
-      if (cleaned.withheld) withheldFacts.push("Reason for leaving a role (never résumé content)");
+      if (cleaned.withheld) withheldFacts.push(cleaned.withheldLabel ?? "Withheld from this document");
       if (!cleaned.text) return [];
       mapClaim(cleaned.text, exact.map((item) => item.id));
       return [cleaned.text];
@@ -479,7 +486,7 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       .filter((entry) => !isUncertaintyStatement(entry) && !isIdentityFact(entry, identityValues) && !looksLikeHeading(entry))
       .flatMap((entry) => {
         const cleaned = cleanFact(entry);
-        if (cleaned.withheld) withheld.push("Reason for leaving a role (never résumé content)");
+        if (cleaned.withheld) withheld.push(cleaned.withheldLabel ?? "Withheld from this document");
         return cleaned.text ? [cleaned.text] : [];
       })
   );
@@ -489,7 +496,14 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
     linkedinAbout: first?.linkedinSummary || first?.summary || "",
     linkedinSkills: unique(variants.flatMap((item) => item.resume.coreSkills)).slice(0, 30),
     masterProofBank: proofBank,
-    coverLetterFoundation: approved.length ? `Approved evidence to draw from: ${approved.slice(0, 3).map((item) => cleanFact(item.detail).text).join("; ")}` : "Approve proof points before drafting a cover letter.",
+    coverLetterFoundation: approved.length ? (() => {
+          // Withheld facts leave an empty slot, which rendered as bare
+          // semicolons: "Approved evidence to draw from: ; Drove clients; ".
+          const usable = approved.map((item) => cleanFact(item.detail).text).filter(Boolean).slice(0, 3);
+          return usable.length
+            ? `Approved evidence to draw from: ${usable.join("; ")}`
+            : "Approve proof points before drafting a cover letter.";
+        })() : "Approve proof points before drafting a cover letter.",
     receipt: {
       id: `${id}-receipt`, generatedAt: nowIso, evidenceUsed: used,
       evidenceOmitted: approved.filter((item) => !used.includes(item.id)).map((item) => item.id),

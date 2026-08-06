@@ -76,19 +76,35 @@ const terminationPatterns: RegExp[] = [
 // is a family circumstance.
 const sensitiveDisclosurePatterns: RegExp[] = [
   // Departure framed with a reason: the reason is the disclosure.
-  /\b(left|quit|resigned|stepped\s+(away|down)|took\s+(time|leave|a\s+break))\b[^.!?]{0,60}?\b(because|due\s+to|so\s+(i|we)\s+could)\b/i,
+  // The departure must be about EMPLOYMENT. Matching any "left … because"
+  // deleted "Left detailed handoff notes because the night shift needed them."
+  // and "I stepped down the ladder carefully because the rungs were wet."
+  /\b(left|quit|resigned)\s+(?:the\s+(?:job|company|role|position|team|store|site|place)|there|that\s+job)\b[^.!?]{0,60}?\b(because|due\s+to|so\s+(i|we)\s+could)\b/i,
+  /\b(left|quit|resigned|stepped\s+away|took\s+(?:time\s+off|leave|a\s+break))\b(?=[^.!?]{0,28}\b(?:19|20)\d{2}\b)[^.!?]{0,60}?\b(because|due\s+to|so\s+(i|we)\s+could)\b/i,
+  /\b(quit|resigned|stepped\s+down)\b[^.!?]{0,40}?\b(because|due\s+to)\b[^.!?]{0,60}?\b(family|health|sick|illness|afford|money|childcare|caregiv\w*)\b/i,
   // Health and medical, about the candidate or their family.
   /\b(my|our)\s+\w+\s+(got|was|became|is|fell)\s+(sick|ill|injured|diagnosed)\b/i,
   /\b(i|we)\s+(got|was|were|became|fell)\s+(sick|ill|injured|diagnosed)\b/i,
-  /\b(had\s+to\s+)?(care\s+for|look\s+after|take\s+care\s+of)\s+(my|her|him|them|a\s+family)\b/i,
-  /\b(my|our)\s+(health|illness|surgery|treatment|diagnosis|disability|recovery)\b/i,
+  // "had to" is MANDATORY here, or an explicit family relation. My first
+  // version made the prefix optional, which deleted a home health aide's core
+  // duties — "I care for her three days a week in her own home." and "I take
+  // care of them on the day shift." both vanished from every surface. Care
+  // work is this product's primary audience; caring for someone is their JOB.
+  /\bhad\s+to\s+(care\s+for|look\s+after|take\s+care\s+of)\b/i,
+  /\b(care\s+for|caring\s+for|look\s+after|looking\s+after|take\s+care\s+of|taking\s+care\s+of)\s+(my|our)\s+(mother|father|mom|dad|parent|parents|son|daughter|child|children|kid|kids|husband|wife|spouse|partner|family|grandmother|grandfather|grandma|grandpa|sister|brother)\b/i,
+  // "recovery" and "our" are dropped: "I ran our recovery process for damaged
+  // pallets every Monday." is warehouse work, not a medical disclosure.
+  /\bmy\s+(health|illness|surgery|treatment|diagnosis|disability)\b/i,
   /\b(maternity|paternity|parental|medical|bereavement)\s+leave\b/i,
   // Financial hardship.
   /\b(could\s*n[o']?t|couldn't|can\s*n[o']?t)\s+afford\b/i,
   /\b(financial|money)\s+(reasons|hardship|trouble|problems)\b/i,
   // An unfinished credential framed as a personal failure. "Some coursework"
   // or "in progress" is ordinary résumé content and is deliberately not here.
-  /\b(dropped\s+out|flunked\s+out|had\s+to\s+(drop|leave|withdraw))\b/i,
+  // The object must be a course of study. "I had to leave the dock clear for
+  // the next truck." is a duty, not a withdrawal.
+  /\b(dropped\s+out|flunked\s+out)\b/i,
+  /\bhad\s+to\s+(drop\s+out|withdraw|leave)\b[^.!?]{0,30}\b(school|college|university|program|degree|course|classes)\b/i,
   /\b(did\s*n[o']?t|never)\s+finish(ed)?\b[^.!?]{0,30}\b(school|college|university|degree|program)\b/i,
   // A bare departure statement, once its reason has been stripped away.
   // "Left in August 2023 because my mother got sick" survived as the fragment
@@ -128,8 +144,18 @@ function finishClause(value: string): string {
 
 // Removes termination-reason clauses from a sentence while keeping the rest
 // usable. Returns the cleaned text and whether anything was withheld.
-export function stripTerminationReasons(text: string): { text: string; withheld: boolean } {
+export type WithheldCategory = "separation" | "personal";
+
+/** Which category caused a withholding, so the receipt can say so truthfully. */
+export function withheldCategory(text: string): WithheldCategory | null {
+  if (containsTerminationReason(text)) return "separation";
+  if (containsSensitiveDisclosure(text)) return "personal";
+  return null;
+}
+
+export function stripTerminationReasons(text: string): { text: string; withheld: boolean; category?: WithheldCategory } {
   if (!containsTerminationReason(text) && !containsSensitiveDisclosure(text)) return { text, withheld: false };
+  const category: WithheldCategory = containsTerminationReason(text) ? "separation" : "personal";
 
   const cleanedSentences = text
     .split(/(?<=[.!?])\s+/)
@@ -202,7 +228,7 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
     })
     .filter(Boolean);
 
-  return { text: cleanedSentences.join(" ").replace(/\s{2,}/g, " ").trim(), withheld: true };
+  return { text: cleanedSentences.join(" ").replace(/\s{2,}/g, " ").trim(), withheld: true, category };
 }
 
 // First-person framing that reads fine in an intake box but wrong in a

@@ -53,6 +53,7 @@ function load(fp) {
 }
 
 const { classifyEvidenceAdmissibility } = load("src/lib/evidence-admissibility.ts");
+const { containsSensitiveDisclosure } = load("src/lib/truth-guards.ts");
 const { generateResumePackage } = load("src/lib/generator.ts");
 const { initialIntake } = load("src/lib/career-data.ts");
 
@@ -618,6 +619,52 @@ for (const [title, typed, forbidden] of [
   const whole = JSON.stringify(pkg);
   expect(`no taxonomy claim from a bare noun: "${typed.slice(0, 44)}…"`, !forbidden.test(whole), whole.slice(0, 240));
   expect(`  no attribution sentence either`, !/strengths the candidate reports include/i.test(whole), whole.slice(0, 200));
+}
+
+// ═══════════════════════════════════════════════ RA-P0-10
+// Round 5. The retirement missed the LinkedIn headline entirely, and my own
+// sensitive-disclosure guard turned into the amputation machine it was written
+// to avoid — it deleted a home health aide's core duties.
+H("RA-P0-10 — findings from the fifth independent review");
+
+// (a) The headline rewrote the user's real job title into a taxonomy label and
+// appended a competency, for a user who typed a title and an employer only.
+for (const title of ["Cashier", "Security Officer", "Caregiver", "Janitor", "Warehouse Associate", "Barista", "Receptionist"]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Bellview", currentTime: "2022 - 2024" }));
+  expect(`headline keeps the user's own title: "${title}"`, pkg.linkedinHeadline.startsWith(title), pkg.linkedinHeadline);
+  expect(`  no taxonomy competency is appended`, !/\|\s*(Customer Service|Patient Support|Safety & Compliance|Operations|Documentation)\s*$/.test(pkg.linkedinHeadline) || pkg.linkedinHeadline.endsWith(intake({}).targetJobTitle || ""), pkg.linkedinHeadline);
+}
+// …and it must not commit the attribution error the retirement exists to close.
+{
+  const pkg = generateResumePackage(intake({ currentTitle: "Caregiver", currentCompany: "BM", currentTime: "2022 - 2024", responsibilities: "The night crew kept the care notes for me." }));
+  expect("headline credits nothing to the candidate from a third-party sentence", !/Documentation/i.test(pkg.linkedinHeadline), pkg.linkedinHeadline);
+  expect("  linkedinSummary asserts no taxonomy environment", !/hands-on experience in \w+ .*environment/i.test(pkg.linkedinSummary), pkg.linkedinSummary);
+}
+
+// (b) CARE WORK IS A JOB. The disclosure guard had an OPTIONAL "had to"
+// prefix, contradicting its own comment, and deleted these from every surface.
+for (const typed of [
+  "I care for her three days a week in her own home.",
+  "I take care of them on the day shift.",
+  "Cared for 40 patients per shift on the memory-care wing.",
+  "Looked after the stockroom keys for the whole team.",
+  "I had to leave the dock clear for the next truck.",
+  "Left detailed handoff notes because the night shift needed them.",
+  "I stepped down the ladder carefully because the rungs were wet.",
+  "I ran our recovery process for damaged pallets every Monday."
+]) {
+  expect(`ordinary work is not a personal disclosure: "${typed.slice(0, 46)}…"`, !containsSensitiveDisclosure(typed), typed);
+}
+// …while genuine disclosures are still withheld.
+for (const typed of [
+  "I had to care for my father after his surgery.",
+  "I take care of my mother full time.",
+  "I dropped out of community college after one semester because I could not afford it.",
+  "I had to leave school when the money ran out.",
+  "I was on medical leave for three months.",
+  "My health got worse that winter."
+]) {
+  expect(`genuine disclosure is withheld: "${typed.slice(0, 46)}…"`, containsSensitiveDisclosure(typed), typed);
 }
 
 L();
