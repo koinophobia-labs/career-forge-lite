@@ -339,6 +339,41 @@ for (const achievement of [
   expect(`achievement phrased with "never" is not quarantined: "${achievement}"`, classifyEvidenceAdmissibility(achievement) === "claim", classifyEvidenceAdmissibility(achievement));
 }
 
+// ═══════════════════════════════════════════════ RA-P0-06
+// A termination reason GOVERNS the clause attached to it. Promoting that
+// clause to a standalone bullet asserted the opposite of what the user wrote:
+// "I was laid off before I trained the new hires." exported as "Trained the
+// new hires." Fixed as a CLASS, not for one sentence — every temporal/causal
+// subordinator behaves the same way.
+H("RA-P0-06 — a governed clause is never promoted to a standalone claim");
+
+for (const [typed, inverted] of [
+  ["I was laid off before I trained the new hires.", /trained the new hires/i],
+  ["I was let go before I completed the safety certification.", /completed the safety certification/i],
+  ["I was terminated until I ran the weekly close.", /ran the weekly close/i],
+  ["I was fired when I rebuilt the vendor list.", /rebuilt the vendor list/i],
+  ["I was let go after I finished the audit.", /finished the audit/i],
+  ["I was laid off because I refused the transfer.", /refused the transfer/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  const whole = JSON.stringify(pkg);
+  expect(`governed clause is not asserted: "${typed}"`, !inverted.test(whole), whole.slice(0, 260));
+}
+
+// The opposite direction must keep working, or the guard has simply become a
+// deletion machine — withholding a true accomplishment is its own failure.
+{
+  const kept = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Managed vendor contracts worth $2M annually until I was laid off in June 2026." });
+  expect("an accomplishment bounded by a termination is KEPT", kept.includes("Managed vendor contracts worth $2M annually."), JSON.stringify(kept));
+  expect("  the termination reason itself is not exported", !JSON.stringify(kept).toLowerCase().includes("laid off"), JSON.stringify(kept));
+}
+{
+  // A concessive genuinely DOES assert the second clause.
+  const kept = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Although I was laid off, I completed the safety certification." });
+  expect("a concessive keeps the asserted accomplishment", kept.includes("Completed the safety certification."), JSON.stringify(kept));
+  expect("  the termination reason itself is not exported", !JSON.stringify(kept).toLowerCase().includes("laid off"), JSON.stringify(kept));
+}
+
 L();
 L("=".repeat(78));
 L(`Generator truth regression: ${passes} passed, ${fails} failed`);

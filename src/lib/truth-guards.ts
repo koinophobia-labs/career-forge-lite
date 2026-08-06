@@ -86,13 +86,38 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       // one clause with no comma) — a temporal/causal conjunction almost
       // always introduces the reason as a trailing dependent clause, so
       // split there instead of discarding safe content along with it.
-      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(?:until|because|since|when|after|though|although|before)\b\s+(.*)$/i);
+      const conjunctionMatch = sentence.match(/^(.*?)\s+\b(until|because|since|when|after|though|although|before)\b\s+(.*)$/i);
       if (conjunctionMatch) {
-        const [, before, after] = conjunctionMatch;
+        const [, before, conjunction, after] = conjunctionMatch;
         const beforeUnsafe = containsTerminationReason(before);
         const afterUnsafe = containsTerminationReason(after);
+        // Keeping the clause BEFORE the conjunction is safe: it states
+        // something that happened, and the conjunction only bounds when it
+        // stopped. "Managed vendor contracts until I was laid off" → the
+        // contracts were managed.
         if (!beforeUnsafe && afterUnsafe && before.trim()) return finishClause(before);
-        if (!afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
+        // Keeping the clause AFTER it is NOT safe in general, because a
+        // subordinating conjunction makes that clause's factual status depend
+        // on the main clause. "I was laid off BEFORE I trained the new hires"
+        // says the training never happened — promoting the dependent clause
+        // exported "Trained the new hires." as an accomplishment, asserting the
+        // opposite of what the user wrote. Only a CONCESSIVE conjunction
+        // ("although I was laid off, I completed X") actually asserts it.
+        const concessive = /^(?:though|although)$/i.test(conjunction);
+        if (concessive && !afterUnsafe && beforeUnsafe && after.trim()) return finishClause(after);
+      }
+
+      // A sentence-initial concessive puts the asserted clause last with no
+      // clause before the conjunction for the pattern above to match:
+      // "Although I was let go, I finished the audit." Without this the whole
+      // sentence would be withheld and a true accomplishment lost.
+      const leadingConcessive = sentence.match(/^\s*\b(?:though|although)\b\s+(.*)$/i);
+      if (leadingConcessive) {
+        const remainder = leadingConcessive[1];
+        const split = remainder.match(/^(.*?)(?<!\d),\s*(.*)$/);
+        if (split && containsTerminationReason(split[1]) && !containsTerminationReason(split[2]) && split[2].trim()) {
+          return finishClause(split[2]);
+        }
       }
 
       // Nothing in the sentence is independently safe from the reason.
