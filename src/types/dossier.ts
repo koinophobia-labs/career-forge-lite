@@ -172,6 +172,12 @@ export type PackGenerationReceipt = {
   itemsExcludedByUser?: number;
   /** Flagged and still undecided; counted as neither used nor omitted. */
   itemsAwaitingReview?: number;
+  /**
+   * Career Forge rejected one of ITS OWN generated sentences at export. Kept
+   * distinct from user-resolution withholding so the receipt never has to
+   * guess why something is absent.
+   */
+  generatedSentencesWithheld?: number;
   id: string;
   generatedAt: string;
   evidenceUsed: string[];

@@ -181,6 +181,16 @@ const disclosurePatterns: Array<[DisclosureReason, RegExp]> = [
   ["separation", /\b(?:left|quit|resigned)\s+(?:the\s+)?(?:job|company|role|position|post)\b/i],
   ["separation", /\b(?:left|quit|resigned)\b[^.!?]{0,50}?\bbecause\b/i],
   ["separation", /\b(?:contract|role|position)\s+(?:was\s+)?not\s+renewed\b/i],
+  // Organisational-separation phrasings. These were in the original guard and
+  // I dropped them when rewriting the classifier; they still need to raise a
+  // hand, they just no longer cut. "Managed the reorganization of the
+  // stockroom shelving" is deliberately NOT matched — the subject must be the
+  // employer or a unit of it, not a thing the user organised.
+  ["separation", /\b(?:company|employer|organi[sz]ation|department|team|division|group|unit|store|site|branch)\s+(?:was\s+|were\s+|later\s+|then\s+)*(?:closed|shut\s+down|folded|went\s+under|downsized|reorganiz\w*|reorganis\w*|restructur\w*|dissolved|eliminated)\b/i],
+  ["separation", /\b(?:company|employer|organi[sz]ation|department|team|division)\s+(?:underwent|went\s+through|had|announced)\s+(?:a\s+)?(?:round\s+of\s+)?layoffs?\b/i],
+  ["separation", /\bleadership\s+(?:decided\s+to\s+)?eliminat\w*\s+(?:the\s+)?(?:role|position|team|department)\b/i],
+  ["separation", /\b(?:role|position|job|department|team)\s+(?:was\s+)?eliminated\b/i],
+  ["separation", /\breduction\s+in\s+force\b/i],
   ["health", /\b(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b[^.!?]{0,40}?\b(?:sick|ill|unwell|injured|diagnosed|surgery|hospital)\b/i],
   ["health", /\bhad\s+to\s+(?:care\s+for|look\s+after)\s+(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b/i],
   ["health", /\b(?:maternity|paternity|parental|bereavement|sick)\s+leave\b/i],

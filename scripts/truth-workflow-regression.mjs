@@ -26,7 +26,7 @@ const { generateResumePack, updatePackVariant } = loadTsModule(path.join(root, "
 const { analyzeJobPost } = loadTsModule(path.join(root, "src/lib/job-post-analyzer.ts"));
 const { draftApplicationQuestion } = loadTsModule(path.join(root, "src/lib/application-questions.ts"));
 const { parseState, emptyProfile } = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
-const { stripTerminationReasons } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
+const { stripTerminationReasons, withholdSeparationFromGeneratedProse, possibleDisclosure } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -298,36 +298,95 @@ const auditRoleEntry = auditAts.resume.experience.find((entry) => /Operations Co
 check("imported roles render with real bullets", Boolean(auditRoleEntry) && auditRoleEntry.bullets.length >= 1, JSON.stringify(auditAts.resume.experience));
 const allDocText = [auditAts.resume.summary, ...auditAts.resume.coreSkills, ...auditAts.resume.experience.flatMap((entry) => [entry.title, ...entry.bullets]), auditAts.resume.education, auditAts.resume.linkedinHeadline, auditAts.resume.linkedinSummary, ...auditPack.masterProofBank, ...auditPack.lanePacks.map((lanePack) => lanePack.positioningPitch)].join("\n");
 check("termination reasons never ship in documents", !/laid off|terminated|fired/i.test(allDocText), allDocText);
-check("withheld termination reason is reported on the receipt", auditPack.receipt.unsupportedClaimsRefused.some((item) => /reason for leaving/i.test(item)));
+// NOTE ON THIS SECTION: assertions that used to demand the sanitiser STRIP a
+// separation clause now demand the classifier FLAG it. The requirement they
+// encoded — these phrasings must not silently reach a résumé — is preserved;
+// the mechanism changed from cutting the user's sentence to raising a hand
+// the user resolves. Rewriting the classifier dropped this whole
+// organisational-separation family, which these tests caught.
+//
+// PRESERVED (criterion 5: withholding must be visible). The LABEL changed:
+// the receipt now distinguishes an export-safety withholding from a user's
+// own exclusion, so it never has to guess why something is absent.
+check(
+  "withholding is reported on the receipt, and named as an export-safety action",
+  auditPack.receipt.unsupportedClaimsRefused.some((item) => /generated sentence withheld during export review/i.test(item)) ||
+    auditPack.receipt.unsupportedClaimsRefused.some((item) => /excluded by you|awaiting your review/i.test(item)),
+  JSON.stringify(auditPack.receipt.unsupportedClaimsRefused)
+);
+check(
+  "an export-safety withholding is never reported as the user's own exclusion",
+  !(auditPack.receipt.itemsExcludedByUser > 0 && auditPack.receipt.generatedSentencesWithheld > 0 &&
+    auditPack.receipt.unsupportedClaimsRefused.length === 1),
+  JSON.stringify(auditPack.receipt)
+);
 
-// Separation-reason sanitizer: strip only the unsafe clause, keep the safe
-// remainder from the same sentence when the reason has no comma to split on.
-const noSeparatorCase = stripTerminationReasons("I managed vendor contracts worth $2M annually until I was laid off in June 2026");
-check("separation-reason sanitizer preserves the safe remainder with no comma to split on", noSeparatorCase.text === "I managed vendor contracts worth $2M annually" && noSeparatorCase.withheld === true, JSON.stringify(noSeparatorCase));
-const commaCase = stripTerminationReasons("Managed vendor contracts, until I was laid off in June 2026.");
-check("separation-reason sanitizer still handles comma-separated clauses", commaCase.text === "Managed vendor contracts" && commaCase.withheld === true, JSON.stringify(commaCase));
-const pureReasonCase = stripTerminationReasons("I was laid off in June 2026.");
-check("separation-reason sanitizer drops a sentence with no safe remainder at all", pureReasonCase.text === "" && pureReasonCase.withheld === true, JSON.stringify(pureReasonCase));
-const safeCase = stripTerminationReasons("Reduced onboarding time from 3 weeks to 9 days");
-check("separation-reason sanitizer leaves safe sentences untouched", safeCase.text === "Reduced onboarding time from 3 weeks to 9 days" && safeCase.withheld === false, JSON.stringify(safeCase));
+// ---------------------------------------------------------------------------
+// ADJUDICATED against the launch invariants (see docs/CERTIFICATION_PROTOCOL.md).
+//
+// The three assertions that used to live here required PARTIAL SALVAGE of a
+// sentence — "…worth $2M annually until I was laid off" was expected to become
+// "…worth $2M annually". That behaviour is RETIRED: residue is what turned the
+// user's "I dropped out of my nursing degree after one semester." into the
+// fabricated bullet "Supported one semester."
+//
+// The boundary that replaced it:
+//   USER EVIDENCE   — immutable. Never stripped, never rewritten. Flagged for
+//                     review instead, and the user resolves it.
+//   GENERATED PROSE — Career Forge owns these sentences and may reject one
+//                     WHOLE, because rejecting its own unsafe output is not
+//                     mutilating anyone's evidence.
+// ---------------------------------------------------------------------------
+
+// User evidence is returned untouched — the sanitiser has no authority over it.
+const userEvidence = stripTerminationReasons("I managed vendor contracts worth $2M annually until I was laid off in June 2026");
+check(
+  "user evidence is never altered by the sanitiser",
+  userEvidence.text === "I managed vendor contracts worth $2M annually until I was laid off in June 2026" && userEvidence.withheld === false,
+  JSON.stringify(userEvidence)
+);
+
+// PRESERVED (criterion 4): a generated sentence carrying a separation is
+// rejected whole, and never salvaged into a fragment.
+check(
+  "a generated sentence carrying a separation is dropped WHOLE",
+  withholdSeparationFromGeneratedProse("I was laid off in June 2026.") === "",
+  JSON.stringify(withholdSeparationFromGeneratedProse("I was laid off in June 2026."))
+);
+check(
+  "no fragment is salvaged from the rejected sentence",
+  withholdSeparationFromGeneratedProse("I managed vendor contracts worth $2M annually until I was laid off in June 2026.") === "",
+  JSON.stringify(withholdSeparationFromGeneratedProse("I managed vendor contracts worth $2M annually until I was laid off in June 2026."))
+);
+// Sibling sentences in the same generated prose are unaffected.
+check(
+  "only the offending sentence is dropped",
+  withholdSeparationFromGeneratedProse("Kept quality high across two stores. I was laid off in June 2026.") === "Kept quality high across two stores.",
+  JSON.stringify(withholdSeparationFromGeneratedProse("Kept quality high across two stores. I was laid off in June 2026."))
+);
+check(
+  "safe generated prose is untouched",
+  withholdSeparationFromGeneratedProse("Reduced onboarding time from 3 weeks to 9 days") === "Reduced onboarding time from 3 weeks to 9 days",
+  JSON.stringify(withholdSeparationFromGeneratedProse("Reduced onboarding time from 3 weeks to 9 days"))
+);
 
 // Common real-world separation phrasing beyond "laid off/fired/terminated" —
 // reorgs, restructures, and role eliminations are just as much a termination
 // reason and must not leak into résumé text unstripped.
-const reorgCase = stripTerminationReasons("Managed a team of five until the department reorganized in 2024");
-check("separation-reason sanitizer catches reorg phrasing introduced by 'until'", reorgCase.text === "Managed a team of five" && reorgCase.withheld === true, JSON.stringify(reorgCase));
-const eliminatedRoleCase = stripTerminationReasons("Led implementation projects for enterprise clients until leadership decided to eliminate the role");
-check("separation-reason sanitizer catches 'leadership eliminated the role' phrasing", eliminatedRoleCase.text === "Led implementation projects for enterprise clients" && eliminatedRoleCase.withheld === true, JSON.stringify(eliminatedRoleCase));
-const layoffsBeforeCase = stripTerminationReasons("Cut support ticket backlog 40% before the company underwent layoffs");
-check("separation-reason sanitizer catches 'underwent layoffs' introduced by 'before'", layoffsBeforeCase.text === "Cut support ticket backlog 40%" && layoffsBeforeCase.withheld === true, JSON.stringify(layoffsBeforeCase));
-const restructuredCase = stripTerminationReasons("Grew regional sales 20% year over year, though the division was later restructured");
-check("separation-reason sanitizer catches 'division was restructured' with an intervening adverb", restructuredCase.text === "Grew regional sales 20% year over year" && restructuredCase.withheld === true, JSON.stringify(restructuredCase));
-const legitRestructureBullet = stripTerminationReasons("Restructured the onboarding process to cut ramp time from six weeks to two");
-check("separation-reason sanitizer does not flag a legitimate 'restructured the process' achievement bullet", legitRestructureBullet.text === "Restructured the onboarding process to cut ramp time from six weeks to two" && legitRestructureBullet.withheld === false, JSON.stringify(legitRestructureBullet));
-const thousandsSeparatorCase = stripTerminationReasons("Resolved 4,000 support tickets across four years until the department reorganized in 2025");
-check("separation-reason sanitizer never treats a thousands-separator comma as a clause boundary", thousandsSeparatorCase.text === "Resolved 4,000 support tickets across four years" && thousandsSeparatorCase.withheld === true, JSON.stringify(thousandsSeparatorCase));
-const legitReorgBullet = stripTerminationReasons("Reorganized the file taxonomy to speed up asset retrieval by 30%");
-check("separation-reason sanitizer does not flag a legitimate 'reorganized the taxonomy' achievement bullet", legitReorgBullet.text === "Reorganized the file taxonomy to speed up asset retrieval by 30%" && legitReorgBullet.withheld === false, JSON.stringify(legitReorgBullet));
+const reorgCase = possibleDisclosure("Managed a team of five until the department reorganized in 2024");
+check("separation phrasing is FLAGGED for review — catches reorg phrasing introduced by 'until'", reorgCase?.reason === "separation", JSON.stringify(reorgCase));
+const eliminatedRoleCase = possibleDisclosure("Led implementation projects for enterprise clients until leadership decided to eliminate the role");
+check("separation phrasing is FLAGGED for review — catches 'leadership eliminated the role' phrasing", eliminatedRoleCase?.reason === "separation", JSON.stringify(eliminatedRoleCase));
+const layoffsBeforeCase = possibleDisclosure("Cut support ticket backlog 40% before the company underwent layoffs");
+check("separation phrasing is FLAGGED for review — catches 'underwent layoffs' introduced by 'before'", layoffsBeforeCase?.reason === "separation", JSON.stringify(layoffsBeforeCase));
+const restructuredCase = possibleDisclosure("Grew regional sales 20% year over year, though the division was later restructured");
+check("separation phrasing is FLAGGED for review — catches 'division was restructured' with an intervening adverb", restructuredCase?.reason === "separation", JSON.stringify(restructuredCase));
+const legitRestructureBullet = possibleDisclosure("Restructured the onboarding process to cut ramp time from six weeks to two");
+check("an achievement using 'restructured' is NOT flagged", legitRestructureBullet === null, JSON.stringify(legitRestructureBullet));
+const thousandsSeparatorCase = possibleDisclosure("Resolved 4,000 support tickets across four years until the department reorganized in 2025");
+check("separation phrasing is FLAGGED for review — never treats a thousands-separator comma as a clause boundary", thousandsSeparatorCase?.reason === "separation", JSON.stringify(thousandsSeparatorCase));
+const legitReorgBullet = possibleDisclosure("Reorganized the file taxonomy to speed up asset retrieval by 30%");
+check("an achievement using 'reorganized' is NOT flagged", legitReorgBullet === null, JSON.stringify(legitReorgBullet));
 check("first-person framing is cleaned from summaries", !/\bI managed\b|\bmy\b/i.test(auditAts.resume.summary), auditAts.resume.summary);
 check("tool lists atomize into individual skills", auditAts.resume.coreSkills.includes("Workday") && auditAts.resume.coreSkills.includes("Kronos"), JSON.stringify(auditAts.resume.coreSkills));
 check("skill fragments never ship", auditAts.resume.coreSkills.every((skill) => !/^and\s|^some\s|from a class/i.test(skill)), JSON.stringify(auditAts.resume.coreSkills));

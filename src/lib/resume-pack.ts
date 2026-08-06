@@ -1,5 +1,5 @@
 import { classifyEvidenceAdmissibility, isProfessionalEvidence } from "@/lib/evidence-admissibility";
-import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
+import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import { isUsableEvidence } from "@/lib/evidence-admissibility";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
@@ -516,8 +516,19 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       // such — the product no longer invents a reason for a disappearance.
       // Items still awaiting review are reported as awaiting review, and are
       // counted as neither used nor omitted.
+      // THREE DISTINCT BUCKETS. Collapsing them recreates the earlier defect
+      // where the product invented a reason for a disappearance:
+      //   excludedByUser  — the user reviewed a flag and chose to leave it off
+      //   awaitingReview  — flagged, undecided; neither used nor omitted
+      //   generatedWithheld — Career Forge rejected ITS OWN generated sentence
+      //                       at export; no user evidence was touched
       itemsExcludedByUser: dossier.evidence.filter((item) => item.disclosureReview === "exclude").length,
       itemsAwaitingReview: dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length,
+      generatedSentencesWithheld: variants.filter((variant) =>
+        [variant.resume.summary, variant.resume.linkedinSummary, variant.resume.linkedinHeadline].some(
+          (prose) => (prose ?? "") !== withholdSeparationFromGeneratedProse(prose ?? "")
+        )
+      ).length,
       unsupportedClaimsRefused: unique([
         ...withheld,
         ...(dossier.evidence.some((item) => item.disclosureReview === "exclude")
@@ -525,6 +536,13 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
           : []),
         ...(dossier.evidence.some((item) => item.disclosureReview === "needs_review")
           ? [`${dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length} item(s) still awaiting your review`]
+          : []),
+        ...(variants.some((variant) =>
+          [variant.resume.summary, variant.resume.linkedinSummary, variant.resume.linkedinHeadline].some(
+            (prose) => (prose ?? "") !== withholdSeparationFromGeneratedProse(prose ?? "")
+          )
+        )
+          ? ["1 generated sentence withheld during export review (your evidence was not changed)"]
           : []),
         ...unique(omitted).map((role) => `Role omitted (no usable approved detail yet): ${role}`)
       ]),

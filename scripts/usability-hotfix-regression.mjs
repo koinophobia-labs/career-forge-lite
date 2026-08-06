@@ -194,7 +194,12 @@ const terminationSafe = sanitizeResumeForProfessionalUse({
   ...safeResume,
   summary: "Led store operations until I was laid off in June 2026, kept quality high. Handled escalations calmly."
 });
-check("termination clause is removed while safe remainder survives", !/laid\s+off/i.test(terminationSafe.summary) && terminationSafe.summary.includes("kept quality high") && terminationSafe.summary.includes("Handled escalations calmly"), terminationSafe.summary);
+// ADJUDICATED: partial salvage is retired. The first sentence carries a
+// separation, so the WHOLE sentence is rejected — "kept quality high" was
+// inside it and goes with it. Salvaging fragments is what produced
+// "Supported one semester." The sibling sentence is unaffected.
+check("a generated sentence carrying a separation is rejected whole", !/laid\s+off/i.test(terminationSafe.summary) && !terminationSafe.summary.includes("kept quality high"), terminationSafe.summary);
+check("  the sibling generated sentence survives", terminationSafe.summary.includes("Handled escalations calmly"), terminationSafe.summary);
 
 const roleEvidence = evidenceRecord("role", "Product Operations Coordinator · Acme · 2022–2025", "manual", true, NOW, { label: "Employment" });
 const responsibilityEvidence = evidenceRecord("responsibility", "Coordinated weekly release readiness across product, support, and engineering", "manual", true, NOW, { label: "Responsibility" });
