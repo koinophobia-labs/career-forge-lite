@@ -40,11 +40,25 @@ h3 {
 }
 
 .trust-panel,
-.trust-card,
-.dark-form-card {
+.trust-card {
   border-color: var(--line2);
   border-radius: 5px;
   background: var(--panel);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+  backdrop-filter: none;
+}
+
+/* .dark-form-card is a LIGHT card carrying dark (text-ink) content — the
+   guided intake, its review screen, and the LinkedIn editor all render inside
+   one. Folding it into the dark-panel rule above set a near-black background
+   behind near-black text (1.08:1) and made those screens unreadable. It keeps
+   its own light surface, restated here so the palette re-skin cannot capture
+   it again. */
+.dark-form-card {
+  border-color: var(--line2);
+  border-radius: 5px;
+  background: rgba(242, 238, 227, 0.96);
+  color: #17140f;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
   backdrop-filter: none;
 }

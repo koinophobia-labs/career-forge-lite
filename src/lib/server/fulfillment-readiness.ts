@@ -1,3 +1,14 @@
+import { createHash } from "node:crypto";
+
+/**
+ * A non-reversible reference to a Stripe session, safe to publish. The session
+ * id itself is a bearer credential for /api/license and must never leave the
+ * server.
+ */
+function sessionDigest(sessionId: string): string {
+  return `sha256:${createHash("sha256").update(sessionId).digest("hex").slice(0, 12)}`;
+}
+
 /**
  * Can this deployment actually deliver what it sells?
  *
@@ -217,7 +228,12 @@ export async function operationalReadiness(
     name: "stripe_verified_certification",
     passed: evidenceVerdict.valid,
     detail: evidenceVerdict.valid
-      ? `Certified against Stripe test-mode session ${evidence!.checkoutSessionId} at ${evidence!.completedAt}.`
+      ? // NEVER print the session id: /api/commerce-health is public and
+        // unauthenticated, and /api/license treats a session id as a bearer
+        // credential — publishing it let anyone mint a signed paid license
+        // from the certification drill's own evidence. A short digest keeps
+        // the audit trail linkable without handing over the credential.
+        `Certified against Stripe test-mode session ${sessionDigest(evidence!.checkoutSessionId)} at ${evidence!.completedAt}.`
       : evidenceVerdict.reasons.join(" "),
   });
   blockers.push(...evidenceVerdict.reasons);
@@ -231,7 +247,8 @@ export async function operationalReadiness(
     name: "human_authorization",
     passed: approvalVerdict.valid,
     detail: approvalVerdict.valid
-      ? `Authorized by ${approval!.approvalActor} at ${approval!.approvedAt}.`
+      ? // The approver's name is not public-endpoint material either.
+        `Human authorization on file, recorded ${approval!.approvedAt}.`
       : approvalVerdict.reasons.join(" "),
   });
   blockers.push(...approvalVerdict.reasons);

@@ -181,5 +181,84 @@ check("unknown lanes fall back to a human label, never a raw lane id", noLaneRea
 const analyticsSource = fs.readFileSync(path.join(root, "src/lib/analytics.ts"), "utf8");
 check("career workflow analytics are event-name only", /function trackCareerEvent[\s\S]*?track\(event\)/.test(analyticsSource) && !/trackCareerEvent[\s\S]*?properties/.test(analyticsSource));
 
+// --- Guided write-back must not duplicate or hollow out profile-created roles -------
+// Repro of the closure-audit contamination: roles created on /profile carry ids
+// from the profile path; a guided session prefilled via intakeFromDossier and
+// merged back with mergeIntakeIntoDossier must UPDATE those roles in place —
+// never add a same-employment role under a new id, never shadow a recorded
+// role with an empty heading-only copy, and never drop earned evidence links.
+{
+  const profileDossier = {
+    ...emptyState().dossier,
+    roles: [
+      {
+        id: "role-profile-fmg",
+        title: "Shift Supervisor",
+        employer: "Fresh Market Grocery",
+        startDate: "2021–2024",
+        endDate: "",
+        current: false,
+        responsibilities: [
+          "It was my job to reconcile the drawer.",
+          "Reported to my manager and the shift lead.",
+          "Trained 4 new cashiers on the register system.",
+          "Made weekly schedules for a team of 6.",
+          "Handled customer complaints and refunds."
+        ],
+        tools: [],
+        outcomes: [],
+        evidenceIds: ["evidence-fmg-1", "evidence-fmg-2"]
+      },
+      {
+        id: "role-profile-quickstop",
+        title: "Cashier",
+        employer: "QuickStop Convenience",
+        startDate: "2019–2021",
+        endDate: "",
+        current: false,
+        responsibilities: ["Answered phones.", "Rang up purchases and bagged groceries.", "Counted the till at closing."],
+        tools: [],
+        outcomes: [],
+        evidenceIds: ["evidence-qs-1"]
+      }
+    ]
+  };
+
+  const prefilled = intakeFromDossier(profileDossier, "Assistant Store Manager");
+  const mergedOnce = mergeIntakeIntoDossier(profileDossier, prefilled, "guided", true, "guided write-back", NOW);
+  const mergedTwice = mergeIntakeIntoDossier(mergedOnce, intakeFromDossier(mergedOnce, "Assistant Store Manager"), "guided", true, "guided write-back again", NOW);
+
+  check("guided write-back keeps exactly the two recorded roles", mergedOnce.roles.length === 2, `roles=${mergedOnce.roles.map((r) => `${r.title}@${r.employer}#${r.id}(${r.responsibilities.length})`).join(", ")}`);
+  check("guided write-back reuses the profile role ids", mergedOnce.roles.every((r) => ["role-profile-fmg", "role-profile-quickstop"].includes(r.id)));
+  check("no two roles share an id after write-back", new Set(mergedOnce.roles.map((r) => r.id)).size === mergedOnce.roles.length);
+  check(
+    "no recorded role is hollowed out by a heading-only lane",
+    mergedOnce.roles.every((r) => r.responsibilities.length > 0),
+    JSON.stringify(mergedOnce.roles.map((r) => [r.employer, r.responsibilities.length]))
+  );
+  check(
+    "the current role keeps the evidence links it earned on /profile",
+    (() => {
+      const fmg = mergedOnce.roles.find((r) => r.id === "role-profile-fmg");
+      return fmg && fmg.evidenceIds.includes("evidence-fmg-1") && fmg.evidenceIds.includes("evidence-fmg-2");
+    })()
+  );
+  check("a second guided write-back is idempotent on role count", mergedTwice.roles.length === 2, `roles=${mergedTwice.roles.length}`);
+  check(
+    "a genuinely new previous employer still becomes a new role",
+    (() => {
+      const withNew = mergeIntakeIntoDossier(
+        profileDossier,
+        { ...prefilled, previousTitle: "Stocker", previousCompany: "Valley Hardware", previousTime: "2018–2019" },
+        "guided",
+        true,
+        "typed a new employer",
+        NOW
+      );
+      return withNew.roles.length === 3 && withNew.roles.some((r) => r.employer === "Valley Hardware");
+    })()
+  );
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

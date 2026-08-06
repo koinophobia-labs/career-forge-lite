@@ -11,7 +11,7 @@ import { initialIntake } from "@/lib/career-data";
 import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
 import { createId, loadState } from "@/lib/command-center-store";
 import { resumeToText } from "@/lib/resume-export";
-import { consumeHandoff, recordTailoredResumeVersion, type TailorHandoff } from "@/lib/tailor-handoff";
+import { clearHandoff, peekHandoff, recordTailoredResumeVersion, type TailorHandoff } from "@/lib/tailor-handoff";
 import { applyTailoredContext, contextFromHandoff, type TailoredInfluence } from "@/lib/tailored-resume";
 import { updateCommandCenter } from "@/lib/use-command-center";
 import { generateResumePackage } from "@/lib/generator";
@@ -52,6 +52,9 @@ function recordResumeVersion(
     updateCommandCenter((state) =>
       recordTailoredResumeVersion(state, tailorSession, nowIso, influenceSummary, resumeText, snapshot)
     );
+    // The tailored session is complete once its version is recorded; a later,
+    // unrelated builder visit starts clean.
+    clearHandoff();
     return;
   }
 
@@ -102,7 +105,7 @@ export default function Home() {
 
   useEffect(() => {
     const stored = loadState();
-    const handoff = consumeHandoff(new Date().toISOString());
+    const handoff = peekHandoff(new Date().toISOString());
     const dossierIntake = intakeFromDossier(stored.dossier, handoff?.roleTitle ?? "");
     if (stored.dossier.evidence.length || stored.dossier.roles.length || stored.dossier.projects.length) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from the canonical local dossier
@@ -272,7 +275,10 @@ export default function Home() {
               </div>
               <button
                 type="button"
-                onClick={() => setTailorSession(null)}
+                onClick={() => {
+                  clearHandoff();
+                  setTailorSession(null);
+                }}
                 className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-paper/60 transition hover:border-coral hover:text-coral"
               >
                 Exit tailored session
