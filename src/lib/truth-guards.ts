@@ -59,8 +59,57 @@ const terminationPatterns: RegExp[] = [
   /\bleadership\s+(decided\s+to\s+)?eliminat(ed?|ing)\s+(the\s+)?(role|position|team|department)\b/i
 ];
 
+// Personal circumstances a résumé must never carry. Distinct from a
+// termination reason but withheld by the same path, because the harm is the
+// same: a polished, trustworthy-looking document that discloses someone's
+// health, family situation, money trouble, or an unfinished degree to an
+// employer who never asked.
+//
+// Observed in the DECODED exports, not the preview:
+//   word/document.xml  "Left in August 2023 because my mother got sick and I
+//                       had to care for her"
+//   PDF content stream "Dropped out of community college after one semester
+//                       because I could not afford it"
+//
+// Each pattern needs BOTH a personal subject and the disclosure — "cared for
+// 40 patients" is a care worker's job and must survive; "had to care for her"
+// is a family circumstance.
+const sensitiveDisclosurePatterns: RegExp[] = [
+  // Departure framed with a reason: the reason is the disclosure.
+  /\b(left|quit|resigned|stepped\s+(away|down)|took\s+(time|leave|a\s+break))\b[^.!?]{0,60}?\b(because|due\s+to|so\s+(i|we)\s+could)\b/i,
+  // Health and medical, about the candidate or their family.
+  /\b(my|our)\s+\w+\s+(got|was|became|is|fell)\s+(sick|ill|injured|diagnosed)\b/i,
+  /\b(i|we)\s+(got|was|were|became|fell)\s+(sick|ill|injured|diagnosed)\b/i,
+  /\b(had\s+to\s+)?(care\s+for|look\s+after|take\s+care\s+of)\s+(my|her|him|them|a\s+family)\b/i,
+  /\b(my|our)\s+(health|illness|surgery|treatment|diagnosis|disability|recovery)\b/i,
+  /\b(maternity|paternity|parental|medical|bereavement)\s+leave\b/i,
+  // Financial hardship.
+  /\b(could\s*n[o']?t|couldn't|can\s*n[o']?t)\s+afford\b/i,
+  /\b(financial|money)\s+(reasons|hardship|trouble|problems)\b/i,
+  // An unfinished credential framed as a personal failure. "Some coursework"
+  // or "in progress" is ordinary résumé content and is deliberately not here.
+  /\b(dropped\s+out|flunked\s+out|had\s+to\s+(drop|leave|withdraw))\b/i,
+  /\b(did\s*n[o']?t|never)\s+finish(ed)?\b[^.!?]{0,30}\b(school|college|university|degree|program)\b/i,
+  // A bare departure statement, once its reason has been stripped away.
+  // "Left in August 2023 because my mother got sick" survived as the fragment
+  // "Left in August 2023" — still a separation disclosure, and useless as a
+  // résumé bullet. Requires a date and a short clause, so ordinary work like
+  // "Left the building secure at close every night." is untouched.
+  /^\s*(left|quit|resigned|departed|stepped\s+down)\b(?=[^.!?]{0,28}\b(?:19|20)\d{2}\b)[^.!?]{0,34}$/i,
+  /^\s*(left|quit|resigned|departed)\s*$/i
+];
+
+export function containsSensitiveDisclosure(text: string): boolean {
+  return sensitiveDisclosurePatterns.some((pattern) => pattern.test(text));
+}
+
 export function containsTerminationReason(text: string): boolean {
   return terminationPatterns.some((pattern) => pattern.test(text));
+}
+
+// Either category disqualifies a clause from a résumé.
+function isUnsafeClause(text: string): boolean {
+  return containsTerminationReason(text) || containsSensitiveDisclosure(text);
 }
 
 const trailingConjunction = /\s+(until|after|when|because|since|though|although)\s*[.!?]?\s*$/i;
@@ -80,12 +129,12 @@ function finishClause(value: string): string {
 // Removes termination-reason clauses from a sentence while keeping the rest
 // usable. Returns the cleaned text and whether anything was withheld.
 export function stripTerminationReasons(text: string): { text: string; withheld: boolean } {
-  if (!containsTerminationReason(text)) return { text, withheld: false };
+  if (!containsTerminationReason(text) && !containsSensitiveDisclosure(text)) return { text, withheld: false };
 
   const cleanedSentences = text
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => {
-      if (!containsTerminationReason(sentence)) return sentence;
+      if (!containsTerminationReason(sentence) && !containsSensitiveDisclosure(sentence)) return sentence;
 
       // First: if the sentence already has comma/semicolon/dash-separated
       // clauses, drop only the ones that carry the reason. A comma between
@@ -93,7 +142,7 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       // boundary — splitting there once mangled a summary to "Resolved 4".
       const punctuationClauses = sentence.split(/(?<!\d),|,(?!\d)|;|\s+—\s+|\s+-\s+/);
       if (punctuationClauses.length > 1) {
-        const kept = punctuationClauses.filter((clause) => !containsTerminationReason(clause));
+        const kept = punctuationClauses.filter((clause) => !isUnsafeClause(clause));
         if (kept.length > 0) return finishClause(kept.join(", "));
       }
 
@@ -105,8 +154,8 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       const conjunctionMatch = sentence.match(/^(.*?)\s+\b(until|because|since|whenever|when|after|while|though|although|before)\b\s+(.*)$/i);
       if (conjunctionMatch) {
         const [, before, conjunction, after] = conjunctionMatch;
-        const beforeUnsafe = containsTerminationReason(before);
-        const afterUnsafe = containsTerminationReason(after);
+        const beforeUnsafe = isUnsafeClause(before);
+        const afterUnsafe = isUnsafeClause(after);
         // Keeping the clause BEFORE the conjunction is safe: it states
         // something that happened, and the conjunction only bounds when it
         // stopped. "Managed vendor contracts until I was laid off" → the
@@ -143,7 +192,7 @@ export function stripTerminationReasons(text: string): { text: string; withheld:
       if (leadingConcessive) {
         const remainder = leadingConcessive[1];
         const split = remainder.match(/^(.*?)(?<!\d),\s*(.*)$/);
-        if (split && containsTerminationReason(split[1]) && !containsTerminationReason(split[2]) && split[2].trim()) {
+        if (split && isUnsafeClause(split[1]) && !isUnsafeClause(split[2]) && split[2].trim()) {
           return finishClause(split[2]);
         }
       }

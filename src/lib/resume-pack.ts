@@ -445,7 +445,29 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       evidenceOmitted: approved.filter((item) => !evidenceUsed.includes(item.id)).map((item) => item.id), gapsAvoided: lane.gaps
     };
   });
-  const used = unique(variants.flatMap((variant) => variant.evidenceReferences.flatMap((reference) => reference.evidenceIds)));
+  // The receipt is a factual claim about this document, so it is derived from
+  // what the document ACTUALLY CONTAINS — not from generation success and not
+  // from the count of approved facts. Deriving it from evidenceReferences
+  // reported "Approved professional evidence used: 11 / not used: 0" for a
+  // pack whose résumés contained neither of two typed responsibilities. A
+  // reference records that a fact was considered; only the rendered text
+  // records that it was used.
+  const renderedCorpus = variants
+    .map((variant) => JSON.stringify(variant.resume))
+    .join(" ")
+    .toLowerCase();
+  const appearsInDocument = (item: DossierEvidenceRecord): boolean => {
+    const cleaned = cleanFact(item.detail).text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!cleaned) return false;
+    const haystack = renderedCorpus.replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
+    if (haystack.includes(cleaned)) return true;
+    // A long sentence may be rendered as a trimmed clause; require a
+    // substantial run of its words rather than a single shared token.
+    const words = cleaned.split(" ").filter((word) => word.length > 3);
+    if (words.length < 4) return false;
+    return haystack.includes(words.slice(0, 4).join(" "));
+  };
+  const used = unique(approved.filter(appearsInDocument).map((item) => item.id));
   const transferred = unique(variants.flatMap((variant) => variant.evidenceReferences.filter((reference) => reference.supportType === "transferred").map((reference) => reference.claimText)));
   const first = variants[0]?.resume;
   // Proof-bank entries are user-facing document material: uncertainty

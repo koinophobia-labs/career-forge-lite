@@ -868,6 +868,10 @@ export function withRoleResponsibilitiesEdited(
   );
   const known = new Set(dossier.evidence.map((item) => item.id));
   const additions = added.filter((item) => !known.has(item.id));
+  // Retyping a duty that was previously removed must bring it back. The record
+  // already exists, so it is not in `additions`; without this it stayed
+  // rejected and the retyped text silently failed to appear.
+  const revivedIds = new Set(added.filter((item) => known.has(item.id)).map((item) => item.id));
 
   // Ownership must be EXCLUSIVE before a record may be rejected here. The
   // first version also swept in anything listed in this role's evidenceIds,
@@ -896,18 +900,25 @@ export function withRoleResponsibilitiesEdited(
             employer: roleFields.employer ?? item.employer,
             startDate: roleFields.startDate ?? item.startDate,
             responsibilities,
-            evidenceIds: [...new Set([...item.evidenceIds, ...added.map((record) => record.id)])].filter(
-              (evidenceId) => !removedIds.has(evidenceId)
-            )
+            // The link is KEPT even for a removed duty. Stripping the id
+            // orphaned the record: "Restore and approve" flipped it back to
+            // approved but nothing re-linked it, so the restored duty never
+            // reached the résumé again and the user could not recover their
+            // own text by any documented path. Exclusion is carried by the
+            // rejected flag alone — every consumer already filters on
+            // `approved && !rejected` — so restoring is a single flag flip.
+            evidenceIds: [...new Set([...item.evidenceIds, ...added.map((record) => record.id)])]
           }
         : item
     ),
     responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])].filter(
       (item) => !removedText.has(norm(item))
     ),
-    evidence: [...dossier.evidence, ...additions].map((item) =>
-      removedIds.has(item.id) ? { ...item, rejected: true, approved: false } : item
-    ),
+    evidence: [...dossier.evidence, ...additions].map((item) => {
+      if (removedIds.has(item.id)) return { ...item, rejected: true, approved: false };
+      if (revivedIds.has(item.id) && item.rejected) return { ...item, rejected: false, approved: true };
+      return item;
+    }),
     approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])].filter(
       (item) => !removedText.has(norm(item))
     ),

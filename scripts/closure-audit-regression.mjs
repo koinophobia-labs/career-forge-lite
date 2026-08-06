@@ -378,10 +378,28 @@ check(
     edited.evidence.some((item) => item.detail === DUTIES[1] && item.rejected && !item.approved),
     JSON.stringify(edited.evidence.map((item) => [item.detail.slice(0, 30), item.approved, item.rejected]))
   );
+  // The role KEEPS the link and exclusion is carried by the rejected flag.
+  // Stripping the id orphaned the record so that neither documented restore
+  // path could bring the duty back — the user could not recover their own
+  // text. What must hold is that it does not PRINT and stays restorable.
   check(
-    "the role stops citing the removed evidence",
-    edited.roles[0].evidenceIds.length === 2,
+    "the removed evidence stays linked so it can be restored",
+    edited.roles[0].evidenceIds.length === 3,
     JSON.stringify(edited.roles[0].evidenceIds)
+  );
+  check(
+    "restoring the rejected record makes the duty print again",
+    (() => {
+      const target = edited.evidence.find((item) => item.detail === DUTIES[1]);
+      const restored = { ...edited, evidence: edited.evidence.map((item) => (item.id === target.id ? { ...item, approved: true, rejected: false } : item)) };
+      return packText(restored).includes("Trained 4 new cashiers on the register system");
+    })(),
+    "restore-and-approve did not bring the duty back"
+  );
+  check(
+    "retyping the duty also restores it",
+    packText(withRoleResponsibilitiesEdited(edited, roleId, DUTIES, NOW)).includes("Trained 4 new cashiers on the register system"),
+    "retyping did not bring the duty back"
   );
   check(
     "the removed duty leaves approvedClaims and the responsibility pool",
@@ -404,7 +422,9 @@ check(
   const twice = withRoleResponsibilitiesEdited(edited, roleId, [DUTIES[0], DUTIES[2]], NOW);
   check(
     "repeating the edit is idempotent",
-    twice.roles[0].evidenceIds.length === 2 && twice.evidence.length === edited.evidence.length,
+    twice.roles[0].evidenceIds.length === edited.roles[0].evidenceIds.length &&
+      twice.evidence.length === edited.evidence.length &&
+      twice.evidence.filter((item) => item.rejected).length === edited.evidence.filter((item) => item.rejected).length,
     JSON.stringify([twice.roles[0].evidenceIds.length, twice.evidence.length, edited.evidence.length])
   );
 }

@@ -172,9 +172,24 @@ function hasSelfDeclaredGapClause(value: string): boolean {
   return false;
 }
 
+// "no <evidence noun>" is a GAP only when the candidate is describing what
+// they lack — not when "with no X" describes HOW they did the work. The two
+// readings are opposite claims:
+//
+//   GAP          "I have no supervisory experience."
+//                "No formal training or certifications yet."
+//   ACHIEVEMENT  "Completed closing procedures with no supervision."
+//                "Trained six new hires with no formal training budget."
+//                "Rebuilt the schedule with no history to work from."
+//
+// A previous version matched "no <noun>" ANYWHERE, so it deleted three of four
+// approved accomplishments from every exported document and told the user each
+// was an "Evidence gap (never résumé content)". Relation first: a preposition
+// in front of "no" makes it adverbial — a description of the conditions, which
+// is evidence of independence rather than an absence of evidence.
+const ADVERBIAL_NO = /\b(?:with|without|under|despite|using|given|on|after|before|through|from)\s+no\b/i;
+
 const GAP_PATTERNS = [
-  // "no <evidence noun>" ANYWHERE, not only at the start: "Have no measurable
-  // results yet" is the same statement as "No measurable results yet".
   /\bno\s+(?![-\s]?code\b)(?:[\w&-]+\s+){0,5}(?:employment|experience|metrics?|outcomes?|results?|leadership|title|ownership|credentials?|certif\w*|degree|diploma|qualifications?|licen[cs]\w*|background|history|training|education|supervis\w*|budget|numbers?|data|saas|software\s+implementation|project[-\s]?management)\b/i,
   /\b(?:i|we)\s+(?:lack|lacks|lacking)\b/i,
   // lack/without + any evidence noun, including ones the old short list missed
@@ -208,7 +223,7 @@ export function classifyEvidenceAdmissibility(text: string): EvidenceAdmissibili
   if (isUncertaintyStatement(value)) return "uncertainty";
   if (containsTerminationReason(value)) return "separation_reason";
   if (TARGET_PREFERENCE_PATTERNS.some((pattern) => pattern.test(value))) return "preference";
-  if (GAP_PATTERNS.some((pattern) => pattern.test(value)) || hasSelfDeclaredGapClause(value)) return "gap";
+  if ((!ADVERBIAL_NO.test(value) && GAP_PATTERNS.some((pattern) => pattern.test(value))) || hasSelfDeclaredGapClause(value)) return "gap";
   if (CONSTRAINT_PATTERNS.some((pattern) => pattern.test(value))) return "constraint";
   return "claim";
 }

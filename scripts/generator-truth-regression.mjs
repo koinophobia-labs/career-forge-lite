@@ -505,6 +505,58 @@ for (const [typed, forbiddenSkill] of [
   expect(`  denial is not listed as a skill: "${typed}"`, !pkg.coreSkills.some((skill) => /\b(?:not|never)\b|n['’]?t\b/i.test(skill)), JSON.stringify(pkg.coreSkills));
 }
 
+// ═══════════════════════════════════════════════ RA-P0-08
+// Sensitive personal disclosures must never reach an exported document, and
+// "no <noun>" must be read RELATION-first. Both were found by decoding the
+// actual DOCX/PDF, not by reading generator return values.
+H("RA-P0-08 — sensitive disclosures and relation-aware 'no'");
+
+const SENSITIVE = /(mother got sick|care for her|dropped out|could ?n'?t afford|could not afford|medical leave|left in august)/i;
+
+for (const typed of [
+  "Left in August 2023 because my mother got sick and I had to care for her.",
+  "I dropped out of community college after one semester because I could not afford it.",
+  "I quit because I couldn't afford childcare.",
+  "I was on medical leave for three months."
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Clerk", currentCompany: "Grocery Co", currentTime: "2021 - 2023", responsibilities: `Ran the front end register during Sunday peak. ${typed}` }));
+  const whole = JSON.stringify(pkg);
+  expect(`personal disclosure never reaches the document: "${typed.slice(0, 46)}…"`, !SENSITIVE.test(whole), whole.slice(0, 240));
+  expect(`  the surrounding true work survives`, /front end register/i.test(whole), whole.slice(0, 200));
+}
+
+// …and ordinary care work, unfinished-but-neutral study, and "left" used as a
+// normal verb are NOT disclosures. Over-deletion is its own truth failure.
+for (const [typed, mustSurvive] of [
+  ["Cared for 40 patients per shift on the memory-care wing.", /40 patients/i],
+  ["Provided personal care and bathing help to residents each morning.", /bathing help/i],
+  ["Completed some coursework in accounting.", /coursework in accounting/i],
+  ["Left the building secure at close every night.", /building secure/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Caregiver", currentCompany: "Bright Meadows", currentTime: "2021 - 2024", responsibilities: typed }));
+  expect(`ordinary work is not treated as a disclosure: "${typed.slice(0, 46)}…"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
+}
+
+// "with no X" describes HOW the work was done — evidence of independence.
+// "I have no X" is an absence of evidence. A blanket no+noun rule deleted
+// three of four approved accomplishments from every exported document.
+for (const achievement of [
+  "Completed closing procedures with no supervision.",
+  "Trained six new hires with no formal training budget.",
+  "Rebuilt the schedule with no history to work from.",
+  "Ran the night shift with no manager on site."
+]) {
+  expect(`adverbial "no" stays a claim: "${achievement}"`, classifyEvidenceAdmissibility(achievement) === "claim", classifyEvidenceAdmissibility(achievement));
+}
+for (const gap of [
+  "I have no supervisory experience.",
+  "No formal training or certifications yet.",
+  "I have no leadership experience.",
+  "No measurable results yet."
+]) {
+  expect(`declared absence stays a gap: "${gap}"`, classifyEvidenceAdmissibility(gap) !== "claim", classifyEvidenceAdmissibility(gap));
+}
+
 L();
 L("=".repeat(78));
 L(`Generator truth regression: ${passes} passed, ${fails} failed`);
