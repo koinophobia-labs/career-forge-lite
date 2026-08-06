@@ -111,7 +111,12 @@ export function toResumeVoice(text: string): string {
     .trim()
     .replace(/^\s*i\s+(was|am|have\s+been|had\s+been)\s+/i, "")
     .replace(/^\s*i\s+/i, "")
-    .replace(/\bmy\s+/gi, "")
+    // "My" only drops where it opens the line ("My duties included…" →
+    // "Duties included…"). A global strip deleted every interior "my" and
+    // produced broken English in every export: "It was my job to reconcile
+    // the drawer." became "It was job to reconcile the drawer." Mid-sentence
+    // possessives are part of the user's own wording and stay.
+    .replace(/^\s*my\s+/i, "")
     .replace(/^\s*([a-z])/, (match) => match.toUpperCase())
     .replace(/\s{2,}/g, " ");
 }
