@@ -541,14 +541,25 @@ export function loadState(): CommandCenterState {
   return parseState(serialized);
 }
 
-export function saveState(state: CommandCenterState): void {
-  if (typeof window === "undefined") return;
+/**
+ * Returns true when the state reached durable storage.
+ *
+ * The caller has to know. updateCommandCenter always rebased on what is ON
+ * DISK, so after one quota failure the next edit rebased on the last state
+ * that saved and silently threw away everything the user had done since —
+ * in the UI as well as on disk. A boolean lets the caller keep working from
+ * the in-memory snapshot until a write succeeds again.
+ */
+export function saveState(state: CommandCenterState): boolean {
+  if (typeof window === "undefined") return false;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
   } catch {
     // Almost always QuotaExceededError. The in-memory state is still correct,
     // so surface the failure instead of losing it silently.
     window.dispatchEvent(new CustomEvent(SAVE_ERROR_EVENT));
+    return false;
   }
 }
 

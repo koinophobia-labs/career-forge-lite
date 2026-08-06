@@ -473,5 +473,68 @@ check(
   );
 }
 
+// --- 13. A failed save must not discard later edits (DS-01 / RELY-01) ---------------
+// updateCommandCenter always rebased on what was ON DISK. After one quota
+// failure the next edit rebased on the last state that saved, silently
+// throwing away everything done since — in the UI as well as on disk.
+{
+  const storeModule = loadTsModule(path.join(root, "src/lib/command-center-store.ts"));
+  const { updateCommandCenter, hasUnsavedWork } = loadTsModule(path.join(root, "src/lib/use-command-center.ts"));
+
+  const disk = new Map();
+  let failWrites = false;
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (disk.has(key) ? disk.get(key) : null),
+      setItem: (key, value) => {
+        if (failWrites) {
+          const error = new Error("QuotaExceededError");
+          error.name = "QuotaExceededError";
+          throw error;
+        }
+        disk.set(key, String(value));
+      },
+      removeItem: (key) => disk.delete(key)
+    },
+    dispatchEvent: () => true,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+  globalThis.CustomEvent = class {
+    constructor(type) {
+      this.type = type;
+    }
+  };
+
+  const label = (state) => (state.lanes[0] ? state.lanes[0].title : "");
+  const addLane = (title) => (state) => ({
+    ...state,
+    lanes: [{ id: "lane-1", title, status: "active", whyFit: "", resumeAngle: "", proof: [], gaps: [], keywords: [], source: "custom", createdAt: "2026-08-06T00:00:00.000Z" }]
+  });
+
+  updateCommandCenter(addLane("Edit A"));
+  check("a normal save reaches disk", label(storeModule.loadState()) === "Edit A", label(storeModule.loadState()));
+  check("no unsaved work is reported after a good save", hasUnsavedWork() === false);
+
+  failWrites = true;
+  updateCommandCenter(addLane("Edit B"));
+  check("a failed save is reported, not swallowed", hasUnsavedWork() === true);
+
+  // THE DEFECT: the next edit used to rebase on disk (still "Edit A"), so
+  // "Edit B" vanished from the visible state as well as from storage.
+  updateCommandCenter((state) => ({ ...state, lanes: state.lanes.map((lane) => ({ ...lane, whyFit: "note added after the failure" })) }));
+  failWrites = false;
+  updateCommandCenter((state) => state);
+  check(
+    "work done after a failed save survives once storage recovers",
+    label(storeModule.loadState()) === "Edit B",
+    `disk now holds "${label(storeModule.loadState())}" — the post-failure edit was discarded`
+  );
+  check("the unsaved flag clears after a successful write", hasUnsavedWork() === false);
+
+  delete globalThis.window;
+  delete globalThis.CustomEvent;
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

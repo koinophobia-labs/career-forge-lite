@@ -90,13 +90,25 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+// Set when a write to localStorage fails (quota). While it is true, updates
+// rebase on the in-memory snapshot instead of on disk: the disk copy is stale
+// by definition, and rebasing on it discarded every edit made since the
+// failure — silently, in the UI as well as on disk. Cleared by the first
+// write that succeeds again.
+let lastSaveFailed = false;
+
 export function updateCommandCenter(updater: (current: CommandCenterState) => CommandCenterState): void {
-  const latest = readSanitizedState();
+  const latest = lastSaveFailed && snapshot ? snapshot : readSanitizedState();
   const proposed = updater(latest);
   snapshot = sanitizeCommandCenterState(proposed, latest);
-  saveState(snapshot);
+  lastSaveFailed = !saveState(snapshot);
   persistApplicationActivity(snapshot);
   listeners.forEach((listener) => listener());
+}
+
+/** True when unsaved work is being held in memory only. */
+export function hasUnsavedWork(): boolean {
+  return lastSaveFailed;
 }
 
 export function useCommandCenter() {
