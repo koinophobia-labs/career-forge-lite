@@ -205,6 +205,63 @@ for (const [typed, fabrication] of COMPOUND) {
   expect(`  no fabricated fragment ${fabrication.source}`, !out.some((b) => fabrication.test(b)), JSON.stringify(out));
 }
 
+// ═══════════════════════════════════════════════ RA-P0-04
+// Fixtures authored by the INDEPENDENT adversarial review of this branch, kept
+// verbatim so the defects it found can never come back. Each of these failed
+// before the repair that follows it.
+H("RA-P0-04 — findings from independent adversarial review");
+
+// (a) Rescuing a narration sentence from deletion must not hand it an invented
+// lead verb. The reviewer's exact repro; this was INTRODUCED by the first
+// RA-P0-03 fix and is the reason a word count cannot classify a noun label.
+for (const [typed, fabricated] of [
+  ["It was hectic. Stocked shelves and bagged groceries.", "Supported It was hectic."],
+  ["Managed it well. They promoted me twice.", "Supported They promoted me twice."],
+  ["I was the closer.", "Supported was the closer."]
+]) {
+  const out = bulletsFor({ currentTitle: "Stock Clerk", currentCompany: "Value Mart", currentTime: "2022 - Present", responsibilities: typed });
+  expect(`no invented lead on rescued narration: "${fabricated}"`, !out.includes(fabricated), JSON.stringify(out));
+}
+
+// (b) A described de-escalation must never produce the OPPOSITE claim, and
+// merely naming a manager or making a phone call must not ground escalation.
+for (const [title, company, typed] of [
+  ["Security Guard", "Meridian Plaza", "De-escalated upset callers on the lobby phone."],
+  ["Security Guard", "Meridian Plaza", "Called the shuttle company when visitors needed rides."],
+  ["Cashier", "Value Mart", "Took customer orders while my manager watched the floor."]
+]) {
+  const out = bulletsFor({ currentTitle: title, currentCompany: company, currentTime: "2022 - Present", responsibilities: typed });
+  expect(`no fabricated escalation claim from: "${typed}"`, !out.some((b) => /^Escalated\b/.test(b)), JSON.stringify(out));
+}
+
+// (c) A room is not a team; an adjective about a place is not a procedure.
+{
+  const pkg = generateResumePackage(intake({ currentTitle: "Line Cook", currentCompany: "Copper Skillet", currentTime: "2022 - Present", responsibilities: "Scrubbed the kitchen floors after close." }));
+  const out = pkg.experience.flatMap((r) => r.bullets);
+  expect("solo cleaning does not ground a coordination claim", !out.some((b) => /Coordinated with coworkers/.test(b)), JSON.stringify(out));
+  expect("solo cleaning does not mint a Team Coordination skill", !pkg.coreSkills.includes("Team Coordination"), JSON.stringify(pkg.coreSkills));
+}
+{
+  const pkg = generateResumePackage(intake({ currentTitle: "Warehouse Associate", currentCompany: "Gulf Distribution", currentTime: "2022 - Present", responsibilities: "The dock always felt safe at night." }));
+  expect('"felt safe" does not mint a Safety Procedures skill', !pkg.coreSkills.includes("Safety Procedures"), JSON.stringify(pkg.coreSkills));
+}
+
+// (d) A self-declared gap is withheld no matter which verb carries it — the
+// verb list used to stop at manage/own/lead/… so "trained" slipped through and
+// the negation was printed as an achievement.
+for (const gapText of [
+  "I have never trained anyone",
+  "Never trained anyone",
+  "I have never closed the register on my own",
+  "I have never written a report"
+]) {
+  expect(`self-declared gap withheld: "${gapText}"`, classifyEvidenceAdmissibility(gapText) !== "claim", classifyEvidenceAdmissibility(gapText));
+}
+// …while negating a BAD OUTCOME stays an accomplishment.
+for (const achievement of ["I did not lose any data", "I never missed a deadline", "We did not have a security breach on the platform"]) {
+  expect(`achievement stays a claim: "${achievement}"`, classifyEvidenceAdmissibility(achievement) === "claim", classifyEvidenceAdmissibility(achievement));
+}
+
 L();
 L("=".repeat(78));
 L(`Generator truth regression: ${passes} passed, ${fails} failed`);

@@ -126,7 +126,9 @@ const labelGrounding = new Map<string, RegExp>([
   // candidate managed time. Only evidence about their own time performance
   // authorises the competency.
   ["time management", /\b(deadlines?|on time|prioriti\w*|multitask\w*|juggl\w*|time management|scheduled around)\b/],
-  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?|kitchen)\b/],
+  // A room is not a team: "kitchen" was grounding Team Coordination for a
+  // user who described cleaning it alone. People words only.
+  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?)\b/],
   // Performing a checking TASK ("checked labels") is not the same claim as
   // possessing the QUALITY. This is the same over-claim as the ungated canned
   // bullets that asserted "attention to detail" and were removed; the label
@@ -135,7 +137,9 @@ const labelGrounding = new Map<string, RegExp>([
   ["order accuracy", /\b(orders?|accuracy|accurate)\b/],
   ["problem solving", /\b(problems?|issues?|resolved?|fixed|solved?|troubleshoot|troubleshot)\b/],
   ["patient support", /\b(patients?|residents?|clients?|care)\b/],
-  ["safety procedures", /\b(safety|safe|ppe|osha|sanitation)\b/],
+  // "The dock always felt safe" describes how a place felt, not that the
+  // candidate followed safety procedures. The bare adjective is out.
+  ["safety procedures", /\b(safety|ppe|osha|sanitation)\b/],
   ["inventory", /\b(inventory|stock(?:ed|ing|er)?|restock\w*|shelves|shelf|shipments?|supplies|pallets?)\b/],
   ["documentation", /\b(document\w*|notes?|records?|logs?|reports?|paperwork|wrote)\b/],
   ["reliability", /\b(reliab\w*|on time|showed up|never missed|attendance|dependab\w*|consistent\w*|covered shifts?)\b/],
@@ -1351,7 +1355,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bdisplays?\b|\bpresentation|\bfacing|\bmerchandis\w*/, "maintaining store presentation"],
         [/\binventory\b|\bshelves\b|\bshelf\b|\bbackroom\b/, "organizing inventory areas"]
       ]),
-      { text: "Escalated customer issues to leads or managers.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
+      // The gate names the ACTION only. "my manager" says who was nearby, not
+      // that anything was escalated; "de-escalated" is the opposite action and
+      // must not match through the hyphen boundary.
+      { text: "Escalated customer issues to leads or managers.", when: /(?<!de[\s-])\bescalat\w*/i },
       composed(corpus, "Balanced", [
         [/\bregisters?\b|\baccura\w*/, "register accuracy"],
         [/\bcustomers?\b|\bservice\b/, "customer service"],
@@ -1398,7 +1405,9 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bobservations?\b|\bnoticed\b/, "observations"],
         [/\bnotes?\b|\blogs?\b|\blogged\b|\bwrote\b|\breport\w*/, "shift notes"]
       ]),
-      { text: "Escalated concerns in line with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
+      // Same rule: only escalation language grounds an escalation claim.
+      // "called" (phoning anyone) and "policies" (existing) did not.
+      { text: "Escalated concerns in line with site policies.", when: /(?<!de[\s-])\bescalat\w*/i },
       // (ungated canned bullet removed: it asserted reliability / attention to
       // detail with nothing in the user's corpus behind it, and could be the ONLY
       // experience bullet on the résumé. A role with nothing grounded renders
@@ -1486,7 +1495,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bclean\w*|\bwiped?\b/, "clean"],
         [/\borganiz\w*|\bstation\b|\bstocked\b/, "organized"]
       ]),
-      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|team|kitchen)\b/ },
+      // "kitchen" is a room, not collaboration: "Scrubbed the kitchen floors
+      // after close." described solo work and was grounding a two-claim
+      // coordination bullet. The gate names people, not places.
+      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|teammates?|team|crew|servers?|expo)\b/ },
       composed(corpus, "Handled", [
         [/\bquestions?\b|\basked\b/, "customer questions"],
         [/\bissues?\b|\bcomplaints?\b|\bwrong\b|\bremade?\b/, "order issues"]
@@ -1875,12 +1887,21 @@ function isVerbLed(line: string) {
   return verbLedPhrase.test(line) || /^[a-z]{3,}(ed|ing)$/i.test(first);
 }
 
+// A clause has a subject and/or a copula: "It was hectic.", "They promoted
+// me twice.", "was the closer". A word count cannot tell these from a chip
+// label, and treating them as labels produced fabricated leads like
+// "Supported It was hectic." Detected structurally — no verb whitelist.
+function readsAsClause(line: string) {
+  return /\b(?:it|they|them|we|he|she|you|i)\b/i.test(line) || /\b(?:is|was|were|are|am|be|been|being)\b/i.test(line);
+}
+
 // A line may take the "Supported …" lead ONLY when it is unmistakably a bare
-// noun label — a short fragment with no verb of its own. Anything else is the
-// user's own sentence and is emitted as written. Never guess a lead.
+// noun label — a short fragment with no verb and no clause structure of its
+// own. Anything else is the user's own sentence and is emitted as written.
+// Never guess a lead.
 function isNounLabel(line: string) {
   const words = cleanWhitespace(line).split(/\s+/).filter(Boolean);
-  return words.length > 0 && words.length <= 4 && !isVerbLed(line);
+  return words.length > 0 && words.length <= 4 && !isVerbLed(line) && !readsAsClause(line);
 }
 
 function capitalizeSentence(value: string) {

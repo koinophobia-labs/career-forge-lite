@@ -73,11 +73,24 @@ const TARGET_PREFERENCE_PATTERNS = [
 //      "do not have a degree" negates a credential (a gap).
 // ---------------------------------------------------------------------------
 
-const GAP_VERBS = "manage|own|lead|implement|hold|have|work|use|track|measure|supervise|report";
-// Regular inflections plus the irregular past forms of lead/hold/have, which a
-// suffix rule cannot reach ("have not led a team").
-const GAP_VERB_FORMS = `(?:(?:${GAP_VERBS})(?:d|s|es|ed|ing|n)?|led|held|had)`;
-const AUXILIARIES = "do|does|did|have|has|don['’]?t|doesn['’]?t|didn['’]?t|haven['’]?t|hasn['’]?t";
+// The verb slot is OPEN. A closed list ("manage|own|lead|…") let any gap
+// phrased with an unlisted verb through as a positive claim: "I have never
+// trained anyone" was classified as a claim and shipped as the résumé bullet
+// "Supported have never trained anyone." The real signals are the three that
+// follow — negation, a self subject, and a gap OBJECT — and none of them
+// depend on which verb the user reached for.
+//
+// The one thing worth enumerating is the opposite case: negating a BAD
+// OUTCOME is an accomplishment, not a gap ("did not lose any data", "never
+// missed a deadline"). Those verbs are a small, closed, and stable set,
+// unlike the open set of things people do at work.
+const ACHIEVEMENT_VERBS = "lose|loses|losing|lost|miss|misses|missing|missed|break|breaks|breaking|broke|broken|fail|fails|failing|failed|damage|damages|damaging|damaged|breach|breaches|breaching|breached|violate|violates|violating|violated";
+// The scan anchors on the NEGATION itself rather than on a verb. Trying to
+// name the verb slot failed both ways: a closed list missed "trained", and an
+// open slot swallowed the auxiliary carrying the negation ("havent" read as
+// the verb). The negator is the one token that must be present, so it is the
+// anchor, and the subject and object are read around it.
+const NEGATOR = /\b(?:not|never)\b|\b[A-Za-z]+n['’]?t\b/gi;
 
 // Nouns whose ABSENCE is a gap in a candidate's evidence.
 const GAP_OBJECTS =
@@ -99,14 +112,14 @@ const PREPOSITION = /^(?:in|at|on|during|for|with|from|by|under|over|across|afte
  * evidence, rather than an accomplishment described with a negation.
  */
 function hasSelfDeclaredGapClause(value: string): boolean {
-  // `not` and `never` are both negators, and `never` can stand alone with no
-  // auxiliary at all ("Never supervised anybody"), so the auxiliary is optional.
-  const pattern = new RegExp(`(?:\\b(${AUXILIARIES})\\b\\s*)?(\\s*\\b(?:not|never)\\b)?\\s*\\b(${GAP_VERB_FORMS})\\b`, "gi");
+  // Anchor on the negator: "not", "never", or any contraction ending in n't.
+  // Everything after it, up to the first preposition, is the object.
+  const pattern = new RegExp(NEGATOR.source, "gi");
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(value)) !== null) {
-    const auxiliary = match[1] ?? "";
-    const negated = Boolean(match[2]) || /n['’]?t$/i.test(auxiliary);
-    if (!negated) continue;
+    // A contraction only negates when the n't is the contraction's own tail
+    // ("havent", "didn't") — never a word that merely ends in those letters.
+    if (!/^(?:not|never)$/i.test(match[0]) && !/(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need)n['’]?t$/i.test(match[0])) continue;
 
     // --- 1. Whose gap is it? Walk left, skipping adverbs, to find the subject.
     const before = value.slice(0, match.index).trim().split(/\s+/).filter(Boolean);
@@ -140,7 +153,19 @@ function hasSelfDeclaredGapClause(value: string): boolean {
     // the next preposition, which usually starts a qualifying phrase.
     const rest = value.slice(match.index + match[0].length);
     const object = rest.split(/\b(?:on|in|at|for|during|since|with|without|across|over|under|from|to|by)\b/i)[0] ?? rest;
+    // Negating a BAD OUTCOME is an accomplishment, not a gap: "did not lose
+    // any data", "never missed a deadline". Those verbs are a small, closed,
+    // stable set — unlike the open set of things people do at work, which is
+    // why the verb is not otherwise named.
+    if (new RegExp(`^\\W*(?:${ACHIEVEMENT_VERBS})\\b`, "i").test(rest)) continue;
     if (GAP_OBJECTS.test(object)) return true;
+    // A named evidence noun is the clearest case, but not the only one.
+    // "I have never trained anyone" / "I have never closed the register on my
+    // own" were classified as claims and then printed as résumé bullets
+    // asserting the opposite of what the user said. With bad-outcome verbs
+    // excluded above, a first-person "never" IS the candidate reporting
+    // something they have not done.
+    if (FIRST_PERSON.test(subject) && /^never$/i.test(match[0])) return true;
   }
   return false;
 }
