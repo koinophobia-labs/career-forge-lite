@@ -6,6 +6,7 @@ import { educationPlaceholder } from "@/lib/resume-export";
 import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
+import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
@@ -1016,7 +1017,12 @@ function buildResponsibilityList(data: IntakeData) {
     return dedupeNearIdentical(
       compact([
         ...userResponsibilities,
-        ...groundedOnly([...occupation.dailyTasks, ...occupation.communication, ...occupation.challenges], corpus)
+        // Occupation taxonomy is retired from the launch path: a grounded
+        // token proves a WORD appeared, never that this candidate performed
+        // the task. See src/lib/occupation-templates.ts.
+        ...(OCCUPATION_TEMPLATES_ENABLED
+          ? groundedOnly([...occupation.dailyTasks, ...occupation.communication, ...occupation.challenges], corpus)
+          : [])
       ])
     ).slice(0, 10);
   }
@@ -1094,7 +1100,11 @@ function buildSkillList(data: IntakeData) {
       ? occupation.transferables
       : [...roleIntelligence[data.roleFamily].skills, ...workflowSkillsByFamily[data.roleFamily]];
   const skillPool = [
-    ...groundedOnly(taxonomy, corpus).map(normalizeResponsibility),
+    // Derived competency labels are retired with the rest of the layer. A noun
+    // in the user's sentence licensed a competency ABOUT them — "The cash
+    // office was next to my register." minted Cash Handling, and the summary
+    // then read "Strengths the candidate reports include cash Handling."
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(taxonomy, corpus).map(normalizeResponsibility) : []),
     ...responsibilities.slice(0, 8),
     ...data.selectedResponsibilities.map(normalizeResponsibility).slice(0, 6),
     ...data.selectedActions.map(normalizeResponsibility).slice(0, 3),
@@ -1155,8 +1165,8 @@ function fallbackDomainProfile(data: IntakeData): DomainProfile | null {
     const corpus = buildGroundingCorpus(data);
     // Arsenal taxonomy is gated the same way as occupation taxonomy: only
     // grounded skills/workflows may describe the user.
-    const groundedArsenalSkills = groundedOnly(arsenal.skills, corpus);
-    const groundedArsenalWorkflows = groundedOnly(arsenal.workflows, corpus);
+    const groundedArsenalSkills = OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(arsenal.skills, corpus) : [];
+    const groundedArsenalWorkflows = OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(arsenal.workflows, corpus) : [];
     return {
       name: independentCategory.toLowerCase(),
       keywords: [independentCategory, ...arsenal.domainLanguage],
@@ -1700,9 +1710,13 @@ function buildOccupationSummary(data: IntakeData, target: string, experience: Ex
   const currentRole = experience[0];
   const title = (currentRole?.title ?? cleanWhitespace(data.currentTitle)) || "Worker";
   const strengths = compact([
+    // Only what the user SELECTED or TYPED may be attributed to them. The
+    // taxonomy branch is retired: a noun in their sentence produced
+    // "Strengths the candidate reports include cash Handling." for someone
+    // who reported no such thing.
     ...data.customRoleTransferableSkills.map(normalizeResponsibility),
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
-    ...groundedOnly(occupation.transferables, corpus)
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(occupation.transferables, corpus) : [])
   ]).slice(0, 4);
   const responsibilities = buildResponsibilityList(data).map(readableUserPhrase).slice(0, 4);
   const aiPhrase = aiWorkflowPhrase(data);
@@ -1890,6 +1904,11 @@ function cleanSentence(sentence: string) {
 // the sentence must be individually evidenced, and a bullet only renders when
 // at least two grounded activities exist.
 function specificEvidenceBullets(data: IntakeData) {
+  // Same mechanism as the occupation templates under a different name: a
+  // vocabulary match licenses a composed activity claim ("Maintained safety
+  // coverage by monitoring access points and documenting incidents."). It
+  // cannot tell whose activity it was either, so it retires with the layer.
+  if (!OCCUPATION_TEMPLATES_ENABLED) return [];
   const tools = buildToolList(data);
   const responsibilities = buildResponsibilityList(data).map(readableUserPhrase);
   const evidence = evidenceText(data).toLowerCase();
@@ -2096,16 +2115,22 @@ function buildExperienceBullets(data: IntakeData, role: ExperienceRole, roleInde
         when: /\b(launch\w*|shipp\w*|deploy\w*|document\w*|built)\b/
       }
     ];
-    const grounded = canned.filter((bullet) => bullet.text && (!bullet.when || bullet.when.test(corpus))).map((bullet) => bullet.text);
+    const grounded = OCCUPATION_TEMPLATES_ENABLED
+      ? canned.filter((bullet) => bullet.text && (!bullet.when || bullet.when.test(corpus))).map((bullet) => bullet.text)
+      : [];
     return qualityCheckBullets(compact([...composeUserBullets(data, data.roleFamily), ...grounded]));
   }
 
-  const occupation = detectOccupationProfile(data, role);
+  // RETIRED from the launch path. Occupation templates asserted activities on
+  // the strength of vocabulary alone and could not tell whose activity it was
+  // — see src/lib/occupation-templates.ts. The user's own evidence path below
+  // handles every profile now.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED ? detectOccupationProfile(data, role) : null;
   if (occupation) {
     return buildOccupationBullets(data, role, occupation);
   }
 
-  if (isBeautyServiceProfile(data, role)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && isBeautyServiceProfile(data, role)) {
     return buildBeautyServiceBullets(data);
   }
 
@@ -2186,13 +2211,18 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   const roleFamily = data.roleFamily;
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
-  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
+  // The occupation summary asserts an ENVIRONMENT ("a retail service
+  // environment") drawn from the taxonomy rather than from the user, so it
+  // retires with the layer.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data))
+    : null;
   const strategy = roleStrategies[roleFamily];
   const responsibilities = buildResponsibilityList(data);
   if (occupation) {
     return buildOccupationSummary(data, target, experience, occupation);
   }
-  if (currentRole && isBeautyServiceProfile(data, currentRole)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` serving ${volume}` : "";
     const evidence = evidenceStrengthLabels(data);
@@ -2211,14 +2241,17 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
   }
   const corpus = buildGroundingCorpus(data);
   const background = currentRole
-    ? `${currentRole.title} with experience in ${domain?.environment ?? strategy.environment}`
+    // The environment phrase is taxonomy too. Without it the sentence states
+    // only what the user gave: their title.
+    ? `${currentRole.title}${OCCUPATION_TEMPLATES_ENABLED ? ` with experience in ${domain?.environment ?? strategy.environment}` : ""}`
     : `Early-career professional with ${roleFamily.toLowerCase()} experience`;
-  // Domain/family strengths are template taxonomy: grounded entries only. The
-  // user's own responsibilities always qualify.
+  // Domain/family strengths are template taxonomy and retire with the layer:
+  // a grounded token proved a WORD appeared, never that this candidate has
+  // the competency. The user's own responsibilities and tools remain.
   const strengths = compact([
-    ...groundedOnly(domain?.strengths ?? [], corpus),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(domain?.strengths ?? [], corpus) : []),
     ...responsibilities.map(readableUserPhrase),
-    ...groundedOnly(strategy.focus, corpus).map(readablePhrase),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(strategy.focus, corpus).map(readablePhrase) : []),
     ...buildToolList(data)
   ]).slice(0, 3);
   const aiPhrase = aiWorkflowPhrase(data);
@@ -2234,21 +2267,27 @@ function buildSummary(data: IntakeData, target: string, experience: ExperienceRo
 function buildLinkedInSummary(data: IntakeData, target: string, experience: ExperienceRole[]) {
   const currentRole = experience[0];
   const domain = currentRole ? detectDomain(currentRole) ?? fallbackDomainProfile(data) : fallbackDomainProfile(data);
-  const occupation = currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data);
+  // Retired with the layer — this path asserted an environment and taxonomy
+  // strengths ("Brings cash Handling …") that the user never stated.
+  const occupation = OCCUPATION_TEMPLATES_ENABLED
+    ? (currentRole ? detectOccupationProfile(data, currentRole) : detectOccupationProfile(data))
+    : null;
   const strategy = roleStrategies[data.roleFamily];
   const corpus = buildGroundingCorpus(data);
   const responsibilities = buildResponsibilityList(data).slice(0, 3).map(readableUserPhrase);
   const strengths = compact([
-    ...groundedOnly(domain?.strengths ?? [], corpus),
+    // Domain and strategy taxonomy retire with the layer; the user's own
+    // responsibilities and tools remain.
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(domain?.strengths ?? [], corpus) : []),
     ...responsibilities,
-    ...groundedOnly(strategy.focus, corpus).map(readablePhrase),
+    ...(OCCUPATION_TEMPLATES_ENABLED ? groundedOnly(strategy.focus, corpus).map(readablePhrase) : []),
     ...buildToolList(data)
   ]).slice(0, 3);
   const environment = domain?.environment ?? strategy.environment;
   if (occupation) {
     return buildOccupationLinkedInSummary(data, target, experience, occupation);
   }
-  if (currentRole && isBeautyServiceProfile(data, currentRole)) {
+  if (OCCUPATION_TEMPLATES_ENABLED && currentRole && isBeautyServiceProfile(data, currentRole)) {
     const volume = serviceVolume(data);
     const volumePhrase = volume ? ` ${volume},` : "";
     const beautyStrengths = compact([

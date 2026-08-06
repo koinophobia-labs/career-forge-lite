@@ -319,14 +319,17 @@ for (const [typed, forbiddenSkill, forbiddenBullet] of [
   }
 }
 // …and the positive controls must still ground, or the filter is over-broad.
-// (Title must match an occupation profile, or no skills are derived at all and
-// the control would pass vacuously.)
-for (const [typed, expectedSkill] of [
-  ["Handled cash at the register every shift.", "Cash Handling"],
-  ["Coordinated with coworkers during the dinner rush.", "Team Coordination"]
+// The occupation-template layer is RETIRED (src/lib/occupation-templates.ts),
+// so a positive statement no longer MINTS a taxonomy label — that was the
+// mechanism which also minted Cash Handling from "The cash office was next to
+// my register." The control that still matters is that the user's own words
+// survive intact, which is what the product now promises.
+for (const typed of [
+  "Handled cash at the register every shift.",
+  "Coordinated with coworkers during the dinner rush."
 ]) {
-  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate Market", currentTime: "2022 - 2025", responsibilities: typed }));
-  expect(`positive statement still grounds "${expectedSkill}"`, pkg.coreSkills.includes(expectedSkill), JSON.stringify(pkg.coreSkills));
+  const out = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate Market", currentTime: "2022 - 2025", responsibilities: typed });
+  expect(`the user's own sentence survives: "${typed}"`, out.includes(typed), JSON.stringify(out));
 }
 
 // (d) A true achievement phrased with "never" must NOT be quarantined. The
@@ -555,6 +558,66 @@ for (const gap of [
   "No measurable results yet."
 ]) {
   expect(`declared absence stays a gap: "${gap}"`, classifyEvidenceAdmissibility(gap) !== "claim", classifyEvidenceAdmissibility(gap));
+}
+
+// ═══════════════════════════════════════════════ RA-P0-09
+// THE OCCUPATION-TEMPLATE LAYER IS RETIRED FROM THE LAUNCH PATH.
+// Five review rounds established that lexical gating cannot decide WHO
+// performed an action. These assertions pin the retirement itself: no
+// occupation-derived phrase may reach a document unless it is already
+// user-owned evidence.
+H("RA-P0-09 — the occupation-template layer is retired");
+
+{
+  const flags = fs.readFileSync(path.join(root, "src/lib/occupation-templates.ts"), "utf8");
+  expect("the layer is off unless explicitly set to research", /=== "research"/.test(flags), flags.slice(0, 200));
+  const source = fs.readFileSync(path.join(root, "src/lib/generator.ts"), "utf8");
+  expect("the generator gates on the retirement flag", (source.match(/OCCUPATION_TEMPLATES_ENABLED/g) || []).length >= 8, "too few gates");
+}
+
+// (a) THIRD-PARTY ATTRIBUTION — the class the gates could never decide.
+// 13 of 15 fabricated before retirement.
+for (const [title, typed] of [
+  ["Caregiver", "The night crew kept the care notes for me."],
+  ["Cashier", "A senior cashier processed the payments while I bagged."],
+  ["Security Officer", "A contracted team monitored the camera feeds from off site."],
+  ["Line Cook", "My shift lead handled the customer questions and the order issues."],
+  ["Janitor", "The day porter reported the broken fixtures and the safety concerns."],
+  ["Receptionist", "The office manager kept the appointments and the messages."],
+  ["Warehouse Associate", "A quality inspector checked the labels and the counts after us."],
+  ["Delivery Driver", "The dispatcher used the delivery apps and the navigation tools for us."]
+]) {
+  const out = bulletsFor({ currentTitle: title, currentCompany: "Northgate", currentTime: "2020 - 2023", responsibilities: typed });
+  const own = typed.replace(/[.\s]/g, "").toLowerCase();
+  const extra = out.filter((bullet) => bullet.replace(/[.\s]/g, "").toLowerCase() !== own);
+  expect(`no act is borrowed from a third party: "${typed.slice(0, 48)}…"`, extra.length === 0, JSON.stringify(out));
+}
+
+// (b) THE USER'S OWN WORK MUST SURVIVE — retirement must not become amputation.
+for (const [title, typed, mustSurvive] of [
+  ["Security Officer", "I patrolled the building every hour and checked that the doors were locked.", /patrolled the building/i],
+  ["Caregiver", "I bathed and dressed two clients every morning.", /bathed and dressed two clients/i],
+  ["Caregiver", "I gave medication reminders and wrote care notes.", /medication reminders/i],
+  ["Attendant", "I cleaned the pumps.", /cleaned the pumps/i],
+  ["Order Picker", "I packed 200 orders a night without a single mistake.", /packed 200 orders/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Northgate", currentTime: "2020 - 2023", responsibilities: typed }));
+  expect(`the user's own work survives: "${typed.slice(0, 44)}…"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 220));
+}
+
+// (c) NO TAXONOMY PHRASE IN ANY DOCUMENT SURFACE — bullets, skills, summary.
+// Each fixture names something WITHOUT describing the activity.
+for (const [title, typed, forbidden] of [
+  ["Cashier", "The cash office was next to my register.", /cash handling/i],
+  ["Warehouse Associate", "A safety poster hung over the dock door.", /safety procedures/i],
+  ["Caregiver", "Patients waited in the lobby I cleaned.", /patient support|personal care|mobility/i],
+  ["Security Officer", "The camera monitors sat in the guard station.", /monitored|camera feeds/i],
+  ["Line Cook", "The food prep table was cleaned nightly.", /preparing food/i]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: title, currentCompany: "Northgate", currentTime: "2020 - 2023", responsibilities: typed }));
+  const whole = JSON.stringify(pkg);
+  expect(`no taxonomy claim from a bare noun: "${typed.slice(0, 44)}…"`, !forbidden.test(whole), whole.slice(0, 240));
+  expect(`  no attribution sentence either`, !/strengths the candidate reports include/i.test(whole), whole.slice(0, 200));
 }
 
 L();
