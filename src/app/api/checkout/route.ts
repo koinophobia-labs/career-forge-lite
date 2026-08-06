@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCommerceMode } from "@/lib/commerce-mode";
 import { isPackageTier } from "@/lib/packages";
 import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
@@ -24,6 +25,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   if (!isPackageTier(tier)) {
     return NextResponse.json({ error: "Unknown package." }, { status: 400 });
+  }
+  // Commerce off means NO checkout, not "test playground". The non-live branch
+  // below applies none of the safety gates — no sell verdict, no tier
+  // restriction — so with commerce off (the public-beta posture, and the
+  // fallback for any typo in NEXT_PUBLIC_COMMERCE_MODE) a direct POST here
+  // could create a real Stripe session for any tier while the UI truthfully
+  // said "No purchases enabled".
+  if (getCommerceMode() === "off") {
+    return NextResponse.json({ error: "Purchases are not enabled." }, { status: 503 });
   }
   const liveMode = process.env.NEXT_PUBLIC_COMMERCE_MODE === "live";
   if (liveMode && process.env.PAID_BETA_TIER !== "reset") {

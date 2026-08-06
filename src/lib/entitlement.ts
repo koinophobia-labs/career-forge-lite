@@ -7,18 +7,16 @@
 // purchase.
 
 import { useSyncExternalStore } from "react";
+import { getCommerceMode } from "@/lib/commerce-mode";
 import { verifyLicenseKey } from "@/lib/license";
 import { tierHasFeature, tierLaneLimit, type EntitledFeature, type PackageTier } from "@/lib/packages";
 
 export const LICENSE_STORAGE_KEY = "career-forge-license-v1";
 
-export type CommerceMode = "off" | "test" | "live";
-
-export function getCommerceMode(): CommerceMode {
-  const raw = process.env.NEXT_PUBLIC_COMMERCE_MODE;
-  if (raw === "test" || raw === "live") return raw;
-  return "off";
-}
+// Re-exported so existing client callers keep working; the parser itself lives
+// in a server-safe module (see commerce-mode.ts).
+export { getCommerceMode } from "@/lib/commerce-mode";
+export type { CommerceMode } from "@/lib/commerce-mode";
 
 export type EntitlementState = {
   // "checking" only while an actual stored key awaits verification.

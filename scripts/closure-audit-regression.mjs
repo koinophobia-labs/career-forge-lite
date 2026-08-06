@@ -409,5 +409,69 @@ check(
   );
 }
 
+// --- 11. Commerce posture: "off" means no checkout, and no paid-state copy ----------
+// PE-04: the non-live branch of /api/checkout applied NONE of the safety gates
+// (no sell verdict, no tier restriction), so with commerce off — the public
+// beta posture, and the fallback for any typo in NEXT_PUBLIC_COMMERCE_MODE — a
+// direct POST could create a real Stripe session for any tier while the UI
+// truthfully said "No purchases enabled".
+{
+  const checkoutSource = fs.readFileSync(path.join(root, "src/app/api/checkout/route.ts"), "utf8");
+  check(
+    "checkout refuses outright when commerce is off",
+    /getCommerceMode\(\) === "off"[\s\S]{0,160}status: 503/.test(checkoutSource),
+    "no unconditional off-mode guard found"
+  );
+  // Compare against the CALL, not the import line at the top of the file.
+  const offGuardIndex = checkoutSource.indexOf('getCommerceMode() === "off"');
+  const firstCallIndex = checkoutSource.search(/await createCheckoutSession\(/);
+  check(
+    "the off guard runs before any session can be created",
+    offGuardIndex > -1 && firstCallIndex > -1 && offGuardIndex < firstCallIndex,
+    `guard@${offGuardIndex} call@${firstCallIndex}`
+  );
+
+  // PE-01: /founding-beta advertised a live $49 checkout unconditionally while
+  // /pricing said "No purchases enabled" and the gate was closed.
+  const foundingSource = fs.readFileSync(path.join(root, "src/app/founding-beta/page.tsx"), "utf8");
+  check(
+    "founding-beta reads the commerce posture",
+    /getCommerceMode\(\) !== "off"/.test(foundingSource)
+  );
+  check(
+    'no unconditional "Secure checkout is live" claim',
+    !/^\s*Secure checkout is live\./m.test(foundingSource),
+    "found an unconditional live-checkout claim"
+  );
+  check(
+    "the paid CTA and the price framing are both conditional",
+    /purchasesEnabled && \(/.test(foundingSource) && /purchasesEnabled\s*\?/.test(foundingSource)
+  );
+}
+
+// --- 12. With commerce off nothing is gated and no paywall renders -------------------
+{
+  // The parser lives in a server-safe module so server components can read the
+  // posture too; entitlement.ts re-exports it for client callers.
+  const modeSource = fs.readFileSync(path.join(root, "src/lib/commerce-mode.ts"), "utf8");
+  check(
+    "an unrecognised commerce mode falls back to off, never to live",
+    /if \(raw === "test" \|\| raw === "live"\) return raw;[\s\S]{0,40}return "off";/.test(modeSource)
+  );
+  check(
+    "the mode parser is server-safe (not a client module)",
+    !/^\s*"use client"/m.test(modeSource)
+  );
+  const entitlementSource = fs.readFileSync(path.join(root, "src/lib/entitlement.ts"), "utf8");
+  check(
+    "there is exactly one commerce-mode parser",
+    !/function getCommerceMode\(\)/.test(entitlementSource) && /export \{ getCommerceMode \} from "@\/lib\/commerce-mode"/.test(entitlementSource)
+  );
+  check(
+    "commerce off grants every feature (no lock UI can render)",
+    /if \(!commerceEnabled\) return true;/.test(entitlementSource)
+  );
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

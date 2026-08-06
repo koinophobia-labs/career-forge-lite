@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
+import { getCommerceMode } from "@/lib/commerce-mode";
 import { PACKAGES } from "@/lib/packages";
 
 export const metadata = {
@@ -9,6 +10,12 @@ export const metadata = {
 };
 
 const reset = PACKAGES.reset;
+
+// This page described a live $49 checkout unconditionally, while /pricing
+// said "No purchases enabled" and the checkout gate was closed. Whichever
+// posture the deployment is in, the copy now matches it: with commerce off
+// nothing here implies a purchase is possible.
+const purchasesEnabled = getCommerceMode() !== "off";
 
 const fitSignals = [
   "You are actively restarting, cleaning up, or refocusing a real job search.",
@@ -32,7 +39,7 @@ export default function FoundingBetaPage() {
       <section className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="trust-panel overflow-hidden">
           <div className="p-6 sm:p-9">
-            <p className="trust-kicker text-sm font-bold uppercase">Founding paid beta · Five purchases</p>
+            <p className="trust-kicker text-sm font-bold uppercase">{purchasesEnabled ? "Founding paid beta · Five purchases" : "Planned packaging · Not on sale"}</p>
             <div className="mt-3 grid gap-7 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
               <div>
                 <h1 className="max-w-3xl text-4xl font-bold leading-tight text-paper sm:text-6xl">
@@ -44,27 +51,37 @@ export default function FoundingBetaPage() {
                   positioning, and exportable files.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Link href="/pricing" className="lab-pill-button inline-flex min-h-11 items-center px-6 py-3 text-sm font-black">
-                    Start Career Reset →
+                  <Link href="/" className="lab-pill-button inline-flex min-h-11 items-center px-6 py-3 text-sm font-black">
+                    {purchasesEnabled ? "Build and review free first" : "Start building — free"}
                   </Link>
-                  <Link href="/" className="inline-flex min-h-11 items-center rounded-md border border-cyan/40 bg-cyan/10 px-6 py-3 text-sm font-bold text-cyan">
-                    Build and review free first
-                  </Link>
+                  {purchasesEnabled && (
+                    <Link href="/pricing" className="inline-flex min-h-11 items-center rounded-md border border-cyan/40 bg-cyan/10 px-6 py-3 text-sm font-bold text-cyan">
+                      Start Career Reset →
+                    </Link>
+                  )}
                 </div>
                 <p className="mt-3 text-xs leading-5 text-paper/55">
-                  Secure checkout charges ${reset.priceUsd} once. Career Reset is the only paid tier in the founding beta, and checkout closes after five completed purchases.
+                  {purchasesEnabled
+                    ? `Secure checkout charges $${reset.priceUsd} once. Career Reset is the only paid tier in the founding beta, and checkout closes after five completed purchases.`
+                    : "No purchases are enabled right now. Every part of the workflow below is free to use while the paid outcome is being validated."}
                 </p>
               </div>
 
               <aside className="rounded-xl border border-gold/35 bg-gold/10 p-5 sm:p-6">
-                <p className="lab-mono text-xs font-black uppercase tracking-[0.14em] text-gold">Founding price</p>
+                <p className="lab-mono text-xs font-black uppercase tracking-[0.14em] text-gold">
+                  {purchasesEnabled ? "Founding price" : "Intended founding price"}
+                </p>
                 <p className="mt-2 text-5xl font-black text-paper">${reset.priceUsd}</p>
-                <p className="mt-1 text-sm font-bold text-paper/65">one time · no subscription</p>
+                <p className="mt-1 text-sm font-bold text-paper/65">
+                  {purchasesEnabled ? "one time · no subscription" : "not charged today · free during the public beta"}
+                </p>
                 <p className="mt-4 text-sm leading-6 text-paper/72">
                   One active role direction, the complete Career Reset deliverables, and founding-cohort support. Higher tiers remain closed until their own outcomes are validated.
                 </p>
                 <div className="mt-5 rounded-lg border border-cyan/25 bg-cyan/5 p-3 text-xs leading-5 text-paper/65">
-                  Secure checkout is live. After payment, your license appears on the confirmation page and unlocks Career Reset on this device.
+                  {purchasesEnabled
+                    ? "Secure checkout is live. After payment, your license appears on the confirmation page and unlocks Career Reset on this device."
+                    : "Checkout is closed. This page describes how Career Reset is intended to be packaged — it is not an offer, and nothing on it can take payment today."}
                 </div>
               </aside>
             </div>
