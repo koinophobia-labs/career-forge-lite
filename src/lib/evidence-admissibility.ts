@@ -6,7 +6,7 @@ import {
 import {
   containsTerminationReason,
   isUncertaintyStatement,
-  withholdSeparationFromGeneratedProse
+  // (no truth-guard withholding on this path -- see sanitizeProfessionalLine)
 } from "@/lib/truth-guards";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
@@ -308,10 +308,15 @@ function targetRoleValues(detail: string): string[] {
 }
 
 export function sanitizeProfessionalLine(value: string): string {
-  // Sanitization runs over STORED product artifacts during migration, where no
-  // user is present to resolve a flag — so a separation sentence is dropped
-  // whole rather than trimmed down to a salvaged clause.
-  const stripped = withholdSeparationFromGeneratedProse(value).trim();
+  // NOT a product-prose path. It is reached from sanitizeProfessionalParagraph
+  // -> safeParagraphArray -> sanitizeResumeForProfessionalUse, i.e. over the
+  // USER'S OWN résumé bullets on the way into the exported file. Routing
+  // withholdSeparationFromGeneratedProse through here deleted a bullet the user
+  // had reviewed and KEPT, and where it was a role's only bullet the employer
+  // and its dates went with it — six years of employment erased from the DOCX
+  // and PDF while the on-screen résumé still showed them. Admissibility is
+  // judged below; nothing is withheld here.
+  const stripped = value.trim();
   if (!stripped) return "";
   return classifyEvidenceAdmissibility(stripped) === "claim" ? stripped : "";
 }

@@ -45,6 +45,7 @@ const { initialIntake } = loadTsModule(path.join(root, "src/lib/career-data.ts")
 const { emptyDossier, evidenceRecord, resolveDisclosure, intakeEligibleForGeneration, pendingDisclosureReviews } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
 const { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } = loadTsModule(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { mergeIntakeIntoDossier } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
+const { sanitizeResumeForProfessionalUse } = loadTsModule(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { resumeToText } = loadTsModule(path.join(root, "src/lib/resume-export.ts"));
 const { withholdSeparationFromGeneratedProse, possibleDisclosure } = loadTsModule(path.join(root, "src/lib/truth-guards.ts"));
 
@@ -724,6 +725,34 @@ check(
   check("I10. dossier and guided produce identical eligibility for equivalent evidence",
     JSON.stringify(eligibilityOf(dossierSide)) === JSON.stringify(eligibilityOf(guidedSide)),
     `${JSON.stringify(eligibilityOf(dossierSide))} vs ${JSON.stringify(eligibilityOf(guidedSide))}`);
+}
+
+// ---------------------------------------------------------------------------
+// Export sanitization must never amputate the USER'S OWN bullets. Routing
+// withholdSeparationFromGeneratedProse through sanitizeProfessionalLine did
+// exactly that: the path reaches user résumé bullets via
+// sanitizeProfessionalParagraph -> safeParagraphArray -> sanitizeResumeForProfessionalUse,
+// and because a role with no surviving bullets is dropped whole, an employer
+// and its dates vanished from the DOCX and PDF while the on-screen résumé
+// still showed them. Six years of employment, silently deleted, only in the
+// delivered file. Independently found by the export lens at 2d0791a.
+{
+  const resume = {
+    summary: "", coreSkills: [], linkedinHeadline: "", linkedinSummary: "", education: "",
+    experience: [
+      { title: "Warehouse Team Leader", company: "Corran Logistics", timeframe: "2017-2023",
+        bullets: ["Ran the loading bay single-handed for the last four months before the store closed."] },
+      { title: "Stock Assistant", company: "Ferrybank Foods", timeframe: "2023-2026",
+        bullets: ["Cut the pick error rate from 4.1% to 0.9% over two quarters."] }
+    ]
+  };
+  const out = sanitizeResumeForProfessionalUse(resume);
+  check("export sanitization never deletes an employer the user worked at",
+    out.experience.length === 2 && out.experience[0].company === "Corran Logistics",
+    JSON.stringify(out.experience.map((r) => `${r.title} | ${r.company}`)));
+  check("  and the user's own bullet is not amputated from the role",
+    out.experience[0]?.bullets.some((b) => /loading bay/i.test(b)),
+    JSON.stringify(out.experience[0]?.bullets));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);
