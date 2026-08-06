@@ -168,9 +168,12 @@ export function recordTailoredResumeVersion(
   nowIso: string,
   influenceSummary = "",
   resumeText = "",
-  resumeSnapshot: ResumeSnapshot | null = null
+  resumeSnapshot: ResumeSnapshot | null = null,
+  // Supplied by the caller when it needs to write later edits back to this
+  // same record; generated here otherwise.
+  providedVersionId?: string
 ): CommandCenterState {
-  const versionId = createId("resume");
+  const versionId = providedVersionId ?? createId("resume");
   const target = handoff.company ? `${handoff.roleTitle} @ ${handoff.company}` : handoff.roleTitle;
 
   const version = {

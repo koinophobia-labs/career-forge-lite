@@ -278,5 +278,136 @@ check(
   );
 }
 
+// --- 9. Preview edits must reach the saved version record (DS-03) --------------------
+// recordResumeVersion ran once inside generate() and the preview's onChange
+// only touched React state, so the saved record — and every export and linked
+// application derived from it — kept the pre-edit text while /versions/view
+// told the user "This is the exact document you generated".
+{
+  const builderSource = fs.readFileSync(path.join(root, "src/app/resume-builder/page.tsx"), "utf8");
+  check(
+    "recordResumeVersion returns the id of the record it created",
+    /function recordResumeVersion\([\s\S]*?\):\s*string\s*\{/.test(builderSource) && /return versionId;/.test(builderSource)
+  );
+  check(
+    "the builder remembers which version this session recorded",
+    /setRecordedVersionId\(/.test(builderSource) && /const \[recordedVersionId/.test(builderSource)
+  );
+  check(
+    "preview edits are written back to that same record",
+    /resumeVersions: state\.resumeVersions\.map\(\(version\) =>[\s\S]*?version\.id === recordedVersionId/.test(builderSource)
+  );
+  check(
+    "the write-back is debounced rather than firing per keystroke",
+    /setTimeout\([\s\S]*?\}, 600\)/.test(builderSource) && /clearTimeout\(handle\)/.test(builderSource)
+  );
+
+  // The tailored path must accept the caller's id, or the write-back targets
+  // a record that does not exist.
+  const handoffSource = fs.readFileSync(path.join(root, "src/lib/tailor-handoff.ts"), "utf8");
+  check(
+    "recordTailoredResumeVersion accepts a caller-supplied version id",
+    /providedVersionId\?: string/.test(handoffSource) && /providedVersionId \?\? createId\("resume"\)/.test(handoffSource)
+  );
+}
+
+// --- 10. A deleted duty must stop printing (DS-02) -----------------------------------
+// BEHAVIOURAL, not a source scan: build a dossier, generate the pack, delete a
+// duty the way the /profile editor does, regenerate, and assert the bullet is
+// gone from the real generated output. Pre-fix the editor wrote only
+// role.responsibilities while the generator also read role-owned evidence, so
+// the removed duty came back with the receipt certifying it as "direct".
+{
+  const { withRoleResponsibilitiesEdited, evidenceRecord, emptyDossier } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
+  const { generateResumePack } = loadTsModule(path.join(root, "src/lib/resume-pack.ts"));
+
+  const NOW = "2026-08-06T00:00:00.000Z";
+  const DUTIES = [
+    "Reconciled the cash drawer at close.",
+    "Trained 4 new cashiers on the register system.",
+    "Made weekly schedules for a team of 6."
+  ];
+  const roleId = "role-fmg";
+  const evidence = DUTIES.map((detail) =>
+    evidenceRecord("responsibility", detail, "manual", true, NOW, { label: "Role responsibility", roleId })
+  );
+  const base = {
+    ...emptyDossier(NOW),
+    identity: { fullName: "Jordan Reyes", email: "jordan@example.com", phone: "", location: "", links: [] },
+    roles: [
+      {
+        id: roleId,
+        title: "Shift Supervisor",
+        employer: "Fresh Market Grocery",
+        startDate: "2021-2024",
+        endDate: "",
+        current: false,
+        responsibilities: [...DUTIES],
+        tools: [],
+        outcomes: [],
+        evidenceIds: evidence.map((item) => item.id)
+      }
+    ],
+    evidence,
+    responsibilities: [...DUTIES],
+    approvedClaims: [...DUTIES]
+  };
+  const lanes = [{
+    id: "lane-1", title: "Retail Shift Supervisor", status: "active", whyFit: "", resumeAngle: "",
+    proof: [], gaps: [], keywords: [], source: "custom", createdAt: NOW
+  }];
+  const packText = (dossier) => JSON.stringify(generateResumePack(dossier, lanes, NOW));
+
+  const before = packText(base);
+  check("the duty prints before it is deleted", before.includes("Trained 4 new cashiers on the register system"), before.slice(0, 200));
+
+  const edited = withRoleResponsibilitiesEdited(base, roleId, [DUTIES[0], DUTIES[2]], NOW);
+  const after = packText(edited);
+  check(
+    "a deleted duty does not print after the edit",
+    !after.includes("Trained 4 new cashiers on the register system"),
+    after.slice(0, 400)
+  );
+  check(
+    "the duties the user kept still print",
+    after.includes("Reconciled the cash drawer at close") && after.includes("Made weekly schedules for a team of 6"),
+    after.slice(0, 400)
+  );
+  check(
+    "the removed duty is rejected, not destroyed (restorable)",
+    edited.evidence.some((item) => item.detail === DUTIES[1] && item.rejected && !item.approved),
+    JSON.stringify(edited.evidence.map((item) => [item.detail.slice(0, 30), item.approved, item.rejected]))
+  );
+  check(
+    "the role stops citing the removed evidence",
+    edited.roles[0].evidenceIds.length === 2,
+    JSON.stringify(edited.roles[0].evidenceIds)
+  );
+  check(
+    "the removed duty leaves approvedClaims and the responsibility pool",
+    !edited.approvedClaims.includes(DUTIES[1]) && !edited.responsibilities.includes(DUTIES[1])
+  );
+  // Control: the ORIGINAL editor behaviour — update role.responsibilities and
+  // leave the evidence untouched — must still print the deleted duty. This is
+  // what makes the assertions above meaningful rather than vacuous.
+  const naiveEdit = {
+    ...base,
+    roles: base.roles.map((item) => (item.id === roleId ? { ...item, responsibilities: [DUTIES[0], DUTIES[2]] } : item))
+  };
+  check(
+    "control: the pre-fix edit path DOES resurrect the deleted duty",
+    packText(naiveEdit).includes("Trained 4 new cashiers on the register system"),
+    "the control no longer reproduces the bug — this test would pass vacuously"
+  );
+
+  // Re-running the same edit must not churn state (the editor saves on every submit).
+  const twice = withRoleResponsibilitiesEdited(edited, roleId, [DUTIES[0], DUTIES[2]], NOW);
+  check(
+    "repeating the edit is idempotent",
+    twice.roles[0].evidenceIds.length === 2 && twice.evidence.length === edited.evidence.length,
+    JSON.stringify([twice.roles[0].evidenceIds.length, twice.evidence.length, edited.evidence.length])
+  );
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

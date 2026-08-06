@@ -39,23 +39,32 @@ function buildSnapshot(intake: IntakeData, resumePackage: ResumePackage, templat
   };
 }
 
+/**
+ * Records the generated version and returns its id so later edits in the
+ * preview can be written back to the SAME record. Without the id the preview
+ * was a dead end: `onChange` updated React state only, so the saved version —
+ * and every export and application link derived from it — kept the pre-edit
+ * text while /versions/view told the user "This is the exact document you
+ * generated".
+ */
 function recordResumeVersion(
   targetJobTitle: string,
   tailorSession: TailorHandoff | null,
   influenceSummary: string,
   resumeText: string,
   snapshot: ResumeSnapshot
-) {
+): string {
   const nowIso = new Date().toISOString();
+  const versionId = createId("resume");
 
   if (tailorSession) {
     updateCommandCenter((state) =>
-      recordTailoredResumeVersion(state, tailorSession, nowIso, influenceSummary, resumeText, snapshot)
+      recordTailoredResumeVersion(state, tailorSession, nowIso, influenceSummary, resumeText, snapshot, versionId)
     );
     // The tailored session is complete once its version is recorded; a later,
     // unrelated builder visit starts clean.
     clearHandoff();
-    return;
+    return versionId;
   }
 
   const label = targetJobTitle.trim() || "General resume";
@@ -66,7 +75,7 @@ function recordResumeVersion(
       resumeVersions: [
         ...state.resumeVersions,
         {
-          id: createId("resume"),
+          id: versionId,
           label: `${label} — ${nowIso.slice(0, 10)}`,
           laneId: matchingLane ? matchingLane.id : null,
           notes: "Generated with the guided resume builder.",
@@ -84,6 +93,7 @@ function recordResumeVersion(
       ]
     };
   });
+  return versionId;
 }
 
 const workflowSteps: Array<{ label: string; step: Step }> = [
@@ -102,6 +112,10 @@ export default function Home() {
   const hasTrackedGuidedCompletion = useRef(false);
   const [tailorSession, setTailorSession] = useState<TailorHandoff | null>(null);
   const [influence, setInfluence] = useState<TailoredInfluence | null>(null);
+  // The version this session recorded. Edits made in the preview are written
+  // back to it, so the saved record, its exports, and any linked application
+  // always reflect what the user last edited.
+  const [recordedVersionId, setRecordedVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = loadState();
@@ -125,6 +139,11 @@ export default function Home() {
   // callers. This route already knows the user chose Guided Setup, so advance
   // that internal chooser before revealing the form. The user lands directly
   // on the first useful question instead of answering how to start twice.
+  // Scheduled with setTimeout, not requestAnimationFrame. rAF does not fire in
+  // a hidden or background tab, so the form — and its own retry fallback —
+  // stayed invisible until the tab was looked at: a user who opened the
+  // builder in a background tab found an empty page, and the whole reveal was
+  // coupled to paint timing it has no reason to depend on.
   useEffect(() => {
     if (step !== "intake" || intakeReady) return;
     let cancelled = false;
@@ -136,24 +155,43 @@ export default function Home() {
         .find((button) => button.textContent?.trim() === "Start");
       if (startButton) {
         startButton.click();
-        window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
           if (!cancelled) setIntakeReady(true);
-        });
+        }, 16);
         return;
       }
       attempts += 1;
       if (attempts < 12) {
-        window.requestAnimationFrame(advanceToTargetQuestion);
+        window.setTimeout(advanceToTargetQuestion, 16);
       } else {
         setIntakeReady(true);
       }
     }
 
-    window.requestAnimationFrame(advanceToTargetQuestion);
+    window.setTimeout(advanceToTargetQuestion, 16);
     return () => {
       cancelled = true;
     };
   }, [intakeReady, step]);
+
+  // Write preview edits back to the recorded version. Debounced because the
+  // preview's onChange fires per keystroke and each write serializes the whole
+  // command-center state. The saved record is the one every export and the
+  // linked application read from, so it must not lag behind the editor.
+  useEffect(() => {
+    if (!recordedVersionId) return;
+    const handle = window.setTimeout(() => {
+      const resumeText = resumeToText(intake, resume);
+      const snapshot = buildSnapshot(intake, resume, template);
+      updateCommandCenter((state) => ({
+        ...state,
+        resumeVersions: state.resumeVersions.map((version) =>
+          version.id === recordedVersionId ? { ...version, resumeText, resumeSnapshot: snapshot } : version
+        )
+      }));
+    }, 600);
+    return () => window.clearTimeout(handle);
+  }, [recordedVersionId, resume, intake, template]);
 
   const workflowStep = step === "intake" ? 1 : 2;
 
@@ -214,18 +252,22 @@ export default function Home() {
       const tailored = applyTailoredContext(basePackage, contextFromHandoff(tailorSession), intake, extraEvidence);
       setResume(tailored.resume);
       setInfluence(tailored.influence);
-      recordResumeVersion(
-        intake.targetJobTitle,
-        tailorSession,
-        tailored.influence.summaryText,
-        resumeToText(intake, tailored.resume),
-        buildSnapshot(intake, tailored.resume, template)
+      setRecordedVersionId(
+        recordResumeVersion(
+          intake.targetJobTitle,
+          tailorSession,
+          tailored.influence.summaryText,
+          resumeToText(intake, tailored.resume),
+          buildSnapshot(intake, tailored.resume, template)
+        )
       );
       trackCareerEvent("tailored_resume_completed");
     } else {
       setResume(basePackage);
       setInfluence(null);
-      recordResumeVersion(intake.targetJobTitle, null, "", resumeToText(intake, basePackage), buildSnapshot(intake, basePackage, template));
+      setRecordedVersionId(
+        recordResumeVersion(intake.targetJobTitle, null, "", resumeToText(intake, basePackage), buildSnapshot(intake, basePackage, template))
+      );
     }
     trackResumeGeneration("guided");
     if (!hasTrackedGuidedCompletion.current) {

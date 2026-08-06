@@ -10,6 +10,7 @@ import {
   assessDossierReadiness,
   evidenceRecord,
   parseResumePackToProposals,
+  withRoleResponsibilitiesEdited,
   withUpdatedDossier
 } from "@/lib/dossier";
 import { extractLocalResumeFiles } from "@/lib/local-resume-import";
@@ -355,26 +356,17 @@ export default function DossierPage() {
   function editRole(id: string, form: FormData) {
     const now = new Date().toISOString();
     const responsibilities = values(String(form.get("responsibilities") ?? ""));
-    // Typing a responsibility here must actually create evidence owned by this
-    // role. Previously this wrote the text onto the role but minted nothing, so
-    // an employer carrying no evidence of its own could never be brought back
-    // into the résumé — the role stayed bullet-less no matter what the user did.
-    const responsibilityEvidence = responsibilities.map((detail) =>
-      evidenceRecord("responsibility", detail, "manual", true, now, { label: "Role responsibility", roleId: id })
+    // Duties live in two places — role.responsibilities and role-owned
+    // evidence records — and the generator reads both. withRoleResponsibilitiesEdited
+    // keeps them in step, so a duty removed here actually stops printing
+    // instead of being resurrected by the next forge.
+    save(
+      withRoleResponsibilitiesEdited(dossier, id, responsibilities, now, {
+        title: String(form.get("title") ?? "").trim(),
+        employer: String(form.get("employer") ?? "").trim(),
+        startDate: String(form.get("dates") ?? "").trim()
+      })
     );
-    const known = new Set(dossier.evidence.map((item) => item.id));
-    const additions = responsibilityEvidence.filter((item) => !known.has(item.id));
-    save({
-      ...dossier,
-      roles: dossier.roles.map((item) => item.id === id ? {
-        ...item, title: String(form.get("title") ?? "").trim(), employer: String(form.get("employer") ?? "").trim(),
-        startDate: String(form.get("dates") ?? "").trim(), responsibilities,
-        evidenceIds: [...new Set([...item.evidenceIds, ...responsibilityEvidence.map((record) => record.id)])]
-      } : item),
-      responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])],
-      evidence: [...dossier.evidence, ...additions],
-      approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])]
-    });
   }
 
   function editProject(id: string, form: FormData) {

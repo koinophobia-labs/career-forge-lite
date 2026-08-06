@@ -808,3 +808,74 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
     updatedAt: nowIso
   };
 }
+
+/**
+ * Applies an edit to one role's responsibility list, keeping the role's
+ * EVIDENCE in step with it.
+ *
+ * A role's duties live in two places: `role.responsibilities` (what the
+ * editor writes) and role-owned evidence records (what the generator reads).
+ * The editor used to write only the first, so a duty the user deleted
+ * survived as an approved record and the next forge printed it again — with
+ * the Defensibility Receipt certifying the resurrected bullet as "direct".
+ *
+ * Removed duties are marked rejected rather than deleted: that is the
+ * reversible path the Truth Inbox already understands, so the record stays
+ * visible and restorable instead of being destroyed.
+ */
+export function withRoleResponsibilitiesEdited(
+  dossier: CareerDossier,
+  roleId: string,
+  responsibilities: string[],
+  nowIso = new Date().toISOString(),
+  roleFields: { title?: string; employer?: string; startDate?: string } = {}
+): CareerDossier {
+  const norm = (value: string) => value.trim().toLowerCase();
+  const keptText = new Set(responsibilities.map(norm));
+  const role = dossier.roles.find((item) => item.id === roleId);
+  const ownedByThisRole = new Set(role?.evidenceIds ?? []);
+
+  const added = responsibilities.map((detail) =>
+    evidenceRecord("responsibility", detail, "manual", true, nowIso, { label: "Role responsibility", roleId })
+  );
+  const known = new Set(dossier.evidence.map((item) => item.id));
+  const additions = added.filter((item) => !known.has(item.id));
+
+  const removed = dossier.evidence.filter(
+    (item) =>
+      item.kind === "responsibility" &&
+      (item.roleId === roleId || ownedByThisRole.has(item.id)) &&
+      !item.rejected &&
+      !keptText.has(norm(item.detail))
+  );
+  const removedIds = new Set(removed.map((item) => item.id));
+  const removedText = new Set(removed.map((item) => norm(item.detail)));
+
+  return {
+    ...dossier,
+    roles: dossier.roles.map((item) =>
+      item.id === roleId
+        ? {
+            ...item,
+            title: roleFields.title ?? item.title,
+            employer: roleFields.employer ?? item.employer,
+            startDate: roleFields.startDate ?? item.startDate,
+            responsibilities,
+            evidenceIds: [...new Set([...item.evidenceIds, ...added.map((record) => record.id)])].filter(
+              (evidenceId) => !removedIds.has(evidenceId)
+            )
+          }
+        : item
+    ),
+    responsibilities: [...new Set([...dossier.responsibilities, ...responsibilities])].filter(
+      (item) => !removedText.has(norm(item))
+    ),
+    evidence: [...dossier.evidence, ...additions].map((item) =>
+      removedIds.has(item.id) ? { ...item, rejected: true, approved: false } : item
+    ),
+    approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])].filter(
+      (item) => !removedText.has(norm(item))
+    ),
+    updatedAt: nowIso
+  };
+}
