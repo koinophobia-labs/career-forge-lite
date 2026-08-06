@@ -35,6 +35,15 @@ function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];
 }
 
+// Responsibilities are entered one per LINE — the field says so. Splitting them
+// on commas too shredded ordinary sentences: "Mopped, swept, wiped the front
+// end." became three records, and the résumé printed the fragments "Mopped" and
+// "Swept" while the rest fell off the bullet cap. A sentence the user wrote is
+// one claim, at input as well as at generation.
+function lines(text: string): string[] {
+  return [...new Set(text.split(/\n/).map((item) => item.trim()).filter(Boolean))];
+}
+
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-white/12 bg-obsidian/40 p-4">
@@ -159,7 +168,7 @@ export default function DossierPage() {
   function addRole() {
     if (!role.title.trim() && !role.employer.trim()) return;
     const now = new Date().toISOString();
-    const responsibilities = values(role.responsibilities);
+    const responsibilities = lines(role.responsibilities);
     // The role id is minted first so every record collected here can be stamped
     // with its owner — a résumé role may only cite evidence it owns.
     const roleId = createId("role");
@@ -355,7 +364,7 @@ export default function DossierPage() {
 
   function editRole(id: string, form: FormData) {
     const now = new Date().toISOString();
-    const responsibilities = values(String(form.get("responsibilities") ?? ""));
+    const responsibilities = lines(String(form.get("responsibilities") ?? ""));
     // Duties live in two places — role.responsibilities and role-owned
     // evidence records — and the generator reads both. withRoleResponsibilitiesEdited
     // keeps them in step, so a duty removed here actually stops printing
@@ -373,7 +382,7 @@ export default function DossierPage() {
     save({ ...dossier, projects: dossier.projects.map((item) => item.id === id ? {
       ...item, name: String(form.get("name") ?? "").trim(), organization: String(form.get("organization") ?? "").trim(),
       dates: String(form.get("dates") ?? "").trim(), description: String(form.get("description") ?? "").trim(),
-      responsibilities: values(String(form.get("responsibilities") ?? "")), tools: values(String(form.get("tools") ?? "")),
+      responsibilities: lines(String(form.get("responsibilities") ?? "")), tools: values(String(form.get("tools") ?? "")),
       outcomes: values(String(form.get("outcomes") ?? "")), metrics: values(String(form.get("metrics") ?? "")),
       links: values(String(form.get("links") ?? "")),
       defaultPlacement: String(form.get("placement")) as DossierProject["defaultPlacement"]

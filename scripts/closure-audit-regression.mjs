@@ -536,5 +536,33 @@ check(
   delete globalThis.CustomEvent;
 }
 
+// --- 14. Responsibility entry is line-based, matching its own field label -----------
+// The field says "One recurring responsibility per line", but the parser also
+// split on commas, so an ordinary sentence was shredded at INPUT time:
+// "Mopped, swept, wiped the front end." became three records and the résumé
+// printed the fragments "Mopped" and "Swept" while the remainder fell off the
+// bullet cap. A sentence the user wrote is one claim at input as well as at
+// generation.
+{
+  const profileSource = fs.readFileSync(path.join(root, "src/app/profile/page.tsx"), "utf8");
+  check(
+    "a line-based parser exists for responsibilities",
+    /function lines\(text: string\): string\[\] \{[\s\S]{0,160}split\(\/\\n\/\)/.test(profileSource)
+  );
+  check(
+    "every responsibility field uses the line parser, never the comma splitter",
+    [...profileSource.matchAll(/responsibilities:?\s*=?\s*(lines|values)\(/g)].every((m) => m[1] === "lines"),
+    JSON.stringify([...profileSource.matchAll(/responsibilities:?\s*=?\s*(lines|values)\(/g)].map((m) => m[0]))
+  );
+  check(
+    "comma-separated fields (tools) still split on commas",
+    /tools: values\(/.test(profileSource)
+  );
+  check(
+    "the field label still promises one per line",
+    /One recurring responsibility per line/.test(profileSource)
+  );
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
