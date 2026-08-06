@@ -21,6 +21,17 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
  * names removed. A title says who someone was called, not what they did, so it
  * must not authorise an activity claim — see buildResponsibilityList.
  */
+// A negation marker. The apostrophe in a contraction is REQUIRED: an earlier
+// version wrote n['’]?t with the apostrophe OPTIONAL, which made every
+// English word ending in "nt" a negation — management, equipment, front,
+// different, important, consistent, department, assistant, restaurant, client.
+// That silently stripped ordinary true sentences out of the grounding corpus
+// and emptied CORE SKILLS for real users.
+const NEGATION_MARKER = new RegExp(
+  String.raw`\b(?:not|never|no|none|neither|nor|without)\b|\b(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need|ai)n['’]?t\b`,
+  "i"
+);
+
 /**
  * Removes NEGATED clauses before text is used as grounding evidence.
  *
@@ -41,7 +52,7 @@ export function withoutNegatedClauses(text: string): string {
   if (!text) return "";
   return text
     .split(/(?<=[.!?;:,])\s+|\n|\s+\b(?:and|but|though|although|however|while|because|so)\b\s+/i)
-    .filter((clause) => !/\b(?:not|never|no|none|neither|nor|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(clause))
+    .filter((clause) => !NEGATION_MARKER.test(clause))
     .join(" ");
 }
 
@@ -1049,7 +1060,7 @@ function looksLikeSkillLabel(skill: string) {
   if (/\b(me|them|they|was|were|about|because)\b/i.test(skill)) return false;
   // A denial is never a skill. "I never handled cash" was reaching CORE SKILLS
   // as the literal entry "never handled cash".
-  if (/\b(?:not|never|no|none|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(skill)) return false;
+  if (NEGATION_MARKER.test(skill)) return false;
   return true;
 }
 
@@ -1974,7 +1985,7 @@ function readsAsClause(line: string) {
     // A negation is a statement about what did NOT happen, never a chip label.
     // "never handled cash" was short enough to pass as a bare label and came
     // back as the fabricated bullet "Supported never handled cash."
-    /\b(?:not|never|no|none|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(line)
+    NEGATION_MARKER.test(line)
   );
 }
 

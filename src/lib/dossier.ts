@@ -869,13 +869,20 @@ export function withRoleResponsibilitiesEdited(
   const known = new Set(dossier.evidence.map((item) => item.id));
   const additions = added.filter((item) => !known.has(item.id));
 
-  const removed = dossier.evidence.filter(
-    (item) =>
-      item.kind === "responsibility" &&
-      (item.roleId === roleId || ownedByThisRole.has(item.id)) &&
-      !item.rejected &&
-      !keptText.has(norm(item.detail))
+  // Ownership must be EXCLUSIVE before a record may be rejected here. The
+  // first version also swept in anything listed in this role's evidenceIds,
+  // so editing one job rejected evidence stamped to a DIFFERENT employer —
+  // the user edited their current role and lost bullets from a previous one.
+  // A record with no owner at all is only claimed when no other role lists it.
+  const listedElsewhere = new Set(
+    dossier.roles.filter((role) => role.id !== roleId).flatMap((role) => role.evidenceIds)
   );
+  const removed = dossier.evidence.filter((item) => {
+    if (item.kind !== "responsibility" || item.rejected) return false;
+    if (keptText.has(norm(item.detail))) return false;
+    if (item.roleId) return item.roleId === roleId;
+    return ownedByThisRole.has(item.id) && !listedElsewhere.has(item.id);
+  });
   const removedIds = new Set(removed.map((item) => item.id));
   const removedText = new Set(removed.map((item) => norm(item.detail)));
 

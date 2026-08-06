@@ -482,6 +482,29 @@ for (const [title, typed, mustSurvive] of [
   expect(`genuine work still reaches the résumé: "${typed.slice(0, 44)}…"`, mustSurvive.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 240));
 }
 
+// (d) The negation marker must be a CLOSED auxiliary list. Writing it as
+// [A-Za-z]+n['’]?t made every English word ending in "nt" a negation —
+// management, equipment, front, different, important, consistent, department,
+// assistant, restaurant, client, account — which silently stripped ordinary
+// true sentences out of the grounding corpus and emptied CORE SKILLS.
+{
+  const ordinary = "Handled cash and card payments at the front register. Managed the equipment consistently.";
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: ordinary }));
+  expect("words ending in \"nt\" do not read as negations", pkg.coreSkills.length > 0, JSON.stringify(pkg.coreSkills));
+  expect("  the user's own sentence still reaches the résumé", /front register/i.test(JSON.stringify(pkg)), JSON.stringify(pkg).slice(0, 200));
+}
+for (const [typed, forbiddenSkill] of [
+  ["I never handled cash at the front register.", "Cash Handling"],
+  ["I havent managed anyone on the team.", null],
+  ["I dont have a forklift certification.", "Equipment Operation"]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  if (forbiddenSkill) {
+    expect(`real negation still strips grounding: "${typed}"`, !pkg.coreSkills.includes(forbiddenSkill), JSON.stringify(pkg.coreSkills));
+  }
+  expect(`  denial is not listed as a skill: "${typed}"`, !pkg.coreSkills.some((skill) => /\b(?:not|never)\b|n['’]?t\b/i.test(skill)), JSON.stringify(pkg.coreSkills));
+}
+
 L();
 L("=".repeat(78));
 L(`Generator truth regression: ${passes} passed, ${fails} failed`);

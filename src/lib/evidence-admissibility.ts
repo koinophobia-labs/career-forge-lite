@@ -90,7 +90,9 @@ const ACHIEVEMENT_VERBS = "lose|loses|losing|lost|miss|misses|missing|missed|bre
 // open slot swallowed the auxiliary carrying the negation ("havent" read as
 // the verb). The negator is the one token that must be present, so it is the
 // anchor, and the subject and object are read around it.
-const NEGATOR = /\b(?:not|never)\b|\b[A-Za-z]+n['’]?t\b/gi;
+// The apostrophe is REQUIRED. With it optional, every word ending in "nt"
+// (management, equipment, different, important) scanned as a negation.
+const NEGATOR = /\b(?:not|never)\b|\b(?:do|does|did|have|has|had|is|are|was|were|ca|wo|would|could|should|must|need|ai)n['’]?t\b/gi;
 
 // Nouns whose ABSENCE is a gap in a candidate's evidence.
 const GAP_OBJECTS =
