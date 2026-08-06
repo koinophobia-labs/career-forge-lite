@@ -27,9 +27,8 @@ import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { syncRoleSprintsWithEvidence } from "@/lib/role-sprint";
 import { earlyWinBullets } from "@/lib/early-win";
 import { useCommandCenter } from "@/lib/use-command-center";
+import { IDENTITY_CALLOUT_DISMISSED_KEY } from "@/lib/local-keys";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
-
-const IDENTITY_CALLOUT_DISMISSED_KEY = "career-forge-identity-callout-dismissed-v1";
 
 function values(text: string): string[] {
   return [...new Set(text.split(/\n|,|;/).map((item) => item.trim()).filter(Boolean))];

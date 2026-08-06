@@ -14,10 +14,8 @@ import {
 } from "@/lib/backup";
 import { buildPilotSummary, pilotSummaryContainsContent } from "@/lib/pilot-metrics";
 import { updateCommandCenter, useCommandCenter } from "@/lib/use-command-center";
-import { emptyState, RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
-import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
-import { HANDOFF_KEY } from "@/lib/tailor-handoff";
-import { LAST_BACKUP_KEY } from "@/lib/backup";
+import { emptyState } from "@/lib/command-center-store";
+import { clearCareerDataKeys, clearIdentityBoundKeys } from "@/lib/local-keys";
 import type { CommandCenterState } from "@/types/command-center";
 
 function formatDate(iso: string | null): string {
@@ -119,6 +117,11 @@ export default function SettingsPage() {
 
   function confirmRestore() {
     if (!pendingImport) return;
+    // A restore can swap identities. Anything holding the previous person's
+    // own words outside the command-center state — interview transcript,
+    // practice answers, feedback drafts, an in-flight tailor handoff — must
+    // not survive it, or the next person reads someone else's answers.
+    clearIdentityBoundKeys();
     // Replaces the live store atomically; every open page re-renders from the
     // restored state through the shared subscription.
     updateCommandCenter(() => pendingImport.state);
@@ -127,14 +130,11 @@ export default function SettingsPage() {
   }
 
   function clearLocalData() {
-    // Every Career Forge key, so "clear" actually means clear: main store,
-    // backup marker, in-flight tailor handoff, interview session, and any
-    // quarantined recovery snapshot.
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem(LAST_BACKUP_KEY);
-    window.localStorage.removeItem(HANDOFF_KEY);
-    window.localStorage.removeItem(INTERVIEW_SESSION_KEY);
-    window.localStorage.removeItem(RECOVERY_KEY);
+    // Every registered Career Forge key, so "clear" actually means clear —
+    // including interview transcripts, practice answers, and beta feedback,
+    // which a hand-written key list kept missing. Only the license key is
+    // preserved (see local-keys.ts).
+    clearCareerDataKeys();
     updateCommandCenter(() => emptyState());
     setPendingImport(null);
     setConfirmingClear(false);
@@ -278,7 +278,7 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="mt-6 rounded-xl border border-coral/30 bg-coral/5 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Clear local data</h2><p className="mt-1 text-sm leading-6 text-paper/60">Use this only after downloading a backup. This removes the dossier, résumé packs, applications, outreach, and export history from this browser.</p>{confirmingClear ? <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={clearLocalData} className="rounded-md bg-coral px-4 py-2 text-sm font-black text-ink">Yes, clear all local Career Forge data</button><button type="button" onClick={() => setConfirmingClear(false)} className="rounded border border-white/20 px-4 py-2 text-sm text-paper/70">Cancel</button></div> : <button type="button" onClick={() => setConfirmingClear(true)} className="mt-4 rounded border border-coral/50 px-4 py-2 text-sm font-bold text-coral">Clear local data…</button>}</div>
+        <div className="mt-6 rounded-xl border border-coral/30 bg-coral/5 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Clear local data</h2><p className="mt-1 text-sm leading-6 text-paper/60">Use this only after downloading a backup. This removes the dossier, résumé packs, applications, outreach, export history, interview transcripts and practice answers, and any feedback drafts from this browser. An access code activated on this device is kept so you do not lose what you paid for.</p>{confirmingClear ? <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={clearLocalData} className="rounded-md bg-coral px-4 py-2 text-sm font-black text-ink">Yes, clear all local Career Forge data</button><button type="button" onClick={() => setConfirmingClear(false)} className="rounded border border-white/20 px-4 py-2 text-sm text-paper/70">Cancel</button></div> : <button type="button" onClick={() => setConfirmingClear(true)} className="mt-4 rounded border border-coral/50 px-4 py-2 text-sm font-bold text-coral">Clear local data…</button>}</div>
       </section>
 
       <SiteFooter />

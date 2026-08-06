@@ -23,7 +23,11 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
  */
 export function buildActivityCorpus(data: IntakeData) {
   return [
-    data.tools,
+    // data.tools is deliberately ABSENT. Naming a tool says what was in reach,
+    // not what was done with it: "POS Systems, Cash Drawer" was grounding
+    // "Processed payments" and the skill "Cash Handling" for a user who never
+    // described handling payments. Tools still reach output as tool phrases
+    // ("… using X") and the Tools section, which is what naming one supports.
     data.responsibilities,
     data.outcomes,
     data.customRoleNotes,
@@ -931,7 +935,10 @@ function buildUserResponsibilityList(data: IntakeData) {
     ...data.customRoleTransferableSkills.map(normalizeResponsibility),
     ...data.customRoleWorkStyles.map(normalizeResponsibility),
     ...data.selectedResponsibilities.map(normalizeResponsibility),
-    normalizeResponsibility(data.customRoleIndustry),
+    // customRoleIndustry is deliberately absent: an industry chip ("Retail")
+    // names a sector, not a duty — rendering it as a responsibility produced
+    // fused fake bullets like "Supported Escalation handling, Retail, and the
+    // shift lead."
     ...splitResponsibilityText(data.responsibilities).map(normalizeResponsibility)
   ])
     .filter((item) => !looksLikeNarrationFragment(item))
@@ -1342,7 +1349,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
       // into a specific activity the user never described.
       composed(corpus, `Assisted ${customerScope ? customerScope.phrase : "customers"} with`, [
         [/\bpurchase\w*|\bsales?\b|\bbought\b|\bbuying\b/, "purchases"],
-        [/\breturns?\b|\bexchang\w*|\brefund\w*/, "returns"],
+        // "returns" and "refunds" are different activities: a user who wrote
+        // "Handled customer complaints and refunds." never described returns.
+        [/\breturns?\b|\bexchang\w*/, "returns"],
+        [/\brefund\w*/, "refunds"],
         [/\bquestions?\b|\basked\b|\binquir\w*/, "questions"],
         [/\bfind\w*|\blocat\w*|\bproducts?\b|\bmerchandis\w*/, "locating products"]
       ]),

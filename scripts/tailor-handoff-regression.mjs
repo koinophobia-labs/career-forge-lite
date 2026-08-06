@@ -258,6 +258,47 @@ check(
   })()
 );
 
+// --- Refresh survival (peek-and-retain, not consume-once) ---------------------------
+// A tailored session must survive a page refresh or away-and-back navigation:
+// reading the handoff must NOT delete it. It is deleted only by clearHandoff()
+// (version recorded / session exited) or ignored after the TTL.
+{
+  const { peekHandoff, clearHandoff, HANDOFF_KEY } = loadTsModule(path.join(root, "src/lib/tailor-handoff.ts"));
+  const store = new Map();
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key)
+    }
+  };
+
+  const handoff = buildHandoff({ analysis, lane, company: "Cascade Foods Market", roleTitle: "Assistant Store Manager", applicationId: "app-1", nowIso: NOW });
+  window.localStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff));
+
+  const first = peekHandoff(NOW);
+  check("peekHandoff returns the stored session", first !== null && first.roleTitle === "Assistant Store Manager");
+  check("peekHandoff does NOT remove the blob (refresh survives)", store.has(HANDOFF_KEY));
+
+  const second = peekHandoff(NOW);
+  check(
+    "a remount after refresh gets the identical session",
+    second !== null && JSON.stringify(second) === JSON.stringify(first)
+  );
+
+  clearHandoff();
+  check("clearHandoff removes the blob", !store.has(HANDOFF_KEY));
+  check("after clearHandoff a builder visit starts clean", peekHandoff(NOW) === null);
+
+  window.localStorage.setItem(HANDOFF_KEY, JSON.stringify({ ...handoff, createdAt: "2026-07-06T10:59:00.000Z" }));
+  check(
+    "a blob older than the TTL is ignored even though it is still stored",
+    peekHandoff("2026-07-06T12:00:00.000Z") === null
+  );
+
+  delete globalThis.window;
+}
+
 // --- Result ------------------------------------------------------------------------
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

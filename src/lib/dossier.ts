@@ -386,11 +386,33 @@ export function mergeIntakeIntoDossier(
   // signal — intakeFromDossier() prefills these very fields from the GLOBAL
   // dossier pool, so after a job change both roles legitimately record the same
   // strings and a text-matching guard would clear both.
-  const roles = [
+  const intakeLanes = [
     roleFromIntake(intake.currentTitle, intake.currentCompany, intake.currentTime, responsibilities, tools, outcomes, []),
     roleFromIntake(intake.previousTitle, intake.previousCompany, intake.previousTime, [], [], [], []),
     roleFromIntake(intake.additionalTitle, intake.additionalCompany, intake.additionalTime, [], [], [], [])
   ].filter((role): role is DossierRole => role !== null);
+  // Roles created on /profile carry ids from their own creation path, so a
+  // stableId derived from intake text will not match them. An unmatched id
+  // means the SAME employment lands as a second role (and the id mismatch
+  // spuriously trips prefillMovedEmployer below, un-stamping ownership).
+  // Adopt the existing role's id whenever title+employer already exist, and
+  // drop heading-only lanes that duplicate an already-recorded role — the
+  // previous/additional lanes are heading-only by design and must never
+  // shadow a recorded role with an empty copy.
+  const adoptExisting = (role: DossierRole): DossierRole => {
+    const existing = current.roles.find(
+      (item) =>
+        item.title.toLowerCase() === role.title.toLowerCase() &&
+        item.employer.toLowerCase() === role.employer.toLowerCase()
+    );
+    return existing ? { ...role, id: existing.id, evidenceIds: [...existing.evidenceIds] } : role;
+  };
+  const roles = intakeLanes.map(adoptExisting).filter((role, index, all) => {
+    const alreadyRecorded = current.roles.some((item) => item.id === role.id);
+    const headingOnly = !role.responsibilities.length && !role.tools.length && !role.outcomes.length;
+    if (alreadyRecorded && headingOnly) return false;
+    return all.findIndex((other) => other.id === role.id) === index;
+  });
   const currentRole = roles[0] && roles[0].title === intake.currentTitle.trim() && roles[0].employer === intake.currentCompany.trim() ? roles[0] : null;
   // The role-scoped fields were prefilled from a DIFFERENT job than the one
   // being submitted: the user changed employer and left the carried-over detail
@@ -405,7 +427,9 @@ export function mergeIntakeIntoDossier(
   const currentRoleEvidenceIds = currentRole
     ? proposed.filter((item) => item.roleId === currentRole.id).map((item) => item.id)
     : [];
-  if (currentRole) currentRole.evidenceIds = [...currentRoleEvidenceIds];
+  // Union, never overwrite: an adopted role keeps the evidence links it earned
+  // on /profile in addition to the records this merge just stamped.
+  if (currentRole) currentRole.evidenceIds = [...new Set([...currentRole.evidenceIds, ...currentRoleEvidenceIds])];
   roles.forEach((role) => {
     const record = evidenceRecord("role", [role.title, role.employer, role.startDate].filter(Boolean).join(" · "), source, approved, nowIso, { sourceText, roleId: role.id });
     proposed.push(record);
