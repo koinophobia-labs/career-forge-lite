@@ -92,7 +92,12 @@ const groundingAliasGroups: string[][] = [
   ["schedul", "appointment", "calendar", "booking", "shift", "coverage"],
   ["document", "note", "record", "log", "report", "paperwork", "file", "wrote", "writ"],
   ["deliver", "route", "courier", "dispatch", "doordash", "driver", "driving", "drove", "trip"],
-  ["conflict", "de-escalat", "deescalat", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  // Situation words (conflict, upset customers, tense moments) may ground
+  // resolution claims, but never the de-escalation ACTION — being near tense
+  // moments is not performing de-escalation, so that stem only grounds when
+  // the user described de-escalating or defusing themselves (RA-P0-03).
+  ["conflict", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  ["de-escalat", "deescalat", "defus"],
   ["team", "coworker", "crew", "staff", "colleague", "kitchen staff", "servers"],
   ["safety", "safe", "ppe", "osha", "hazard"],
   ["order", "ticket", "request", "case", "wager", "issue"],
@@ -903,9 +908,17 @@ function splitResponsibilityText(value: string) {
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
-// not responsibilities; they are dropped rather than templated.
+// not responsibilities; they are dropped rather than templated. Only
+// title-cased heading fragments match: a sentence the user actually wrote is
+// sentence-cased and is a claim, not an artifact — "It was my job to
+// reconcile the drawer." and "They told me to cover the front desk." must
+// survive verbatim (RA-P0-03).
 function looksLikeNarrationFragment(item: string) {
-  return /\b(they|them|about what|it was|i was)\b/i.test(item);
+  if (!/\b(they|them|about what|it was|i was)\b/i.test(item)) return false;
+  const words = item.split(/\s+/).filter((word) => /[a-z]/i.test(word));
+  if (words.length < 3) return true;
+  const capitalized = words.filter((word) => /^[A-Z]/.test(word));
+  return capitalized.length >= Math.ceil(words.length * 0.8);
 }
 
 function buildUserResponsibilityList(data: IntakeData) {
