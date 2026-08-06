@@ -235,5 +235,48 @@ check(
   delete globalThis.window;
 }
 
+// --- 7. The job posting must not supply its own evidence -----------------------------
+// In a tailored session intake.targetJobTitle IS the posting's title, so
+// including it in the evidence corpus let the employer's ad add "Store
+// Manager" to CORE SKILLS and "hands-on experience in store manager" to the
+// summary of a user who had never held the role.
+{
+  const { buildEvidenceCorpus } = loadTsModule(path.join(root, "src/lib/tailored-resume.ts"));
+  const corpus = buildEvidenceCorpus(
+    intake({
+      targetJobTitle: "Assistant Store Manager",
+      currentTitle: "Shift Supervisor",
+      currentCompany: "Fresh Market Grocery",
+      responsibilities: "Trained 4 new cashiers on the register system.",
+      education: "Certified Public Accountant"
+    })
+  );
+  check("the posting's own title is not evidence", !corpus.includes("assistant store manager"), corpus.slice(0, 200));
+  check("a credential is not a description of work performed", !corpus.includes("certified public accountant"), corpus.slice(0, 200));
+  check("the user's own role and duties remain evidence", corpus.includes("shift supervisor") && corpus.includes("trained 4 new cashiers"), corpus.slice(0, 200));
+}
+
+// --- 8. The public health endpoint must not publish a bearer credential --------------
+// /api/commerce-health is unauthenticated and /api/license treats a Stripe
+// session id as a bearer credential: printing the certified session id let
+// anyone mint a signed paid license from the certification drill's evidence.
+{
+  const source = fs.readFileSync(path.join(root, "src/lib/server/fulfillment-readiness.ts"), "utf8");
+  check(
+    "the certified Stripe session id is never interpolated into a public detail string",
+    !/\$\{evidence!?\.checkoutSessionId\}/.test(source),
+    "found a raw checkoutSessionId interpolation"
+  );
+  check(
+    "the session reference is a non-reversible digest",
+    /sessionDigest\(evidence!?\.checkoutSessionId\)/.test(source) && /createHash\("sha256"\)/.test(source)
+  );
+  check(
+    "the approver's name is not published either",
+    !/\$\{approval!?\.approvalActor\}/.test(source),
+    "found a raw approvalActor interpolation"
+  );
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
