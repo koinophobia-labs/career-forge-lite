@@ -356,3 +356,23 @@ Recorded so they are not rediscovered as surprises:
 - The guided and pack stacks still produce different documents from identical input.
 - Interview transcripts and prep drafts still fail to save silently when storage is full (RELY-02); the capture surface still holds drafts in unpersisted React state (DS-04).
 - `"I was laid off before I trained the new hires."` still exports `"Trained the new hires."` — the termination-reason splitter keeps the dependent clause and re-asserts it (lens A, pre-existing P0). **This one is a genuine P0 and belongs at the top of the next queue.**
+
+---
+
+## OPEN P0 — the shared-oracle concern is realised (found 2026-08-06, not yet repaired)
+
+The founder raised an architectural objection to the `composed()` double gate: routing both validation steps through the same `isGroundedClaim()` risks recreating the shared-oracle problem, because if that function misunderstands a relation, both gates agree on the same wrong answer.
+
+**It is realised, though not where the double gate sits.** The gate holds for bullets. The same oracle leaks through `labelGrounding` into CORE SKILLS and then into the exported summary, where the wording makes it an explicit attribution:
+
+| Typed by the user | Skill minted | Summary sentence |
+| --- | --- | --- |
+| "The cash office was next to my register." | Cash Handling | "Strengths the candidate reports include cash Handling." |
+| "A safety poster hung over the dock door." | Safety Procedures | "Strengths the candidate reports include safety Procedures." |
+| "Patients waited in the lobby I cleaned." | Patient Support | "Strengths the candidate reports include patient Support." |
+
+In every case a NOUN naming something *near* the person grounds a COMPETENCY claim *about* the person, and the document then states the candidate reported it. They did not.
+
+**Deliberately not repaired in the same pass that found it.** Four consecutive rounds have shown that a repair written without independent review introduces a new defect, and a fifth unreviewed repair to the grounding layer is exactly the pattern that keeps failing. The fourth review is running with an independent eight-category fixture inventory for this layer; the class will be repaired once with that inventory rather than piecemeal.
+
+Severity: **P0** — a fabricated competency, attributed to the user, in an exported document.
