@@ -324,13 +324,28 @@ It also exposed a systemic pre-existing P0 that both earlier passes missed: **gr
 
 ## Verdict change
 
-**NOT READY FOR RELEASE → READY AFTER LISTED BLOCKERS**, with exactly three blockers remaining, none of which is a code defect:
+### CORRECTION (2026-08-06, after founder review)
 
-1. **Set `NEXT_PUBLIC_COMMERCE_MODE=off` on the Vercel production environment and redeploy.** Until then production still shows $49 locks that dead-end at a closed checkout. One setting; no code change.
-2. **Close issue #55** — deactivate the stray live Stripe Payment Link and record the evidence. Needs Stripe dashboard access.
-3. **Run the five-user gate** and meet every criterion.
+The verdict first written here — "READY AFTER LISTED BLOCKERS, three blockers, none a code defect" — **contradicted this document's own findings section**, which listed an open P0 four paragraphs later. A verdict has to be derived from the evidence table, not from the shape one wants the finding to have. The founder caught it; it is corrected below, and the original wording is left visible above rather than quietly edited so the error is auditable.
 
-Two verification steps must accompany them: an independent adversarial review of this integration branch (the pattern has found an introduced P0 every single time), and re-running the §1 readiness preconditions immediately before the gate.
+### Corrected verdict
+
+# NOT READY FOR RELEASE — READY FOR FINAL CERTIFICATION AFTER TWO BOUNDED CODE ACTIONS AND THREE OPERATIONAL GATES
+
+**Two bounded code actions**
+
+1. **Fix the termination/dependent-clause P0 as a general class** — `"I was laid off before I trained the new hires."` exported `"Trained the new hires."`
+   **STATUS: DONE** at `ec53406`. Fixed for the whole class (before / until / when / after / because / since), with both opposite directions preserved: an accomplishment bounded by a termination is still kept, and a concessive's asserted clause is still kept. Six inversions reproduce pre-fix — and they reached the summary and core skills, not only the bullets.
+2. **Independently review PR #59.** Every previous review round found a P0 the author had introduced while repairing something else. Two rounds, three introduced P0s. This is not optional.
+   **STATUS: IN PROGRESS** — five lenses, including a full inventory of the ~25 surviving `composed()` clause pairs and an end-to-end journey lens that inspects the decoded DOCX and PDF rather than the on-screen preview.
+
+**Three operational gates**
+
+3. Set `NEXT_PUBLIC_COMMERCE_MODE=off` on Vercel production and redeploy.
+4. Close issue #55 — deactivate the stray live Stripe Payment Link. Needs dashboard access.
+5. Run and **pass** the five-user gate (`docs/FIVE_USER_LAUNCH_GATE.md`).
+
+Only when all five are closed does the release checklist in §8 apply.
 
 ## Still open, and deliberately not fixed here
 
