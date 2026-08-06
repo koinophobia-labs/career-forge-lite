@@ -143,8 +143,15 @@ const pack = migrated.resumePacks[0];
 const variant = pack.variants[0];
 
 // --- 1–4: résumé bodies, LinkedIn, pitches, framing, proof bank, cover letter
-check("résumé summary drops the separation reason but keeps the safe remainder",
-  !contaminationIn(variant.resume.summary).length && variant.resume.summary.includes(SAFE_REMAINDER), variant.resume.summary);
+// Partial stripping is retired. Migration rewrites product-authored prose in
+// stored artifacts, where there is no user present to review a flagged
+// sentence — so a contaminated sentence is dropped WHOLE. The salvaged
+// remainder these checks used to demand ("Managed vendor contracts worth $2M
+// annually", carved out of "…until I was laid off in June 2026") is exactly
+// the clause surgery that could not tell a bounded accomplishment from a
+// pre-empted one. Its ABSENCE is now the assertion.
+check("résumé summary drops the whole contaminated sentence, not just its reason",
+  !contaminationIn(variant.resume.summary).length && !variant.resume.summary.includes(SAFE_REMAINDER), variant.resume.summary);
 check("résumé bullets drop separation/uncertainty but keep the safe fact and the user edit",
   !contaminationIn(variant.resume.experience[0].bullets.join("\n")).length
     && variant.resume.experience[0].bullets.some((bullet) => bullet.includes(SAFE_FACT))
@@ -184,9 +191,10 @@ check("gap statements never seed behavioral or role questions",
 // --- 7: saved versions -------------------------------------------------------
 const snapshotVersion = migrated.resumeVersions.find((item) => item.id === "version-snapshot");
 const textVersion = migrated.resumeVersions.find((item) => item.id === "version-text-only");
-check("saved version snapshot is decontaminated and keeps safe content",
+check("saved version snapshot drops the contaminated sentence whole",
   !contaminationIn(JSON.stringify(snapshotVersion.resumeSnapshot)).length
-    && JSON.stringify(snapshotVersion.resumeSnapshot).includes(SAFE_REMAINDER), "");
+    && !JSON.stringify(snapshotVersion.resumeSnapshot).includes(SAFE_REMAINDER),
+  JSON.stringify(snapshotVersion.resumeSnapshot).slice(0, 200));
 check("saved version resumeText (snapshot-backed) is decontaminated", !contaminationIn(snapshotVersion.resumeText).length, snapshotVersion.resumeText);
 check("text-only saved version is decontaminated line by line and keeps the safe fact",
   !contaminationIn(textVersion.resumeText).length && textVersion.resumeText.includes(SAFE_FACT), textVersion.resumeText);
@@ -197,8 +205,8 @@ check("no contamination anywhere in the migrated pack object", !contaminationIn(
 // --- 9: export formats -------------------------------------------------------
 const plain = variantPlainText(migrated.dossier, variant.resume, variant.sectionOrder, variant.kind);
 fs.writeFileSync(path.join(EVIDENCE_DIR, "export-plain-text.txt"), plain);
-check("plain-text export is decontaminated and keeps the safe remainder",
-  !contaminationIn(plain).length && plain.includes(SAFE_REMAINDER), plain);
+check("plain-text export drops the contaminated sentence whole",
+  !contaminationIn(plain).length && !plain.includes(SAFE_REMAINDER), plain.slice(0, 200));
 
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 const pdfFile = await createVariantFile(variant, migrated.dossier, "Product Operations", "pdf");

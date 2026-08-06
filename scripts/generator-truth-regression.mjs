@@ -53,7 +53,7 @@ function load(fp) {
 }
 
 const { classifyEvidenceAdmissibility } = load("src/lib/evidence-admissibility.ts");
-const { containsSensitiveDisclosure } = load("src/lib/truth-guards.ts");
+const { containsSensitiveDisclosure, possibleDisclosure } = load("src/lib/truth-guards.ts");
 const { generateResumePackage } = load("src/lib/generator.ts");
 const { initialIntake } = load("src/lib/career-data.ts");
 
@@ -351,7 +351,7 @@ for (const achievement of [
 // Extraction has to be RELATION-AWARE.
 H("RA-P0-06 — relation-aware extraction around a termination reason");
 
-const TERMINATION_WORDS = /\b(laid off|let go|terminated|fired|dismissed|sacked|downsized|redundant|not renewed|lost my job|asked to resign)\b/i;
+const TERMINATION_WORDS = /\b(laid off|let go|terminated|fired|dismissed|sacked|downsized|redundant|not renewed|lost my job|asked to resign|position was cut)\b/i;
 
 // NON-ASSERTING: the termination pre-empted the event, so promoting the clause
 // asserts the opposite of what the user wrote.
@@ -366,7 +366,19 @@ for (const [typed, inverted] of [
 
 // ASSERTING: the event definitely happened. Deleting it amputates a true
 // accomplishment — as much a truth failure as inventing one.
-for (const [typed, mustSurvive] of [
+//
+// These assertions used to require the accomplishment CLAUSE to survive while
+// the termination clause was stripped out of the same sentence. That mechanism
+// — partial stripping — is retired. It could not tell "I was laid off after I
+// completed the certification." (the certification happened) from "I was laid
+// off before I completed the certification." (it did not) without modelling
+// clause relations, and when it guessed wrong it deleted true work.
+//
+// The invariant is unchanged: a true accomplishment must not be deleted. What
+// changed is who decides. The whole sentence is preserved, flagged, and
+// withheld from the draft until the user resolves it; a Keep puts their own
+// words back verbatim. Deferred, not deleted — and never partially rewritten.
+for (const [typed, accomplishment] of [
   ["I was laid off after I completed the certification.", /completed the certification/i],
   ["I was fired because I reported the accounting discrepancy.", /reported the accounting discrepancy/i],
   ["I was dismissed when I refused to falsify the records.", /refused to falsify the records/i],
@@ -375,22 +387,38 @@ for (const [typed, mustSurvive] of [
   ["My position was cut because I flagged the billing error.", /flagged the billing error/i],
   ["Although I was laid off, I completed the safety certification.", /completed the safety certification/i]
 ]) {
-  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
-  const whole = JSON.stringify(pkg);
-  expect(`asserted event SURVIVES: "${typed}"`, mustSurvive.test(whole), whole.slice(0, 240));
-  // …and the termination reason itself never rides along with it. This is the
-  // assertion that caught "Was dismissed when I refused to falsify the
-  // records." being exported whole, because "dismissed" was missing from the
-  // termination patterns entirely.
-  expect(`  the termination reason itself is not exported`, !TERMINATION_WORDS.test(whole), whole.slice(0, 240));
+  const role = { currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed };
+
+  // 1. The sentence is recognised as a possible disclosure at all. Without this
+  //    the other two steps would pass vacuously.
+  expect(`flagged for review: "${typed}"`, possibleDisclosure(typed)?.reason === "separation", JSON.stringify(possibleDisclosure(typed)));
+
+  // 2. Unresolved, NOTHING from the sentence reaches the document — not the
+  //    termination, and not the accomplishment either. Withholding pending a
+  //    decision is not the same as judging the content.
+  const pending = JSON.stringify(generateResumePackage(intake(role)));
+  expect(`  unresolved: nothing from it is published`, !accomplishment.test(pending) && !TERMINATION_WORDS.test(pending), pending.slice(0, 240));
+
+  // 3. Resolved KEEP, the user's sentence returns WHOLE. The accomplishment is
+  //    proof it was never amputated; the termination phrase riding along with
+  //    it is proof the product did not quietly edit a decision the user made
+  //    about their own résumé. Whole sentence or nothing — never a clause.
+  const kept = JSON.stringify(generateResumePackage(intake({ ...role, disclosureApproved: [typed] })));
+  expect(`  kept: the accomplishment survives`, accomplishment.test(kept), kept.slice(0, 240));
+  expect(`  kept: the sentence is not partially stripped`, TERMINATION_WORDS.test(kept), kept.slice(0, 240));
 }
 
 // The clause BEFORE the conjunction states something that happened; the
-// conjunction only bounds when it stopped.
+// conjunction only bounds when it stopped. Same retirement as above: the
+// bounded accomplishment is withheld whole rather than truncated at "until",
+// and comes back whole when the user resolves it.
 {
-  const kept = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: "Managed vendor contracts worth $2M annually until I was laid off in June 2026." });
-  expect("an accomplishment bounded by a termination is KEPT", kept.includes("Managed vendor contracts worth $2M annually."), JSON.stringify(kept));
-  expect("  the termination reason itself is not exported", !TERMINATION_WORDS.test(JSON.stringify(kept)), JSON.stringify(kept));
+  const typed = "Managed vendor contracts worth $2M annually until I was laid off in June 2026.";
+  const role = { currentTitle: "Sales Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed };
+  expect("a bounded accomplishment is withheld, not truncated", !bulletsFor(role).some((b) => /vendor contracts/i.test(b)), JSON.stringify(bulletsFor(role)));
+  const kept = bulletsFor({ ...role, disclosureApproved: [typed] });
+  expect("an accomplishment bounded by a termination is KEPT once resolved", kept.some((b) => /Managed vendor contracts worth \$2M annually/.test(b)), JSON.stringify(kept));
+  expect("  and it is kept WHOLE, not truncated at the conjunction", TERMINATION_WORDS.test(JSON.stringify(kept)), JSON.stringify(kept));
 }
 
 // Termination phrasings the original pattern list missed entirely, so the

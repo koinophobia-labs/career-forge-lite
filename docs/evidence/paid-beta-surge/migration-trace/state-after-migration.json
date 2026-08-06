@@ -162,7 +162,7 @@
       "label": "Contaminated snapshot",
       "createdAt": "2026-07-16T18:00:00.000Z",
       "source": "tailor",
-      "resumeText": "Operations professional. Managed vendor contracts worth $2M annually\nVendor Management\nOperations Coordinator | Meridian Logistics | 2020–2026\n- Managed vendor contracts worth $2M annually\n- Resolved customer escalations and documented the outcome\n- Rewrote onboarding documentation for new hires",
+      "resumeText": "Operations professional.\nVendor Management\nOperations Coordinator | Meridian Logistics | 2020–2026\n- Resolved customer escalations and documented the outcome\n- Rewrote onboarding documentation for new hires",
       "notes": "Needs review after evidence-safety update.",
       "applicationId": null,
       "laneId": "lane-old",
@@ -177,7 +177,7 @@
         "website": "",
         "template": "Modern ATS",
         "resume": {
-          "summary": "Operations professional. Managed vendor contracts worth $2M annually",
+          "summary": "Operations professional.",
           "coreSkills": [
             "Vendor Management"
           ],
@@ -187,7 +187,6 @@
               "company": "Meridian Logistics",
               "time": "2020–2026",
               "bullets": [
-                "Managed vendor contracts worth $2M annually",
                 "Resolved customer escalations and documented the outcome",
                 "Rewrote onboarding documentation for new hires"
               ]
@@ -195,7 +194,7 @@
           ],
           "education": "",
           "linkedinHeadline": "Operations Coordinator.",
-          "linkedinSummary": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome."
+          "linkedinSummary": "Resolved customer escalations and documented the outcome."
         }
       }
     },
@@ -204,7 +203,7 @@
       "label": "Contaminated text-only",
       "createdAt": "2026-07-16T18:00:00.000Z",
       "source": "plain",
-      "resumeText": "- Managed vendor contracts worth $2M annually\n- Resolved customer escalations and documented the outcome",
+      "resumeText": "- Resolved customer escalations and documented the outcome",
       "notes": "Needs review after evidence-safety update.",
       "applicationId": null,
       "laneId": null,
@@ -242,7 +241,7 @@
           "canonical": true,
           "userEdited": true,
           "resume": {
-            "summary": "Operations professional. Managed vendor contracts worth $2M annually",
+            "summary": "Operations professional.",
             "coreSkills": [
               "Vendor Management"
             ],
@@ -252,7 +251,6 @@
                 "company": "Meridian Logistics",
                 "time": "2020–2026",
                 "bullets": [
-                  "Managed vendor contracts worth $2M annually",
                   "Resolved customer escalations and documented the outcome",
                   "Rewrote onboarding documentation for new hires"
                 ]
@@ -260,7 +258,7 @@
             ],
             "education": "",
             "linkedinHeadline": "Operations Coordinator.",
-            "linkedinSummary": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome."
+            "linkedinSummary": "Resolved customer escalations and documented the outcome."
           },
           "template": "Modern ATS",
           "evidenceReferences": [],
@@ -284,7 +282,7 @@
       "linkedinHeadlines": [
         "Operations Coordinator."
       ],
-      "linkedinAbout": "Managed vendor contracts worth $2M annually Resolved customer escalations and documented the outcome.",
+      "linkedinAbout": "Resolved customer escalations and documented the outcome.",
       "linkedinSkills": [
         "Vendor Management"
       ],

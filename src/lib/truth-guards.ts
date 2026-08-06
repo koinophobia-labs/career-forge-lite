@@ -191,6 +191,16 @@ const disclosurePatterns: Array<[DisclosureReason, RegExp]> = [
   ["separation", /\bleadership\s+(?:decided\s+to\s+)?eliminat\w*\s+(?:the\s+)?(?:role|position|team|department)\b/i],
   ["separation", /\b(?:role|position|job|department|team)\s+(?:was\s+)?eliminated\b/i],
   ["separation", /\breduction\s+in\s+force\b/i],
+  // More phrasings dropped when the classifier was rewritten. Each was caught
+  // by a test, which is why the suite is adjudicated rather than normalised.
+  ["separation", /\blost\s+(?:my|the)\s+(?:job|role|position)\b/i],
+  ["separation", /\b(?:asked|forced|pushed)\s+to\s+resign\b/i],
+  ["separation", /\b(?:my|our|the)\s+(?:hours|shifts)\s+(?:were|was)\s+cut\b/i],
+  // Caught by the rewritten assertions: this phrasing was matched by NOTHING,
+  // and flowed verbatim into the summary ("Brings My position was cut because
+  // I flagged the billing error with a transition focus toward…").
+  ["separation", /\b(?:my|our|the)\s+(?:position|role|job|post)\s+(?:was|were)\s+(?:cut|eliminated|abolished|removed)\b/i],
+  ["health", /\bon\s+(?:medical|sick|disability|stress)\s+leave\b/i],
   ["health", /\b(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b[^.!?]{0,40}?\b(?:sick|ill|unwell|injured|diagnosed|surgery|hospital)\b/i],
   ["health", /\bhad\s+to\s+(?:care\s+for|look\s+after)\s+(?:my|our)\s+(?:mother|father|mom|dad|parent|son|daughter|child|husband|wife|partner|family)\b/i],
   ["health", /\b(?:maternity|paternity|parental|bereavement|sick)\s+leave\b/i],

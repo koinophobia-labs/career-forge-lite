@@ -11,13 +11,15 @@ import { initialIntake } from "@/lib/career-data";
 import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, trackCtaClick, trackResumeGeneration } from "@/lib/analytics";
 import { createId, loadState } from "@/lib/command-center-store";
 import { resumeToText } from "@/lib/resume-export";
+import { DISCLOSURE_REASON_LABEL } from "@/lib/truth-guards";
 import { clearHandoff, peekHandoff, recordTailoredResumeVersion, type TailorHandoff } from "@/lib/tailor-handoff";
 import { applyTailoredContext, contextFromHandoff, type TailoredInfluence } from "@/lib/tailored-resume";
 import { updateCommandCenter } from "@/lib/use-command-center";
 import { generateResumePackage } from "@/lib/generator";
-import { intakeFromDossier, mergeIntakeIntoDossier, withUpdatedDossier } from "@/lib/dossier";
+import { intakeEligibleForGeneration, intakeFromDossier, mergeIntakeIntoDossier, pendingDisclosureReviews, resolveDisclosure, withUpdatedDossier } from "@/lib/dossier";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 import type { ResumeSnapshot } from "@/types/command-center";
+import type { DossierEvidenceRecord } from "@/types/dossier";
 
 type Step = "intake" | "preview";
 
@@ -116,6 +118,9 @@ export default function Home() {
   // back to it, so the saved record, its exports, and any linked application
   // always reflect what the user last edited.
   const [recordedVersionId, setRecordedVersionId] = useState<string | null>(null);
+  // Sentences the classifier flagged and the user has not resolved. They are
+  // withheld from the draft until answered — never deleted, never rewritten.
+  const [pendingReviews, setPendingReviews] = useState<DossierEvidenceRecord[]>([]);
 
   useEffect(() => {
     const stored = loadState();
@@ -236,11 +241,21 @@ export default function Home() {
     }
 
     const nowIso = new Date().toISOString();
+    // The guided path enters the CANONICAL evidence lifecycle before anything
+    // is generated: the merge creates records, classification flags them, and
+    // generation then draws only on what is eligible. Without this the
+    // textarea flowed straight into bullets, so a flagged sentence had no
+    // record to be flagged on and nowhere to be resolved.
     updateCommandCenter((current) => withUpdatedDossier(
       current,
       mergeIntakeIntoDossier(current.dossier, intake, "guided", true, "Guided Career Dossier setup", nowIso)
     ));
-    const basePackage = generateResumePackage(intake);
+    const dossierAfterMerge = loadState().dossier;
+    setPendingReviews(pendingDisclosureReviews(dossierAfterMerge));
+    // The user's typed intake is never modified — only what generation may
+    // draw on is narrowed.
+    const eligibleIntake = intakeEligibleForGeneration(intake, dossierAfterMerge);
+    const basePackage = generateResumePackage(eligibleIntake);
     if (tailorSession) {
       const profile = loadState().profile;
       const extraEvidence = [
@@ -430,6 +445,60 @@ export default function Home() {
 
       {step === "preview" && (
         <>
+          {pendingReviews.length > 0 && (
+            <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8" aria-labelledby="disclosure-review-title">
+              <div className="rounded-xl border border-gold/40 bg-gold/10 p-5 sm:p-6">
+                <p className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Before you export</p>
+                <h2 id="disclosure-review-title" className="mt-2 text-xl font-bold text-paper">
+                  {pendingReviews.length} sentence{pendingReviews.length === 1 ? "" : "s"} to check
+                </h2>
+                {/* The copy admits uncertainty on purpose. The check is lexical
+                    and is frequently wrong in both directions — a receptionist's
+                    "surgery" is a clinic — so it must not tell the user what
+                    their own sentence means. */}
+                <p className="mt-1 text-sm leading-6 text-paper/70">
+                  This may contain personal information, or it may describe your work. Review it before using it in
+                  your résumé. Your text has not been changed, and nothing here has been added to the draft yet.
+                </p>
+                <ul className="mt-4 grid gap-3">
+                  {pendingReviews.map((record) => (
+                    <li key={record.id} className="rounded-lg border border-white/12 bg-obsidian/40 p-4">
+                      <p className="text-sm leading-6 text-paper">{record.detail}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateCommandCenter((state) => withUpdatedDossier(state, resolveDisclosure(state.dossier, record.id, "keep")));
+                            setPendingReviews((current) => current.filter((item) => item.id !== record.id));
+                          }}
+                          className="min-h-11 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink"
+                        >
+                          Keep as work evidence
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateCommandCenter((state) => withUpdatedDossier(state, resolveDisclosure(state.dossier, record.id, "exclude")));
+                            setPendingReviews((current) => current.filter((item) => item.id !== record.id));
+                          }}
+                          className="min-h-11 rounded border border-white/20 px-4 py-2 text-sm font-bold text-paper/75"
+                        >
+                          Exclude from résumé
+                        </button>
+                        <span className="lab-mono text-[0.62rem] uppercase text-paper/45">
+                          {DISCLOSURE_REASON_LABEL[record.disclosureReason ?? "health"]}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs leading-5 text-paper/55">
+                  Keeping a sentence adds it to this draft. Excluding one leaves it in your saved history but off the
+                  résumé — either way you decide, not us.
+                </p>
+              </div>
+            </section>
+          )}
           {influence && (
             <section className="mx-auto max-w-6xl px-5 pt-8 sm:px-8">
               <div className="rounded-xl border border-gold/30 bg-gold/10 p-5 sm:p-6">

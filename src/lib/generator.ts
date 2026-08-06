@@ -7,7 +7,7 @@ import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
 import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
-import { isUncertaintyStatement, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
+import { isUncertaintyStatement, possibleDisclosure, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
 // ---------------------------------------------------------------------------
@@ -944,7 +944,7 @@ function buildScopeItems(data: IntakeData) {
 
 // Free-text responsibilities become phrase fragments. Fragments that read as
 // role statements or third-party narration are dropped rather than templated.
-function splitResponsibilityText(value: string) {
+function splitResponsibilityText(value: string, data?: IntakeData) {
   const text = value;
   // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
   // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
@@ -963,14 +963,42 @@ function splitResponsibilityText(value: string) {
     // took." reached the résumé, summary and LinkedIn summary as one bullet.
     // Look back TWO characters instead: a run of dots means an ellipsis.
     .split(/\n|;|(?<!\.\.)(?<=[.!?])\s+/)
-    .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
+    .map((item) => normalizeSentenceItem(item))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
+    // A sentence the classifier flagged waits for the user. It is NOT altered
+    // and NOT removed from their intake — it simply does not enter the draft
+    // until they resolve it. An explicit keep puts it straight back.
+    .filter((item) => {
+      if (!possibleDisclosure(item)) return true;
+      // Both sides MUST run through the same normalizer. They did not: the
+      // approval list carries the user's raw sentence ("I was laid off after I
+      // completed the certification.") while `item` has already had its leading
+      // "I " and terminal period stripped. The two could never be equal, so an
+      // explicit Keep authorised nothing and the sentence stayed withheld —
+      // silently, which is the failure mode this lifecycle exists to prevent.
+      const approved = (data?.disclosureApproved ?? []).map((entry) =>
+        normalizeSentenceItem(entry).toLowerCase()
+      );
+      return approved.includes(item.toLowerCase());
+    })
     .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
     // The narration filter that used to sit here DELETED any sentence mentioning
     // "my manager", "they", "me" and so on. It destroyed true statements —
     // "Reported to my manager and the shift lead." vanished from every surface —
     // while the leftover token "manager" separately authorised an unrelated
     // canned claim. Narration is the user's own wording and is kept.
+}
+
+/**
+ * The single canonical form for a typed sentence. Used both when splitting the
+ * user's intake into items and when matching their Keep decisions against those
+ * items, so the two can never drift apart.
+ */
+function normalizeSentenceItem(item: string) {
+  return cleanWhitespace(item)
+    .replace(/[.!?]+$/, "")
+    .replace(/^(i|we)\s+(also\s+)?/i, "")
+    .replace(/^(and|or|plus|also)\s+/i, "");
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
@@ -997,7 +1025,7 @@ function buildUserResponsibilityList(data: IntakeData) {
     // names a sector, not a duty — rendering it as a responsibility produced
     // fused fake bullets like "Supported Escalation handling, Retail, and the
     // shift lead."
-    ...splitResponsibilityText(data.responsibilities).map(normalizeResponsibility)
+    ...splitResponsibilityText(data.responsibilities, data).map(normalizeResponsibility)
   ])
     .filter((item) => !looksLikeNarrationFragment(item))
     .slice(0, 10);

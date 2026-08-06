@@ -54,6 +54,15 @@ export type DossierEvidenceRecord = {
   disclosureReview?: "needs_review" | "keep" | "exclude";
   /** Why the hand went up. Preserved separately so the receipt never guesses. */
   disclosureReason?: DisclosureReason;
+  /**
+   * The EXACT text the user saw when they resolved the flag. A resolution
+   * belongs to the version that was reviewed, not to an id that may later
+   * hold different words: keep a sentence, then edit it into something newly
+   * sensitive, and the old "keep" must not silently authorise the new text.
+   * When this no longer matches `detail`, the resolution is stale and the
+   * record returns to needs_review.
+   */
+  disclosureReviewedText?: string;
   sourceFilenames: string[];
   sourceExcerpts: string[];
   createdAt: string;

@@ -6,7 +6,7 @@ import {
 import {
   containsTerminationReason,
   isUncertaintyStatement,
-  stripTerminationReasons
+  withholdSeparationFromGeneratedProse
 } from "@/lib/truth-guards";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
@@ -39,14 +39,36 @@ export type EvidenceAdmissibility =
  * The record is never deleted and its text is never altered — the only thing
  * the flag changes is whether generation may draw on it yet.
  */
-export function isUsableEvidence(item: { approved: boolean; rejected: boolean; disclosureReview?: string }): boolean {
+type ReviewableEvidence = {
+  approved: boolean;
+  rejected: boolean;
+  detail?: string;
+  disclosureReview?: string;
+  disclosureReviewedText?: string;
+};
+
+/**
+ * A resolution is STALE when the text has changed since the user reviewed it.
+ * Keeping a sentence and then editing it into something newly sensitive must
+ * not inherit the old approval — the decision belonged to the words that were
+ * on screen.
+ */
+export function disclosureResolutionIsStale(item: ReviewableEvidence): boolean {
+  if (item.disclosureReview !== "keep" && item.disclosureReview !== "exclude") return false;
+  if (item.disclosureReviewedText === undefined) return false;
+  return item.disclosureReviewedText !== (item.detail ?? "");
+}
+
+export function isUsableEvidence(item: ReviewableEvidence): boolean {
   if (!item.approved || item.rejected) return false;
-  return item.disclosureReview !== "needs_review" && item.disclosureReview !== "exclude";
+  if (item.disclosureReview === "needs_review" || item.disclosureReview === "exclude") return false;
+  // A stale "keep" is not a keep.
+  return !disclosureResolutionIsStale(item);
 }
 
 /** Flagged and still undecided — an export must surface these, not guess. */
-export function needsDisclosureReview(item: { disclosureReview?: string }): boolean {
-  return item.disclosureReview === "needs_review";
+export function needsDisclosureReview(item: ReviewableEvidence): boolean {
+  return item.disclosureReview === "needs_review" || disclosureResolutionIsStale(item);
 }
 
 const PROFESSIONAL_KINDS = new Set<EvidenceKind>([
@@ -286,7 +308,10 @@ function targetRoleValues(detail: string): string[] {
 }
 
 export function sanitizeProfessionalLine(value: string): string {
-  const stripped = stripTerminationReasons(value).text.trim();
+  // Sanitization runs over STORED product artifacts during migration, where no
+  // user is present to resolve a flag — so a separation sentence is dropped
+  // whole rather than trimmed down to a salvaged clause.
+  const stripped = withholdSeparationFromGeneratedProse(value).trim();
   if (!stripped) return "";
   return classifyEvidenceAdmissibility(stripped) === "claim" ? stripped : "";
 }

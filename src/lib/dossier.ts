@@ -1,5 +1,6 @@
 import { initialIntake } from "@/lib/career-data";
 import { possibleDisclosure } from "@/lib/truth-guards";
+import { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } from "@/lib/evidence-admissibility";
 import type { IntakeData } from "@/types/career";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
 import type { DisclosureReason } from "@/lib/truth-guards";
@@ -944,6 +945,78 @@ export function withRoleResponsibilitiesEdited(
     }),
     approvedClaims: [...new Set([...dossier.approvedClaims, ...responsibilities])].filter(
       (item) => !removedText.has(norm(item))
+    ),
+    updatedAt: nowIso
+  };
+}
+
+
+/**
+ * Makes the GUIDED path use the canonical evidence lifecycle instead of a
+ * second one of its own.
+ *
+ * The guided textarea used to flow straight into generation, so a flagged
+ * sentence had no durable record to be flagged ON, nowhere to be resolved, and
+ * nothing to audit — it simply appeared in a bullet. Rather than build a
+ * guided-only review mechanism (two lifecycles that would eventually
+ * disagree), the intake is filtered against the records the dossier already
+ * holds: a sentence whose evidence is unresolved, excluded, or carrying a
+ * stale resolution is withheld from generation exactly as it would be on the
+ * dossier path.
+ *
+ * The user's text is NEVER altered here. Whole sentences are withheld or they
+ * are not; nothing is trimmed, and the intake the user typed is untouched in
+ * storage.
+ */
+export function intakeEligibleForGeneration(intake: IntakeData, dossier: CareerDossier): IntakeData {
+  const blocked = new Map<string, DossierEvidenceRecord>();
+  for (const record of dossier.evidence) {
+    if (record.kind !== "responsibility" && record.kind !== "proof" && record.kind !== "metric") continue;
+    if (isUsableEvidence(record)) continue;
+    if (!record.disclosureReview && !disclosureResolutionIsStale(record)) continue;
+    blocked.set(record.detail.trim().toLowerCase(), record);
+  }
+  // Records the user explicitly KEPT become the approval list, so a flagged
+  // sentence they confirmed goes straight back into the draft.
+  const approved = dossier.evidence
+    .filter((record) => record.disclosureReview === "keep" && !disclosureResolutionIsStale(record))
+    .map((record) => record.detail);
+
+  if (!blocked.size) return approved.length ? { ...intake, disclosureApproved: approved } : intake;
+
+  const withhold = (text: string): string =>
+    text
+      .split(/\n/)
+      .filter((line) => !blocked.has(line.trim().toLowerCase()))
+      .join("\n");
+
+  return {
+    ...intake,
+    disclosureApproved: approved,
+    responsibilities: withhold(intake.responsibilities),
+    outcomes: withhold(intake.outcomes),
+    customRoleNotes: withhold(intake.customRoleNotes)
+  };
+}
+
+/** Records the guided path has flagged and the user has not yet resolved. */
+export function pendingDisclosureReviews(dossier: CareerDossier): DossierEvidenceRecord[] {
+  return dossier.evidence.filter((record) => needsDisclosureReview(record));
+}
+
+/** Resolves one flagged record, binding the decision to the reviewed text. */
+export function resolveDisclosure(
+  dossier: CareerDossier,
+  evidenceId: string,
+  decision: "keep" | "exclude",
+  nowIso = new Date().toISOString()
+): CareerDossier {
+  return {
+    ...dossier,
+    evidence: dossier.evidence.map((record) =>
+      record.id === evidenceId
+        ? { ...record, disclosureReview: decision, disclosureReviewedText: record.detail, updatedAt: nowIso }
+        : record
     ),
     updatedAt: nowIso
   };

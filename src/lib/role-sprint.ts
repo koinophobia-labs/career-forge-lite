@@ -1,7 +1,7 @@
 import { createId } from "@/lib/command-center-store";
 import { evidenceRecord } from "@/lib/dossier";
 import { requiredYearsFromRequirement, type RequirementMatch } from "@/lib/job-post-analyzer";
-import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
+import { isUncertaintyStatement, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import type {
   CommandCenterState,
   RoleSprintOutputs,
@@ -249,7 +249,12 @@ function firstMeaningfulLine(text: string): string {
 // A short, safe excerpt of the user's own submission: first meaningful line,
 // termination reasons stripped, cut at a sentence/word boundary.
 export function sprintWorkExcerpt(userWork: string, maxChars = WORK_EXCERPT_MAX_CHARS): string {
-  const line = stripTerminationReasons(firstMeaningfulLine(userWork)).text.trim();
+  // The excerpt is quoted INTO product-authored prose ("Work produced: …"), so
+  // the product owns what it repeats. stripTerminationReasons no longer mutates
+  // anything, which left "until I was laid off in June 2026" riding into the
+  // portfolio summary. Whole sentences are dropped instead of being trimmed —
+  // the surrounding sentences of the user's own work still come through.
+  const line = withholdSeparationFromGeneratedProse(firstMeaningfulLine(userWork)).trim();
   if (line.length <= maxChars) return line;
   const sentenceEnd = line.slice(0, maxChars).match(/^[\s\S]*[.!?](?=\s|$)/)?.[0];
   if (sentenceEnd && sentenceEnd.length >= 40) return sentenceEnd.trim();
@@ -287,8 +292,8 @@ export function sprintEvidenceFromWork(sprint: RoleSprintRecord, userWork: strin
   const target = [sprint.roleTitle, sprint.company].filter(Boolean).join(" at ");
   const detail =
     `Completed a self-directed ${noun} (Role Sprint, labeled practice work — separate from employment history)` +
-    `${target ? ` while preparing an application for ${target}` : ""}, addressing the job requirement "${sprint.requirement}". ` +
-    `Work produced: ${excerpt}`;
+    `${target ? ` while preparing an application for ${target}` : ""}, addressing the job requirement "${sprint.requirement}".` +
+    (excerpt ? ` Work produced: ${excerpt}` : "");
   return evidenceRecord(
     sprint.sprintType === "build" ? "project" : "proof",
     detail,
@@ -297,7 +302,10 @@ export function sprintEvidenceFromWork(sprint: RoleSprintRecord, userWork: strin
     nowIso,
     {
       label: `Role Sprint ${noun}`,
-      sourceText: stripTerminationReasons(userWork.trim()).text.slice(0, SOURCE_EXCERPT_MAX_CHARS),
+      // Provenance: the user's own submission, stored verbatim. Nothing is
+      // withheld here — this is the record of what they actually wrote, and
+      // altering it would make the provenance trail a lie.
+      sourceText: userWork.trim().slice(0, SOURCE_EXCERPT_MAX_CHARS),
       confidence: "high"
     }
   );
@@ -338,12 +346,13 @@ export function generateSprintOutputs(
   const requirement = shortRequirement(sprint.requirement);
   const target = [sprint.roleTitle, sprint.company].filter(Boolean).join(" at ");
   const supporting = sprintSupportingEvidence(sprint, dossier);
-  const supportingDetail = supporting[0] ? stripTerminationReasons(supporting[0].detail).text : "";
+  const supportingDetail = supporting[0] ? withholdSeparationFromGeneratedProse(supporting[0].detail) : "";
 
   const portfolioTitle = `${sprint.title} — ${noun}`;
   const portfolioSummary =
     `A ${noun} completed as a bounded Role Sprint${target ? ` while preparing an application for ${target}` : ""}. ` +
-    `It addresses the posting requirement "${requirement}". What was produced: ${excerpt} ` +
+    `It addresses the posting requirement "${requirement}".` +
+    (excerpt ? ` What was produced: ${excerpt} ` : " ") +
     `Labeled as self-directed practice, separate from employment history.` +
     (supportingDetail ? ` It builds on approved evidence: "${supportingDetail}".` : "");
 
