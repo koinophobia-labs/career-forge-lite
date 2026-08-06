@@ -260,5 +260,42 @@ check("career workflow analytics are event-name only", /function trackCareerEven
   );
 }
 
+// --- Role identity, ordering and merge fidelity (second-review regressions) ---------
+// All three were INTRODUCED by the first version of the id-adoption fix and
+// found by the independent review of PR #58.
+{
+  const NOW2 = "2026-08-06T00:00:00.000Z";
+  const base = (o) => ({ ...intake, ...o });
+
+  // Dates are part of a role's identity: two stints at one employer must stay
+  // two records, or one stint's work is exported under the other's dates.
+  let d = mergeIntakeIntoDossier(emptyState().dossier, base({ currentTitle: "Associate", currentCompany: "Northwind", currentTime: "Jun 2021 - Dec 2023", responsibilities: "Answered the overnight support line." }), "guided", true, "", NOW2);
+  d = mergeIntakeIntoDossier(d, base({ currentTitle: "Associate", currentCompany: "Northwind", currentTime: "Jan 2024 - present", responsibilities: "Reconciled the vendor invoice queue every Friday." }), "guided", true, "", NOW2);
+  check("two stints at one employer stay two roles", d.roles.length === 2, JSON.stringify(d.roles.map((r) => [r.employer, r.startDate])));
+  check(
+    "each stint keeps its own dates",
+    d.roles.some((r) => r.startDate === "Jun 2021 - Dec 2023") && d.roles.some((r) => r.startDate === "Jan 2024 - present"),
+    JSON.stringify(d.roles.map((r) => r.startDate))
+  );
+
+  // Employment order is meaning; an unedited re-run must not invert it.
+  let e = mergeIntakeIntoDossier(emptyState().dossier, base({ currentTitle: "Barista", currentCompany: "Bean Street", currentTime: "2023-present", responsibilities: "Pulled espresso shots.", previousTitle: "Cashier", previousCompany: "Fresh Market", previousTime: "2021-2023" }), "guided", true, "", NOW2);
+  const orderBefore = e.roles.map((r) => `${r.title}·${r.employer}`).join("|");
+  e = mergeIntakeIntoDossier(e, intakeFromDossier(e, "Operations"), "guided", true, "", NOW2);
+  check("an unedited re-run preserves employment order", e.roles.map((r) => `${r.title}·${r.employer}`).join("|") === orderBefore, `${orderBefore} -> ${e.roles.map((r) => `${r.title}·${r.employer}`).join("|")}`);
+
+  // Adoption must MERGE onto the stored role, not replace it.
+  const stored = {
+    ...emptyState().dossier,
+    roles: [{ id: "role-x", title: "Shift Lead", employer: "Fresh Market", startDate: "Mar 2021", endDate: "Aug 2024", current: false, responsibilities: ["Counted the safe at close", "Ran the morning huddle"], tools: ["POS", "Kronos"], outcomes: ["Cut shrink 8%"], evidenceIds: ["ev1"] }]
+  };
+  const merged = mergeIntakeIntoDossier(stored, base({ currentTitle: "Shift Lead", currentCompany: "Fresh Market", currentTime: "Mar 2021", responsibilities: "Counted the safe at close" }), "guided", true, "", NOW2);
+  const kept = merged.roles.find((r) => r.id === "role-x");
+  check("adoption preserves the stored end date", kept && kept.endDate === "Aug 2024", JSON.stringify(kept && kept.endDate));
+  check("adoption preserves stored tools and outcomes", kept && kept.tools.includes("POS") && kept.outcomes.includes("Cut shrink 8%"), JSON.stringify(kept && [kept.tools, kept.outcomes]));
+  check("adoption preserves duties the intake pass did not carry", kept && kept.responsibilities.includes("Ran the morning huddle"), JSON.stringify(kept && kept.responsibilities));
+  check("adoption preserves earned evidence links", kept && kept.evidenceIds.includes("ev1"), JSON.stringify(kept && kept.evidenceIds));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

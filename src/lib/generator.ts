@@ -21,6 +21,30 @@ import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/ty
  * names removed. A title says who someone was called, not what they did, so it
  * must not authorise an activity claim — see buildResponsibilityList.
  */
+/**
+ * Removes NEGATED clauses before text is used as grounding evidence.
+ *
+ * Grounding matched raw text with no notion of polarity, so a denial licensed
+ * the very claim it denied: "I never handled cash" produced the skill Cash
+ * Handling and the summary line "Strengths the candidate reports include cash
+ * Handling"; "I am not forklift certified" produced Equipment Operation; "I
+ * never had to escalate a single ticket" produced "Escalated customer issues
+ * to leads or managers." The words are the user's, but the claim is its
+ * opposite.
+ *
+ * A clause carrying not / never / no / n't contributes nothing to grounding.
+ * Its text still reaches the résumé verbatim through the responsibility path —
+ * this only stops it AUTHORISING derived claims. Dropping a clause can at
+ * worst under-claim, which is the safe direction.
+ */
+export function withoutNegatedClauses(text: string): string {
+  if (!text) return "";
+  return text
+    .split(/(?<=[.!?;:,])\s+|\n|\s+\b(?:and|but|though|although|however|while|because|so)\b\s+/i)
+    .filter((clause) => !/\b(?:not|never|no|none|neither|nor|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(clause))
+    .join(" ");
+}
+
 export function buildActivityCorpus(data: IntakeData) {
   return [
     // data.tools is deliberately ABSENT. Naming a tool says what was in reach,
@@ -47,6 +71,7 @@ export function buildActivityCorpus(data: IntakeData) {
     ...data.selectedIndependentWorkSignals,
     ...data.selectedAiWorkflows
   ]
+    .map((value) => withoutNegatedClauses(value ?? ""))
     .join(" ")
     .toLowerCase();
 }
@@ -904,7 +929,10 @@ function splitResponsibilityText(value: string) {
   // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
   // is one claim and stays one claim.
   return text
-    .split(/\n|;|(?<=[.!?])\s+/)
+    // An ellipsis is not a sentence boundary. Splitting on its final dot tore
+    // "Closed, counted, locked up... every single night." into two claims,
+    // deleted the "...", and rejoined the halves with an invented "and".
+    .split(/\n|;|(?<![.!?])(?<=[.!?])\s+/)
     .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
     .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
@@ -1011,6 +1039,9 @@ function looksLikeSkillLabel(skill: string) {
   if (/^(i|we|my|our)\b/i.test(skill)) return false;
   if (skill.split(/\s+/).length > 5) return false;
   if (/\b(me|them|they|was|were|about|because)\b/i.test(skill)) return false;
+  // A denial is never a skill. "I never handled cash" was reaching CORE SKILLS
+  // as the literal entry "never handled cash".
+  if (/\b(?:not|never|no|none|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(skill)) return false;
   return true;
 }
 
@@ -1893,7 +1924,13 @@ const verbLedPhrase =
 // misread as a noun label and wrapped in an invented "Supported " lead, so
 // "Mopped." rendered as "Supported mopped."
 function isVerbLed(line: string) {
-  const first = cleanWhitespace(line).split(/\s+/)[0] ?? "";
+  // Strip punctuation clinging to the first word before testing it. A user who
+  // writes a comma-separated list — "Mopped, swept, wiped." — gives a first
+  // token of "Mopped," and the -ed/-ing test, being anchored at $, failed on
+  // the comma. The line was then judged a bare noun label and shipped as the
+  // fabricated bullet "Supported Mopped, swept, wiped." Those verbs are
+  // precisely the ones the suffix fallback exists to catch.
+  const first = (cleanWhitespace(line).split(/\s+/)[0] ?? "").replace(/[^A-Za-z'’-]/g, "");
   return verbLedPhrase.test(line) || /^[a-z]{3,}(ed|ing)$/i.test(first);
 }
 
@@ -1902,7 +1939,14 @@ function isVerbLed(line: string) {
 // label, and treating them as labels produced fabricated leads like
 // "Supported It was hectic." Detected structurally — no verb whitelist.
 function readsAsClause(line: string) {
-  return /\b(?:it|they|them|we|he|she|you|i)\b/i.test(line) || /\b(?:is|was|were|are|am|be|been|being)\b/i.test(line);
+  return (
+    /\b(?:it|they|them|we|he|she|you|i)\b/i.test(line) ||
+    /\b(?:is|was|were|are|am|be|been|being)\b/i.test(line) ||
+    // A negation is a statement about what did NOT happen, never a chip label.
+    // "never handled cash" was short enough to pass as a bare label and came
+    // back as the fabricated bullet "Supported never handled cash."
+    /\b(?:not|never|no|none|without)\b|\b[A-Za-z]+n['’]?t\b/i.test(line)
+  );
 }
 
 // A line may take the "Supported …" lead ONLY when it is unmistakably a bare

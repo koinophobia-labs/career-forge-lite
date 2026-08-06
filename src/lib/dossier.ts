@@ -399,13 +399,33 @@ export function mergeIntakeIntoDossier(
   // drop heading-only lanes that duplicate an already-recorded role — the
   // previous/additional lanes are heading-only by design and must never
   // shadow a recorded role with an empty copy.
+  const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const adoptExisting = (role: DossierRole): DossierRole => {
+    // DATES ARE PART OF THE IDENTITY. Matching on title+employer alone fused
+    // two genuinely separate stints at one employer — "Associate, Jun 2021 -
+    // Dec 2023" and "Associate, Jan 2024 - present" — into one record, and the
+    // later stint's work was exported under the earlier stint's dates.
     const existing = current.roles.find(
       (item) =>
-        item.title.toLowerCase() === role.title.toLowerCase() &&
-        item.employer.toLowerCase() === role.employer.toLowerCase()
+        sameText(item.title, role.title) &&
+        sameText(item.employer, role.employer) &&
+        sameText(item.startDate, role.startDate)
     );
-    return existing ? { ...role, id: existing.id, evidenceIds: [...existing.evidenceIds] } : role;
+    if (!existing) return role;
+    // MERGE onto the stored role rather than replacing it. Overwriting wiped
+    // the end date, tools, outcomes and any duties recorded on /profile that
+    // this intake pass did not happen to carry.
+    return {
+      ...existing,
+      title: role.title || existing.title,
+      employer: role.employer || existing.employer,
+      startDate: role.startDate || existing.startDate,
+      current: role.current || existing.current,
+      responsibilities: compact([...existing.responsibilities, ...role.responsibilities]),
+      tools: compact([...existing.tools, ...role.tools]),
+      outcomes: compact([...existing.outcomes, ...role.outcomes]),
+      evidenceIds: [...new Set([...existing.evidenceIds, ...role.evidenceIds])]
+    };
   };
   const roles = intakeLanes.map(adoptExisting).filter((role, index, all) => {
     const alreadyRecorded = current.roles.some((item) => item.id === role.id);
@@ -494,7 +514,15 @@ export function mergeIntakeIntoDossier(
       phone: intake.phone.trim() || current.identity.phone,
       links: compact([...current.identity.links, intake.website])
     },
-    roles: [...current.roles.filter((item) => !roles.some((role) => role.id === item.id)), ...roles],
+    // Order is meaning: a résumé's employment history is read top-down.
+    // Appending updated roles to the end inverted it — one unedited re-run of
+    // the builder moved the previous job above the current one, and the
+    // builder then prefilled the old job as "current". Roles the dossier
+    // already knows keep their position; only genuinely new ones are appended.
+    roles: [
+      ...current.roles.map((item) => roles.find((role) => role.id === item.id) ?? item),
+      ...roles.filter((role) => !current.roles.some((item) => item.id === role.id))
+    ],
     projects,
     education,
     responsibilities: compact([...current.responsibilities, ...responsibilities]),

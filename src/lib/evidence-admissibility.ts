@@ -158,14 +158,14 @@ function hasSelfDeclaredGapClause(value: string): boolean {
     // stable set — unlike the open set of things people do at work, which is
     // why the verb is not otherwise named.
     if (new RegExp(`^\\W*(?:${ACHIEVEMENT_VERBS})\\b`, "i").test(rest)) continue;
+    // A NAMED EVIDENCE NOUN is required. Treating any first-person "never" as
+    // a gap was too blunt: it quarantined true achievements — "I never had to
+    // escalate a single ticket", "I never missed a shift" — and deleted them
+    // from the résumé while telling the user they were "not career-material
+    // content". Withholding a real accomplishment is its own truth failure.
+    // "I have never trained anyone" is still caught, because "anyone" is a gap
+    // object; "…closed the register on my own" is not, and stays a claim.
     if (GAP_OBJECTS.test(object)) return true;
-    // A named evidence noun is the clearest case, but not the only one.
-    // "I have never trained anyone" / "I have never closed the register on my
-    // own" were classified as claims and then printed as résumé bullets
-    // asserting the opposite of what the user said. With bad-outcome verbs
-    // excluded above, a first-person "never" IS the candidate reporting
-    // something they have not done.
-    if (FIRST_PERSON.test(subject) && /^never$/i.test(match[0])) return true;
   }
   return false;
 }

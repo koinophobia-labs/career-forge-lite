@@ -252,14 +252,91 @@ for (const [title, company, typed] of [
 for (const gapText of [
   "I have never trained anyone",
   "Never trained anyone",
-  "I have never closed the register on my own",
   "I have never written a report"
 ]) {
   expect(`self-declared gap withheld: "${gapText}"`, classifyEvidenceAdmissibility(gapText) !== "claim", classifyEvidenceAdmissibility(gapText));
 }
+// A negation that names no evidence noun ("…closed the register on my own")
+// stays a claim. Treating EVERY first-person "never" as a gap was tried and
+// reverted: it quarantined true achievements ("I never had to escalate a
+// single ticket") and deleted them from the résumé, which is its own truth
+// failure. The invariant that actually matters is that the claim is never
+// INVERTED — the sentence may be printed as the user wrote it, but its
+// affirmative twin must never be manufactured.
 // …while negating a BAD OUTCOME stays an accomplishment.
 for (const achievement of ["I did not lose any data", "I never missed a deadline", "We did not have a security breach on the platform"]) {
   expect(`achievement stays a claim: "${achievement}"`, classifyEvidenceAdmissibility(achievement) === "claim", classifyEvidenceAdmissibility(achievement));
+}
+
+// ═══════════════════════════════════════════════ RA-P0-05
+// Fixtures from the SECOND independent adversarial review (of PR #58 on the
+// integrated branch). It returned FAIL on three of four lenses and found two
+// P0s that #58 had INTRODUCED. Kept verbatim so they cannot come back.
+H("RA-P0-05 — findings from the second independent review");
+
+// (a) INTRODUCED BY #58: a comma-separated verb list got an invented lead.
+// isVerbLed read the first token WITH its comma ("Mopped,") and its -ed/-ing
+// test is $-anchored, so the line was judged a bare noun label.
+for (const typed of [
+  "Mopped, swept, wiped.",
+  "Vacuumed, dusted, polished.",
+  "Bussed, wiped, reset.",
+  "Folded, hung, tagged.",
+  "Bathed, dressed, fed."
+]) {
+  const out = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate Market", currentTime: "2022 - 2025", responsibilities: typed });
+  expect(`comma-separated verb list keeps its own lead: "${typed}"`, out.includes(typed), JSON.stringify(out));
+  expect(`  no invented "Supported" lead on "${typed}"`, !out.some((b) => b.startsWith("Supported ")), JSON.stringify(out));
+}
+
+// (b) INTRODUCED BY #58: an ellipsis was read as a sentence boundary, so one
+// sentence became two claims rejoined with an invented "and".
+{
+  const typed = "Closed, counted, locked up... every single night.";
+  const out = bulletsFor({ currentTitle: "Sales Associate", currentCompany: "Northgate Market", currentTime: "2022 - 2025", responsibilities: typed });
+  expect("an ellipsis does not split one sentence into two claims", out.length === 1, JSON.stringify(out));
+  expect("  the halves are not rejoined with an invented \"and\"", !out.some((b) => /locked up and every single night/i.test(b)), JSON.stringify(out));
+  expect("  no invented \"Supported\" lead", !out.some((b) => b.startsWith("Supported ")), JSON.stringify(out));
+}
+
+// (c) A DENIAL must never ground its own affirmative. Grounding had no notion
+// of polarity: "I never handled cash" produced the skill Cash Handling, "I am
+// not forklift certified" produced Equipment Operation, and "I never had to
+// escalate a single ticket" produced the canned bullet "Escalated customer
+// issues to leads or managers."
+for (const [typed, forbiddenSkill, forbiddenBullet] of [
+  ["I never used a register or handled cash.", "Cash Handling", /^Processed payments/],
+  ["I am not forklift certified and never drove one.", "Equipment Operation", null],
+  ["I never had to escalate a single ticket.", "Issue Escalation", /^Escalated /]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Associate", currentCompany: "Northgate", currentTime: "2022 - 2025", responsibilities: typed }));
+  const out = pkg.experience.flatMap((r) => r.bullets);
+  expect(`denial does not mint "${forbiddenSkill}": "${typed}"`, !pkg.coreSkills.includes(forbiddenSkill), JSON.stringify(pkg.coreSkills));
+  expect(`  denial is not listed as a skill verbatim`, !pkg.coreSkills.some((s) => /\b(?:not|never)\b/i.test(s)), JSON.stringify(pkg.coreSkills));
+  expect(`  denial gets no invented "Supported" lead`, !out.some((b) => b.startsWith("Supported ")), JSON.stringify(out));
+  if (forbiddenBullet) {
+    expect(`  denial does not emit ${forbiddenBullet.source}`, !out.some((b) => forbiddenBullet.test(b)), JSON.stringify(out));
+  }
+}
+// …and the positive controls must still ground, or the filter is over-broad.
+// (Title must match an occupation profile, or no skills are derived at all and
+// the control would pass vacuously.)
+for (const [typed, expectedSkill] of [
+  ["Handled cash at the register every shift.", "Cash Handling"],
+  ["Coordinated with coworkers during the dinner rush.", "Team Coordination"]
+]) {
+  const pkg = generateResumePackage(intake({ currentTitle: "Sales Associate", currentCompany: "Northgate Market", currentTime: "2022 - 2025", responsibilities: typed }));
+  expect(`positive statement still grounds "${expectedSkill}"`, pkg.coreSkills.includes(expectedSkill), JSON.stringify(pkg.coreSkills));
+}
+
+// (d) A true achievement phrased with "never" must NOT be quarantined. The
+// first attempt at (c)'s sibling rule treated every first-person "never" as a
+// gap and deleted real accomplishments from the résumé.
+for (const achievement of [
+  "I never had to escalate a single ticket",
+  "I never missed a shift in two years"
+]) {
+  expect(`achievement phrased with "never" is not quarantined: "${achievement}"`, classifyEvidenceAdmissibility(achievement) === "claim", classifyEvidenceAdmissibility(achievement));
 }
 
 L();
