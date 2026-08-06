@@ -1,5 +1,6 @@
 import { classifyEvidenceAdmissibility, isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
+import { isUsableEvidence } from "@/lib/evidence-admissibility";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
@@ -31,19 +32,15 @@ function withheldReason(item: DossierEvidenceRecord): string {
 // with the reason a job ended. Documents get the same fact in résumé voice,
 // and termination reasons are withheld (and reported as withheld, so the
 // omission is visibly deliberate).
-function cleanFact(detail: string): { text: string; withheld: boolean; withheldLabel?: string } {
+function cleanFact(detail: string): { text: string; withheld: boolean } {
   const stripped = stripTerminationReasons(detail);
   const voiced = toResumeVoice(stripped.text)
     .replace(/\s{2,}/g, " ")
     .replace(/[.;,\s]+$/, "");
-  // The receipt must name the ACTUAL reason. Every withholding was labelled
-  // "Reason for leaving a role", so a home-care duty removed by the personal
-  // disclosure guard was reported to the user as a separation reason — a lie
-  // about their own document.
-  const withheldLabel = stripped.category === "personal"
-    ? "Personal circumstances (never résumé content)"
-    : "Reason for leaving a role (never résumé content)";
-  return { text: voiced, withheld: stripped.withheld, withheldLabel };
+  // Nothing is withheld by a heuristic any more — the classifier cannot mutate
+  // text and cannot decide. Exclusions come from the user's own resolution of
+  // a needs_review item, and are reported as such by the receipt.
+  return { text: voiced, withheld: stripped.withheld };
 }
 
 // "Tools: Workday, Kronos, and some Excel from class" is ONE evidence record
@@ -97,7 +94,7 @@ function bulletsFromEvidence(item: DossierEvidenceRecord, withheld: string[]): s
     .slice(0, 3)
     .flatMap((line) => {
       const cleaned = cleanFact(line);
-      if (cleaned.withheld) withheld.push(cleaned.withheldLabel ?? "Withheld from this document");
+      if (cleaned.withheld) withheld.push("Withheld from this document");
       if (!cleaned.text || cleaned.text.split(/\s+/).length < 2) return [];
       return [cleaned.text];
     });
@@ -128,7 +125,7 @@ function approvedEvidence(dossier: CareerDossier): DossierEvidenceRecord[] {
   // résumé, its evidence references and the pack receipt, and rendered in the
   // /versions editor and evidence drawer. The exported file stayed clean only
   // because sanitizeResumeForProfessionalUse catches it at the export boundary.
-  return dossier.evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item));
+  return dossier.evidence.filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item));
 }
 
 function evidenceByIds(approved: DossierEvidenceRecord[], ids: string[]): DossierEvidenceRecord[] {
@@ -175,7 +172,7 @@ function buildLaneResume(
   // listing them would turn every ordinary pack receipt into a false refusal.
   dossier.evidence
     .filter((item) =>
-      item.approved && !item.rejected &&
+      isUsableEvidence(item) &&
       item.kind !== "goal" && item.kind !== "constraint" && item.kind !== "identity" &&
       !isProfessionalEvidence(item))
     .forEach((item) => withheldFacts.push(withheldReason(item)));
@@ -214,7 +211,7 @@ function buildLaneResume(
   const summaryEvidence = proof.slice(0, kind === "ats" ? 2 : 3);
   const summaryFacts = summaryEvidence.flatMap((item) => {
     const cleaned = cleanFact(item.detail.split(/\n/)[0]);
-    if (cleaned.withheld) withheldFacts.push(cleaned.withheldLabel ?? "Withheld from this document");
+    if (cleaned.withheld) withheldFacts.push("Withheld from this document");
     return cleaned.text ? [cleaned.text] : [];
   });
   const summary = summaryFacts.length
@@ -290,7 +287,7 @@ function buildLaneResume(
       const exact = support.filter((item) => item.detail.toLowerCase().includes(bullet.toLowerCase()) || bullet.toLowerCase().includes(item.detail.toLowerCase()));
       if (!exact.length) return [];
       const cleaned = cleanFact(bullet);
-      if (cleaned.withheld) withheldFacts.push(cleaned.withheldLabel ?? "Withheld from this document");
+      if (cleaned.withheld) withheldFacts.push("Withheld from this document");
       if (!cleaned.text) return [];
       mapClaim(cleaned.text, exact.map((item) => item.id));
       return [cleaned.text];
@@ -486,7 +483,7 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       .filter((entry) => !isUncertaintyStatement(entry) && !isIdentityFact(entry, identityValues) && !looksLikeHeading(entry))
       .flatMap((entry) => {
         const cleaned = cleanFact(entry);
-        if (cleaned.withheld) withheld.push(cleaned.withheldLabel ?? "Withheld from this document");
+        if (cleaned.withheld) withheld.push("Withheld from this document");
         return cleaned.text ? [cleaned.text] : [];
       })
   );
@@ -506,12 +503,29 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
         })() : "Approve proof points before drafting a cover letter.",
     receipt: {
       id: `${id}-receipt`, generatedAt: nowIso, evidenceUsed: used,
-      evidenceOmitted: approved.filter((item) => !used.includes(item.id)).map((item) => item.id),
+      // Unresolved items are not "omitted" — nobody has decided yet. Counting
+      // them as omitted would be the product answering a question it just
+      // asked the user.
+      evidenceOmitted: approved
+        .filter((item) => !used.includes(item.id) && item.disclosureReview !== "needs_review")
+        .map((item) => item.id),
       laneFraming: lanePacks.map((lanePack) => ({ laneId: lanePack.laneId, angle: lanePack.positioningPitch })),
       keywordsIncluded: unique(active.flatMap((lane) => lane.keywords).filter((keyword) => approved.some((item) => item.detail.toLowerCase().includes(keyword.toLowerCase())))),
       gapsAvoided: unique(active.flatMap((lane) => lane.gaps)),
+      // Truthful accounting. An exclusion is the USER'S decision, named as
+      // such — the product no longer invents a reason for a disappearance.
+      // Items still awaiting review are reported as awaiting review, and are
+      // counted as neither used nor omitted.
+      itemsExcludedByUser: dossier.evidence.filter((item) => item.disclosureReview === "exclude").length,
+      itemsAwaitingReview: dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length,
       unsupportedClaimsRefused: unique([
         ...withheld,
+        ...(dossier.evidence.some((item) => item.disclosureReview === "exclude")
+          ? [`${dossier.evidence.filter((item) => item.disclosureReview === "exclude").length} item(s) excluded by you after review`]
+          : []),
+        ...(dossier.evidence.some((item) => item.disclosureReview === "needs_review")
+          ? [`${dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length} item(s) still awaiting your review`]
+          : []),
         ...unique(omitted).map((role) => `Role omitted (no usable approved detail yet): ${role}`)
       ]),
       transferredClaims: transferred, gapsLeftUnclaimed: unique(active.flatMap((lane) => lane.gaps))

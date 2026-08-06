@@ -1,3 +1,5 @@
+import type { DisclosureReason } from "@/lib/truth-guards";
+
 import type { ResumePackage, TemplateStyle } from "@/types/career";
 
 export type EvidenceKind =
@@ -36,6 +38,22 @@ export type DossierEvidenceRecord = {
   confidence: "high" | "medium" | "low";
   approved: boolean;
   rejected: boolean;
+  /**
+   * Set when a lexical check thinks this MIGHT be a personal disclosure. It is
+   * a question, not a verdict: the text is never altered and the record is
+   * never deleted. Until the user resolves it the record is neither used nor
+   * counted as omitted, rejected, or a separation reason.
+   *
+   *   "needs_review" — flagged, undecided. Excluded from generation, and an
+   *                    export surfaces the review step rather than deciding.
+   *   "keep"         — the user confirmed it describes their work. Used
+   *                    normally, exactly as they wrote it.
+   *   "exclude"      — the user chose to leave it off the résumé. Reported as
+   *                    excluded BY THE USER, with no invented reason.
+   */
+  disclosureReview?: "needs_review" | "keep" | "exclude";
+  /** Why the hand went up. Preserved separately so the receipt never guesses. */
+  disclosureReason?: DisclosureReason;
   sourceFilenames: string[];
   sourceExcerpts: string[];
   createdAt: string;
@@ -150,6 +168,10 @@ export type LanePack = {
 };
 
 export type PackGenerationReceipt = {
+  /** Excluded by the USER after reviewing a disclosure flag. Never a guess. */
+  itemsExcludedByUser?: number;
+  /** Flagged and still undecided; counted as neither used nor omitted. */
+  itemsAwaitingReview?: number;
   id: string;
   generatedAt: string;
   evidenceUsed: string[];

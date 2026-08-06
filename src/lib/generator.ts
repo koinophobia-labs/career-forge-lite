@@ -7,7 +7,7 @@ import { polishResumePackage } from "@/lib/resume-intelligence";
 import { normalizeTransferTarget } from "@/lib/transferable-targets";
 import { buildCareerEvidence } from "@/lib/career-recommendations";
 import { OCCUPATION_TEMPLATES_ENABLED } from "@/lib/occupation-templates";
-import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice } from "@/lib/truth-guards";
+import { isUncertaintyStatement, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage, RoleFamily } from "@/types/career";
 
 // ---------------------------------------------------------------------------
@@ -945,7 +945,7 @@ function buildScopeItems(data: IntakeData) {
 // Free-text responsibilities become phrase fragments. Fragments that read as
 // role statements or third-party narration are dropped rather than templated.
 function splitResponsibilityText(value: string) {
-  const { text } = stripTerminationReasons(value);
+  const text = value;
   // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
   // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
   // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
@@ -1212,7 +1212,7 @@ function buildOutcomeSupport(data: IntakeData) {
   // clause; longer outcome text becomes its own bullet instead (never spliced
   // mid-sentence), and uncertainty statements never become claims.
   const selected = compact(data.selectedOutcomes.filter((outcome) => outcome.split(/\s+/).length <= 4).map((outcome) => outcome.toLowerCase()));
-  const custom = cleanWhitespace(stripTerminationReasons(data.outcomes).text).replace(/^improved\s+/i, "");
+  const custom = cleanWhitespace(data.outcomes).replace(/^improved\s+/i, "");
   if (selected.length) return sentenceList(selected.slice(0, 2));
   if (custom && custom.length <= 60 && !isWeakFreeText(custom) && !isUncertaintyStatement(custom)) return custom;
   return "";
@@ -1221,7 +1221,7 @@ function buildOutcomeSupport(data: IntakeData) {
 // Sentence-like outcome text the user wrote becomes standalone bullets in
 // resume voice (first-person stripped, termination reasons withheld).
 function userOutcomeBullets(data: IntakeData) {
-  const { text } = stripTerminationReasons(data.outcomes);
+  const text = data.outcomes;
   return text
     .split(/(?<=[.!?])\s+|\n+/)
     .map((sentence) => cleanWhitespace(sentence))
@@ -2383,12 +2383,14 @@ export function generateResumePackage(data: IntakeData): ResumePackage {
   // surface, even if it slipped through a free-text field.
   const withGuards = (resume: ResumePackage): ResumePackage => ({
     ...resume,
-    summary: stripTerminationReasons(resume.summary).text,
-    linkedinSummary: stripTerminationReasons(resume.linkedinSummary).text,
-    linkedinHeadline: stripTerminationReasons(resume.linkedinHeadline).text,
+    // Product-authored prose only. The bullets below keep the user's own
+    // sentences exactly as they wrote and resolved them.
+    summary: withholdSeparationFromGeneratedProse(resume.summary),
+    linkedinSummary: withholdSeparationFromGeneratedProse(resume.linkedinSummary),
+    linkedinHeadline: withholdSeparationFromGeneratedProse(resume.linkedinHeadline),
     experience: resume.experience.map((role) => ({
       ...role,
-      bullets: role.bullets.map((bullet) => stripTerminationReasons(bullet).text).filter(Boolean)
+      bullets: role.bullets.filter(Boolean)
     }))
   });
 

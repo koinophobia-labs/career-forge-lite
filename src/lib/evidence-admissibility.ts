@@ -30,6 +30,25 @@ export type EvidenceAdmissibility =
   | "separation_reason"
   | "uncertainty";
 
+/**
+ * Usable in a generated document.
+ *
+ * A record flagged as a possible disclosure is NOT usable until the user has
+ * resolved it: "needs_review" waits for them, "exclude" is their decision to
+ * leave it off, "keep" is their confirmation that it describes their work.
+ * The record is never deleted and its text is never altered — the only thing
+ * the flag changes is whether generation may draw on it yet.
+ */
+export function isUsableEvidence(item: { approved: boolean; rejected: boolean; disclosureReview?: string }): boolean {
+  if (!item.approved || item.rejected) return false;
+  return item.disclosureReview !== "needs_review" && item.disclosureReview !== "exclude";
+}
+
+/** Flagged and still undecided — an export must surface these, not guess. */
+export function needsDisclosureReview(item: { disclosureReview?: string }): boolean {
+  return item.disclosureReview === "needs_review";
+}
+
 const PROFESSIONAL_KINDS = new Set<EvidenceKind>([
   "role",
   "project",
@@ -325,7 +344,7 @@ export type DossierSanitization = {
 
 export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitization {
   const approvedContext = dossier.evidence.filter(
-    (item) => item.approved && !item.rejected && contextCategory(item.kind, item.detail) !== "claim"
+    (item) => isUsableEvidence(item) && contextCategory(item.kind, item.detail) !== "claim"
   );
   const contextItems = approvedContext.map((item) => item.detail);
   const quarantinedEvidenceIds = approvedContext.map((item) => item.id);
@@ -352,10 +371,10 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
   const evidence = dossier.evidence;
 
   const approvedProfessionalIds = new Set(
-    evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)).map((item) => item.id)
+    evidence.filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item)).map((item) => item.id)
   );
   const approvedProfessional = evidence.filter(
-    (item) => item.approved && !item.rejected && isProfessionalEvidence(item)
+    (item) => isUsableEvidence(item) && isProfessionalEvidence(item)
   );
 
   const roles = dossier.roles.flatMap((role) => {
@@ -569,13 +588,13 @@ function sanitizeVariant(
 function sanitizePack(pack: ResumePack, dossier: CareerDossier, forceReview: boolean): ResumePack {
   const validEvidenceIds = new Set(
     dossier.evidence
-      .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+      .filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item))
       .map((item) => item.id)
   );
   const variants = pack.variants.map((variant) => sanitizeVariant(variant, validEvidenceIds, forceReview));
   const first = variants.find((variant) => variant.kind === "recruiter")?.resume ?? variants[0]?.resume;
   const approvedFacts = dossier.evidence
-    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+    .filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item))
     .map((item) => sanitizeProfessionalParagraph(item.detail))
     .filter(Boolean);
   const lanePacks = pack.lanePacks.map((lanePack) => ({

@@ -1,6 +1,8 @@
 import { initialIntake } from "@/lib/career-data";
+import { possibleDisclosure } from "@/lib/truth-guards";
 import type { IntakeData } from "@/types/career";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
+import type { DisclosureReason } from "@/lib/truth-guards";
 import type {
   CareerDossier,
   DossierEducation,
@@ -12,6 +14,11 @@ import type {
   ImportProposalGroup,
   ImportProposalRecord
 } from "@/types/dossier";
+
+// Only body content is flagged for disclosure review.
+const PROFESSIONAL_EVIDENCE_KINDS = new Set<EvidenceKind>([
+  "responsibility", "proof", "metric", "story", "role", "project", "education", "skill", "tool"
+]);
 
 function compact(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
@@ -88,6 +95,14 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
           // Must be revived explicitly: this whitelist silently drops any field
           // it does not name, which would erase ownership on every page load.
           ...(text(item.roleId) ? { roleId: text(item.roleId) } : {}),
+          // Same rule for the review state — losing it on reload would silently
+          // re-admit an item the user had excluded, or re-flag one they kept.
+          ...(["needs_review", "keep", "exclude"].includes(text(item.disclosureReview))
+            ? { disclosureReview: text(item.disclosureReview) as "needs_review" | "keep" | "exclude" }
+            : {}),
+          ...(["health", "separation", "education", "financial"].includes(text(item.disclosureReason))
+            ? { disclosureReason: text(item.disclosureReason) as DisclosureReason }
+            : {}),
           source: ["guided", "story", "resume-import", "legacy-profile", "manual", "role-sprint"].includes(text(item.source))
             ? text(item.source) as EvidenceSource
             : "manual",
@@ -193,6 +208,14 @@ export function evidenceRecord(
     confidence: options?.confidence ?? "high",
     approved,
     rejected: false,
+    // The classifier raises a hand here and does nothing else: the detail
+    // above is the user's text, unaltered. Only professional-evidence kinds
+    // are flagged — a goal or a constraint is not résumé body content.
+    ...(() => {
+      if (!PROFESSIONAL_EVIDENCE_KINDS.has(kind)) return {};
+      const flag = possibleDisclosure(normalized);
+      return flag ? { disclosureReview: "needs_review" as const, disclosureReason: flag.reason } : {};
+    })(),
     sourceFilenames: [],
     sourceExcerpts: compact([options?.sourceText ?? normalized]),
     createdAt: nowIso,

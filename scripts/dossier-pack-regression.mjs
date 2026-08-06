@@ -108,10 +108,22 @@ const sampleResume = {
   linkedinHeadline: "",
   linkedinSummary: ""
 };
+// PARTIAL STRIPPING IS RETIRED. This fixture's summary is a SINGLE sentence
+// carrying a separation ("Led store operations until I was laid off in June
+// 2026, kept quality high."), so the whole sentence is withheld and the
+// summary section is absent rather than emitting a trimmed fragment. Residue
+// is what turned "I dropped out of my nursing degree after one semester." into
+// the fabricated bullet "Supported one semester."; the export net now removes
+// whole sentences or nothing.
 const orderedKeys = exportSections(sampleResume, ["education", "experience", "projects", "skills", "summary"], "ats").sections.map((section) => section.key);
-check("exports respect the variant's chosen sectionOrder", orderedKeys.join(",") === "education,experience,skills,summary", orderedKeys.join(","));
+check("exports respect the variant's chosen sectionOrder", orderedKeys.join(",") === "education,experience,skills", orderedKeys.join(","));
 const strippedSummary = exportSections(sampleResume, undefined, "ats");
-check("termination reasons are stripped from exported summaries as a final net", !/laid\s+off/i.test(JSON.stringify(strippedSummary.sections)) && strippedSummary.sections.some((section) => section.key === "summary" && section.text.includes("kept quality high")));
+check("a separation sentence never reaches an exported summary", !/laid\s+off/i.test(JSON.stringify(strippedSummary.sections)), JSON.stringify(strippedSummary.sections));
+check("no trimmed fragment is emitted in its place", !strippedSummary.sections.some((section) => section.key === "summary"), JSON.stringify(strippedSummary.sections.map((s) => s.key)));
+// A multi-sentence summary keeps the sentences that carry no separation.
+const mixedSummary = exportSections({ ...sampleResume, summary: "Kept quality high across two stores. Led operations until I was laid off in June 2026." }, undefined, "ats");
+check("unaffected sentences in the same summary survive", mixedSummary.sections.some((section) => section.key === "summary" && section.text.includes("Kept quality high across two stores")), JSON.stringify(mixedSummary.sections));
+check("  and the separation sentence does not", !/laid\s+off/i.test(JSON.stringify(mixedSummary.sections)), JSON.stringify(mixedSummary.sections));
 check("stripped termination reason is surfaced as a withheld fact", strippedSummary.withheldFacts.length === 1 && strippedSummary.withheldFacts[0] === "reason for leaving");
 const sparseSections = exportSections({ ...sampleResume, summary: "", coreSkills: [], education: "Education or Certification | School or Provider | Year" }, undefined, "ats").sections;
 check("empty or placeholder sections never emit a heading", sparseSections.length === 1 && sparseSections[0].key === "experience");
