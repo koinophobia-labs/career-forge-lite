@@ -1,3 +1,4 @@
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -228,13 +229,17 @@ function safeMaterialLines(values: string[]): string[] {
   return values.filter((value) => value.trim() && classifyEvidenceAdmissibility(value) === "claim");
 }
 
-function materialsText(pack: ResumePack, lanes: TargetLane[], dossier: CareerDossier): string {
+export function materialsText(pack: ResumePack, lanes: TargetLane[], dossier: CareerDossier): string {
   const pitches = pack.lanePacks.map((lanePack) => {
     const lane = lanes.find((item) => item.id === lanePack.laneId);
     return `${lane?.title ?? "Custom lane"}: ${lanePack.positioningPitch}`;
   }).join("\n");
-  const approvedFacts = dossier.evidence
-    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+  // Was `item.approved && !item.rejected` — a hand-rolled eligibility test that
+  // knew nothing about disclosure review. It printed unresolved AND explicitly
+  // excluded personal disclosures verbatim under this heading, while the
+  // README in the same archive claimed they had been refused.
+  const approvedFacts = getUsableEvidenceForGeneration(dossier)
+    .filter((item) => isProfessionalEvidence(item))
     .map((item) => item.detail);
   return [
     "DRAFT MATERIALS — REVIEW EVERY CLAIM BEFORE USE",

@@ -1,3 +1,4 @@
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
 import { isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { matchRequirement } from "@/lib/job-post-analyzer";
 import type { ApplicationRecord, CareerProfile, TargetLane } from "@/types/command-center";
@@ -374,7 +375,11 @@ function approvedEvidence(dossier?: CareerDossier | null): DossierEvidenceRecord
   // rewrite `kind`), so every consumer that feeds a generated artifact has to
   // ask. Without this, a separation reason or gap statement keeps its original
   // kind and seeds an interview question.
-  return dossier?.evidence.filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)) ?? [];
+  if (!dossier) return [];
+  // Interview prep is a generated artifact, so it reads through the gate like
+  // every other consumer. The old `approved && !rejected` test let an
+  // unresolved or excluded disclosure seed an interview question.
+  return getUsableEvidenceForGeneration(dossier).filter((item) => isProfessionalEvidence(item));
 }
 
 const QUANTIFIED = /[\d$%]/;

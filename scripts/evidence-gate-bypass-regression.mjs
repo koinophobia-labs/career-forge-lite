@@ -50,7 +50,7 @@ function load(filePath) {
 const { emptyDossier, intakeFromDossier } = load(path.join(root, "src/lib/dossier.ts"));
 const { generateResumePackage } = load(path.join(root, "src/lib/generator.ts"));
 const { generateResumePack } = load(path.join(root, "src/lib/resume-pack.ts"));
-const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
+const { variantPlainText, materialsText } = load(path.join(root, "src/lib/pack-export.ts"));
 const { initialIntake } = load(path.join(root, "src/lib/career-data.ts"));
 const { sanitizeCommandCenterState } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { getEvidence, getUsableEvidence, getPendingReviews, evidenceEligibility } = load(path.join(root, "src/lib/evidence-read.ts"));
@@ -152,6 +152,15 @@ console.log("\n--- 1. hand-built dossier straight into the pack builder ---");
   if (variant) {
     const plain = variantPlainText(d, variant.resume);
     check("  plain-text export of that pack is clean", leaks(plain).length === 0, JSON.stringify(leaks(plain)));
+  }
+  {
+    // The exact surface that leaked in Round 8: the bundle's materials file
+    // built its own `approved && !rejected` list, so unresolved AND excluded
+    // disclosures printed verbatim under a heading claiming they were approved
+    // — while the README in the same archive reported them as refused.
+    const materials = materialsText(pack, lanes, d);
+    check("  the bundle's cover-letter facts are clean", leaks(materials).length === 0, JSON.stringify(leaks(materials)));
+    check("    and still carry the eligible fact", materials.includes("stock count"), materials.slice(0, 200));
   }
 }
 

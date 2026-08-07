@@ -1,6 +1,6 @@
-import { classifyEvidenceAdmissibility, isProfessionalEvidence } from "@/lib/evidence-admissibility";
+import { classifyEvidenceAdmissibility, isProfessionalEvidence, isUsableEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
-import { isUsableEvidence } from "@/lib/evidence-admissibility";
+import { isUsable } from "@/lib/evidence-read";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
@@ -477,8 +477,18 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
   // Proof-bank entries are user-facing document material: uncertainty
   // statements and termination reasons never belong in it.
   const identityValues = identityValueSet(dossier);
+  // dossier.proofPoints is a denormalized string pool that carries no review
+  // state, and it was concatenated AHEAD of the correctly-gated `approved`
+  // list — so an excluded financial disclosure printed in the master proof
+  // bank. Anything in the pool that the evidence store says is ineligible is
+  // dropped; entries with no matching record are kept, since the pool predates
+  // evidence records and is the only home for some older facts.
+  const ineligibleText = new Set(
+    dossier.evidence.filter((item) => !isUsable(item)).map((item) => item.detail.trim().toLowerCase())
+  );
   const proofBank = unique(
     dossier.proofPoints
+      .filter((entry) => !ineligibleText.has(entry.trim().toLowerCase()))
       .concat(approved.filter((item) => item.kind === "proof" || item.kind === "metric").map((item) => item.detail))
       .filter((entry) => !isUncertaintyStatement(entry) && !isIdentityFact(entry, identityValues) && !looksLikeHeading(entry))
       .flatMap((entry) => {
