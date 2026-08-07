@@ -1,6 +1,6 @@
 import { classifyEvidenceAdmissibility, isProfessionalEvidence, isUsableEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
-import { isUsable } from "@/lib/evidence-read";
+import { getPendingReviews, getUserExcludedEvidence, isUsable } from "@/lib/evidence-read";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
@@ -532,8 +532,12 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       //   awaitingReview  — flagged, undecided; neither used nor omitted
       //   generatedWithheld — Career Forge rejected ITS OWN generated sentence
       //                       at export; no user evidence was touched
-      itemsExcludedByUser: dossier.evidence.filter((item) => item.disclosureReview === "exclude").length,
-      itemsAwaitingReview: dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length,
+      // Counted through the canonical reader, not by string-equality on the
+      // stored flag. The flag misses stale resolutions and legacy records that
+      // were never reviewed — and the undercount gets WORSE as generation
+      // withholds more, which would put a false statement in a delivered file.
+      itemsExcludedByUser: getUserExcludedEvidence(dossier).length,
+      itemsAwaitingReview: getPendingReviews(dossier).length,
       generatedSentencesWithheld: variants.filter((variant) =>
         [variant.resume.summary, variant.resume.linkedinSummary, variant.resume.linkedinHeadline].some(
           (prose) => (prose ?? "") !== withholdSeparationFromGeneratedProse(prose ?? "")
@@ -541,11 +545,11 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       ).length,
       unsupportedClaimsRefused: unique([
         ...withheld,
-        ...(dossier.evidence.some((item) => item.disclosureReview === "exclude")
-          ? [`${dossier.evidence.filter((item) => item.disclosureReview === "exclude").length} item(s) excluded by you after review`]
+        ...(getUserExcludedEvidence(dossier).length
+          ? [`${getUserExcludedEvidence(dossier).length} item(s) excluded by you after review`]
           : []),
-        ...(dossier.evidence.some((item) => item.disclosureReview === "needs_review")
-          ? [`${dossier.evidence.filter((item) => item.disclosureReview === "needs_review").length} item(s) still awaiting your review`]
+        ...(getPendingReviews(dossier).length
+          ? [`${getPendingReviews(dossier).length} item(s) still awaiting your review`]
           : []),
         ...(variants.some((variant) =>
           [variant.resume.summary, variant.resume.linkedinSummary, variant.resume.linkedinHeadline].some(

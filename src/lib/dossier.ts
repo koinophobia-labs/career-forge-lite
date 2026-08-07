@@ -1019,8 +1019,13 @@ export function intakeEligibleForGeneration(intake: IntakeData, dossier: CareerD
   }
   // Records the user explicitly KEPT become the approval list, so a flagged
   // sentence they confirmed goes straight back into the draft.
+  // This is an ALLOW-list, not a filter: generation uses it to RE-ADMIT an
+  // otherwise-flagged sentence. It checked only the review flag, so a record
+  // the user later REJECTED still authorized its sentence back into the draft.
+  // A fail-open in an allow-list publishes immediately, so it takes the full
+  // eligibility test.
   const approved = dossier.evidence
-    .filter((record) => record.disclosureReview === "keep" && !disclosureResolutionIsStale(record))
+    .filter((record) => isUsable(record) && record.disclosureReview === "keep")
     .map((record) => record.detail);
 
   if (!blocked.size) return approved.length ? { ...intake, disclosureApproved: approved } : intake;

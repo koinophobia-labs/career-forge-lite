@@ -1,3 +1,4 @@
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
 import type { CareerDossier, PackGenerationReceipt, ResumeVariant } from "@/types/dossier";
 
 export type DefensibilityStatus = "Fully traced" | "Traced with transfers" | "Needs evidence review" | "User-edited, recheck required";
@@ -61,7 +62,13 @@ function yearTokens(value: string): string[] {
 
 export function deriveDefensibilityReceipt(variant: ResumeVariant, dossier: CareerDossier): DefensibilityReceipt {
   const claims = claimsForVariant(variant);
-  const approved = new Map(dossier.evidence.filter((item) => item.approved && !item.rejected).map((item) => [item.id, item]));
+  // This receipt is not a readout — versions/page.tsx turns it into
+  // packExportBlocked, which enables the ZIP, PDF, DOCX and Copy controls.
+  // Its predicate was WEAKER than the exporter's, so a claim citing a
+  // needs_review, excluded or stale record resolved as valid provenance, the
+  // receipt read "Fully traced", and export was permitted on a document citing
+  // withheld evidence. A false PASS here ships the document.
+  const approved = new Map(getUsableEvidenceForGeneration(dossier).map((item) => [item.id, item]));
   const incompletePaths = new Set(variant.evidenceReferences.filter((reference) =>
     reference.evidenceIds.length === 0 || reference.evidenceIds.some((id) => !approved.has(id))
   ).map((reference) => reference.claimPath));

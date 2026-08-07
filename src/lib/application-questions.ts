@@ -1,3 +1,5 @@
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
+import type { UsableEvidence } from "@/lib/evidence-read";
 import type { ApplicationQuestion } from "@/types/command-center";
 import type { CareerDossier, DossierEvidenceRecord, EvidenceKind } from "@/types/dossier";
 import { requiredYearsFromRequirement, verifiedDurationForRequirement } from "@/lib/job-post-analyzer";
@@ -202,7 +204,9 @@ export function draftApplicationQuestion(
 ): ApplicationQuestion {
   const cleanPrompt = prompt.trim();
   const category = classifyApplicationQuestion(cleanPrompt);
-  const approved = dossier.evidence.filter((item) => item.approved && !item.rejected);
+  // Feeds draftAnswer -> the text a candidate pastes into an employer's
+  // application form. The old predicate knew nothing about disclosure review.
+  const approved = getUsableEvidenceForGeneration(dossier);
   const requiredYears = requiredYearsFromRequirement(cleanPrompt);
   if (requiredYears !== null) {
     const duration = verifiedDurationForRequirement(cleanPrompt, dossier, now);
@@ -214,8 +218,11 @@ export function draftApplicationQuestion(
       return { id, prompt: cleanPrompt, draftAnswer: REFUSAL, evidenceIds: [], userEdited: false };
     }
     const durationEvidence = duration.supportingEvidenceIds
+      // Resolving an id against the ELIGIBLE set, not the raw store: an id
+      // persisted on an application record must not resurrect a record that
+      // has since become ineligible.
       .map((evidenceId) => approved.find((item) => item.id === evidenceId))
-      .filter((item): item is DossierEvidenceRecord => Boolean(item));
+      .filter((item): item is UsableEvidence => Boolean(item));
     return {
       id,
       prompt: cleanPrompt,

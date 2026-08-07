@@ -1,4 +1,5 @@
 import type { TailorHandoff } from "@/lib/tailor-handoff";
+import type { UsableIntake } from "@/lib/evidence-read";
 import type { IntakeData, ResumePackage } from "@/types/career";
 
 // Post-processes a generated resume package with the tailoring session's
@@ -47,7 +48,14 @@ export function contextFromHandoff(handoff: TailorHandoff): TailoredResumeContex
   };
 }
 
-export function buildEvidenceCorpus(intake: IntakeData, extraEvidence = ""): string {
+// Takes a GATED intake. Typing this as plain IntakeData let
+// resume-builder hand back the raw object ten lines after computing the
+// eligible one: the withheld sentence was never printed, but it still
+// AUTHORIZED a posting keyword to be claimed as a skill — "I dropped out of
+// the phlebotomy program after one term." produced coreSkills: ["Phlebotomy"].
+// Worse than printing it, because the resulting claim has no citation to
+// invalidate. The brand makes that a compile error.
+export function buildEvidenceCorpus(intake: UsableIntake<IntakeData>, extraEvidence = ""): string {
   return [
     // intake.targetJobTitle is deliberately ABSENT. In a tailored session it
     // IS the posting's own title, so including it let the job description
@@ -103,7 +111,7 @@ function joinNaturally(items: string[]): string {
 export function applyTailoredContext(
   base: ResumePackage,
   context: TailoredResumeContext,
-  intake: IntakeData,
+  intake: UsableIntake<IntakeData>,
   extraEvidence = ""
 ): { resume: ResumePackage; influence: TailoredInfluence } {
   const corpus = buildEvidenceCorpus(intake, extraEvidence);

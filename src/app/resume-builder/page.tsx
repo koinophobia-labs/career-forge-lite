@@ -16,6 +16,7 @@ import { clearHandoff, peekHandoff, recordTailoredResumeVersion, type TailorHand
 import { applyTailoredContext, contextFromHandoff, type TailoredInfluence } from "@/lib/tailored-resume";
 import { updateCommandCenter } from "@/lib/use-command-center";
 import { generateResumePackage } from "@/lib/generator";
+import { eligibleUserText, getUsableIntake } from "@/lib/evidence-read";
 import { intakeEligibleForGeneration, intakeFromDossier, mergeIntakeIntoDossier, pendingDisclosureReviews, resolveDisclosure, withUpdatedDossier } from "@/lib/dossier";
 import type { IntakeData, IntakeErrors, ResumePackage, TemplateStyle } from "@/types/career";
 import type { ResumeSnapshot } from "@/types/command-center";
@@ -258,13 +259,28 @@ export default function Home() {
     const basePackage = generateResumePackage(eligibleIntake);
     if (tailorSession) {
       const profile = loadState().profile;
-      const extraEvidence = [
-        profile.transferableSkills.join(" "),
-        profile.experienceSummary,
-        profile.proofPoints,
-        profile.strengths.join(" ")
-      ].join(" ");
-      const tailored = applyTailoredContext(basePackage, contextFromHandoff(tailorSession), intake, extraEvidence);
+      // CareerProfile carries no lifecycle fields at all — no approved,
+      // rejected, or disclosureReview — so no record-level rule can ever apply
+      // to it. It gets the text read instead, with an empty approval set.
+      const extraEvidence = eligibleUserText(
+        [
+          profile.transferableSkills.join(" "),
+          profile.experienceSummary,
+          profile.proofPoints,
+          profile.strengths.join(" ")
+        ].join(" "),
+        new Set<string>()
+      );
+      // The GATED intake, not the raw one. Passing `intake` here meant a
+      // withheld sentence still authorized a posting keyword to be claimed as
+      // a skill: "I dropped out of the phlebotomy program after one term."
+      // yielded coreSkills: ["Phlebotomy"].
+      const tailored = applyTailoredContext(
+        basePackage,
+        contextFromHandoff(tailorSession),
+        getUsableIntake(eligibleIntake),
+        extraEvidence
+      );
       setResume(tailored.resume);
       setInfluence(tailored.influence);
       setRecordedVersionId(

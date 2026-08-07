@@ -1,3 +1,4 @@
+import { isUsable } from "@/lib/evidence-read";
 import { createId } from "@/lib/command-center-store";
 import { evidenceRecord } from "@/lib/dossier";
 import { requiredYearsFromRequirement, type RequirementMatch } from "@/lib/job-post-analyzer";
@@ -227,7 +228,11 @@ export function createRoleSprint(input: {
 export function sprintSupportingEvidence(sprint: RoleSprintRecord, dossier: CareerDossier): DossierEvidenceRecord[] {
   return sprint.supportingEvidenceIds
     .map((id) => dossier.evidence.find((item) => item.id === id))
-    .filter((item): item is DossierEvidenceRecord => Boolean(item && item.approved && !item.rejected));
+    // Re-checked against the live dossier so revoked approvals drop out. It
+    // used to re-check the WRONG thing: `approved && !rejected` says nothing
+    // about disclosure review, so a withheld sentence was quoted verbatim into
+    // the portfolio summary and the STAR story, both behind Copy buttons.
+    .filter((item): item is DossierEvidenceRecord => Boolean(item && isUsable(item)));
 }
 
 // Honest statement of what stays unproven even after the sprint. Shown on the

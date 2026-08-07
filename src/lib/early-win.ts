@@ -1,3 +1,4 @@
+import { isUsable } from "@/lib/evidence-read";
 import { isProfessionalEvidence } from "@/lib/evidence-admissibility";
 import { polishBulletsVerbatim } from "@/lib/resume-intelligence";
 import type { CareerDossier } from "@/types/dossier";
@@ -28,7 +29,10 @@ export function earlyWinBullets(dossier: CareerDossier): EarlyWinPreview | null 
     // decides whether they may be shown at all. The two are not the same, and
     // treating them as one showed the user their own quarantined gap statement
     // back under a panel headed "Nothing here was invented".
-    .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item)
+    // Presented as finished résumé content under the claim "Nothing here was
+    // invented", after a professional transformation. That is generation, not
+    // display, so it reads through the gate.
+    .filter((item) => isUsable(item) && isProfessionalEvidence(item)
       && (item.kind === "responsibility" || item.kind === "metric" || item.kind === "proof"))
     .map((item) => item.detail);
   const seen = new Set<string>();

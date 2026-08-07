@@ -1,5 +1,6 @@
 "use client";
 
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CommandNav } from "@/components/CommandNav";
@@ -77,8 +78,10 @@ export default function OutreachPage() {
   const template = outreachTemplates.find((item) => item.key === templateKey) ?? outreachTemplates[0];
   const templateContact = state.outreach.find((contact) => contact.id === templateContactId) ?? null;
   const approvedEvidenceOptions = useMemo(
-    () => state.dossier.evidence
-      .filter((item) => item.approved && !item.rejected && isProfessionalEvidence(item))
+    // The picker must not offer an option that generation will withhold —
+    // the placeholder is literally named "[approved evidence]".
+    () => getUsableEvidenceForGeneration(state.dossier)
+      .filter((item) => isProfessionalEvidence(item))
       .sort((a, b) => (evidencePriority[a.kind] ?? 99) - (evidencePriority[b.kind] ?? 99) || a.detail.localeCompare(b.detail))
       .slice(0, 30),
     [state.dossier.evidence]

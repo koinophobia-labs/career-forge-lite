@@ -185,10 +185,14 @@ export function getUsableEvidenceForGeneration(
   dossier: Pick<CareerDossier, "evidence">,
   options: { roleId?: string; kinds?: EvidenceKind[] } = {}
 ): UsableEvidence[] {
-  return getUsableEvidence(dossier, {
-    ...options,
-    kinds: options.kinds ?? [...REVIEWABLE_KINDS]
-  });
+  // Deliberately NOT kind-restricted. An earlier version defaulted to
+  // REVIEWABLE_KINDS, conflating "kinds that participate in disclosure review"
+  // with "kinds a document may draw on" — which silently dropped the
+  // work-authorization, clearance, availability and compensation evidence that
+  // exists precisely to answer employer questions. Eligibility is about review
+  // state; which KINDS suit a given surface is the consumer's business, and
+  // consumers say so with isProfessionalEvidence or an explicit kinds option.
+  return getUsableEvidence(dossier, options);
 }
 
 /** The user's words from an item that has passed the gate. */
@@ -265,6 +269,15 @@ export function assertUsable(items: DossierEvidenceRecord[]): UsableEvidence[] {
  * the user said about their working life.
  */
 const NON_EVIDENCE_INTAKE_FIELDS = new Set([
+  // NOT exempt, though an earlier version of this list wrongly exempted them:
+  // `education` prints as resume.education, and the *Time fields print as the
+  // dates beside each employer. Both carry user prose and both leaked while a
+  // byte-identical sentence in customRoleNotes was correctly withheld in the
+  // SAME generation call — "Dropped out of the plumbing diploma after the
+  // first term." reached the document, and "2019-2023, until my position was
+  // cut because I flagged the billing error" printed as an employment date.
+  // `withGuards` nets only summary/linkedinSummary/linkedinHeadline, so there
+  // was no second chance to catch either.
   "sourceRoleId",
   "fullName",
   "email",
@@ -276,14 +289,10 @@ const NON_EVIDENCE_INTAKE_FIELDS = new Set([
   "template",
   "currentTitle",
   "currentCompany",
-  "currentTime",
   "previousTitle",
   "previousCompany",
-  "previousTime",
   "additionalTitle",
-  "additionalCompany",
-  "additionalTime",
-  "education"
+  "additionalCompany"
 ]);
 
 /** Split that keeps ellipses intact — "Closed, counted, locked up... every night." is ONE claim. */
@@ -327,7 +336,11 @@ export function eligibleUserText(value: string, approved: Set<string>): string {
  * The user's stored intake is NOT modified — this returns a narrowed copy, and
  * a withheld sentence stays in their record, visible and restorable.
  */
-export function getUsableIntake<T extends Record<string, unknown>>(intake: T): T {
+declare const USABLE_INTAKE_BRAND: unique symbol;
+/** An intake that has passed the eligibility read. Only this module mints it. */
+export type UsableIntake<T> = T & { readonly [USABLE_INTAKE_BRAND]: true };
+
+export function getUsableIntake<T extends Record<string, unknown>>(intake: T): UsableIntake<T> {
   const approved = new Set(
     (Array.isArray(intake.disclosureApproved) ? (intake.disclosureApproved as string[]) : []).map(approvalKey)
   );
@@ -342,5 +355,5 @@ export function getUsableIntake<T extends Record<string, unknown>>(intake: T): T
         .filter((entry) => entry.trim().length > 0);
     }
   }
-  return out as T;
+  return out as UsableIntake<T>;
 }

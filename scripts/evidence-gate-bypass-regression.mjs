@@ -49,6 +49,9 @@ function load(filePath) {
 
 const { emptyDossier, intakeFromDossier } = load(path.join(root, "src/lib/dossier.ts"));
 const { generateResumePackage } = load(path.join(root, "src/lib/generator.ts"));
+const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
+const { applyTailoredContext } = load(path.join(root, "src/lib/tailored-resume.ts"));
+const { getUsableIntake } = load(path.join(root, "src/lib/evidence-read.ts"));
 const { generateResumePack } = load(path.join(root, "src/lib/resume-pack.ts"));
 const { variantPlainText, materialsText } = load(path.join(root, "src/lib/pack-export.ts"));
 const { initialIntake } = load(path.join(root, "src/lib/career-data.ts"));
@@ -295,6 +298,39 @@ console.log("\n--- 8. evidence belonging to another role ---");
   check("  and an ownerless legacy record is not silently adopted",
     getUsableEvidence(ownerless, { roleId: "role-a" }).length === 0,
     JSON.stringify(getUsableEvidence(ownerless, { roleId: "role-a" }).map((e) => e.detail)));
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n--- 9. fields the gate exempted, and laundering ---");
+{
+  const base = { ...initialIntake, fullName: "Sam Okafor", currentTitle: "Assistant", currentCompany: "Bridgeway", currentTime: "2021 - 2026", responsibilities: CLEAN };
+
+  // The exemption list is the gate's one hand-maintained surface, so it gets
+  // its own assertions. `education` and the *Time fields print on the résumé
+  // and were exempt: the SAME sentence was withheld from customRoleNotes and
+  // printed from education in one generation call.
+  const edu = { ...base, education: "Dropped out of the plumbing diploma after the first term." };
+  const eduPkg = generateResumePackage(edu);
+  check("a disclosure typed into the education field is withheld",
+    !/plumbing diploma/i.test(resumeToText(edu, eduPkg) + JSON.stringify(eduPkg)), JSON.stringify(eduPkg.education));
+  check("  while ordinary education still prints",
+    /Business Administration/i.test(JSON.stringify(generateResumePackage({ ...base, education: "AA in Business Administration, Tri-C 2020" }))));
+
+  const dated = { ...base, currentTime: "2019-2023, until my position was cut because I flagged the billing error" };
+  check("a disclosure typed into an employment date is withheld",
+    !/billing error/i.test(JSON.stringify(generateResumePackage(dated))));
+  check("  while ordinary dates still print", /2021 - 2026/.test(JSON.stringify(generateResumePackage(base))));
+
+  // Laundering: the withheld sentence is never printed, but it must not
+  // AUTHORIZE a posting keyword to be claimed as a skill either. That is worse
+  // than printing it — the resulting claim has no citation to invalidate.
+  const denial = { ...base, currentCompany: "Clinic", responsibilities: "I dropped out of the phlebotomy program after one term." };
+  const ctx = { roleTitle: "Phlebotomist", company: "Acme Clinic", laneTitle: null, resumeAngle: "", keywords: ["phlebotomy"], coveredRequirements: [], partialRequirements: [], gaps: [] };
+  const tailored = applyTailoredContext(generateResumePackage(denial), ctx, getUsableIntake(denial), "");
+  check("a denial cannot authorize a posting keyword as a skill",
+    !tailored.resume.coreSkills.some((skill) => /phlebotom/i.test(skill)), JSON.stringify(tailored.resume.coreSkills));
+  check("  nor as claimed experience in the summary",
+    !/experience in phlebotomy/i.test(tailored.resume.summary), tailored.resume.summary);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

@@ -1,3 +1,4 @@
+import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
 import type { CareerProfile, TargetLane } from "@/types/command-center";
 import type { CareerDossier, DossierEvidenceRecord } from "@/types/dossier";
 
@@ -120,11 +121,11 @@ function profileCorpus(profile: CareerProfile): string {
 // employment experience — and re-enters solely through the explicit
 // practice-partial branch in matchRequirement.
 function approvedRecords(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
-  return dossier?.evidence.filter((item) => item.approved && !item.rejected && item.source !== "role-sprint") ?? [];
+  return dossier ? getUsableEvidenceForGeneration(dossier).filter((item) => item.source !== "role-sprint") : [];
 }
 
 function approvedPracticeRecords(dossier?: CareerDossier | null): DossierEvidenceRecord[] {
-  return dossier?.evidence.filter((item) => item.approved && !item.rejected && item.source === "role-sprint") ?? [];
+  return dossier ? getUsableEvidenceForGeneration(dossier).filter((item) => item.source === "role-sprint") : [];
 }
 
 // Practice work supports a requirement only when its own text overlaps the
