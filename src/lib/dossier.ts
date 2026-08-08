@@ -183,6 +183,11 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
       location: text(identityRaw.location), links: strings(identityRaw.links)
     },
     roles,
+    // User intent, so it MUST survive the round trip. This whitelist silently
+    // drops any field it does not name, and dropping the tombstone would make
+    // every deliberately-deleted job look like one Career Forge destroyed —
+    // and be offered back on the next load.
+    ...(strings(source.removedRoleIds).length ? { removedRoleIds: strings(source.removedRoleIds) } : {}),
     projects,
     education,
     responsibilities: strings(source.responsibilities),

@@ -55,10 +55,10 @@ const { getUsableIntake, intakeFieldCategory } = load(path.join(root, "src/lib/e
 const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
 const { revalidateResumeForExport } = load(path.join(root, "src/lib/evidence-read.ts"));
 const { emptyDossier, evidenceRecord, resolveDisclosure, reviveDossier } = load(path.join(root, "src/lib/dossier.ts"));
-const { sanitizeCareerDossier } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
+const { sanitizeCareerDossier, sanitizeCommandCenterState } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { generateResumePack: buildPack } = load(path.join(root, "src/lib/resume-pack.ts"));
 const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
-const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles } = load(path.join(root, "src/lib/employment-structure.ts"));
+const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles, missingEmploymentCandidates } = load(path.join(root, "src/lib/employment-structure.ts"));
 const { truthShape: shapeOf } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 
 let passes = 0;
@@ -685,6 +685,76 @@ console.log("\n=== CLUSTER C-delta — a representation is evidence only if we k
   const oneJob = recover(damaged(), [twoViews]);
   check("D4c over-caution: two representations of ONE job still recover",
     oneJob.employer === "Bluebird Care", JSON.stringify(oneJob.employer));
+}
+
+// ===========================================================================
+console.log("\n=== CLUSTER C-epsilon — containers the old build deleted outright ===");
+{
+  const T = "2026-08-07T09:00:00.000Z";
+  const v = (id, text) => ({
+    id, label: "saved", laneId: null, notes: "", source: "builder", applicationId: null,
+    targetCompany: "", targetTitle: "", keywordsUsed: [], gapsAcknowledged: [], influenceSummary: "",
+    resumeText: text, resumeSnapshot: null, createdAt: T
+  });
+  const cands = (versions, dossier = { roles: [] }) => missingEmploymentCandidates({ resumeVersions: versions }, dossier);
+
+  // P1 — RECOVER: two versions agree on a job the dossier no longer holds.
+  const attested = [
+    v("v1", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024"),
+    v("v2", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024")
+  ];
+  const found = cands(attested);
+  check("P1 recover: a wholly deleted job is surfaced again",
+    found.length === 1 && found[0].employer === "Bluebird Care" && found[0].title === "Support Worker",
+    JSON.stringify(found));
+  check("   with its dates and how many versions attest to it",
+    found[0]?.time === "2018 - 2024" && found[0]?.attestations === 2, JSON.stringify(found[0]));
+
+  // P2 — REVIEW: history establishes the job but disagrees on a structural field.
+  const disagree = cands([
+    v("v1", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024"),
+    v("v2", "EXPERIENCE\nSupport Worker | Bluebird Care | 2019 - 2023")
+  ]);
+  check("P2 review: a disagreement on dates is surfaced, not resolved",
+    disagree.length === 1 && !disagree[0].time && (disagree[0].conflicts ?? []).length === 2,
+    JSON.stringify(disagree));
+
+  // P3 — REFUSE: prose implying work happened does not establish a job.
+  const proseOnly = cands([
+    v("v1", "EXPERIENCE\n- Managed inventory for a regional gym chain\n- Ran the induction for every new member"),
+    v("v2", "SUMMARY\nExperienced gym professional | reliable and calm")
+  ]);
+  check("P3 refuse: bullets and prose alone establish no employer",
+    proseOnly.length === 0, JSON.stringify(proseOnly));
+  const halfIdentity = cands([v("v1", "EXPERIENCE\nSupport Worker | 2018 - 2024")]);
+  check("   nor does a heading with a title but no employer",
+    halfIdentity.length === 0, JSON.stringify(halfIdentity));
+
+  // P4 — NO DUPLICATION: the same job, formatted differently, is already there.
+  const already = cands(attested, { roles: [{ title: "support worker", employer: "Bluebird Care Ltd." }] });
+  check("P4 no duplication: a reformatted existing job is not offered again",
+    already.length === 0, JSON.stringify(already));
+
+  // P5 — NO RESURRECTION: the user deleted this job on purpose.
+  const tombstoned = cands(attested, { roles: [], removedRoleIds: ["supportworker::bluebirdcare"] });
+  check("P5 no resurrection: a deliberately removed job is not offered back",
+    tombstoned.length === 0, JSON.stringify(tombstoned));
+
+  // P6 — the whole point: never inserted, only offered.
+  const state = {
+    dossier: { ...emptyDossier(T), roles: [] }, profile: {}, lanes: [], applications: [],
+    resumePacks: [], roleSprints: [], pendingImportReviews: [], resumeVersions: attested
+  };
+  const healed = sanitizeCommandCenterState(JSON.parse(JSON.stringify(state)));
+  check("P6 fabrication: nothing is auto-inserted into the user's roles",
+    healed.dossier.roles.length === 0, JSON.stringify(healed.dossier.roles));
+  check("   but the candidate IS surfaced for them to confirm",
+    (healed.dossier.missingRoleCandidates ?? []).length === 1,
+    JSON.stringify(healed.dossier.missingRoleCandidates));
+  const twice = sanitizeCommandCenterState(JSON.parse(JSON.stringify(healed)));
+  check("   and running it twice changes nothing",
+    JSON.stringify(twice.dossier.missingRoleCandidates) === JSON.stringify(healed.dossier.missingRoleCandidates),
+    JSON.stringify(twice.dossier.missingRoleCandidates));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

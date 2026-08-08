@@ -395,3 +395,94 @@ export function recoverRoleStructure<T extends { title?: string; employer?: stri
 
   return next as RecoveredRole<T>;
 }
+
+/* ------------------------------------------------------------------------- *
+ * EPSILON — WHOLE-CONTAINER RECOVERY
+ *
+ * Recovery was a map over surviving roles: "for every job that still exists,
+ * see if we can repair its fields." A job the pre-fix build deleted OUTRIGHT
+ * has nothing to iterate over, so it was neither recovered nor flagged — it
+ * simply ceased to exist, silently.
+ *
+ * So reconciliation replaces repair:
+ *
+ *   current roles + trustworthy historical roles -> reconcile -> dossier
+ *
+ * THE DANGEROUS EDGE, and the reason nothing here is ever restored
+ * automatically: "missing because Career Forge destroyed it" and "missing
+ * because the user deleted it" are the same state on disk. There is no
+ * tombstone in the historical data to tell them apart, and quietly resurrecting
+ * a job somebody deliberately removed is its own kind of fabrication — arguably
+ * a worse one, because they will not be looking for it.
+ *
+ * Every reconstructed container is therefore a CANDIDATE the user confirms:
+ * "We found an older employment entry that is no longer in your profile.
+ * Restore it?" `removedRoleIds` is the tombstone going forward, so a deletion
+ * made from now on is never offered back.
+ * ------------------------------------------------------------------------- */
+
+export type MissingRoleCandidate = {
+  title: string;
+  employer: string;
+  time: string;
+  /** How many independent saved versions attest to this job. */
+  attestations: number;
+  /** Structural fields the historical record disagrees about. */
+  conflicts?: string[];
+};
+
+/** Format-insensitive identity, so a reformatted employer is not offered twice. */
+function identityKey(title: string | undefined, employer: string | undefined): string {
+  const flatten = (v: string | undefined) =>
+    (v ?? "")
+      .toLowerCase()
+      .replace(/\b(ltd|limited|plc|llp|inc|corp|co|cic|c\.i\.c\.|the)\b/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, "");
+  return `${flatten(title)}::${flatten(employer)}`;
+}
+
+/**
+ * Employment containers the historical record establishes but the dossier no
+ * longer holds. Offered for confirmation; never inserted.
+ */
+export function missingEmploymentCandidates(
+  state: { resumeVersions?: Array<{ resumeText?: string; resumeSnapshot?: { resume?: { experience?: HistoricalRole[] } } | null }> },
+  dossier: { roles?: Array<{ title?: string; employer?: string }>; removedRoleIds?: string[] }
+): MissingRoleCandidate[] {
+  const versions = harvestHistoricalRoles(state);
+  const present = new Set((dossier.roles ?? []).map((role) => identityKey(role.title, role.employer)));
+  const tombstoned = new Set((dossier.removedRoleIds ?? []).map((v) => v.toLowerCase()));
+
+  // Group by identity ACROSS versions; each version attests at most once.
+  const groups = new Map<string, { title: string; employer: string; times: Set<string>; versions: Set<number> }>();
+  versions.forEach((entries, versionIndex) => {
+    for (const entry of entries) {
+      const title = (entry.title ?? "").trim();
+      const employer = (entry.company ?? "").trim();
+      // ENOUGH IDENTITY OR NOTHING. A container needs a title AND an employer
+      // to be a job somebody can recognise. Bullets and generated prose imply
+      // that work happened; they do not establish where.
+      if (!title || !employer) continue;
+      const key = identityKey(title, employer);
+      const g = groups.get(key) ?? { title, employer, times: new Set<string>(), versions: new Set<number>() };
+      if (entry.time) g.times.add(entry.time.trim());
+      g.versions.add(versionIndex);
+      groups.set(key, g);
+    }
+  });
+
+  const out: MissingRoleCandidate[] = [];
+  for (const [key, g] of groups) {
+    if (present.has(key)) continue; // already in the dossier, however formatted
+    if (tombstoned.has(key) || tombstoned.has(g.employer.toLowerCase())) continue;
+    const times = [...g.times];
+    out.push({
+      title: g.title,
+      employer: g.employer,
+      time: times.length === 1 ? times[0] : "",
+      attestations: g.versions.size,
+      ...(times.length > 1 ? { conflicts: times } : {})
+    });
+  }
+  return out.sort((a, b) => b.attestations - a.attestations || a.employer.localeCompare(b.employer));
+}

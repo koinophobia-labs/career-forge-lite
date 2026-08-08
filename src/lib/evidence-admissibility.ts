@@ -10,7 +10,7 @@ import {
   // (no truth-guard withholding on this path -- see sanitizeProfessionalLine)
 } from "@/lib/truth-guards";
 import { eligibleUserText, evidenceEligibility, isUsable, resolutionIsStale } from "@/lib/evidence-read";
-import { harvestHistoricalRoles, organizationIdentity, recoverRoleStructure, roleHasStructure } from "@/lib/employment-structure";
+import { harvestHistoricalRoles, missingEmploymentCandidates, organizationIdentity, recoverRoleStructure, roleHasStructure } from "@/lib/employment-structure";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
 import type {
@@ -837,7 +837,12 @@ export function sanitizeCommandCenterState(
   const history = harvestHistoricalRoles(next);
   const recoveredDossier = {
     ...next.dossier,
-    roles: next.dossier.roles.map((role) => recoverRoleStructure(role, history))
+    roles: next.dossier.roles.map((role) => recoverRoleStructure(role, history)),
+    // Whole containers the old build deleted outright. DERIVED, never stored,
+    // and never inserted into roles — restoring a job the user deliberately
+    // removed is its own fabrication, and on disk that is indistinguishable
+    // from one Career Forge destroyed. The user confirms; the migration offers.
+    missingRoleCandidates: missingEmploymentCandidates(next, next.dossier)
   };
   const sanitized = sanitizeCareerDossier(recoveredDossier);
   const forceReview = sanitized.quarantinedEvidenceIds.length > 0;

@@ -113,6 +113,8 @@ export type DossierEducation = {
   evidenceIds: string[];
 };
 
+import type { MissingRoleCandidate } from "@/lib/employment-structure";
+
 export type CareerDossier = {
   id: string;
   identity: {
@@ -123,6 +125,19 @@ export type CareerDossier = {
     links: string[];
   };
   roles: DossierRole[];
+  /**
+   * Employment containers the historical record establishes but the dossier no
+   * longer holds. DERIVED on every read, never persisted — and never inserted
+   * into `roles`. The user confirms each one.
+   */
+  missingRoleCandidates?: MissingRoleCandidate[];
+  /**
+   * Roles the user deliberately removed. The tombstone that lets recovery tell
+   * "Career Forge destroyed this" from "the user deleted this" — without it the
+   * two are the same state on disk and a migration cannot safely restore
+   * either. Entries are identity keys, not ids, so they survive re-import.
+   */
+  removedRoleIds?: string[];
   projects: DossierProject[];
   education: DossierEducation[];
   responsibilities: string[];
