@@ -29,6 +29,7 @@ import { syncRoleSprintsWithEvidence } from "@/lib/role-sprint";
 import { earlyWinBullets } from "@/lib/early-win";
 import { useCommandCenter } from "@/lib/use-command-center";
 import { IDENTITY_CALLOUT_DISMISSED_KEY } from "@/lib/local-keys";
+import { restoredRoleFrom, tombstoneFor, type MissingRoleCandidate } from "@/lib/employment-structure";
 import type { CareerDossier, DossierEducation, DossierProject, DossierRole, ImportProposalGroup, ImportProposalRecord, PendingImportReview } from "@/types/dossier";
 
 function values(text: string): string[] {
@@ -163,6 +164,35 @@ export default function DossierPage() {
 
   function patchIdentity(field: keyof CareerDossier["identity"], value: string | string[]) {
     save({ ...dossier, identity: { ...dossier.identity, [field]: value } });
+  }
+
+  // C3-07 — the user-facing half of epsilon. The migration can identify an
+  // employment record an earlier build destroyed, but until it ASKS, it has
+  // implemented "detect that we should ask" without asking. CANDIDATE IS NOT
+  // RESTORATION: nothing here happens without a click.
+  function restoreMissingRole(candidate: MissingRoleCandidate) {
+    const restored = restoredRoleFrom(candidate, createId("role"));
+    save({
+      ...dossier,
+      roles: [...dossier.roles, restored as DossierRole],
+      // Dropped from the candidate list on the next read, because the identity
+      // now matches a role that exists.
+      missingRoleCandidates: (dossier.missingRoleCandidates ?? []).filter(
+        (item) => item.title !== candidate.title || item.employer !== candidate.employer
+      )
+    });
+  }
+
+  function dismissMissingRole(candidate: MissingRoleCandidate) {
+    save({
+      ...dossier,
+      // The tombstone is what stops it coming back. Without it the next load
+      // would offer the same job again, forever.
+      removedRoleIds: [...new Set([...(dossier.removedRoleIds ?? []), tombstoneFor(candidate)])],
+      missingRoleCandidates: (dossier.missingRoleCandidates ?? []).filter(
+        (item) => item.title !== candidate.title || item.employer !== candidate.employer
+      )
+    });
   }
 
   function addRole() {
@@ -547,6 +577,50 @@ export default function DossierPage() {
                   <input aria-label="Dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates, e.g. 2022–Present" value={role.dates} onChange={(event) => setRole({ ...role, dates: event.target.value })} />
                   <textarea aria-label="Responsibilities" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="One recurring responsibility per line" value={role.responsibilities} onChange={(event) => setRole({ ...role, responsibilities: event.target.value })} />
                 </div>
+                {(dossier.missingRoleCandidates ?? []).length > 0 && (
+                  <div className="mt-4 rounded-md border border-gold/40 bg-gold/5 p-3">
+                    <h4 className="text-sm font-black text-ink">Employment we found in an earlier saved version</h4>
+                    <p className="mt-1 text-xs text-ink/70">
+                      These are not in your profile now. We have not added them back — that is your call.
+                    </p>
+                    <ul className="mt-3 space-y-3">
+                      {(dossier.missingRoleCandidates ?? []).map((candidate) => (
+                        <li key={`${candidate.title}::${candidate.employer}`} className="rounded border border-ink/10 bg-white/60 p-3">
+                          <p className="text-sm font-bold text-ink">
+                            {[candidate.title, candidate.employer].filter(Boolean).join(" · ")}
+                          </p>
+                          <p className="text-xs text-ink/70">
+                            {candidate.time || "Dates not recorded"}
+                            {" · "}
+                            found in {candidate.attestations} saved {candidate.attestations === 1 ? "version" : "versions"}
+                          </p>
+                          {candidate.conflicts?.length ? (
+                            <p className="mt-1 text-xs text-ink/70">
+                              Saved versions disagree on the dates: {candidate.conflicts.join(" / ")}. Restoring adds the
+                              role without them so you can enter the right ones.
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => restoreMissingRole(candidate)}
+                              className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan"
+                            >
+                              Add it back
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => dismissMissingRole(candidate)}
+                              className="rounded-md border border-ink/20 px-3 py-1.5 text-xs font-bold text-ink/80 transition hover:bg-ink/5"
+                            >
+                              No, I removed this
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <button type="button" onClick={addRole} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan">Add approved role</button>
                 {dossier.roles.length > 0 && <div className="mt-4 grid gap-2">{dossier.roles.map((item) => <details key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-paper/75"><summary className="cursor-pointer font-bold">{item.title || "Role"}{item.employer ? ` · ${item.employer}` : ""}{item.startDate ? ` · ${item.startDate}` : ""}</summary><form action={(form) => editRole(item.id, form)} className="mt-3 grid gap-2"><input name="title" aria-label="Edit role title" defaultValue={item.title} className="trust-input border px-3 py-2 text-ink"/><input name="employer" aria-label="Edit role employer" defaultValue={item.employer} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit role dates" defaultValue={item.startDate} className="trust-input border px-3 py-2 text-ink"/><textarea name="responsibilities" aria-label="Edit role responsibilities" defaultValue={item.responsibilities.join("\n")} className="trust-input border px-3 py-2 text-ink"/><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save role</button><button type="button" onClick={() => deleteRecord("roles", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete role</button></div></form></details>)}</div>}
               </div>

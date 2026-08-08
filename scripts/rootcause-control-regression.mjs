@@ -58,7 +58,7 @@ const { emptyDossier, evidenceRecord, resolveDisclosure, reviveDossier } = load(
 const { sanitizeCareerDossier, sanitizeCommandCenterState } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { generateResumePack: buildPack } = load(path.join(root, "src/lib/resume-pack.ts"));
 const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
-const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles, missingEmploymentCandidates } = load(path.join(root, "src/lib/employment-structure.ts"));
+const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles, missingEmploymentCandidates, restoredRoleFrom, tombstoneFor } = load(path.join(root, "src/lib/employment-structure.ts"));
 const { truthShape: shapeOf } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 
 let passes = 0;
@@ -809,6 +809,75 @@ console.log("\n=== CLUSTER C — verification-debt repairs ===");
   const tomb = reviveDossier(JSON.parse(JSON.stringify({ ...emptyDossier(NOW), removedRoleIds: ["supportworker::bluebirdcare"] })));
   check("   as does the deliberate-deletion tombstone",
     (tomb.removedRoleIds ?? []).length === 1, JSON.stringify(tomb.removedRoleIds));
+}
+
+// ===========================================================================
+console.log("\n=== C3-07 — the candidate lifecycle, end to end ===");
+{
+  const T = "2026-08-07T09:00:00.000Z";
+  const v = (id, text) => ({
+    id, label: "saved", laneId: null, notes: "", source: "builder", applicationId: null,
+    targetCompany: "", targetTitle: "", keywordsUsed: [], gapsAcknowledged: [], influenceSummary: "",
+    resumeText: text, resumeSnapshot: null, createdAt: T
+  });
+  const VERSIONS = [
+    v("v1", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024"),
+    v("v2", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024")
+  ];
+  const baseState = (dossierOver = {}) => ({
+    dossier: { ...emptyDossier(T), roles: [], ...dossierOver },
+    profile: {}, lanes: [], applications: [], resumePacks: [], roleSprints: [],
+    pendingImportReviews: [], resumeVersions: VERSIONS
+  });
+  // A refresh is load -> sanitize -> save, which is what the store does.
+  const refresh = (state) => sanitizeCommandCenterState(JSON.parse(JSON.stringify(state)));
+
+  // LIFECYCLE 1: appears -> refresh -> still appears -> Restore works.
+  let s1 = refresh(baseState());
+  check("L1 the candidate appears", (s1.dossier.missingRoleCandidates ?? []).length === 1,
+    JSON.stringify(s1.dossier.missingRoleCandidates));
+  s1 = refresh({ ...baseState(), dossier: s1.dossier });
+  check("   it survives a refresh", (s1.dossier.missingRoleCandidates ?? []).length === 1,
+    JSON.stringify(s1.dossier.missingRoleCandidates));
+
+  // Restore, exactly as the button does it.
+  const candidate = s1.dossier.missingRoleCandidates[0];
+  const restored = restoredRoleFrom(candidate, "role-restored");
+  check("   Restore adds the confirmed structural record",
+    restored.title === "Support Worker" && restored.employer === "Bluebird Care" && restored.startDate === "2018",
+    JSON.stringify(restored));
+  check("   and INFERS NOTHING — no bullets, no evidence links",
+    restored.responsibilities.length === 0 && restored.evidenceIds.length === 0 && restored.outcomes.length === 0,
+    JSON.stringify(restored));
+  let afterRestore = refresh({ ...baseState({ roles: [restored] }) });
+  check("   after Restore the job is in the dossier",
+    afterRestore.dossier.roles.some((r) => r.employer === "Bluebird Care"),
+    JSON.stringify(afterRestore.dossier.roles.map((r) => [r.title, r.employer])));
+  check("   and it is no longer offered as a candidate",
+    (afterRestore.dossier.missingRoleCandidates ?? []).length === 0,
+    JSON.stringify(afterRestore.dossier.missingRoleCandidates));
+
+  // LIFECYCLE 2: appears -> Dismiss -> refresh -> never resurfaces.
+  const tomb = tombstoneFor(candidate);
+  let afterDismiss = refresh(baseState({ removedRoleIds: [tomb] }));
+  check("L2 after Dismiss the candidate is gone",
+    (afterDismiss.dossier.missingRoleCandidates ?? []).length === 0,
+    JSON.stringify(afterDismiss.dossier.missingRoleCandidates));
+  for (let i = 0; i < 3; i += 1) {
+    afterDismiss = refresh({ ...baseState({ removedRoleIds: [tomb] }), dossier: afterDismiss.dossier });
+  }
+  check("   and it never resurfaces across repeated refreshes",
+    (afterDismiss.dossier.missingRoleCandidates ?? []).length === 0,
+    JSON.stringify(afterDismiss.dossier.missingRoleCandidates));
+  check("   the tombstone itself survives the round trip",
+    (reviveDossier(JSON.parse(JSON.stringify(afterDismiss.dossier))).removedRoleIds ?? []).includes(tomb));
+
+  // The surface exists and is wired to both actions.
+  const page = fs.readFileSync(path.join(root, "src/app/profile/page.tsx"), "utf8");
+  check("L3 the profile surface renders candidates and offers both choices",
+    page.includes("missingRoleCandidates") && page.includes("restoreMissingRole") && page.includes("dismissMissingRole"));
+  check("   and it does not claim the job was restored automatically",
+    /We have not added them back/.test(page));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

@@ -432,7 +432,7 @@ export type MissingRoleCandidate = {
 };
 
 /** Format-insensitive identity, so a reformatted employer is not offered twice. */
-function identityKey(title: string | undefined, employer: string | undefined): string {
+export function roleIdentityKey(title: string | undefined, employer: string | undefined): string {
   const flatten = (v: string | undefined) =>
     (v ?? "")
       .toLowerCase()
@@ -450,7 +450,7 @@ export function missingEmploymentCandidates(
   dossier: { roles?: Array<{ title?: string; employer?: string }>; removedRoleIds?: string[] }
 ): MissingRoleCandidate[] {
   const versions = harvestHistoricalRoles(state);
-  const present = new Set((dossier.roles ?? []).map((role) => identityKey(role.title, role.employer)));
+  const present = new Set((dossier.roles ?? []).map((role) => roleIdentityKey(role.title, role.employer)));
   const tombstoned = new Set((dossier.removedRoleIds ?? []).map((v) => v.toLowerCase()));
 
   // Group by identity ACROSS versions; each version attests at most once.
@@ -463,7 +463,7 @@ export function missingEmploymentCandidates(
       // to be a job somebody can recognise. Bullets and generated prose imply
       // that work happened; they do not establish where.
       if (!title || !employer) continue;
-      const key = identityKey(title, employer);
+      const key = roleIdentityKey(title, employer);
       const g = groups.get(key) ?? { title, employer, times: new Set<string>(), versions: new Set<number>() };
       if (entry.time) g.times.add(entry.time.trim());
       g.versions.add(versionIndex);
@@ -485,4 +485,35 @@ export function missingEmploymentCandidates(
     });
   }
   return out.sort((a, b) => b.attestations - a.attestations || a.employer.localeCompare(b.employer));
+}
+
+/**
+ * The user accepted a candidate. The confirmed structural record is added and
+ * NOTHING else: no bullets, no evidence links, no inferred responsibilities.
+ * Career Forge knows where they worked because a saved version recorded it; it
+ * does not know what they did there, and guessing would be the fabrication
+ * this whole recovery path exists to avoid.
+ */
+export function restoredRoleFrom(candidate: MissingRoleCandidate, id: string): {
+  id: string; title: string; employer: string; startDate: string; endDate: string;
+  current: boolean; responsibilities: string[]; tools: string[]; outcomes: string[]; evidenceIds: string[];
+} {
+  const [start = "", end = ""] = (candidate.time || "").split(/\s*(?:-|–|—|to|until)\s*/i);
+  return {
+    id,
+    title: candidate.title,
+    employer: candidate.employer,
+    startDate: start.trim(),
+    endDate: /present|current|ongoing/i.test(end) ? "" : end.trim(),
+    current: /present|current|ongoing/i.test(candidate.time || ""),
+    responsibilities: [],
+    tools: [],
+    outcomes: [],
+    evidenceIds: []
+  };
+}
+
+/** The user declined a candidate. The tombstone is what stops it coming back. */
+export function tombstoneFor(candidate: MissingRoleCandidate): string {
+  return roleIdentityKey(candidate.title, candidate.employer);
 }
