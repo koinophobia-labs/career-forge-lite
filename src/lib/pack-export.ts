@@ -1,4 +1,5 @@
 import { getUsableEvidenceForGeneration, revalidateResumeForExport } from "@/lib/evidence-read";
+import { assessPdfFidelity, registerUnicodeFont } from "@/lib/pdf-text-fidelity";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -177,13 +178,32 @@ async function docxBlob(
   return Packer.toBlob(document);
 }
 
-function pdfBlob(
+/** Set by the last pdfBlob call so the export entry points can report it. */
+let lastPdfFidelity: { needsUnicode: boolean; unrepresentable: string[] } = { needsUnicode: false, unrepresentable: [] };
+
+async function pdfBlob(
   dossier: CareerDossier,
   resume: ResumePackage,
   kind: ResumeVariant["kind"] = "ats",
   sectionOrder?: SectionKey[]
-): Blob {
+): Promise<Blob> {
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
+  // Which font can carry THIS document's text. Everything the writer is about
+  // to emit is assessed up front, because the encoding decision has to be made
+  // before the first string is written — and because a name in the contact
+  // line must not be corrupted just because the bullets happened to be ASCII.
+  const everyString = [
+    dossier.identity.fullName,
+    identityContactLine(dossier),
+    ...exportSections(resume, sectionOrder, kind).sections.flatMap((section) =>
+      "roles" in section
+        ? section.roles.flatMap((role) => [role.title, role.company, role.time, ...role.bullets])
+        : [section.heading, section.text]
+    )
+  ];
+  const fidelity = assessPdfFidelity(everyString);
+  lastPdfFidelity = fidelity;
+  const bodyFont = fidelity.needsUnicode ? await registerUnicodeFont(pdf) : "helvetica";
   const margin = 54;
   const width = 612 - margin * 2;
   let y = 54;
@@ -191,7 +211,7 @@ function pdfBlob(
   const write = (line: string, options?: { bold?: boolean; size?: number; indent?: number; after?: number }) => {
     const size = options?.size ?? 10;
     const indent = options?.indent ?? 0;
-    pdf.setFont("helvetica", options?.bold ? "bold" : "normal");
+    pdf.setFont(bodyFont, options?.bold ? "bold" : "normal");
     pdf.setFontSize(size);
     const wrapped = pdf.splitTextToSize(line || " ", width - indent) as string[];
     ensure(wrapped.length * (size + 3) + (options?.after ?? 0));
@@ -315,7 +335,7 @@ export async function createPackBundle(
       const filename = uniqueName(resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format));
       const blob = format === "docx"
         ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)
-        : pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder);
+        : await pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder);
       zip.file(filename, await blob.arrayBuffer());
       filenames.push(filename);
     }
@@ -332,12 +352,17 @@ export async function createVariantFile(
   dossier: CareerDossier,
   laneTitle: string,
   format: PackExportFormat
-): Promise<{ blob: Blob; filename: string }> {
+): Promise<{ blob: Blob; filename: string; unrepresentable: string[] }> {
   const safeResume = sanitizeResumeForProfessionalUse(revalidateResumeForExport(variant.resume, dossier));
+  const blob = format === "docx"
+    ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)
+    : await pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder);
   return {
-    blob: format === "docx"
-      ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)
-      : pdfBlob(dossier, safeResume, variant.kind, variant.sectionOrder),
+    blob,
+    // Characters no available font can represent. Reported rather than
+    // silently substituted: a corrupted name is a substituted name, and the
+    // DOCX in the same archive renders these correctly.
+    unrepresentable: format === "pdf" ? lastPdfFidelity.unrepresentable : [],
     filename: resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format)
   };
 }
