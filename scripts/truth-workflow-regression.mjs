@@ -403,7 +403,15 @@ const uncertainDossier = {
 const uncertainPack = generateResumePack(uncertainDossier, [auditLane], NOW);
 check("uncertainty statements stay out of the proof bank", uncertainPack.masterProofBank.every((entry) => !/don'?t know/i.test(entry)), JSON.stringify(uncertainPack.masterProofBank));
 
-// A role with no usable approved detail is omitted, not rendered hollow.
+// RE-ADJUDICATED (Cluster C, C2-05). This used to assert that a role with no
+// usable approved detail is OMITTED rather than rendered hollow. That decision
+// is retired: it meant a real job — employer, title and dates — silently
+// disappeared from every variant, the exported DOCX and the receipt, because
+// this month's evidence happened not to qualify. Whether a bullet is
+// defensible says nothing about whether the person held the job, and the user
+// exporting the file has no way to notice the gap.
+//
+// The container now survives with zero bullets and the omission is REPORTED.
 const hollowDossier = {
   ...emptyDossier(NOW),
   evidence: [add("role", "Shift Lead — Corner Cafe")],
@@ -412,7 +420,12 @@ const hollowDossier = {
 };
 hollowDossier.roles[0].evidenceIds = [hollowDossier.evidence[0].id];
 const hollowPack = generateResumePack(hollowDossier, [auditLane], NOW);
-check("zero-bullet roles are omitted from documents", hollowPack.variants.every((variant) => variant.resume.experience.every((entry) => entry.bullets.length > 0)));
+check("a zero-bullet role keeps its employment container",
+  hollowPack.variants.every((variant) => variant.resume.experience.some((entry) => entry.company === "Corner Cafe")),
+  JSON.stringify(hollowPack.variants[0]?.resume.experience));
+check("  and the omission is reported rather than silent",
+  hollowPack.variants.every((variant) => JSON.stringify(variant).includes("Corner Cafe")),
+  JSON.stringify(hollowPack.receipt?.unsupportedClaimsRefused));
 check("omitted roles are reported honestly", hollowPack.receipt.unsupportedClaimsRefused.some((item) => /Shift Lead/i.test(item)), JSON.stringify(hollowPack.receipt.unsupportedClaimsRefused));
 
 // --- Release-candidate pack inspection fixes (2026-07-16 manual review) ------

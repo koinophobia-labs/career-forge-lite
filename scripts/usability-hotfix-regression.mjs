@@ -180,7 +180,14 @@ const safeResume = sanitizeResumeForProfessionalUse({
   summary: `${targetWish}. ${noMetrics}. Resolved customer escalations and documented the outcome.`,
   coreSkills: ["Customer support", noMetrics],
   experience: [
-    { title: noSaas, company: "Independent project", time: "", bullets: [noSaas] },
+    // Tagged kind:"project", which is what the product actually emits for a
+    // project row (resume-pack.ts:359). Untagged rows are EMPLOYMENT — the
+    // generator emits them for the user's real jobs — and under Cluster C an
+    // employment title is structural and is never judged by the claim
+    // classifier. This fixture modelled a project as an untagged row, a shape
+    // the product never produces, so it was asserting the Cluster C rule
+    // against the wrong container type. The property it protects is unchanged.
+    { title: noSaas, company: "Independent project", time: "", bullets: [noSaas], kind: "project" },
     { title: "Customer Support Associate", company: "Acme", time: "2023–2025", bullets: [noMetrics, "Resolved customer escalations"] }
   ],
   education: "Earlham College",

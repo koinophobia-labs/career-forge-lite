@@ -161,8 +161,18 @@ expect("plain-text export shows no leaked duty after the Sentinel heading",
   !/Troubleshot|Reset passwords|Documented tickets/i.test(tailAfterSentinel));
 // The honest outcome: an employer with no evidence of its own is OMITTED from
 // the résumé rather than filled with another job's duties.
-expect("unsupported employer is omitted, not fabricated", !prevBlock,
-  prevBlock ? `Sentinel Group still rendered with ${prevBlock.bullets.length} bullets` : "");
+// RE-ADJUDICATED (Cluster C, C2-05). These used to require the unsupported
+// employer row to be ABSENT. Deleting a job the user held because this month's
+// evidence did not qualify is lost user data, and it was invisible — gone from
+// every variant, the DOCX and the receipt alike. The container now survives
+// with zero bullets and the omission is reported.
+//
+// The property these assertions actually protect is unchanged and still
+// enforced: NO OTHER EMPLOYER'S DUTIES may print under this heading. A
+// zero-bullet row satisfies that completely.
+expect("unsupported employer keeps its container but borrows no duties",
+  !prevBlock || prevBlock.bullets.length === 0,
+  prevBlock ? `Sentinel Group rendered ${JSON.stringify(prevBlock.bullets)}` : "");
 expect("the supported employer keeps its own duties",
   (atsVariant.resume.experience.find((r) => r.company === "Northwind IT")?.bullets.length ?? 0) > 0);
 
@@ -257,7 +267,8 @@ const legacyPack = generateResumePack(legacyDossier, lanes, NOW);
 const legacyExp = legacyPack.variants[0].resume.experience;
 L(`  legacy experience rows: ${legacyExp.map((r) => `${r.title}@${r.company}[${r.bullets.length}]`).join(", ") || "(none)"}`);
 const legacySentinel = legacyExp.find((r) => r.company === "Sentinel Group");
-expect("legacy shared-evidence dossier does not print duties under the wrong employer", !legacySentinel,
+expect("legacy shared-evidence dossier does not print duties under the wrong employer",
+  !legacySentinel || legacySentinel.bullets.length === 0,
   legacySentinel ? `Sentinel Group rendered ${legacySentinel.bullets.length} bullets` : "");
 const legacyCurrent = legacyExp.find((r) => r.company === "Northwind IT");
 expect("legacy dossier still renders the employer that genuinely recorded the work",
@@ -372,7 +383,8 @@ const legacyRoles = [
 ];
 const legacyPack2 = generateResumePack({ ...emptyDossier(NOW), roles: legacyRoles, evidence: [legacyShared], approvedClaims: [legacyShared.detail] }, jobChangeLanes, NOW);
 const sentinel2 = legacyPack2.variants[0].resume.experience.find((r) => r.company === "Sentinel Group");
-expect("a two-word fragment cannot corroborate a foreign fact", !sentinel2,
+expect("a two-word fragment cannot corroborate a foreign fact",
+  !sentinel2 || sentinel2.bullets.length === 0,
   sentinel2 ? `Sentinel Group prints ${JSON.stringify(sentinel2.bullets)}` : "");
 
 // A project must not reprint an employer's owned facts.

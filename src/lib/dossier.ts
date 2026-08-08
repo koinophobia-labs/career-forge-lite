@@ -2,6 +2,7 @@ import { initialIntake } from "@/lib/career-data";
 import { possibleDisclosure } from "@/lib/truth-guards";
 import { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } from "@/lib/evidence-admissibility";
 import { getUsableEvidenceForRole, isUsable } from "@/lib/evidence-read";
+import { roleHasStructure } from "@/lib/employment-structure";
 import type { IntakeData } from "@/types/career";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
 import type { DisclosureReason } from "@/lib/truth-guards";
@@ -133,7 +134,16 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
     ? source.roles.flatMap((entry): DossierRole[] => {
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
         const item = entry as Record<string, unknown>;
-        if (!text(item.id) || (!text(item.title) && !text(item.employer))) return [];
+        // Survival on READ must match survival on WRITE. This enforced its own
+        // stricter rule than roleHasStructure — id AND (title OR employer) —
+        // so a row whose title and employer had both been blanked by the old
+        // classifier was deleted on load, taking its dates, bullets, outcomes
+        // and evidence links with it, BEFORE the recovery migration could ever
+        // see it. Dates alone still identify a job.
+        if (!text(item.id) || !roleHasStructure({
+          title: text(item.title), employer: text(item.employer),
+          startDate: text(item.startDate), endDate: text(item.endDate)
+        })) return [];
         return [{
           id: text(item.id), title: text(item.title), employer: text(item.employer), startDate: text(item.startDate),
           endDate: text(item.endDate), current: item.current === true, responsibilities: strings(item.responsibilities),

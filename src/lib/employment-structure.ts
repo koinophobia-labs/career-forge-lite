@@ -49,6 +49,9 @@ export type OrganizationField = {
  * Boundaries where a person appends commentary to a name. Ordered so the
  * earliest genuine split wins.
  */
+const TARGETING =
+  /^\s*(?:target(?:ed|ing)?|preferred|desired|ideal)\s+roles?\s*:|^\s*(?:seeking|looking for|interested in|targeting|open to|available for)\b|^\s*(?:i(?:'m| am)?\s+)?(?:want|hoping|aiming)\s+to\b/i;
+
 const BOUNDARIES = [
   /\s*\(([^)]*)\)\s*$/, // Wincanton (agency, until my position was cut)
   /\s+[—–-]\s+(.+)$/, //   DHL — laid off when the site shut
@@ -78,6 +81,14 @@ export function parseOrganizationField(value: string): OrganizationField {
     if (!possibleDisclosure(tail)) continue;
     return { identity: head, narrative: tail };
   }
+
+  // TARGETING TEXT IS NEVER AN ORGANISATION NAME. "Target roles: driver",
+  // "Seeking warehouse work", "Looking for admin roles" typed into the employer
+  // box are statements about where the user wants to go, not a record of where
+  // they have been. Unlike a disclosure phrase — which can be a genuine part of
+  // a real job title, as in "Maternity Leave Cover Teacher" — a targeting
+  // statement has no structural identity inside it to preserve.
+  if (TARGETING.test(raw)) return { identity: "", narrative: raw };
 
   // No narrative boundary found. If the WHOLE value reads as a disclosure there
   // is no identity to keep — that is a review state, not a licence to invent

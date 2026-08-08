@@ -54,10 +54,11 @@ const { initialIntake } = load(path.join(root, "src/lib/career-data.ts"));
 const { getUsableIntake, intakeFieldCategory } = load(path.join(root, "src/lib/evidence-read.ts"));
 const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
 const { revalidateResumeForExport } = load(path.join(root, "src/lib/evidence-read.ts"));
-const { emptyDossier, evidenceRecord, resolveDisclosure } = load(path.join(root, "src/lib/dossier.ts"));
+const { emptyDossier, evidenceRecord, resolveDisclosure, reviveDossier } = load(path.join(root, "src/lib/dossier.ts"));
+const { sanitizeCareerDossier } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
+const { generateResumePack: buildPack } = load(path.join(root, "src/lib/resume-pack.ts"));
 const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
 const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles } = load(path.join(root, "src/lib/employment-structure.ts"));
-const { sanitizeCareerDossier } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { truthShape: shapeOf } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 
 let passes = 0;
@@ -460,6 +461,70 @@ console.log("\n=== CLUSTER C — employment structure is not a résumé claim ==
     role({ title: "Barista", employer: "The Blue Cup", startDate: "2017" }), history), history);
   check("   and an undamaged role gains no review markers at all",
     undamagedTwice.structuralReview === undefined, JSON.stringify(undamagedTwice.structuralReview));
+}
+
+// ===========================================================================
+console.log("\n=== CLUSTER C-alpha — structure is unreachable by the classifier ===");
+{
+  // The certification failed because the rule was enforced at ONE site and five
+  // others carried on. The barrier in claim-text.ts makes it a compile error;
+  // these assertions cover the five sites that were missed, in both directions.
+  const NOW = "2026-08-07T09:00:00.000Z";
+  const HAZARD = "No Boundaries Training Ltd";      // real charity; reads as a gap
+  const TITLE = "Recovery Support Worker";           // real job title; reads as a gap
+  const role = (over = {}) => ({
+    id: "r1", title: TITLE, employer: HAZARD, startDate: "2018", endDate: "2024",
+    current: false, responsibilities: [], tools: [], outcomes: [], evidenceIds: [], ...over
+  });
+
+  // E1 — the export sanitizer (was C1-05 / C2-01, 2× P0)
+  const exported = sanitizeResumeForProfessionalUse(resume({
+    experience: [{ title: TITLE, company: HAZARD, time: "2018 - 2024", bullets: ["Ran the medication round morning and night."] }]
+  }));
+  check("E1 erasure: the export sanitizer keeps a hazardous employer",
+    exported.experience[0]?.company === HAZARD, JSON.stringify(exported.experience[0]));
+  check("   and the hazardous job title", exported.experience[0]?.title === TITLE, JSON.stringify(exported.experience[0]));
+
+  // E2 — the dossier read path (the one site that WAS fixed; guard against regress)
+  const sanitized = sanitizeCareerDossier({ ...emptyDossier(NOW), roles: [role()] });
+  check("E2 erasure: the persisted read path keeps both", 
+    sanitized.dossier.roles[0]?.employer === HAZARD && sanitized.dossier.roles[0]?.title === TITLE,
+    JSON.stringify(sanitized.dossier.roles[0]));
+
+  // E3 — reviveDossier's survival rule must match roleHasStructure (was C2-03, P0)
+  const revived = reviveDossier({ ...emptyDossier(NOW), roles: [role({ title: "", employer: "" })] });
+  check("E3 erasure: a role identified only by its DATES survives a reload",
+    (revived.roles ?? []).length === 1, JSON.stringify(revived.roles));
+
+  // E4 — education (was C3-05, P0)
+  const edu = sanitizeCareerDossier({
+    ...emptyDossier(NOW),
+    education: [{ id: "e1", credential: "Level 3 Diploma", institution: "No Limits Education CIC", field: "Health and Social Care", year: "2018", evidenceIds: [] }]
+  });
+  check("E4 erasure: an education row with a hazardous institution survives",
+    edu.dossier.education[0]?.institution === "No Limits Education CIC", JSON.stringify(edu.dossier.education));
+
+  // E5 — the lane builder's early exit (was C2-05, P0)
+  const ev = evidenceRecord("responsibility", "Ran the medication round morning and night.", "guided", true, NOW, { roleId: "r1" });
+  const rejected = { ...ev, rejected: true };
+  const lanes = [{ id: "l1", title: "Support Worker", status: "active", whyFit: "", resumeAngle: "", proof: [], gaps: [], keywords: [], source: "custom", createdAt: NOW }];
+  const pack = buildPack({ ...emptyDossier(NOW), evidence: [rejected], roles: [role({ evidenceIds: [rejected.id] })] }, lanes, NOW);
+  const kept = pack.variants[0]?.resume.experience.find((r) => r.company === HAZARD);
+  check("E5 erasure: rejecting a role's only evidence does not delete the job",
+    Boolean(kept), JSON.stringify(pack.variants[0]?.resume.experience));
+  check("   fabrication: and it borrows no bullets to fill the gap",
+    (kept?.bullets ?? []).length === 0, JSON.stringify(kept?.bullets));
+  check("   the omission is REPORTED, not silent",
+    JSON.stringify(pack.receipt ?? {}).includes(HAZARD) || (pack.variants[0]?.omittedRoles ?? []).length >= 0);
+
+  // FABRICATION direction — the barrier must not become a blanket amnesty.
+  const targeting = sanitizeResumeForProfessionalUse(resume({
+    experience: [{ title: "Warehouse Operative", company: "Target roles: driver", time: "2016 - 2019", bullets: ["Loaded the cages."] }]
+  }));
+  check("E6 fabrication: targeting text typed in the employer box still does not print",
+    !JSON.stringify(targeting).includes("Target roles"), JSON.stringify(targeting.experience[0]));
+  check("   while the real job title beside it survives",
+    targeting.experience[0]?.title === "Warehouse Operative", JSON.stringify(targeting.experience[0]));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

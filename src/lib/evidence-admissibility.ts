@@ -1,3 +1,4 @@
+import { asClaimText, type ClaimText } from "@/lib/claim-text";
 import {
   mergeImportProposals as mergeBaseImportProposals,
   parseResumePackToProposals as parseBaseResumePackToProposals,
@@ -9,7 +10,7 @@ import {
   // (no truth-guard withholding on this path -- see sanitizeProfessionalLine)
 } from "@/lib/truth-guards";
 import { eligibleUserText, evidenceEligibility, isUsable, resolutionIsStale } from "@/lib/evidence-read";
-import { harvestHistoricalRoles, recoverRoleStructure, roleHasStructure } from "@/lib/employment-structure";
+import { harvestHistoricalRoles, organizationIdentity, recoverRoleStructure, roleHasStructure } from "@/lib/employment-structure";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
 import type {
@@ -304,7 +305,7 @@ function targetRoleValues(detail: string): string[] {
   return unique(cleaned.split(/\r?\n|;|\||,(?=\s*[A-Z])/));
 }
 
-export function sanitizeProfessionalLine(value: string): string {
+export function sanitizeProfessionalLine(value: ClaimText): string {
   // NOT a product-prose path. It is reached from sanitizeProfessionalParagraph
   // -> safeParagraphArray -> sanitizeResumeForProfessionalUse, i.e. over the
   // USER'S OWN résumé bullets on the way into the exported file. Routing
@@ -318,21 +319,21 @@ export function sanitizeProfessionalLine(value: string): string {
   return classifyEvidenceAdmissibility(stripped) === "claim" ? stripped : "";
 }
 
-export function sanitizeProfessionalParagraph(value: string): string {
+export function sanitizeProfessionalParagraph(value: ClaimText): string {
   return value
     .split(/(?<=[.!?])\s+|\r?\n+/)
-    .map((part) => sanitizeProfessionalLine(part.trim()))
+    .map((part) => sanitizeProfessionalLine(asClaimText(part.trim())))
     .filter(Boolean)
     .join(" ")
     .trim();
 }
 
 function safeArray(values: string[]): string[] {
-  return unique(values.map(sanitizeProfessionalLine));
+  return unique(values.map((value) => sanitizeProfessionalLine(asClaimText(value))));
 }
 
 function safeParagraphArray(values: string[]): string[] {
-  return unique(values.map(sanitizeProfessionalParagraph));
+  return unique(values.map((value) => sanitizeProfessionalParagraph(asClaimText(value))));
 }
 
 function normalizeProjectSemantics(project: DossierProject): DossierProject {
@@ -446,9 +447,21 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
     // here. That is the same class as the role defect and belongs to the
     // cluster C follow-up, but it needs container-vs-contents semantics for
     // projects specifically, not the employment rule copied across.
-    const name = sanitizeProfessionalLine(normalized.name);
-    const organization = sanitizeProfessionalLine(normalized.organization);
-    const description = sanitizeProfessionalParagraph(normalized.description);
+    // PROJECTS ARE DELIBERATELY LEFT AS THEY WERE, and this asClaimText() is
+    // the marker for that decision rather than an oversight.
+    //
+    // A project name is structural in the same way an employer is, so by the
+    // Cluster C rule these two lines are wrong. But projects are a separate
+    // container-vs-content problem with their own behaviour attached — the
+    // classifier is currently what removes a "project" whose name is really a
+    // gap statement ("No SaaS experience yet") — and unpicking that belongs to
+    // its own repair with its own controls, not to a widening of Cluster C.
+    //
+    // Recorded, scoped out, and visible: grep asClaimText in this file and this
+    // is the one call that is knowingly on the wrong side of the line.
+    const name = sanitizeProfessionalLine(asClaimText(normalized.name));
+    const organization = sanitizeProfessionalLine(asClaimText(normalized.organization));
+    const description = sanitizeProfessionalParagraph(asClaimText(normalized.description));
     const evidenceIds = normalized.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
     // Kept whenever it still has a usable name — see the role comment above.
     if (!name) return [];
@@ -466,9 +479,14 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
   });
 
   const education = dossier.education.flatMap((item) => {
-    const credential = sanitizeProfessionalLine(item.credential);
-    const institution = sanitizeProfessionalLine(item.institution);
-    const field = sanitizeProfessionalLine(item.field);
+    // STRUCTURAL — not a claim, so not classified. These are facts about where
+    // the user worked or studied, and the claim classifier reads real
+    // organisation names ("No Boundaries Training Ltd", "Parenta") as evidence
+    // gaps and blanks them. The type barrier in claim-text.ts now makes handing
+    // them to it a compile error rather than something to remember.
+    const credential = item.credential;
+    const institution = item.institution;
+    const field = item.field;
     const evidenceIds = item.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
     // Kept whenever it still names a credential or institution.
     if (!credential && !institution) return [];
@@ -542,8 +560,8 @@ function claimsForResume(resume: ResumePackage): Array<{ path: string; text: str
 
 function sanitizeClaimForPath(path: string, text: string): string {
   return path === "summary" || path === "linkedinSummary" || path.includes(".bullets.")
-    ? sanitizeProfessionalParagraph(text)
-    : sanitizeProfessionalLine(text);
+    ? sanitizeProfessionalParagraph(asClaimText(text))
+    : sanitizeProfessionalLine(asClaimText(text));
 }
 
 export function sanitizeResumeForProfessionalUse(resume: ResumePackage): ResumePackage {
@@ -565,8 +583,24 @@ export function sanitizeResumeForProfessionalUse(resume: ResumePackage): ResumeP
   // legitimate outcome, and the container is dropped only when the user gave
   // us nothing to identify it with at all.
   const experience = resume.experience.flatMap((role) => {
-    const title = sanitizeProfessionalLine(role.title);
-    const company = sanitizeProfessionalLine(role.company);
+    // STRUCTURAL — not a claim, so not classified. These are facts about where
+    // the user worked or studied, and the claim classifier reads real
+    // organisation names ("No Boundaries Training Ltd", "Parenta") as evidence
+    // gaps and blanks them. The type barrier in claim-text.ts now makes handing
+    // them to it a compile error rather than something to remember.
+    // Employment rows: title and employer are structural and are NOT judged.
+    // Project rows keep their existing treatment — see the note on projects in
+    // sanitizeCareerDossier; that cousin has its own repair and its own
+    // controls, and widening Cluster C into it here would change behaviour
+    // nobody has written a control pair for yet.
+    // Employment rows get STRUCTURAL PARSING — organizationIdentity separates a
+    // real name from narrative typed alongside it. That is not admissibility:
+    // it never asks whether the value is a defensible claim, only which part of
+    // it is the organisation. Project rows keep their existing treatment; see
+    // the note in sanitizeCareerDossier.
+    const isProject = role.kind === "project";
+    const title = isProject ? sanitizeProfessionalLine(asClaimText(role.title)) : organizationIdentity(role.title);
+    const company = isProject ? sanitizeProfessionalLine(asClaimText(role.company)) : organizationIdentity(role.company);
     const time = typeof role.time === "string" ? role.time.trim() : "";
     const bullets = safeParagraphArray(role.bullets);
     // Nothing identifies this row and nothing survives inside it: there is no
@@ -577,18 +611,18 @@ export function sanitizeResumeForProfessionalUse(resume: ResumePackage): ResumeP
     if (!hasIdentity && !bullets.length) return [];
     return [{ ...role, title, company, bullets }];
   });
-  const summary = sanitizeProfessionalParagraph(resume.summary);
-  const linkedinSummary = sanitizeProfessionalParagraph(resume.linkedinSummary);
+  const summary = sanitizeProfessionalParagraph(asClaimText(resume.summary));
+  const linkedinSummary = sanitizeProfessionalParagraph(asClaimText(resume.linkedinSummary));
   // Sentence-level, not line-level: a mixed headline like "Operations
   // Coordinator. Target roles: X; Y" must lose the preference sentence while
   // keeping the professional one — line-level classification let the whole
   // line through because its first sentence is a legitimate claim.
-  const headline = sanitizeProfessionalParagraph(resume.linkedinHeadline) || coreSkills.slice(0, 3).join(" | ");
+  const headline = sanitizeProfessionalParagraph(asClaimText(resume.linkedinHeadline));
   return {
     summary,
     coreSkills,
     experience,
-    education: sanitizeProfessionalParagraph(resume.education),
+    education: resume.education,
     linkedinHeadline: headline,
     linkedinSummary
   };
@@ -660,16 +694,16 @@ function sanitizePack(pack: ResumePack, dossier: CareerDossier, forceReview: boo
   const first = variants.find((variant) => variant.kind === "recruiter")?.resume ?? variants[0]?.resume;
   const approvedFacts = dossier.evidence
     .filter((item) => isUsableEvidence(item) && isProfessionalEvidence(item))
-    .map((item) => sanitizeProfessionalParagraph(item.detail))
+    .map((item) => sanitizeProfessionalParagraph(asClaimText(item.detail)))
     .filter(Boolean);
   const lanePacks = pack.lanePacks.map((lanePack) => ({
     ...lanePack,
-    positioningPitch: sanitizeProfessionalParagraph(lanePack.positioningPitch),
+    positioningPitch: sanitizeProfessionalParagraph(asClaimText(lanePack.positioningPitch)),
     evidenceUsed: lanePack.evidenceUsed.filter((id) => validEvidenceIds.has(id)),
     evidenceOmitted: lanePack.evidenceOmitted.filter((id) => validEvidenceIds.has(id))
   }));
   const laneFraming = pack.receipt.laneFraming.flatMap((item) => {
-    const angle = sanitizeProfessionalParagraph(item.angle);
+    const angle = sanitizeProfessionalParagraph(asClaimText(item.angle));
     return angle ? [{ ...item, angle }] : [];
   });
   const needsReview = forceReview || variants.some((variant) => variant.status === "needs-review");
@@ -725,8 +759,16 @@ function sanitizeVersion(version: ResumeVersionRecord, forceReview: boolean): Re
       // sanitizeResumeForProfessionalUse — putting whole-sentence withholding
       // on that shared path deleted a bullet the user had kept, and with it the
       // employer whose only bullet it was.
-      const eligible = eligibleUserText(line.replace(/^[-•]\s*/, ""), new Set<string>());
-      const cleaned = sanitizeProfessionalParagraph(eligible);
+      const body = line.replace(/^[-•]\s*/, "");
+      // A rendered "Title | Employer | Dates" row is STRUCTURE, not a claim.
+      // Classifying it deleted the whole employment row while leaving its
+      // bullets in place, so they re-parented to the employer above — one
+      // person's work silently filed under somebody else's job. Section
+      // headings are structure too. Neither is judged; only prose is.
+      const isHeading = !bullet && (body.includes("|") || /^[A-Z][A-Z \-/&]{2,}$/.test(body.trim()));
+      if (isHeading) return [line];
+      const eligible = eligibleUserText(body, new Set<string>());
+      const cleaned = sanitizeProfessionalParagraph(asClaimText(eligible));
       return cleaned ? [`${bullet}${cleaned}`] : [];
     });
     return {

@@ -277,7 +277,14 @@ function buildLaneResume(
     const support = evidenceByIds(approved, role.evidenceIds)
       .filter((item) => chosenSet.has(item.id))
       .filter((item) => roleOwnsEvidence(role, item));
-    if (!support.length) return [];
+    // NO EARLY EXIT HERE. This used to `return []` when a role's evidence was
+    // all ineligible, which deleted the entire employment container — heading,
+    // dates and all — from every variant, from the exported DOCX, and from the
+    // receipt, because the only omission bookkeeping lives further down. Two
+    // exits meaning "nothing printable", one of them silent.
+    //
+    // A role may legitimately have zero usable bullets and still be a job the
+    // person held. Both outcomes now run through the same path below.
     const heading = [role.title, role.employer, [role.startDate, role.endDate].filter(Boolean).join("–")].filter(Boolean).join(" · ");
     mapClaim(heading, support.map((item) => item.id));
     // Bullets come from the role's structured outcomes/responsibilities AND
@@ -299,11 +306,12 @@ function buildLaneResume(
       .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); return bullet; }));
     support.forEach((item) => usedByRoles.add(item.id));
     const bullets = unique([...structuredBullets, ...evidenceBullets]).slice(0, kind === "ats" ? 5 : 3);
-    if (!bullets.length) {
-      // A heading with nothing defensible under it is worse than omission.
-      omittedRoles.push([role.title, role.employer].filter(Boolean).join(" · "));
-      return [];
-    }
+    // Reported whenever there is nothing defensible to print under the heading,
+    // whether that is because the evidence was ineligible or because it yielded
+    // no bullets. The job itself is kept: erasing somebody's employment because
+    // this month's evidence did not qualify is lost user data, and it is
+    // invisible to the person exporting the file.
+    if (!bullets.length) omittedRoles.push([role.title, role.employer].filter(Boolean).join(" · "));
     return [{ title: role.title, company: role.employer, time: [role.startDate, role.endDate].filter(Boolean).join("–"), bullets, kind: "role" as const }];
   });
 
