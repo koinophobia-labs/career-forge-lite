@@ -176,7 +176,24 @@ type HistoricalRole = { title?: string; company?: string; time?: string };
  * Historical structural values, harvested from saved résumé snapshots. These
  * are records of what the field HELD, not text generated about it.
  */
-const DATE_RANGE = /^(?:[a-z]{3,9}\.?\s*)?\d{4}\s*[-–—]\s*(?:present|current|[a-z]{3,9}\.?\s*)?\d{0,4}$|^\d{4}$/i;
+/**
+ * Does this fragment denote a period of time rather than an organisation?
+ *
+ * The previous test recognised only dash-separated numeric years, so every
+ * other way a person writes dates — "Jan 2018 to present", "2019 until 2021",
+ * "Sept 2015 – Dec 2017" — fell through and was restored as a COMPANY NAME.
+ * The question is asked positively now: a fragment made of date words, months,
+ * years and separators is a date, whatever punctuation joins them.
+ */
+const MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december";
+const DATE_JOINER = "(?:-|–|—|to|until|through|thru)";
+function looksLikeDates(value: string): boolean {
+  const v = value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!v) return false;
+  if (!/\d{4}|present|current|ongoing/.test(v)) return false;
+  const token = `(?:(?:${MONTHS})\\.?\\s*)?(?:\\d{1,2}[/.])?\\d{4}|present|current|ongoing`;
+  return new RegExp(`^(?:${token})(?:\\s*${DATE_JOINER}\\s*(?:${token}))?$`, "i").test(v);
+}
 
 /**
  * Historical structural values, grouped BY SAVED VERSION.
@@ -199,20 +216,61 @@ export function harvestHistoricalRoles(state: {
     for (const role of version.resumeSnapshot?.resume?.experience ?? []) {
       if (role && (role.title || role.company)) entries.push(role);
     }
-    for (const line of (version.resumeText ?? "").split(/\r?\n/)) {
-      const parts = line.split("|").map((part) => part.trim());
-      if (parts.length < 2 || !parts[0] || !parts[1]) continue;
-      if (/^[-•]/.test(parts[0])) continue;
-      // "Title | 2018 - 2024" is a heading whose employer was already destroyed
-      // before it was rendered. Reading the date range as the company name
-      // would restore "2018 - 2024" as somebody's employer.
-      const company = DATE_RANGE.test(parts[1]) ? undefined : parts[1];
-      const time = DATE_RANGE.test(parts[1]) ? parts[1] : parts[2];
-      entries.push({ title: parts[0], company, time });
-    }
+    entries.push(...headingsInRenderedText(version.resumeText ?? ""));
     if (entries.length) versions.push(entries);
   }
   return versions;
+}
+
+const EXPERIENCE_SECTION = /^(?:experience|work experience|employment|employment history|professional experience|career history)\b/i;
+const OTHER_SECTION = /^(?:education|skills|core skills|projects|summary|profile|contact|certifications?|references?|interests|volunteering|awards)\b/i;
+// Deliberately NOT a phone-number pattern. The obvious one — a digit followed
+// by seven or more digits, spaces, brackets or dashes — matches "2018 - 2024",
+// so every real employment heading was discarded as a contact line. The shape
+// gate below already rejects contact rows: they carry no date segment.
+const CONTACT_LIKE = /@|https?:|www\./;
+
+/**
+ * A rendered saved résumé is plain text, and the only thing marking an
+ * employment heading is convention. Reading every line containing a "|" as one
+ * was how a user's own summary line became their employer.
+ *
+ * A HISTORICAL REPRESENTATION IS EVIDENCE ONLY IF WE CAN IDENTIFY WHAT FIELD IT
+ * REPRESENTS. So a line must earn the interpretation: it must sit under the
+ * experience heading, not be a bullet, not look like contact details, and have
+ * the shape of a heading — two or three segments, none of them a sentence, with
+ * a recognisable date where a date belongs. Anything else is skipped. Skipping
+ * costs a recovery the user can still make by hand; guessing writes a fiction
+ * into their employment record.
+ */
+function headingsInRenderedText(text: string): HistoricalRole[] {
+  const out: HistoricalRole[] = [];
+  let inExperience = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (EXPERIENCE_SECTION.test(line)) { inExperience = true; continue; }
+    if (OTHER_SECTION.test(line)) { inExperience = false; continue; }
+    if (!inExperience) continue;
+    if (/^[-•*\u2013\u2014]/.test(line)) continue;
+    if (CONTACT_LIKE.test(line)) continue;
+
+    const parts = line.split("|").map((part) => part.trim());
+    if (parts.length < 2 || parts.length > 3) continue;
+    if (parts.some((part) => !part)) continue;
+    // A heading segment is a label, not prose. Anything sentence-shaped is
+    // somebody's summary or a bullet that lost its marker.
+    if (parts.some((part) => part.split(/\s+/).length > 8 || /[.!?]\s/.test(part))) continue;
+
+    const dateIndex = parts.findIndex((part) => looksLikeDates(part));
+    // Every real heading carries its dates. Without one we cannot tell
+    // "Title | Employer" from "Skill | Skill", so we do not guess.
+    if (dateIndex < 1) continue;
+    const time = parts[dateIndex];
+    const rest = parts.filter((_, i) => i !== dateIndex);
+    out.push({ title: rest[0], company: rest[1], time });
+  }
+  return out;
 }
 
 const norm = (value: string | undefined) => (value ?? "").trim().toLowerCase();
@@ -222,45 +280,58 @@ const norm = (value: string | undefined) => (value ?? "").trim().toLowerCase();
  * structural field only — never on bullet text, which is generated prose and
  * would let a rewritten sentence decide who the user worked for.
  */
-function historyFor(role: { title?: string; employer?: string }, versions: HistoricalRole[][]): HistoricalRole[][] {
+function historyFor(
+  role: { title?: string; employer?: string; startDate?: string; endDate?: string },
+  versions: HistoricalRole[][]
+): HistoricalRole[][] {
   const title = norm(role.title);
   const employer = norm(role.employer);
   if (!title && !employer) return [];
+  const period = [role.startDate, role.endDate].filter(Boolean).map((v) => norm(v));
+
+  const matches = (item: HistoricalRole) =>
+    (title && norm(item.title) === title) || (employer && norm(item.company) === employer);
+
   return versions
-    .map((entries) =>
-      entries.filter((item) => (title && norm(item.title) === title) || (employer && norm(item.company) === employer))
-    )
+    .map((entries) => {
+      const hit = entries.filter(matches);
+      if (hit.length < 2 || !period.length) return hit;
+      // Two entries in one version both answer to this role's surviving field —
+      // most often two spells at the same employer, or the same job title held
+      // at two places. Dates are the disambiguator the record already carries;
+      // using them prevents a sibling's history from being read as this job's.
+      // If they do not separate the entries, all of them stay and `decide`
+      // treats the disagreement as a conflict rather than picking one.
+      const byPeriod = hit.filter((item) => period.some((p) => p && norm(item.time).includes(p)));
+      return byPeriod.length ? byPeriod : hit;
+    })
     .filter((entries) => entries.length);
 }
 
-/**
- * Decide from the historical values found for one field.
- *
- * `matched` is how many historical entries describe this role; `values` is what
- * they held. When those differ, some entries were BLANKED — and that changes
- * everything, because the pre-fix build damaged saved snapshots by exactly the
- * same mechanism it used on the live record. Real scar tissue proved it:
- *
- *   snapshot 1: company "" (destroyed)
- *   snapshot 2: company "No Boundaries Ltd"
- *
- * Treating that as unanimous silently restored a variant spelling as the
- * confident answer, and the true value — "No Boundaries Training Ltd", which
- * lived in the destroyed snapshot — was gone with nothing to signal it.
- *
- * So unanimity may only be claimed when NO matched entry is missing the field.
- * A survivor among blanks is a candidate to offer, never an answer to apply.
- */
 function decide(perVersion: string[][]): { status: RecoveryStatus; value?: string; candidates?: string[] } {
-  // One value per version: any surviving witness within a version speaks for it.
-  const voices = perVersion.map((values) => values.map((v) => v.trim()).find(Boolean));
-  const present = voices.filter((v): v is string => Boolean(v));
+  // WITHIN a version, take the DISTINCT non-empty values — not the first one.
+  //
+  // This used to collapse a version with `find(Boolean)`, which was written to
+  // merge the two representations of ONE job: the structured snapshot whose
+  // company the old build blanked, and the rendered heading it left alone. It
+  // also merged two genuinely DIFFERENT jobs that appeared in the same saved
+  // résumé, so array order silently became the confidently-applied answer and
+  // one employer's name was written into another job.
+  //
+  // Distinct values handle both. One job recorded twice, once blank: a single
+  // distinct value, still one voice. Two different jobs: two distinct values,
+  // which is a disagreement inside the version and cannot be unanimity.
+  const voices = perVersion.map((values) => [...new Set(values.map((v) => v.trim()).filter(Boolean))]);
+  const conflictedWithin = voices.some((distinct) => distinct.length > 1);
+  const present = voices.flat();
   const distinct = [...new Set(present)];
   // A version that records this role but retains NO value for the field had its
   // copy destroyed. It may have held a different employer, so the survivors are
   // candidates to offer rather than an answer to apply.
-  const someDestroyed = voices.length > present.length;
-  if (distinct.length === 1 && !someDestroyed) return { status: "recovered", value: distinct[0] };
+  const someDestroyed = voices.some((d) => d.length === 0);
+  if (distinct.length === 1 && !someDestroyed && !conflictedWithin) {
+    return { status: "recovered", value: distinct[0] };
+  }
   if (distinct.length >= 1) return { status: "candidate", candidates: distinct };
   return { status: "unrecoverable" };
 }

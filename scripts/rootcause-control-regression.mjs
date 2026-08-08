@@ -609,5 +609,83 @@ console.log("\n=== CLUSTER C-beta+gamma — uncertain structure stays user struc
     organizationIdentity("Target roles: driver"));
 }
 
+// ===========================================================================
+console.log("\n=== CLUSTER C-delta — a representation is evidence only if we know what field it is ===");
+{
+  const T = "2026-08-07T09:00:00.000Z";
+  const vsn = (id, text, experience = []) => ({
+    id, label: "saved", laneId: null, notes: "", source: "builder", applicationId: null,
+    targetCompany: "", targetTitle: "", keywordsUsed: [], gapsAcknowledged: [], influenceSummary: "",
+    resumeText: text, createdAt: T,
+    resumeSnapshot: experience.length
+      ? { fullName: "D", email: "d@x.com", phone: "", website: "", template: "Modern ATS",
+          resume: { summary: "", coreSkills: [], experience, education: "", linkedinHeadline: "", linkedinSummary: "" } }
+      : null
+  });
+  const damaged = (over = {}) => ({
+    id: "r1", title: "Support Worker", employer: "", startDate: "2018", endDate: "2024",
+    current: false, responsibilities: [], tools: [], outcomes: [], evidenceIds: [], ...over
+  });
+  const recover = (role, versions) => recoverRoleStructure(role, harvestHistoricalRoles({ resumeVersions: versions }));
+  const reviewOf = (r, f) => (r.structuralReview ?? []).find((x) => x.field === f);
+
+  // D1 — FALSE RECOVERY: a date must never become the employer.
+  const dateShapes = [
+    "Support Worker | Jan 2018 to present",
+    "Support Worker | 2019 until 2021",
+    "Support Worker | Sept 2015 – Dec 2017",
+    "Support Worker | 2018 - 2024"
+  ];
+  for (const heading of dateShapes) {
+    const out = recover(damaged(), [vsn("v1", `EXPERIENCE\n${heading}`)]);
+    check(`D1 false-recovery: "${heading.split("|")[1].trim()}" is not restored as an employer`,
+      !out.employer, JSON.stringify(out.employer));
+  }
+
+  // D2 — FALSE RECOVERY: only lines we can identify as headings count.
+  // Each first segment is the damaged role's SURVIVING title, so the line
+  // genuinely enters the match set. An earlier draft used unrelated text and
+  // passed on the broken code too — vacuously, because nothing matched.
+  const notHeadings = [
+    ["a contact line", "CONTACT\nSupport Worker | 07700 900918"],
+    ["a summary line", "SUMMARY\nSupport Worker | calm under pressure"],
+    ["an education line", "EDUCATION\nSupport Worker | Bridgend College | 2018"],
+    ["a bullet that lost its marker", "EXPERIENCE\nSupport Worker | and wrote up every handover note myself"],
+    ["a starred bullet", "EXPERIENCE\n* Support Worker | Bluebird Care | 2018 - 2024"]
+  ];
+  for (const [what, text] of notHeadings) {
+    const out = recover(damaged(), [vsn("v1", text)]);
+    check(`D2 false-recovery: ${what} does not become an employer`, !out.employer, JSON.stringify(out.employer));
+  }
+
+  // D3 — JOB FUSION: two different jobs in one saved version must not fuse.
+  const twoJobs = vsn("v1",
+    "EXPERIENCE\nSupport Worker | Bluebird Care | 2022 - 2024\nSupport Worker | Mencap Cymru | 2018 - 2021");
+  const fused = recover(damaged({ startDate: "", endDate: "" }), [twoJobs]);
+  check("D3 job-fusion: two jobs sharing a title do not collapse into one answer",
+    !fused.employer, JSON.stringify(fused.employer));
+  check("   both are offered as candidates instead",
+    (reviewOf(fused, "employer")?.candidates ?? []).length === 2, JSON.stringify(reviewOf(fused, "employer")));
+
+  // D4 — OVER-CAUTION: a genuinely establishable value must still be recovered.
+  const clean = recover(damaged(), [vsn("v1", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024")]);
+  check("D4 over-caution: an unambiguous heading DOES restore the employer",
+    clean.employer === "Bluebird Care", JSON.stringify(clean.employer));
+  check("   and names its source", reviewOf(clean, "employer")?.status === "recovered", JSON.stringify(clean.structuralReview));
+
+  // D4b — dates disambiguate siblings rather than blocking recovery.
+  const dated = recover(damaged({ startDate: "2022", endDate: "2024" }), [twoJobs]);
+  check("D4b over-caution: dates pick the right sibling instead of refusing both",
+    dated.employer === "Bluebird Care", JSON.stringify(dated.employer));
+
+  // D4c — one job recorded twice in a version (snapshot blanked, heading intact)
+  // is still ONE witness, not a conflict.
+  const twoViews = vsn("v1", "EXPERIENCE\nSupport Worker | Bluebird Care | 2018 - 2024",
+    [{ title: "Support Worker", company: "", time: "2018 - 2024", bullets: [] }]);
+  const oneJob = recover(damaged(), [twoViews]);
+  check("D4c over-caution: two representations of ONE job still recover",
+    oneJob.employer === "Bluebird Care", JSON.stringify(oneJob.employer));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
