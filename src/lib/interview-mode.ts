@@ -216,7 +216,8 @@ function emptyMemory(): ConversationMemory {
 
 function cleanItem(item: string) {
   return item
-    .replace(/^(i|we)\s+(used|use|worked with|work with|handled|managed|supported|coordinated|created|built|led|was responsible for)\s+/i, "")
+    // "I" only — see the note in transformation-invariants.ts.
+    .replace(/^i\s+(used|use|worked with|work with|handled|managed|supported|coordinated|created|built|led|was responsible for)\s+/i, "")
     .replace(/^(and|also|plus|including)\s+/i, "")
     .replace(/\s+/g, " ")
     .replace(/[.]+$/g, "")
@@ -517,7 +518,7 @@ function extractResponsibilitySignals(answer: string) {
   // Stripping the verb can leave the subject pronoun behind ("I onboarding");
   // drop it so fragments read as responsibilities, not shards.
   const listSignals = responsibilityPattern.test(answer)
-    ? splitSignals(answer.replace(responsibilityPattern, "")).map((item) => item.replace(/^(i|we)\s+/i, "")).filter((item) => item.length > 2)
+    ? splitSignals(answer.replace(responsibilityPattern, "")).map((item) => item.replace(/^i\s+/i, "")).filter((item) => item.length > 2)
     : [];
   return unique([...sentenceSignals, ...listSignals]).slice(0, 12);
 }

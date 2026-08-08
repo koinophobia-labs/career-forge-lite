@@ -529,13 +529,33 @@ function sanitizeClaimForPath(path: string, text: string): string {
 
 export function sanitizeResumeForProfessionalUse(resume: ResumePackage): ResumePackage {
   const coreSkills = safeArray(resume.coreSkills);
+  // THE ROLE CONTAINER AND ITS CONTENTS SURVIVE INDEPENDENTLY.
+  //
+  // This function used to return [] for a role whose bullets were all
+  // withheld, and again for one whose title and company both sanitized to
+  // empty. Either way an entire employment record — employer, job title and
+  // years of dates — disappeared from the delivered DOCX and PDF while the
+  // on-screen preview still showed it. Silent, invisible, and unrecoverable
+  // by the user, who has no reason to re-read an export they just watched the
+  // product build.
+  //
+  // A sanitizer may withhold a generated SENTENCE. It may never make a JOB
+  // disappear. Employment history is a fact about the user's life; the
+  // admissibility of one bullet says nothing about whether they held the job.
+  // So bullets are filtered on their own merits, an empty bullet list is a
+  // legitimate outcome, and the container is dropped only when the user gave
+  // us nothing to identify it with at all.
   const experience = resume.experience.flatMap((role) => {
     const title = sanitizeProfessionalLine(role.title);
     const company = sanitizeProfessionalLine(role.company);
-    const heading = [title, company].filter(Boolean).join(" · ");
-    if (!heading) return [];
+    const time = typeof role.time === "string" ? role.time.trim() : "";
     const bullets = safeParagraphArray(role.bullets);
-    if (!bullets.length) return [];
+    // Nothing identifies this row and nothing survives inside it: there is no
+    // job here to preserve. Note this tests the ORIGINAL identity fields too,
+    // so a role is never dropped merely because sanitizing its heading emptied
+    // it — a withheld employer name loses the name, not the job.
+    const hasIdentity = Boolean(title || company || time || role.title?.trim() || role.company?.trim());
+    if (!hasIdentity && !bullets.length) return [];
     return [{ ...role, title, company, bullets }];
   });
   const summary = sanitizeProfessionalParagraph(resume.summary);

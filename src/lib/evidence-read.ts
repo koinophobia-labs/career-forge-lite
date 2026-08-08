@@ -305,7 +305,11 @@ function approvalKey(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[.!?]+$/, "")
-    .replace(/^(i|we)\s+(also\s+)?/i, "")
+    // Leading "I" only, never "we". A résumé bullet with no subject IS its owner,
+    // so dropping "I" leaves the actor unchanged; dropping "we" moves a team's
+    // work to one person. Four separate sites did this, which is why it is
+    // stated at each of them rather than fixed once and forgotten.
+    .replace(/^i\s+(also\s+)?/i, "")
     .replace(/^(and|or|plus|also)\s+/i, "")
     .toLowerCase();
 }

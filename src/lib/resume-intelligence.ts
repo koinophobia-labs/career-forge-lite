@@ -1,3 +1,4 @@
+import { transformPreservingTruth } from "@/lib/transformation-invariants";
 import { isUncertaintyStatement } from "@/lib/truth-guards";
 import type { ExperienceRole, IntakeData, ResumePackage } from "@/types/career";
 
@@ -10,11 +11,15 @@ export type ResumeQualityAnalysis = {
   suggestedImprovements: string[];
 };
 
-const weakTerms = [
-  /\bstuff\b/gi,
-  /\bthings\b/gi,
-  /\bvarious\b/gi,
-  /\bcandidate targeting\b/gi,
+// "stuff", "things" and "various" are GONE from this list. They are ordinary
+// words people use about their own work, and deleting them mid-sentence removed
+// the object of the verb rather than tightening the prose. Vague wording is a
+// coaching problem — analyzeResumeQuality already raises it as a suggestion,
+// which leaves the sentence the user's own.
+//
+// What remains is extraction noise: a token doubled by the importer, never
+// typed twice by a person. It is collapsed to one occurrence, not deleted.
+const duplicateArtifacts = [
   /\bcustomers customers\b/gi,
   /\btickets tickets\b/gi,
   /\bdocumented documentation\b/gi
@@ -118,15 +123,32 @@ function applySpellingAndCapitalization(value: string) {
 // problem: analyzeResumeQuality already surfaces weak openers as a suggestion,
 // which leaves the sentence — and the claim — the user's own.
 function replaceWeakLanguage(value: string) {
-  let next = value.replace(/^(i|we)\s+/i, "");
-  weakTerms.forEach((pattern) => {
-    next = next.replace(pattern, "");
+  // Leading "I" only. Dropping a leading "we" moved the work from the team to
+  // the individual — "we hit 98% on the audit that year" shipped as "Hit 98% on
+  // the audit that year." A résumé bullet with no subject IS its owner, so
+  // dropping "I" changes nothing; dropping "we" changes the actor, which is a
+  // fabrication of credit even though no word was invented.
+  let next = value.replace(/^i\s+/i, "");
+  // Filler words are no longer DELETED. They were removed anywhere in the
+  // sentence, which destroyed the object of the user's verb:
+  //   "helped people find stuff on the shop floor" -> "Helped people find on the shop floor."
+  //   "I sorted things out when the machines jammed" -> "Sorted out when the machines jammed."
+  // Only the duplicated-token artifacts are collapsed — those are extraction
+  // noise ("customers customers"), not words the user chose.
+  duplicateArtifacts.forEach((pattern) => {
+    next = next.replace(pattern, (match) => match.split(/\s+/)[0]);
   });
   return cleanWhitespace(next);
 }
 
 export function polishResumeSentence(value: string) {
-  return normalizePunctuation(sentenceCase(replaceWeakLanguage(applySpellingAndCapitalization(value))));
+  // Every polish runs under the downstream truth invariant. If the polished
+  // sentence would change who did the work, whether it happened, or whether it
+  // was negated, the user's own sentence is kept instead. An unpolished true
+  // bullet is publishable; a polished false one is not.
+  return transformPreservingTruth(value, (input) =>
+    normalizePunctuation(sentenceCase(replaceWeakLanguage(applySpellingAndCapitalization(input))))
+  );
 }
 
 // Opening-verb diversification is gone. It replaced the first word of any bullet
@@ -169,9 +191,13 @@ function polishSkills(skills: string[]) {
   return unique(
     skills.map((skill) => {
       let next = applySpellingAndCapitalization(skill);
-      weakTerms.forEach((pattern) => {
-        next = next.replace(pattern, "");
+      duplicateArtifacts.forEach((pattern) => {
+        next = next.replace(pattern, (match) => match.split(/\s+/)[0]);
       });
+      // A label that is ONLY filler is dropped whole rather than edited down to
+      // a fragment. Deleting the filler out of "various machinery" left
+      // "machinery", quietly changing which skill the user claimed.
+      if (/^(?:stuff|things|various|misc\.?|miscellaneous|other)$/i.test(cleanWhitespace(next))) return "";
       return cleanWhitespace(next);
     })
   )
