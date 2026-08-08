@@ -2216,7 +2216,13 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
       // says nothing, which is what is known.
       company: normalizeCompany(role.company) || (findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title) ? data.independentWorkType || "Independent Work" : ""),
       // "I don't remember exactly" is uncertainty, not a printable date range.
-      time: isWeakFreeText(role.time) || isUncertaintyStatement(role.time) ? "Dates" : cleanWhitespace(role.time) || "Dates",
+      // NO SCAFFOLD FOR DATES EITHER. gamma removed the invented employer but
+      // left this one, and the verification pass caught it: an unfilled date
+      // box printed the literal word "Dates" as the user's employment period,
+      // in the delivered document. A form label is neither empty nor a claim,
+      // so every emptiness filter and admissibility gate waved it through.
+      // Unknown dates are unknown; the record says nothing.
+      time: isWeakFreeText(role.time) || isUncertaintyStatement(role.time) ? "" : cleanWhitespace(role.time),
       bullets: []
     }));
 

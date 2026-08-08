@@ -757,5 +757,59 @@ console.log("\n=== CLUSTER C-epsilon — containers the old build deleted outrig
     JSON.stringify(twice.dossier.missingRoleCandidates));
 }
 
+// ===========================================================================
+console.log("\n=== CLUSTER C — verification-debt repairs ===");
+{
+  const { normalizeEducationEntry } = load(path.join(root, "src/lib/education-intelligence.ts"));
+  const NOW = "2026-08-07T09:00:00.000Z";
+
+  // C2-07 — gamma removed the invented EMPLOYER and left the invented DATES.
+  const noDates = generateResumePackage({
+    ...initialIntake, fullName: "T", currentTitle: "Warehouse Operative",
+    currentCompany: "Wincanton", currentTime: "",
+    responsibilities: "loaded the cages and kept the pick face topped up"
+  });
+  check("V1 fabrication: an unfilled date box does not print the label \"Dates\"",
+    !JSON.stringify(noDates).includes('"Dates"'), JSON.stringify(noDates.experience[0]));
+  check("   erasure: the job and employer are still there",
+    noDates.experience[0]?.company === "Wincanton", JSON.stringify(noDates.experience[0]));
+  check("   and real dates still print",
+    generateResumePackage({ ...initialIntake, fullName: "T", currentTitle: "Warehouse Operative",
+      currentCompany: "Wincanton", currentTime: "2019 - 2024", responsibilities: "loaded the cages" })
+      .experience[0]?.time === "2019 - 2024");
+
+  // C1-10 — an acronym allowlist can only preserve what somebody listed.
+  const QUALS = ["NVQ Level 3 Health and Social Care", "PGCE Primary", "HGV Class 1", "BTEC Level 2", "SVQ Level 2", "HNC Construction"];
+  const lost = QUALS.filter((q) => {
+    const out = normalizeEducationEntry(q);
+    return !out.includes(q.split(" ")[0]);
+  });
+  check("V2 erasure: qualifications the allowlist never heard of keep their capitals",
+    lost.length === 0, JSON.stringify(lost.map((q) => [q, normalizeEducationEntry(q)])));
+  check("   and an ordinary lowercase entry is still tidied",
+    normalizeEducationEntry("bachelor of science") !== "bachelor of science",
+    normalizeEducationEntry("bachelor of science"));
+
+  // C2-08 — the migration's own findings must survive a reload, or the
+  // question it asks reaches nobody.
+  const withReview = {
+    ...emptyDossier(NOW),
+    roles: [{ id: "r1", title: "Support Worker", employer: "", startDate: "2018", endDate: "2024",
+      current: false, responsibilities: [], tools: [], outcomes: [], evidenceIds: [],
+      structuralReview: [{ field: "employer", status: "candidate", candidates: ["Bluebird Care"] }] }]
+  };
+  const afterReload = reviveDossier(JSON.parse(JSON.stringify(withReview)));
+  check("V3 erasure: a recovery candidate survives a reload",
+    (afterReload.roles[0]?.structuralReview ?? []).length === 1,
+    JSON.stringify(afterReload.roles[0]?.structuralReview));
+  check("   with its candidates intact",
+    (afterReload.roles[0]?.structuralReview?.[0]?.candidates ?? []).includes("Bluebird Care"),
+    JSON.stringify(afterReload.roles[0]?.structuralReview));
+  // And the tombstone from epsilon, same whitelist trap.
+  const tomb = reviveDossier(JSON.parse(JSON.stringify({ ...emptyDossier(NOW), removedRoleIds: ["supportworker::bluebirdcare"] })));
+  check("   as does the deliberate-deletion tombstone",
+    (tomb.removedRoleIds ?? []).length === 1, JSON.stringify(tomb.removedRoleIds));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

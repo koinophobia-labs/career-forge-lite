@@ -147,7 +147,13 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
         return [{
           id: text(item.id), title: text(item.title), employer: text(item.employer), startDate: text(item.startDate),
           endDate: text(item.endDate), current: item.current === true, responsibilities: strings(item.responsibilities),
-          tools: strings(item.tools), outcomes: strings(item.outcomes), evidenceIds: strings(item.evidenceIds)
+          tools: strings(item.tools), outcomes: strings(item.outcomes), evidenceIds: strings(item.evidenceIds),
+          // The recovery migration's own findings. Dropped by this whitelist,
+          // a candidate the user was about to confirm vanished on reload and
+          // the refusal half of the invariant became invisible — the migration
+          // asked a question nobody could hear. Recomputed on every read, so a
+          // stale entry cannot outlive the state that produced it.
+          ...(Array.isArray(item.structuralReview) ? { structuralReview: item.structuralReview as DossierRole["structuralReview"] } : {})
         }];
       })
     : [];

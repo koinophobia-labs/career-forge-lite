@@ -253,6 +253,12 @@ function titleCase(value: string) {
   return clean(value)
     .split(/\s+/)
     .map((word) => {
+      // TRUST WHAT THE USER TYPED IN CAPS. The allowlist below can only
+      // preserve acronyms somebody thought to add, so NVQ, PGCE, HGV, BTEC,
+      // SVQ, HNC and every qualification not on it came back lowercased in the
+      // delivered document. A token the user wrote in capitals is a token they
+      // meant in capitals.
+      if (/^[\p{Lu}\p{N}][\p{Lu}\p{N}.&/-]*$/u.test(word) && /\p{Lu}/u.test(word) && word.length > 1) return word;
       const lower = word.toLowerCase();
       return keep.get(lower) ?? lower.charAt(0).toUpperCase() + lower.slice(1);
     })
