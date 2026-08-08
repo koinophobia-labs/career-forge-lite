@@ -1,0 +1,389 @@
+[
+ {
+  "id": "S1-06",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "Real accomplishment bullets are deleted when the user writes \", no X\" instead of \"with no X\"",
+  "mechs": [
+   "The gap/claim distinction is decided by surface syntax rather than semantic role \u2014 a closed list of prepositions is used as a proxy for \"this clause describes conditions of work\", so the identical claim written with a comma instead of \"with\" is read as an absence of evidence and amputated.",
+   "Gap-versus-achievement is decided from an adjacent-token cue \u2014 whether a whitelisted preposition sits immediately before \"no\" \u2014 instead of from clause structure and who is negating what, so the same claim is admissible or inadmissible depending on the user's punctuation."
+  ]
+ },
+ {
+  "id": "S1-07",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "other",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "One \"with no\" anywhere in a string switches gap detection off for the whole string, so a real self-declared gap prints as a r\u00e9sum\u00e9 bullet",
+  "mechs": [
+   "A whole-value regex veto is used to answer a per-clause grammatical question \u2014 one preposition-led \"no\" anywhere in the string exempts every gap pattern in that string, so clause-level meaning is adjudicated at string granularity and a gap clause inherits the exemption earned by an unrelated adverbial clause beside it.",
+   "A per-occurrence linguistic exemption (a preposition in front of \"no\" makes that one \"no\" adverbial) is implemented as a whole-value veto, so one adverbial occurrence anywhere disables every gap detector for the entire string \u2014 including detectors that never keyed on \"no\"."
+  ]
+ },
+ {
+  "id": "S1-05",
+  "sev": "P3",
+  "filed": "P2",
+  "dirn": "amputation",
+  "survives": false,
+  "fixed": false,
+  "verdicts": [
+   "REFUTED",
+   "REFUTED"
+  ],
+  "title": "exportSections re-drops the role container that sanitizeResumeForProfessionalUse deliberately kept",
+  "mechs": [
+   "Two layers apply near-identical emptiness predicates to the same rows, but the upstream one deliberately consults the pre-sanitization identity fields as well, so the layers disagree only on containers that have already been emptied of every renderable field \u2014 a difference in bookkeeping, not in delivered content.",
+   "A container-survival guarantee (\"never delete an employment record\") was read as a rendering guarantee, so a row the sanitizer emptied of every printable field was counted as a lost job even though the renderer, the print stylesheet, and the delivered bytes all agree it has nothing to show."
+  ]
+ },
+ {
+  "id": "S1-08",
+  "sev": "P0",
+  "filed": "P2",
+  "dirn": "other",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "SEVERITY_WRONG",
+   "SEVERITY_WRONG"
+  ],
+  "title": "The date field bypasses every gate: a separation reason typed into it prints verbatim in the DOCX and PDF and is not counted as a withheld fact",
+  "mechs": [
+   "The disclosure gate is keyed to a hand-enumerated set of \"content\" fields rather than to the text the renderer actually prints, so role.time \u2014 a field every printer concatenates into the heading but no sanitizer, revalidator or receipt reads \u2014 carries an already-adjudicated exclusion straight into the delivered document.",
+   "The disclosure gate is applied per-entry-point rather than to the data itself, so a field gated on the intake door (`getUsableIntake` treats `*Time` as gated \"organization\" text) is completely ungated on the dossier door and at the export sanitizer, and the withheld-facts receipt is computed from a different, narrower set of fields than the one the renderer actually prints."
+  ]
+ },
+ {
+  "id": "S1-10",
+  "sev": "P3",
+  "filed": "P3",
+  "dirn": "other",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "A role whose bullets are all withheld renders as a bare bold heading butted against the next job's heading",
+  "mechs": [
+   "The receipt of what was withheld is derived from a different ledger (separation-disclosure sentences) than the one that actually removed the content (admissibility sanitization), so a role emptied by the second is reported by neither the document nor the UI \u2014 and the DOCX renderer emits role containers purely structurally, with no notion that an empty container needs a marker.",
+   "Suppression is decided in the evidence/admissibility gate layer, but neither the document renderer nor the export's withheld-facts receipt is derived from those gate decisions, so a container that survives a gate which removed all of its contents prints as an unexplained blank that nothing downstream can account for."
+  ]
+ },
+ {
+  "id": "S1-09",
+  "sev": "P2",
+  "filed": "P2",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "SEVERITY_WRONG"
+  ],
+  "title": "A withheld LinkedIn headline is silently replaced with a machine-assembled skills string presented as the user's headline",
+  "mechs": [
+   "A withholding decision is treated as a hole to be backfilled rather than as an outcome to be reported, so the sanitizer silently authors replacement text where \"nothing\" was the truthful result and no ledger records that a substitution occurred.",
+   "A field-level withholding decision is treated as a rendering hole to be backfilled rather than as a refusal to be reported, so the sanitizer authors replacement text and overwrites the user's own words in the store instead of returning empty and telling anyone."
+  ]
+ },
+ {
+  "id": "S3-F5",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "The disclosure-review approval loop cannot restore an organization field \u2014 \"Keep on r\u00e9sum\u00e9\" is a dead button for titles, employers and dates",
+  "mechs": [
+   "The approval token is minted from a different unit than the one the gate withholds \u2014 review approves a composite role record (\"title \u00b7 employer \u00b7 dates\") while eligibility is read and withheld per individual field, so the consent key can never match the withheld text.",
+   "A role's disclosure-review record is keyed on a composite identity string (\"title \u00b7 employer \u00b7 dates\") while the gate reads each organization field individually, so the user's approval is minted in a namespace the read can never match \u2014 and the generator's blank-field placeholders then fill the hole the approval was supposed to close."
+  ]
+ },
+ {
+  "id": "S3-F6",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "Real job titles and employer names are wiped by the organization gate: Parental Leave Coordinator, Bereavement Leave Administrator, Sick Leave & Absence Officer, Group Restructuring Analyst, Business Unit Reorganisation Lead, Site Restructure Partners Ltd",
+  "mechs": [
+   "A sentence-level personal-disclosure classifier is applied to controlled label fields, so occupational vocabulary naming leave or restructuring as the user's DOMAIN OF WORK is read as the user disclosing their own circumstances \u2014 and because the approval key is built from the composite role record rather than the field, the review lifecycle cannot re-admit what it flagged.",
+   "A free-text sentence classifier built to judge what a person says about their own circumstances is applied to controlled label fields, so employment metadata is adjudicated as though it were an autobiographical claim \u2014 and the categories that route it there (\"organization\") have no way to surface or approve what they withhold."
+  ]
+ },
+ {
+  "id": "S3-F7",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "other",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "A withheld date range prints the literal placeholder \"Dates\" as the employment period",
+  "mechs": [
+   "Withholding empties a field to the same empty string that \"never filled in\" produces, so the renderer's empty-form scaffolding label is printed as though it were the user's employment record \u2014 absence-by-policy is indistinguishable from absence-by-omission at the point of render.",
+   "Sentence-level disclosure withholding, designed for narrative evidence, is applied to short controlled labels where the whole field is one sentence, so a partial match erases the entire value and the generator's empty-input placeholder \u2014 a word written for a blank box \u2014 becomes the printed content; the re-admission path fails alongside it because approval is keyed on a composed role heading while the read is keyed per field."
+  ]
+ },
+ {
+  "id": "S3-F8",
+  "sev": "P2",
+  "filed": "P2",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "SEVERITY_WRONG"
+  ],
+  "title": "Real HR and ward-admin duties are withheld from evidence fields by the same sentence classifier",
+  "mechs": [
+   "A lexical disclosure classifier treats a benefit-name collocation (\"maternity leave\", \"sick leave\") as evidence of whose circumstance the sentence describes, so administering other people's leave is read as disclosing one's own \u2014 the same subject-attribution failure the care-work patterns were already narrowed to avoid.",
+   "A lexical disclosure classifier keys on the noun phrase (\"\u2026 leave\") without requiring a personal subject, so the vocabulary of an HR/ward administrator's job is indistinguishable from a disclosure about that person's own leave \u2014 and the same pattern fires on employment metadata (a job title), where no user-reachable review can undo it."
+  ]
+ },
+ {
+  "id": "S3-F9",
+  "sev": "P1",
+  "filed": "P2",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "SEVERITY_WRONG"
+  ],
+  "title": "identity fields (phone, website) are ungated and print free text verbatim in the r\u00e9sum\u00e9 contact line",
+  "mechs": [
+   "The intake schema uses one category to answer two different questions \u2014 what a datum MEANS and whether the free text in its field is read through the disclosure gate \u2014 so a field whose datum is correctly \"not a career claim\" also escapes review of whatever prose the user actually typed there.",
+   "Disclosure review is scoped by which intake field the text arrived in rather than by whether the text is free prose that prints, so prose typed into the never-gated identity fields reaches the artifact unreviewed and is excluded from the count the product shows the user."
+  ]
+ },
+ {
+  "id": "S4-03",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "A short ineligible record substring-matches and deletes unrelated, still-approved sentences the user typed",
+  "mechs": [
+   "Export-time withholding decides what to delete by lexical containment against the raw text of ineligible records rather than by the claim-to-evidence provenance the variant already carries, so one record's ineligibility silently amputates every other independently-approved claim that shares its wording.",
+   "Export-time withholding is decided by lexical containment between rendered prose and the raw text of every ineligible record in the dossier, so any record's words can veto a sentence whose own provenance is still fully eligible \u2014 the snapshot's recorded claim-to-evidence mapping is never consulted."
+  ]
+ },
+ {
+  "id": "S4-04",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "Sentences the user typed themselves in View/edit are silently deleted from the delivered DOCX and PDF",
+  "mechs": [
+   "The export-time disclosure gate is applied to the whole stored snapshot with no notion of authorship, so a sentence the user typed into the r\u00e9sum\u00e9 editor is judged by an approval ledger that only evidence records can ever enter \u2014 the classifier that is documented to \"raise its hand, not swing the axe\" swings it where no review lifecycle exists.",
+   "Export-time revalidation is applied uniformly to the whole snapshot, so prose the user typed themselves is judged by a rule written for product-generated prose \u2014 the export boundary has no notion of authorship and no channel to report what it removed."
+  ]
+ },
+ {
+  "id": "S4-02",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED"
+  ],
+  "title": "The ZIP's LinkedIn-and-Career-Materials.txt reprints rejected and user-excluded evidence that the DOCX in the same archive withheld",
+  "mechs": [
+   "The pack is a point-in-time snapshot of generated strings, and export re-derives eligibility only for the r\u00e9sum\u00e9 variants \u2014 every other snapshot field is trusted as already-vetted and copied out verbatim, so evidence that became ineligible after generation survives in whatever surface was not re-derived."
+  ]
+ },
+ {
+  "id": "S4-06",
+  "sev": "P0",
+  "filed": "P1",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "SEVERITY_WRONG",
+   "SEVERITY_WRONG"
+  ],
+  "title": "Saved resume versions are a second unrevalidated export path, and the page asserts the opposite",
+  "mechs": [
+   "Evidence eligibility is decided once when a snapshot is written rather than at the moment bytes leave the product, so any surface that replays a stored snapshot ships decisions the user has since reversed.",
+   "The evidence gate is bound to the pack-export renderer rather than to the act of bytes leaving the product, so any surface that serializes a stored snapshot through its own path \u2014 the saved-version page's copy button, its print-to-PDF button, and the resumeText the builder writes \u2014 sits outside the gate and republishes evidence that has since been withdrawn."
+  ]
+ },
+ {
+  "id": "S4-05",
+  "sev": "P2",
+  "filed": "P0",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "SEVERITY_WRONG",
+   "CONFIRMED"
+  ],
+  "title": "Education is not actually revalidated: excluding the education record still prints the credential in DOCX and PDF",
+  "mechs": [
+   "The export revalidator identifies withdrawn content by text overlap with the record's raw words instead of by the provenance link the claim was generated from, so any field assembled from structured dossier fields is invisible to it \u2014 and the only thing catching that today is a separate provenance gate in another module, not the layer whose stated job it is.",
+   "Export-time revalidation re-derives eligibility from string overlap with the evidence text instead of following the evidence ids the snapshot already cites, so a record whose stored wording differs from the rendered wording \u2014 or that no longer exists \u2014 is invisible to the check, while the genuinely provenance-based gate that would have caught it is waived for any field the user has edited."
+  ]
+ },
+ {
+  "id": "S4-07",
+  "sev": "P2",
+  "filed": "P1",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "SEVERITY_WRONG",
+   "CONFIRMED"
+  ],
+  "title": "Fuzzy matcher's 12-character floor lets a rejected skill record's short atoms print in Core Skills",
+  "mechs": [
+   "When the generator splits one evidence record into several r\u00e9sum\u00e9 claims it keeps the atom text but drops the record id, so the export-time truth gate must re-identify withheld content by string similarity and falls back to a length threshold that short atoms slip under.",
+   "Withholding at the export boundary is decided by fuzzy text overlap with a minimum-length floor instead of by the evidence-record id the snapshot already stores against every claim, so short claims derived from an ineligible record are structurally invisible to the guard."
+  ]
+ },
+ {
+  "id": "TI-05",
+  "sev": "P0",
+  "filed": "P1",
+  "dirn": "fabrication",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "SEVERITY_WRONG",
+   "CONFIRMED"
+  ],
+  "title": "The leading-first-person strip the invariant exists to police runs upstream of transformPreservingTruth, and a change the guard explicitly rejects ships in a DOCX",
+  "mechs": [
+   "The truth invariant is applied as an opt-in wrapper around a single leaf polish step, while the edits that actually change meaning \u2014 leading first-person and possessive strips \u2014 run at earlier, unwrapped normalization sites, so the guard sits structurally downstream of the act it was written to police and can never observe it.",
+   "The truth-shape invariant is wrapped around the last cosmetic polish instead of around the intake normalization that actually rewrites the sentence, so the guard's \"before\" is already the transformed string and the only edit it can ever judge is one that has already happened."
+  ]
+ },
+ {
+  "id": "S4-08",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "fabrication",
+  "survives": false,
+  "fixed": false,
+  "verdicts": [
+   "REFUTED"
+  ],
+  "title": "Prefix-span heuristic misses a hand-edited paraphrase of an excluded record",
+  "mechs": [
+   "The report treats a lexical evidence-match at export as the authority over every sentence in the document, when the product deliberately governs hand-edited claims by authorship status (user-authored, recheck-required) rather than by evidence provenance \u2014 so the \"miss\" is the designed boundary between the two, not a hole in one of them."
+  ]
+ },
+ {
+  "id": "TI-06",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "SEVERITY_WRONG"
+  ],
+  "title": "normalizePunctuation collapses the user's ellipsis into a full stop inside the invariant-protected transform, and the broken sentence ships in a DOCX",
+  "mechs": [
+   "A cosmetic punctuation/function-word normalizer runs inside the truth-preserving transform, but the invariant guarding that transform models only agency, polarity and accomplishment \u2014 so the entire class of edits this transform actually makes (punctuation, casing, stopword deletion) is invisible to its own guard and ships unreviewed.",
+   "A cosmetic punctuation normalizer rewrites sentence-boundary characters the rest of the pipeline treats as structure, so downstream sentence-scoped guards and approval keys are computed against a boundary the user never typed."
+  ]
+ },
+ {
+  "id": "TI-08",
+  "sev": "P2",
+  "filed": "P2",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "polishResumePackage truncates the user's last word after the invariant has already returned, resurrecting a rule the same file says was deleted for doing exactly this",
+  "mechs": [
+   "A text mutation is chained onto the result of the truth-preserving transform instead of running inside it, so the invariant certifies one string while a different, shorter string is what ships.",
+   "The truth invariant is applied as a wrapper around one transform rather than around the field's whole pipeline, so a final edit chained onto transformPreservingTruth's already-cleared return value sits outside the guard entirely \u2014 the guard covers a step, not the value."
+  ]
+ },
+ {
+  "id": "TI-07",
+  "sev": "P2",
+  "filed": "P2",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "CONFIRMED",
+   "CONFIRMED"
+  ],
+  "title": "The guard makes polishResumeSentence stop cleaning an entire family of ordinary sentences, which come back raw and unpublishable",
+  "mechs": [
+   "A surface-token truth classifier is re-run on the output of a transformation that deletes the very token it keys on, so the invariant reads the transformation's own sanctioned edit as a change of claim and reverts it.",
+   "The truth classifier reads accomplishment off surface pronoun phrasing rather than off the claim, so a transformation the same file certifies as meaning-preserving (dropping the leading \"I\") changes the classification and the guard vetoes its own sanctioned edit."
+  ]
+ },
+ {
+  "id": "TI-09",
+  "sev": "P3",
+  "filed": "P3",
+  "dirn": "amputation",
+  "survives": true,
+  "fixed": false,
+  "verdicts": [
+   "REFUTED",
+   "CONFIRMED"
+  ],
+  "title": "polishBullets silently deletes true bullets past the fifth",
+  "mechs": [
+   "The same per-role bullet cap is duplicated at three independent stages of one pipeline, so the finding read the last, permanently-shadowed copy as the amputating line while the truncation a real user experiences is applied earlier \u2014 site attribution by code reading rather than by tracing which stage actually holds the excess content.",
+   "A fixed per-role bullet cap is implemented as a silent truncation duplicated at two pipeline stages rather than as a judgement the quality layer reports, so the user-visible amputation is made by the earlier copy while the copy named in the finding is unreachable dead code."
+  ]
+ }
+]
