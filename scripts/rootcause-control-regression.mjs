@@ -527,5 +527,87 @@ console.log("\n=== CLUSTER C-alpha — structure is unreachable by the classifie
     targeting.experience[0]?.title === "Warehouse Operative", JSON.stringify(targeting.experience[0]));
 }
 
+// ===========================================================================
+console.log("\n=== CLUSTER C-beta+gamma — uncertain structure stays user structure ===");
+{
+  // THE INVARIANT, both halves at once because they are opposite failures of
+  // one rule: structure never becomes empty, and never becomes invented.
+  //   beta  — parsing must not decide "uncertain, therefore blank"
+  //   gamma — downstream must not decide "blank, therefore Current Company"
+
+  // B1 — real job titles whose wording collides with the disclosure classifier.
+  const REAL_TITLES = [
+    "Maternity Leave Cover Teacher", "Sick Leave Cover Supervisor",
+    "Bereavement Leave Administrator", "Recovery Support Worker",
+    "Redundancy Support Adviser", "Leave Cover Supervisor"
+  ];
+  for (const title of REAL_TITLES) {
+    const parsed = parseOrganizationField(title);
+    check(`B1 erasure: "${title}" survives whole`, parsed.identity === title, JSON.stringify(parsed));
+  }
+  check("B1b and the uncertainty is FLAGGED rather than acted on",
+    parseOrganizationField("Maternity Leave Cover Teacher").uncertain === true,
+    JSON.stringify(parseOrganizationField("Maternity Leave Cover Teacher")));
+
+  // B2 — hostile Unicode. Plain-English fixtures were already proven too polite.
+  const NAMES = [
+    "Café Nero", "Société Générale", "Żabka Polska", "Ångström Analys AB",
+    "Ó Súilleabháin Solicitors", "Nkechi's Home Care Agency", "O'Donnell's Bar & Grill",
+    "Marks & Spencer, Leeds", "Baker, Baker & Cole", "St. Mary's Hospice",
+    "Şişli Belediyesi Sosyal Hizmetler", "Ysbyty Gwynedd", "The Co-operative Food",
+    "株式会社ローソン", "Университет ИТМО", "مستشفى الملك فيصل", "北京字节跳动科技有限公司",
+    "1st Choice Care", "24/7 Security Solutions", "Class of 88 Barbers", "3M",
+    "Hillcrest t/a Hillcrest Care", "Bramble Hub C.I.C.", "J Sainsbury Ltd.", "Greggs (UK)"
+  ];
+  const mangled = NAMES.filter((n) => organizationIdentity(n) !== n);
+  check(`B2 erasure: ${NAMES.length} real organisation names survive byte-for-byte`,
+    mangled.length === 0, JSON.stringify(mangled));
+
+  // B2b — the same names all the way through generation into the résumé.
+  const survivedGen = NAMES.filter((name) => {
+    const pkg = generateResumePackage({
+      ...initialIntake, fullName: "Test Person", currentTitle: "Support Worker",
+      currentCompany: name, currentTime: "2019 - 2024",
+      responsibilities: "ran the medication round morning and night"
+    });
+    return pkg.experience.some((r) => r.company === name);
+  });
+  check(`B2b erasure: and all ${NAMES.length} survive generation into the résumé`,
+    survivedGen.length === NAMES.length,
+    JSON.stringify(NAMES.filter((n) => !survivedGen.includes(n))));
+
+  // G1 — the invented employer is gone, and nothing replaces it.
+  const blank = generateResumePackage({
+    ...initialIntake, fullName: "Test Person", currentTitle: "Warehouse Operative",
+    currentCompany: "", currentTime: "2019 - 2024",
+    responsibilities: "loaded the cages and kept the pick face topped up"
+  });
+  const whole = JSON.stringify(blank);
+  check("G1 fabrication: no employer is invented for a blank field",
+    !/Current Company|Previous Company|Additional Company/.test(whole), whole.slice(0, 200));
+  check("   the job itself still appears", blank.experience.length >= 1, JSON.stringify(blank.experience));
+  check("   erasure: and the real job title beside it is untouched",
+    blank.experience[0]?.title === "Warehouse Operative", JSON.stringify(blank.experience[0]));
+
+  // G2 — the seesaw, in one record. Beta must not hand gamma a hole to fill.
+  const seesaw = generateResumePackage({
+    ...initialIntake, fullName: "Test Person", currentTitle: "Yoga Teacher",
+    currentCompany: "Let Go Yoga Studio", currentTime: "2020 - 2025",
+    responsibilities: "taught six classes a week and ran the beginners course"
+  });
+  const line = JSON.stringify(seesaw);
+  check("G2 the employer survives AND is not replaced by a placeholder",
+    line.includes("Let Go Yoga Studio") && !/Current Company/.test(line),
+    JSON.stringify(seesaw.experience[0]));
+
+  // G3 — contamination is still separated where there IS evidence to split on.
+  check("G3 contamination: a delimited narrative is still separated",
+    organizationIdentity("Wincanton (agency, until my position was cut)") === "Wincanton",
+    organizationIdentity("Wincanton (agency, until my position was cut)"));
+  check("   and targeting text still yields no employer",
+    organizationIdentity("Target roles: driver") === "",
+    organizationIdentity("Target roles: driver"));
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

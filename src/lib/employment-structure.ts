@@ -43,6 +43,12 @@ export type OrganizationField = {
   identity: string;
   /** Narrative the user appended to it, if any. Enters the disclosure lifecycle; never printed unresolved. */
   narrative: string;
+  /**
+   * The parser suspects something is mixed in but could not confidently split
+   * it. The value is returned WHOLE and unaltered; this flags it for review.
+   * Uncertainty is a reason to ask, never a reason to blank.
+   */
+  uncertain?: boolean;
 };
 
 /**
@@ -90,10 +96,21 @@ export function parseOrganizationField(value: string): OrganizationField {
   // statement has no structural identity inside it to preserve.
   if (TARGETING.test(raw)) return { identity: "", narrative: raw };
 
-  // No narrative boundary found. If the WHOLE value reads as a disclosure there
-  // is no identity to keep — that is a review state, not a licence to invent
-  // one. The caller surfaces it; nothing is deleted.
-  if (possibleDisclosure(raw)) return { identity: "", narrative: raw };
+  // UNCERTAIN STRUCTURE REMAINS USER STRUCTURE.
+  //
+  // This used to return identity:"" when the whole value tripped the disclosure
+  // classifier with no delimiter to split on. That erased real job titles whole
+  // — "Maternity Leave Cover Teacher", "Bereavement Leave Administrator",
+  // "Sick Leave Cover Supervisor" — because a classifier built to spot personal
+  // disclosure cannot tell somebody disclosing their own leave from somebody
+  // whose JOB is covering other people's.
+  //
+  // The parser is allowed to separate identity from narrative when it has
+  // evidence to do so: a delimiter with a flagged tail. Without that evidence
+  // it has no basis for surgery, so the value comes back whole and carries a
+  // flag. Blanking is not the cautious option — it is a silent edit to somebody
+  // s employment record.
+  if (possibleDisclosure(raw)) return { identity: raw, narrative: "", uncertain: true };
 
   return { identity: raw, narrative: "" };
 }

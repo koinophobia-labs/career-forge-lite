@@ -822,8 +822,17 @@ function normalizeTool(value: string) {
 function normalizeCompany(value: string) {
   const cleaned = cleanWhitespace(value);
   if (!cleaned || isWeakFreeText(cleaned)) return "";
-  const hasIntentionalCaps = /[a-z][A-Z]/.test(cleaned);
-  return hasIntentionalCaps ? cleaned : titleCase(cleaned);
+  // NO RE-CASING. An employer name is a proper noun the user typed, and
+  // title-casing it corrupted every correctly-typed one:
+  //   3M -> 3m            Greggs (UK) -> Greggs (uk)
+  //   C.I.C. -> C.i.c.    O'Donnell's -> O'donnell's
+  //   Университет ИТМО -> Университет Итмо
+  // The "intentional caps" escape hatch only recognised inner camelCase, so
+  // acronyms, initialisms, bracketed country codes and every non-Latin script
+  // fell through it. Tidying "acme corp" is not worth rewriting somebody's
+  // employer, and leaving the user's own words alone is the rule everywhere
+  // else in this codebase.
+  return cleaned;
 }
 
 function isWeakTarget(value: string) {
@@ -840,7 +849,13 @@ function isWeakFreeText(value: string) {
   if (!cleaned) return true;
   if (weakFreeTextValues.has(cleaned)) return true;
   if (cleaned.length === 1) return true;
-  if (/^[^\w]+$/.test(cleaned)) return true;
+  // \w is [A-Za-z0-9_] — ASCII only — so this junk-input test treated EVERY
+  // string with no Latin letter or digit as garbage. 株式会社ローソン,
+  // Университет ИТМО and مستشفى الملك فيصل are employer names, not noise, and
+  // they were deleted and replaced with a placeholder. The Unicode property
+  // escape asks the question that was actually intended: does this contain any
+  // letter or number, in any script?
+  if (!/[\p{L}\p{N}]/u.test(cleaned)) return true;
   if (/^(.)\1{2,}$/.test(cleaned)) return true;
   return false;
 }
@@ -2164,19 +2179,16 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
       title: data.currentTitle,
       company: data.currentCompany,
       time: data.currentTime,
-      fallbackCompany: "Current Company"
     },
     {
       title: data.previousTitle,
       company: data.previousCompany,
       time: data.previousTime,
-      fallbackCompany: "Previous Company"
     },
     {
       title: data.additionalTitle,
       company: data.additionalCompany,
       time: data.additionalTime,
-      fallbackCompany: "Additional Company"
     }
   ]
     // Container vs contents, same rule as the export sanitizer. Filtering on
@@ -2192,7 +2204,17 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
       title: findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title)
         ? formatIndependentTitle(findIndependentWorkRole(role.title)?.title ?? titleCase(role.title), data.independentWorkType)
         : titleCase(role.title),
-      company: normalizeCompany(role.company) || (findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title) ? data.independentWorkType || "Independent Work" : role.fallbackCompany),
+      // NO INVENTED EMPLOYER. This used to fall back to "Current Company" /
+      // "Previous Company" whenever the field read empty, and that scaffold was
+      // persisted into saved résumé versions and exported as factual career
+      // history. Career Forge cannot decide that somebody worked for a company
+      // called Current Company.
+      //
+      // With beta, an empty employer now means the user genuinely left it blank
+      // — the parser no longer blanks real names — so an empty string is the
+      // truthful answer. Rendering can say "Company not provided"; the record
+      // says nothing, which is what is known.
+      company: normalizeCompany(role.company) || (findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title) ? data.independentWorkType || "Independent Work" : ""),
       // "I don't remember exactly" is uncertainty, not a printable date range.
       time: isWeakFreeText(role.time) || isUncertaintyStatement(role.time) ? "Dates" : cleanWhitespace(role.time) || "Dates",
       bullets: []
