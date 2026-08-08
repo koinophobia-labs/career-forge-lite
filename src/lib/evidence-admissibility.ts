@@ -9,6 +9,7 @@ import {
   // (no truth-guard withholding on this path -- see sanitizeProfessionalLine)
 } from "@/lib/truth-guards";
 import { eligibleUserText, evidenceEligibility, isUsable, resolutionIsStale } from "@/lib/evidence-read";
+import { harvestHistoricalRoles, recoverRoleStructure, roleHasStructure } from "@/lib/employment-structure";
 import type { ResumePackage } from "@/types/career";
 import type { CommandCenterState, ResumeVersionRecord } from "@/types/command-center";
 import type {
@@ -404,29 +405,47 @@ export function sanitizeCareerDossier(dossier: CareerDossier): DossierSanitizati
   );
 
   const roles = dossier.roles.flatMap((role) => {
-    const title = sanitizeProfessionalLine(role.title);
-    const employer = sanitizeProfessionalLine(role.employer);
-    const heading = [title, employer].filter(Boolean).join(" · ");
     const evidenceIds = role.evidenceIds.filter((id) => approvedProfessionalIds.has(id));
-    // A role is kept whenever it still has a heading. Dropping it because its
-    // evidence links were filtered deleted genuine employment history on a read
-    // path; an unsupported role simply renders no bullets (see resume-pack.ts,
-    // which already omits roles with nothing defensible from the RÉSUMÉ without
-    // erasing them from the DOSSIER).
-    if (!heading) return [];
+    // TITLE AND EMPLOYER ARE NO LONGER TOUCHED HERE.
+    //
+    // They used to run through sanitizeProfessionalLine — a classifier that
+    // judges whether a RÉSUMÉ CLAIM is defensible — which blanked "No
+    // Boundaries Training Ltd", "Parenta" and "Recovery Support Worker". This
+    // function runs on every state READ and its output is PERSISTED, so the
+    // employer name was not withheld from one document, it was destroyed on
+    // disk and the next read had nothing left to recover from.
+    //
+    // Admissibility is derived, never stored — the same rule the evidence
+    // records above already follow. The structural record comes back exactly as
+    // the user left it, and the identity/narrative split happens where a
+    // document is actually built (organizationIdentity), so nothing a
+    // classifier decides can ever reach storage.
+    //
+    // The role is kept whenever ANY structural field identifies it. Employment
+    // is a fact about the person's life; the admissibility of a bullet, or of
+    // the employer's own name, says nothing about whether they held the job.
+    if (!roleHasStructure(role)) return [];
     return [{
       ...role,
-      title,
-      employer,
       responsibilities: safeParagraphArray(role.responsibilities),
       tools: safeArray(role.tools),
-      outcomes: safeParagraphArray(role.outcomes),
+      outcomes: safeArray(role.outcomes).length ? safeParagraphArray(role.outcomes) : role.outcomes,
       evidenceIds
     }];
   });
 
   const projects = dossier.projects.flatMap((rawProject) => {
     const normalized = normalizeProjectSemantics(rawProject);
+    // Projects are NOT employment structure and deliberately keep admissibility
+    // here. A role is a fact about where someone worked; a project row is often
+    // synthesized by the importer out of the user's prose, and one whose name is
+    // a denial ("I never built a SaaS") is noise, not history.
+    //
+    // Residual risk, recorded rather than hidden: a REAL project whose name the
+    // gap classifier dislikes ("Recovery Support Programme") is still dropped
+    // here. That is the same class as the role defect and belongs to the
+    // cluster C follow-up, but it needs container-vs-contents semantics for
+    // projects specifically, not the employment rule copied across.
     const name = sanitizeProfessionalLine(normalized.name);
     const organization = sanitizeProfessionalLine(normalized.organization);
     const description = sanitizeProfessionalParagraph(normalized.description);
@@ -753,7 +772,32 @@ export function sanitizeCommandCenterState(
   previous?: CommandCenterState
 ): CommandCenterState {
   const pendingImportReviews = reconcilePendingReviews(previous?.pendingImportReviews, next.pendingImportReviews);
-  const sanitized = sanitizeCareerDossier(next.dossier);
+  // C3 — RECOVERY MIGRATION, on load, before anything else reads the roles.
+  //
+  // Earlier builds ran employer and title through an admissibility classifier
+  // on every read and persisted the result, so existing users have employment
+  // records with structural fields already destroyed on disk. Stopping the
+  // damage does not undo it.
+  //
+  // Recovery draws ONLY on preserved historical records of the field itself —
+  // saved résumé snapshots. It never reconstructs an employer or a title from
+  // generated bullet text: knowing only that a bullet says "Managed inventory
+  // for a regional gym chain" does not tell anyone the company was No
+  // Boundaries Training Ltd, and inventing it here would be the fabrication
+  // this audit exists to prevent, arriving through a repair. Where history is
+  // unambiguous the value is restored; where it conflicts the user is offered
+  // the choices; where nothing survives the role is preserved and the field is
+  // marked for the user to restore.
+  //
+  // Idempotent by construction: a recovered field is no longer empty, so the
+  // second run finds nothing to do, and review markers are replaced rather than
+  // appended.
+  const history = harvestHistoricalRoles(next);
+  const recoveredDossier = {
+    ...next.dossier,
+    roles: next.dossier.roles.map((role) => recoverRoleStructure(role, history))
+  };
+  const sanitized = sanitizeCareerDossier(recoveredDossier);
   const forceReview = sanitized.quarantinedEvidenceIds.length > 0;
   const dossier = sanitized.dossier;
   const profile = projectProfileFromDossier(dossier);

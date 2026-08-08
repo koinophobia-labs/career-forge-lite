@@ -56,6 +56,8 @@ const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
 const { revalidateResumeForExport } = load(path.join(root, "src/lib/evidence-read.ts"));
 const { emptyDossier, evidenceRecord, resolveDisclosure } = load(path.join(root, "src/lib/dossier.ts"));
 const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
+const { parseOrganizationField, organizationIdentity, roleHasStructure, recoverRoleStructure, harvestHistoricalRoles } = load(path.join(root, "src/lib/employment-structure.ts"));
+const { sanitizeCareerDossier } = load(path.join(root, "src/lib/evidence-admissibility.ts"));
 const { truthShape: shapeOf } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 
 let passes = 0;
@@ -370,6 +372,94 @@ console.log("\n=== PROGRAM 5 — defects the subsystem certification found in Pr
     ["ran the pot wash through every service", "managed the equipment rota", "handled different departments"]
       .every((t) => shapeOf(t).negations === 0),
     JSON.stringify(["ran the pot wash through every service", "managed the equipment rota", "handled different departments"].map((t) => [t, shapeOf(t).negations])));
+}
+
+// ===========================================================================
+console.log("\n=== CLUSTER C — employment structure is not a résumé claim ===");
+{
+  // ---- C1 AMPUTATION: real organization names survive BYTE-FOR-BYTE. These
+  // are the exact strings an admissibility classifier reads as gaps.
+  const REAL = [
+    "No Boundaries Training Ltd", "Parenta", "Recovery Support Worker",
+    "The Sick Children's Trust", "St. Mary's Hospice", "Redundancy Advice Bureau",
+    "Leavers Removals", "Mind", "Sacked & Sons", "Marks & Spencer, Leeds",
+    "Cut Above Barbers", "Maternity Action", "No.7 Salon"
+  ];
+  for (const name of REAL) {
+    check(`C1 amputation: "${name}" survives byte-for-byte`, organizationIdentity(name) === name, JSON.stringify(organizationIdentity(name)));
+  }
+
+  // ---- C1 CONTAMINATION: narrative in an organization field is separated,
+  // NOT blessed and NOT allowed to destroy the company identity.
+  const CONTAMINATED = [
+    ["Wincanton (agency, until my position was cut)", "Wincanton"],
+    ["DHL, laid off when the site shut", "DHL"],
+    ["EE — made redundant in 2021", "EE"]
+  ];
+  for (const [typed, identity] of CONTAMINATED) {
+    const parsed = parseOrganizationField(typed);
+    check(`C1 contamination: identity preserved from "${typed.slice(0, 34)}…"`, parsed.identity === identity, JSON.stringify(parsed));
+    check(`   the narrative is separated, not blessed`, parsed.narrative.length > 0 && !organizationIdentity(typed).includes(parsed.narrative), JSON.stringify(parsed));
+  }
+  check("C1 a location after a comma is part of the identity, not narrative",
+    organizationIdentity("Marks & Spencer, Leeds") === "Marks & Spencer, Leeds", organizationIdentity("Marks & Spencer, Leeds"));
+
+  // ---- C2 PERSISTENCE INVARIANT: no read path may erase an employment container.
+  const role = (over) => ({ id: "r1", title: "", employer: "", startDate: "", endDate: "", current: false,
+    responsibilities: [], tools: [], outcomes: [], evidenceIds: [], ...over });
+  check("C2 a role identified only by its employer survives", roleHasStructure(role({ employer: "Parenta" })));
+  check("   identified only by its title", roleHasStructure(role({ title: "Recovery Support Worker" })));
+  check("   identified only by its dates", roleHasStructure(role({ startDate: "2019" })));
+  check("   a wholly empty row is still dropped", !roleHasStructure(role({})));
+
+  const dossier = { ...emptyDossier("2026-08-07T00:00:00.000Z"),
+    roles: [role({ id: "r1", title: "Recovery Support Worker", employer: "No Boundaries Training Ltd", startDate: "2018", endDate: "2024" })],
+    evidence: [] };
+  const after = sanitizeCareerDossier(dossier).dossier;
+  check("C2 sanitization (which PERSISTS) does not touch structural fields",
+    after.roles.length === 1 && after.roles[0].employer === "No Boundaries Training Ltd" && after.roles[0].title === "Recovery Support Worker",
+    JSON.stringify(after.roles[0] && [after.roles[0].title, after.roles[0].employer]));
+  const twice = sanitizeCareerDossier(after).dossier;
+  check("   and is stable across repeated reads",
+    twice.roles[0].employer === "No Boundaries Training Ltd", JSON.stringify(twice.roles[0]?.employer));
+
+  // ---- C3 RECOVERY MIGRATION.
+  const history = harvestHistoricalRoles({ resumeVersions: [
+    { resumeSnapshot: { resume: { experience: [{ title: "Support Worker", company: "No Boundaries Training Ltd", time: "2018 - 2024" }] } } }
+  ]});
+  const damaged = role({ id: "r1", title: "Support Worker", employer: "", startDate: "2018", endDate: "2024" });
+  const fixed = recoverRoleStructure(damaged, history);
+  check("C3 recovered exactly: an unambiguous historical employer is restored",
+    fixed.employer === "No Boundaries Training Ltd", JSON.stringify(fixed.employer));
+  check("   and the recovery names its source",
+    (fixed.structuralReview ?? []).some((r) => r.status === "recovered" && r.recoveredFrom), JSON.stringify(fixed.structuralReview));
+
+  const conflicting = harvestHistoricalRoles({ resumeVersions: [
+    { resumeSnapshot: { resume: { experience: [{ title: "Support Worker", company: "No Boundaries Training Ltd" }] } } },
+    { resumeSnapshot: { resume: { experience: [{ title: "Support Worker", company: "No Boundaries Ltd" }] } } }
+  ]});
+  const candidate = recoverRoleStructure(damaged, conflicting);
+  check("C3 recovery candidate: conflicting history is offered, not guessed",
+    candidate.employer === "" && (candidate.structuralReview ?? []).some((r) => r.status === "candidate" && (r.candidates ?? []).length === 2),
+    JSON.stringify(candidate.structuralReview));
+
+  const orphan = role({ id: "r2", title: "Support Worker", employer: "", responsibilities: ["Managed inventory for a regional gym chain"] });
+  const unrec = recoverRoleStructure(orphan, []);
+  check("C3 unrecoverable: the role is preserved and the field marked",
+    roleHasStructure(unrec) && (unrec.structuralReview ?? []).some((r) => r.field === "employer" && r.status === "unrecoverable"),
+    JSON.stringify(unrec.structuralReview));
+  check("C3 FABRICATION CONTROL: an employer is NEVER invented from bullet text",
+    !unrec.employer, JSON.stringify(unrec.employer));
+
+  // The ugly but important property.
+  const once = recoverRoleStructure(damaged, history);
+  const again = recoverRoleStructure(once, history);
+  check("C3 running the migration twice changes nothing the second time",
+    JSON.stringify(once) === JSON.stringify(again), JSON.stringify({ once, again }));
+  const undamagedTwice = recoverRoleStructure(recoverRoleStructure(
+    role({ title: "Barista", employer: "The Blue Cup", startDate: "2017" }), history), history);
+  check("   and an undamaged role gains no review markers at all",
+    undamagedTwice.structuralReview === undefined, JSON.stringify(undamagedTwice.structuralReview));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

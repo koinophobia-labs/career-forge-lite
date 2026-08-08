@@ -80,6 +80,13 @@ export type DossierRole = {
   tools: string[];
   outcomes: string[];
   evidenceIds: string[];
+  /**
+   * Set by the C3 recovery migration when a structural field was found
+   * destroyed on disk. "recovered" values are already restored; "candidate"
+   * and "unrecoverable" are questions for the user. Never a licence to invent
+   * an employer or a title.
+   */
+  structuralReview?: import("@/lib/employment-structure").StructuralReview[];
 };
 
 export type DossierProject = {

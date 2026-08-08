@@ -177,6 +177,11 @@ export type DisclosureFlag = { reason: DisclosureReason };
 
 const disclosurePatterns: Array<[DisclosureReason, RegExp]> = [
   ["separation", /\b(?:was|were|got|been)\s+(?:laid\s+off|let\s+go|terminated|fired|dismissed|sacked|made\s+redundant)\b/i],
+  // The bare participle, with no subject. People write these into a field
+  // rather than a sentence — "EE — made redundant in 2021" in the employer box
+  // — and requiring "I was" in front missed every one of them. Safe to widen:
+  // no ordinary employer name or job title contains these phrases.
+  ["separation", /\b(?:made\s+redundant|laid\s+off|let\s+go)\b/i],
   ["separation", /\blaid\s+off\b/i],
   ["separation", /\b(?:left|quit|resigned)\s+(?:the\s+)?(?:job|company|role|position|post)\b/i],
   ["separation", /\b(?:left|quit|resigned)\b[^.!?]{0,50}?\bbecause\b/i],

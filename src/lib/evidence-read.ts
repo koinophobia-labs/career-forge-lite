@@ -44,6 +44,7 @@
  * evidence editors, provenance trails. Those surfaces are allowed, expected,
  * and deliberately not gated.
  */
+import { organizationIdentity } from "@/lib/employment-structure";
 import { possibleDisclosure } from "@/lib/truth-guards";
 import type { CareerDossier, DossierEvidenceRecord, EvidenceKind } from "@/types/dossier";
 
@@ -389,7 +390,15 @@ export function getUsableIntake<T extends Record<string, unknown>>(intake: T): U
   for (const [key, value] of Object.entries(intake)) {
     if (!GATED_CATEGORIES.has(intakeFieldCategory(key))) continue;
     if (typeof value === "string") {
-      out[key] = eligibleUserText(value, approved);
+      // Organization fields are parsed, not judged. Running them through the
+      // disclosure gate emptied real job titles and employer names, and an
+      // emptied field is indistinguishable from one never filled in — which is
+      // how the form scaffold "Dates" came to print as somebody's employment
+      // record. The identity survives byte-for-byte; any narrative the user
+      // appended to it is separated off and simply not printed here.
+      out[key] = intakeFieldCategory(key) === "organization"
+        ? organizationIdentity(value)
+        : eligibleUserText(value, approved);
     } else if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
       out[key] = (value as string[])
         .map((entry) => eligibleUserText(entry, approved))
