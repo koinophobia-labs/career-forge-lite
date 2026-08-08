@@ -1,0 +1,507 @@
+{
+ "recoverable": {
+  "truth": {
+   "title": "Recovery Support Worker",
+   "employer": "No Boundaries Training Ltd",
+   "startDate": "2018",
+   "endDate": "2024"
+  },
+  "damagedState": {
+   "dossier": {
+    "id": "dossier-local",
+    "identity": {
+     "fullName": "",
+     "email": "",
+     "phone": "",
+     "location": "",
+     "links": []
+    },
+    "roles": [
+     {
+      "id": "r1",
+      "title": "Recovery Support Worker",
+      "employer": "",
+      "startDate": "2018",
+      "endDate": "2024",
+      "current": false,
+      "responsibilities": [],
+      "tools": [],
+      "outcomes": [],
+      "evidenceIds": [
+       "evidence-1cftgoc"
+      ]
+     }
+    ],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [],
+    "interviewStories": [],
+    "constraints": [],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [],
+    "approvedClaims": [
+     "did the medication round morning and night"
+    ],
+    "evidence": [
+     {
+      "id": "evidence-1cftgoc",
+      "kind": "responsibility",
+      "label": "Responsibility",
+      "detail": "did the medication round morning and night",
+      "roleId": "r1",
+      "source": "guided",
+      "sourceText": "did the medication round morning and night",
+      "confidence": "high",
+      "approved": true,
+      "rejected": false,
+      "sourceFilenames": [],
+      "sourceExcerpts": [
+       "did the medication round morning and night"
+      ],
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "updatedAt": "2026-08-01T09:00:00.000Z"
+     }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [],
+    "createdAt": "2026-08-01T09:00:00.000Z",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "profile": {
+    "currentSituation": "",
+    "targetRoles": "",
+    "transferableSkills": [],
+    "experienceSummary": "Recovery Support Worker",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "lanes": [],
+   "applications": [],
+   "resumePacks": [],
+   "roleSprints": [],
+   "pendingImportReviews": [],
+   "resumeVersions": [
+    {
+     "id": "v1",
+     "label": "saved",
+     "laneId": null,
+     "notes": "",
+     "source": "builder",
+     "applicationId": null,
+     "targetCompany": "",
+     "targetTitle": "",
+     "keywordsUsed": [],
+     "gapsAcknowledged": [],
+     "influenceSummary": "",
+     "resumeText": "Recovery Support Worker | 2018 - 2024",
+     "createdAt": "2026-08-01T09:00:00.000Z",
+     "resumeSnapshot": {
+      "fullName": "Dee Okafor",
+      "email": "dee@example.com",
+      "phone": "",
+      "website": "",
+      "template": "Modern ATS",
+      "resume": {
+       "summary": "",
+       "coreSkills": [],
+       "experience": [
+        {
+         "title": "Recovery Support Worker",
+         "company": "",
+         "time": "2018 - 2024",
+         "bullets": []
+        }
+       ],
+       "education": "",
+       "linkedinHeadline": "",
+       "linkedinSummary": ""
+      }
+     }
+    }
+   ]
+  },
+  "damaged": {
+   "title": "Recovery Support Worker",
+   "employer": ""
+  },
+  "roleSurvived": true
+ },
+ "conflicting": {
+  "truth": {
+   "title": "Recovery Support Worker",
+   "employer": "No Boundaries Training Ltd",
+   "startDate": "2018",
+   "endDate": "2024"
+  },
+  "damagedState": {
+   "dossier": {
+    "id": "dossier-local",
+    "identity": {
+     "fullName": "",
+     "email": "",
+     "phone": "",
+     "location": "",
+     "links": []
+    },
+    "roles": [
+     {
+      "id": "r1",
+      "title": "Recovery Support Worker",
+      "employer": "",
+      "startDate": "2018",
+      "endDate": "2024",
+      "current": false,
+      "responsibilities": [],
+      "tools": [],
+      "outcomes": [],
+      "evidenceIds": [
+       "evidence-16ijyw6"
+      ]
+     }
+    ],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [],
+    "interviewStories": [],
+    "constraints": [],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [],
+    "approvedClaims": [
+     "ran the午 after-school club every weekday"
+    ],
+    "evidence": [
+     {
+      "id": "evidence-16ijyw6",
+      "kind": "responsibility",
+      "label": "Responsibility",
+      "detail": "ran the午 after-school club every weekday",
+      "roleId": "r1",
+      "source": "guided",
+      "sourceText": "ran the午 after-school club every weekday",
+      "confidence": "high",
+      "approved": true,
+      "rejected": false,
+      "sourceFilenames": [],
+      "sourceExcerpts": [
+       "ran the午 after-school club every weekday"
+      ],
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "updatedAt": "2026-08-01T09:00:00.000Z"
+     }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [],
+    "createdAt": "2026-08-01T09:00:00.000Z",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "profile": {
+    "currentSituation": "",
+    "targetRoles": "",
+    "transferableSkills": [],
+    "experienceSummary": "Recovery Support Worker",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "lanes": [],
+   "applications": [],
+   "resumePacks": [],
+   "roleSprints": [],
+   "pendingImportReviews": [],
+   "resumeVersions": [
+    {
+     "id": "v1",
+     "label": "saved",
+     "laneId": null,
+     "notes": "",
+     "source": "builder",
+     "applicationId": null,
+     "targetCompany": "",
+     "targetTitle": "",
+     "keywordsUsed": [],
+     "gapsAcknowledged": [],
+     "influenceSummary": "",
+     "resumeText": "Recovery Support Worker | 2018 - 2024",
+     "createdAt": "2026-08-01T09:00:00.000Z",
+     "resumeSnapshot": {
+      "fullName": "Dee Okafor",
+      "email": "dee@example.com",
+      "phone": "",
+      "website": "",
+      "template": "Modern ATS",
+      "resume": {
+       "summary": "",
+       "coreSkills": [],
+       "experience": [
+        {
+         "title": "Recovery Support Worker",
+         "company": "",
+         "time": "2018 - 2024",
+         "bullets": []
+        }
+       ],
+       "education": "",
+       "linkedinHeadline": "",
+       "linkedinSummary": ""
+      }
+     }
+    },
+    {
+     "id": "v2",
+     "label": "saved",
+     "laneId": null,
+     "notes": "",
+     "source": "builder",
+     "applicationId": null,
+     "targetCompany": "",
+     "targetTitle": "",
+     "keywordsUsed": [],
+     "gapsAcknowledged": [],
+     "influenceSummary": "",
+     "resumeText": "Recovery Support Worker | No Boundaries Ltd | 2018 - 2024",
+     "createdAt": "2026-08-01T09:00:00.000Z",
+     "resumeSnapshot": {
+      "fullName": "Dee Okafor",
+      "email": "dee@example.com",
+      "phone": "",
+      "website": "",
+      "template": "Modern ATS",
+      "resume": {
+       "summary": "",
+       "coreSkills": [],
+       "experience": [
+        {
+         "title": "Recovery Support Worker",
+         "company": "No Boundaries Ltd",
+         "time": "2018 - 2024",
+         "bullets": []
+        }
+       ],
+       "education": "",
+       "linkedinHeadline": "",
+       "linkedinSummary": ""
+      }
+     }
+    }
+   ]
+  },
+  "damaged": {
+   "title": "Recovery Support Worker",
+   "employer": ""
+  },
+  "roleSurvived": true
+ },
+ "unrecoverable": {
+  "truth": {
+   "title": "Support Worker",
+   "employer": "No Boundaries Training Ltd",
+   "startDate": "2016",
+   "endDate": "2019"
+  },
+  "damagedState": {
+   "dossier": {
+    "id": "dossier-local",
+    "identity": {
+     "fullName": "",
+     "email": "",
+     "phone": "",
+     "location": "",
+     "links": []
+    },
+    "roles": [
+     {
+      "id": "r1",
+      "title": "Support Worker",
+      "employer": "",
+      "startDate": "2016",
+      "endDate": "2019",
+      "current": false,
+      "responsibilities": [],
+      "tools": [],
+      "outcomes": [],
+      "evidenceIds": [
+       "evidence-12jze1e"
+      ]
+     }
+    ],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [],
+    "interviewStories": [],
+    "constraints": [],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [],
+    "approvedClaims": [
+     "managed inventory for a regional gym chain"
+    ],
+    "evidence": [
+     {
+      "id": "evidence-12jze1e",
+      "kind": "responsibility",
+      "label": "Responsibility",
+      "detail": "managed inventory for a regional gym chain",
+      "roleId": "r1",
+      "source": "guided",
+      "sourceText": "managed inventory for a regional gym chain",
+      "confidence": "high",
+      "approved": true,
+      "rejected": false,
+      "sourceFilenames": [],
+      "sourceExcerpts": [
+       "managed inventory for a regional gym chain"
+      ],
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "updatedAt": "2026-08-01T09:00:00.000Z"
+     }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [],
+    "createdAt": "2026-08-01T09:00:00.000Z",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "profile": {
+    "currentSituation": "",
+    "targetRoles": "",
+    "transferableSkills": [],
+    "experienceSummary": "Support Worker",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "lanes": [],
+   "applications": [],
+   "resumePacks": [],
+   "roleSprints": [],
+   "pendingImportReviews": [],
+   "resumeVersions": []
+  },
+  "damaged": {
+   "title": "Support Worker",
+   "employer": ""
+  },
+  "roleSurvived": true
+ },
+ "control": {
+  "truth": {
+   "title": "Kitchen Porter",
+   "employer": "The Bell Inn",
+   "startDate": "2021",
+   "endDate": "2024"
+  },
+  "damagedState": {
+   "dossier": {
+    "id": "dossier-local",
+    "identity": {
+     "fullName": "",
+     "email": "",
+     "phone": "",
+     "location": "",
+     "links": []
+    },
+    "roles": [
+     {
+      "id": "r1",
+      "title": "Kitchen Porter",
+      "employer": "The Bell Inn",
+      "startDate": "2021",
+      "endDate": "2024",
+      "current": false,
+      "responsibilities": [],
+      "tools": [],
+      "outcomes": [],
+      "evidenceIds": [
+       "evidence-8z1n5j"
+      ]
+     }
+    ],
+    "projects": [],
+    "education": [],
+    "responsibilities": [],
+    "tools": [],
+    "transferableSkills": [],
+    "outcomes": [],
+    "metrics": [],
+    "proofPoints": [],
+    "interviewStories": [],
+    "constraints": [],
+    "preferredWorkStyle": [],
+    "careerGoals": [],
+    "targetRoleInterests": [],
+    "approvedClaims": [
+     "ran the pot wash through every service"
+    ],
+    "evidence": [
+     {
+      "id": "evidence-8z1n5j",
+      "kind": "responsibility",
+      "label": "Responsibility",
+      "detail": "ran the pot wash through every service",
+      "roleId": "r1",
+      "source": "guided",
+      "sourceText": "ran the pot wash through every service",
+      "confidence": "high",
+      "approved": true,
+      "rejected": false,
+      "sourceFilenames": [],
+      "sourceExcerpts": [
+       "ran the pot wash through every service"
+      ],
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "updatedAt": "2026-08-01T09:00:00.000Z"
+     }
+    ],
+    "unstructuredNotes": [],
+    "migrationReview": [],
+    "createdAt": "2026-08-01T09:00:00.000Z",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "profile": {
+    "currentSituation": "",
+    "targetRoles": "",
+    "transferableSkills": [],
+    "experienceSummary": "Kitchen Porter at The Bell Inn",
+    "strengths": [],
+    "constraints": "",
+    "workStyle": "",
+    "proofPoints": "",
+    "updatedAt": "2026-08-01T09:00:00.000Z"
+   },
+   "lanes": [],
+   "applications": [],
+   "resumePacks": [],
+   "roleSprints": [],
+   "pendingImportReviews": [],
+   "resumeVersions": []
+  },
+  "damaged": {
+   "title": "Kitchen Porter",
+   "employer": "The Bell Inn"
+  },
+  "roleSurvived": true
+ }
+}

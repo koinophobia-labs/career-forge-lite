@@ -148,16 +148,43 @@ type HistoricalRole = { title?: string; company?: string; time?: string };
  * Historical structural values, harvested from saved résumé snapshots. These
  * are records of what the field HELD, not text generated about it.
  */
+const DATE_RANGE = /^(?:[a-z]{3,9}\.?\s*)?\d{4}\s*[-–—]\s*(?:present|current|[a-z]{3,9}\.?\s*)?\d{0,4}$|^\d{4}$/i;
+
+/**
+ * Historical structural values, grouped BY SAVED VERSION.
+ *
+ * Grouping matters. A single saved version records the same job twice — once as
+ * a structured snapshot and once as the rendered "Title | Employer | Dates"
+ * line — and the pre-fix build damaged those two copies differently, blanking
+ * the snapshot's company while leaving the rendered line alone. Treated as two
+ * independent sources, one blank and one populated look like a disagreement.
+ * Treated as one version, they are one fact with one surviving witness.
+ *
+ * A conflict is two VERSIONS that disagree, not two representations of one.
+ */
 export function harvestHistoricalRoles(state: {
-  resumeVersions?: Array<{ resumeSnapshot?: { resume?: { experience?: HistoricalRole[] } } | null }>;
-}): HistoricalRole[] {
-  const out: HistoricalRole[] = [];
+  resumeVersions?: Array<{ resumeText?: string; resumeSnapshot?: { resume?: { experience?: HistoricalRole[] } } | null }>;
+}): HistoricalRole[][] {
+  const versions: HistoricalRole[][] = [];
   for (const version of state.resumeVersions ?? []) {
+    const entries: HistoricalRole[] = [];
     for (const role of version.resumeSnapshot?.resume?.experience ?? []) {
-      if (role && (role.title || role.company)) out.push(role);
+      if (role && (role.title || role.company)) entries.push(role);
     }
+    for (const line of (version.resumeText ?? "").split(/\r?\n/)) {
+      const parts = line.split("|").map((part) => part.trim());
+      if (parts.length < 2 || !parts[0] || !parts[1]) continue;
+      if (/^[-•]/.test(parts[0])) continue;
+      // "Title | 2018 - 2024" is a heading whose employer was already destroyed
+      // before it was rendered. Reading the date range as the company name
+      // would restore "2018 - 2024" as somebody's employer.
+      const company = DATE_RANGE.test(parts[1]) ? undefined : parts[1];
+      const time = DATE_RANGE.test(parts[1]) ? parts[1] : parts[2];
+      entries.push({ title: parts[0], company, time });
+    }
+    if (entries.length) versions.push(entries);
   }
-  return out;
+  return versions;
 }
 
 const norm = (value: string | undefined) => (value ?? "").trim().toLowerCase();
@@ -167,19 +194,46 @@ const norm = (value: string | undefined) => (value ?? "").trim().toLowerCase();
  * structural field only — never on bullet text, which is generated prose and
  * would let a rewritten sentence decide who the user worked for.
  */
-function historyFor(role: { title?: string; employer?: string }, history: HistoricalRole[]): HistoricalRole[] {
+function historyFor(role: { title?: string; employer?: string }, versions: HistoricalRole[][]): HistoricalRole[][] {
   const title = norm(role.title);
   const employer = norm(role.employer);
   if (!title && !employer) return [];
-  return history.filter(
-    (item) => (title && norm(item.title) === title) || (employer && norm(item.company) === employer)
-  );
+  return versions
+    .map((entries) =>
+      entries.filter((item) => (title && norm(item.title) === title) || (employer && norm(item.company) === employer))
+    )
+    .filter((entries) => entries.length);
 }
 
-function decide(values: string[]): { status: RecoveryStatus; value?: string; candidates?: string[] } {
-  const distinct = [...new Set(values.map((v) => v.trim()).filter(Boolean))];
-  if (distinct.length === 1) return { status: "recovered", value: distinct[0] };
-  if (distinct.length > 1) return { status: "candidate", candidates: distinct };
+/**
+ * Decide from the historical values found for one field.
+ *
+ * `matched` is how many historical entries describe this role; `values` is what
+ * they held. When those differ, some entries were BLANKED — and that changes
+ * everything, because the pre-fix build damaged saved snapshots by exactly the
+ * same mechanism it used on the live record. Real scar tissue proved it:
+ *
+ *   snapshot 1: company "" (destroyed)
+ *   snapshot 2: company "No Boundaries Ltd"
+ *
+ * Treating that as unanimous silently restored a variant spelling as the
+ * confident answer, and the true value — "No Boundaries Training Ltd", which
+ * lived in the destroyed snapshot — was gone with nothing to signal it.
+ *
+ * So unanimity may only be claimed when NO matched entry is missing the field.
+ * A survivor among blanks is a candidate to offer, never an answer to apply.
+ */
+function decide(perVersion: string[][]): { status: RecoveryStatus; value?: string; candidates?: string[] } {
+  // One value per version: any surviving witness within a version speaks for it.
+  const voices = perVersion.map((values) => values.map((v) => v.trim()).find(Boolean));
+  const present = voices.filter((v): v is string => Boolean(v));
+  const distinct = [...new Set(present)];
+  // A version that records this role but retains NO value for the field had its
+  // copy destroyed. It may have held a different employer, so the survivors are
+  // candidates to offer rather than an answer to apply.
+  const someDestroyed = voices.length > present.length;
+  if (distinct.length === 1 && !someDestroyed) return { status: "recovered", value: distinct[0] };
+  if (distinct.length >= 1) return { status: "candidate", candidates: distinct };
   return { status: "unrecoverable" };
 }
 
@@ -197,14 +251,14 @@ export type RecoveredRole<T> = T & { structuralReview?: StructuralReview[] };
  */
 export function recoverRoleStructure<T extends { title?: string; employer?: string; startDate?: string; endDate?: string }>(
   role: T,
-  history: HistoricalRole[]
+  history: HistoricalRole[][]
 ): RecoveredRole<T> {
   const candidates = historyFor(role, history);
   const reviews: StructuralReview[] = [];
   const next: Record<string, unknown> = { ...role };
 
   if (!(role.employer ?? "").trim()) {
-    const outcome = decide(candidates.map((item) => item.company ?? ""));
+    const outcome = decide(candidates.map((entries) => entries.map((item) => item.company ?? "")));
     if (outcome.status === "recovered" && outcome.value) {
       next.employer = outcome.value;
       reviews.push({ field: "employer", status: "recovered", recoveredFrom: "saved résumé version" });
@@ -214,7 +268,7 @@ export function recoverRoleStructure<T extends { title?: string; employer?: stri
   }
 
   if (!(role.title ?? "").trim()) {
-    const outcome = decide(candidates.map((item) => item.title ?? ""));
+    const outcome = decide(candidates.map((entries) => entries.map((item) => item.title ?? ""))); 
     if (outcome.status === "recovered" && outcome.value) {
       next.title = outcome.value;
       reviews.push({ field: "title", status: "recovered", recoveredFrom: "saved résumé version" });
