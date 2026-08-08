@@ -97,10 +97,15 @@ function identityContactLine(dossier: CareerDossier): string {
 
 export function variantPlainText(
   dossier: CareerDossier,
-  resume: ResumePackage,
+  rawResume: ResumePackage,
   sectionOrder?: SectionKey[],
   kind: ResumeVariant["kind"] = "ats"
 ): string {
+  // Copy-to-clipboard is an export. It left the product unrevalidated, so
+  // excluded, rejected, un-approved and stale evidence all survived on the
+  // clipboard while the DOCX and PDF beside it were clean — and the user
+  // pastes the clipboard into the employer's form.
+  const resume = revalidateResumeForExport(rawResume, dossier);
   const header = [dossier.identity.fullName.trim(), identityContactLine(dossier)].filter(Boolean).join("\n");
   const { sections } = exportSections(resume, sectionOrder, kind);
   const parts: string[] = header ? [header] : [];

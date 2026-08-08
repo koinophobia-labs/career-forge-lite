@@ -312,7 +312,13 @@ const INTAKE_FIELD_CATEGORY: Record<string, IntakeFieldCategory> = {
   additionalCompany: "organization",
   additionalTime: "organization",
 
-  targetJobTitle: "targeting",
+  // targetJobTitle is a FREE-TEXT box the user types into, not a controlled
+  // label, and it prints in the summary, the LinkedIn headline and the LinkedIn
+  // summary. People type their situation into it — "care assistant, I had to
+  // drop out of my nursing degree so I've no qualification" — so it is gated
+  // like any other thing they wrote about themselves. roleFamily is a fixed
+  // enum the user picks from a list and cannot carry free text.
+  targetJobTitle: "evidence",
   roleFamily: "targeting",
   template: "ui",
   sourceRoleId: "ui",

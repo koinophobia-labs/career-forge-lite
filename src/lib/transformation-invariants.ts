@@ -50,13 +50,21 @@ const THIRD_PARTY_SUBJECT =
  * management, equipment, front and different as negations and emptied CORE
  * SKILLS, so the list is closed on purpose.
  */
+// The apostrophe is OPTIONAL and may be curly: people type "cant", "didnt",
+// "wasn’t". Requiring a straight apostrophe made the guard blind to a complete
+// polarity flip. Negative quantifiers are counted too — "nobody did the
+// deliveries" is a negation of agency even with no auxiliary in sight.
+// The auxiliary list stays CLOSED: an open-ended "ends in nt" test once
+// classified management, equipment and different as negations.
 const NEGATION =
-  /\b(?:do|does|did|is|are|was|were|has|have|had|can|could|will|would|should|must|might|may)\s*n[o']?t\b|\b(?:don|doesn|didn|isn|aren|wasn|weren|hasn|haven|hadn|can|couldn|won|wouldn|shouldn|mustn|mightn)['’]t\b|\bnever\b|\bno longer\b/gi;
+  /\b(?:do|does|did|is|are|was|were|has|have|had|can|could|will|would|should|must|might|may)\s*n['’]?o?t\b|\b(?:do|does|did|is|are|was|were|has|have|had|ca|could|wo|would|should|must|might)n['’]?t\b|\bnever\b|\bno longer\b|\b(?:nobody|no one|nothing|none of us|not once)\b/gi;
 
 const ASPIRATIONAL =
-  /\b(?:i(?:'d| would)? (?:like|love|want|hope)|one day|some ?day|in (?:the )?future|hoping to|looking to|planning to|want to (?:get|move|go) into|my goal is|aiming to)\b/i;
+  /\b(?:i(?:['’]d| would)? (?:like|love|want|hope)|one day|some ?day|in (?:the )?future|hoping to|looking to|planning to|want to (?:get|move|go) into|my goal is|aiming to)\b/i;
 const HYPOTHETICAL = /\b(?:if i|would have|could have|should have|were i to|suppose|what if|am i supposed to|do i need to|does this need)\b/i;
-const DENIAL = /\b(?:never (?:did|ran|handled|used|worked|trained|been)|not trained|no experience|wasn['’]?t trained|didn['’]?t (?:do|handle|run|use))\b/i;
+// Recall here was measured at 4 of 15 on real phrasings, so the reader leans on
+// the polarity count rather than trying to enumerate every way to say "no".
+const DENIAL = /\b(?:never (?:did|ran|handled|used|worked|trained|been)|not trained|no experience|wasn['’]?t trained|didn['’]?t (?:do|handle|run|use)|no formal|not qualified|not my job|wasn['’]?t me)\b/i;
 
 function agencyOf(text: string): Agency {
   // Order matters. A sentence naming someone else as the actor is third-party
@@ -70,6 +78,9 @@ function agencyOf(text: string): Agency {
 
 function accomplishmentOf(text: string): Accomplishment {
   if (DENIAL.test(text)) return "denied";
+  // A first-person sentence carrying a negated verb is a denial even when it
+  // matches none of the phrasings above.
+  if (SELF_SUBJECT.test(text) && (text.match(NEGATION) ?? []).length > 0) return "denied";
   if (ASPIRATIONAL.test(text)) return "aspirational";
   if (HYPOTHETICAL.test(text)) return "hypothetical";
   return "stated";

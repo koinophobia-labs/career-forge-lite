@@ -55,6 +55,8 @@ const { getUsableIntake, intakeFieldCategory } = load(path.join(root, "src/lib/e
 const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
 const { revalidateResumeForExport } = load(path.join(root, "src/lib/evidence-read.ts"));
 const { emptyDossier, evidenceRecord, resolveDisclosure } = load(path.join(root, "src/lib/dossier.ts"));
+const { variantPlainText } = load(path.join(root, "src/lib/pack-export.ts"));
+const { truthShape: shapeOf } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -306,6 +308,68 @@ console.log("\n=== PROGRAM 4 — snapshot revalidation at export ===");
   check("D4 control: a clean résumé is untouched by revalidation",
     clean.summary === KEPT && clean.experience[0].bullets.length === 1 && clean.coreSkills.length === 1,
     JSON.stringify(clean));
+}
+
+// ===========================================================================
+console.log("\n=== PROGRAM 5 — defects the subsystem certification found in Programs 3 and 4 ===");
+{
+  // Gating an organization field emptied currentTitle, and buildExperience
+  // filtered on TITLE ALONE. That deleted the whole job AND promoted the
+  // previous employer into slot 0, so the current job's duties printed under
+  // the previous employer's name. One line, both directions at once.
+  const intake = { ...initialIntake, fullName: "Aoife Ni Bhraonain",
+    currentTitle: "receptionist (until my hours were cut)", currentCompany: "Bramley Road Dental", currentTime: "2019 - 2025",
+    previousTitle: "Barista", previousCompany: "The Blue Cup", previousTime: "2017 - 2019",
+    responsibilities: "booked the appointments and chased the recalls every morning" };
+  const pkg = generateResumePackage(intake);
+  const rows = pkg.experience.map((r) => [r.title, r.company, r.time, r.bullets.length]);
+  check("E1 amputation: withholding a job TITLE does not delete the job",
+    pkg.experience.some((r) => /Bramley Road Dental/i.test(r.company)), JSON.stringify(rows));
+  check("   the dates survive with it",
+    pkg.experience.some((r) => /2019 - 2025/.test(r.time)), JSON.stringify(rows));
+  check("E2 fabrication: the current job's duties are NOT re-attributed to the previous employer",
+    !pkg.experience.some((r) => /Blue Cup/i.test(r.company) && r.bullets.some((b) => /recalls|appointments/i.test(b))),
+    JSON.stringify(pkg.experience.map((r) => [r.company, r.bullets])));
+  check("   and the withheld title text does not print",
+    !/hours were cut/i.test(JSON.stringify(pkg)), JSON.stringify(rows));
+
+  // targetJobTitle is a free-text box that prints; people type their situation into it.
+  const targeted = { ...initialIntake, fullName: "Sam", currentTitle: "Care Assistant", currentCompany: "Oakhaven", currentTime: "2020 - 2025",
+    responsibilities: "did the medication round morning and night",
+    targetJobTitle: "care assistant, I had to drop out of my nursing degree so I've no qualification" };
+  check("E3 fabrication: a disclosure typed into the target-role box does not print",
+    !/nursing degree|no qualification/i.test(JSON.stringify(generateResumePackage(targeted))),
+    JSON.stringify(generateResumePackage(targeted).summary));
+  check("   an ordinary target role still frames the summary",
+    /Customer Support/i.test(JSON.stringify(generateResumePackage({ ...targeted, targetJobTitle: "Customer Support" }))),
+    generateResumePackage({ ...targeted, targetJobTitle: "Customer Support" }).summary);
+
+  // Copy-to-clipboard is an export.
+  const T0 = "2026-08-07T09:00:00.000Z", T1 = "2026-08-07T14:00:00.000Z";
+  const EX = "I covered my manager's job for three months while she was on maternity leave.";
+  const ok = "Ran the goods-in bay on my own every morning.";
+  const r1 = evidenceRecord("responsibility", ok, "guided", true, T0, { roleId: "r1" });
+  const r2 = evidenceRecord("responsibility", EX, "guided", true, T0, { roleId: "r1" });
+  let d = { ...emptyDossier(T0), evidence: [r1, r2] };
+  d = resolveDisclosure(d, r2.id, "keep", T0);
+  const snap = { summary: `${ok} ${EX}`, coreSkills: [], education: "",
+    experience: [{ title: "Warehouse Operative", company: "Wincanton", time: "2019 - 2025", bullets: [ok, EX] }],
+    linkedinHeadline: "", linkedinSummary: "" };
+  d = resolveDisclosure(d, r2.id, "exclude", T1);
+  const clip = variantPlainText(d, snap);
+  check("E4 fabrication: the clipboard is revalidated like every other export",
+    !/maternity leave/i.test(clip), clip.slice(0, 200));
+  check("E5 amputation: the clipboard keeps the eligible content",
+    /goods-in bay/i.test(clip) && /Wincanton/i.test(clip), clip.slice(0, 200));
+
+  // Polarity blind spots.
+  for (const t of ["i cant drive a forklift", "i didnt do the rota", "nobody did the deliveries", "i wasn’t trained on it"]) {
+    check(`E6 polarity is read without a straight apostrophe — "${t}"`, shapeOf(t).negations > 0, JSON.stringify(shapeOf(t)));
+  }
+  check("E7 amputation: ordinary positive sentences are NOT read as negations",
+    ["ran the pot wash through every service", "managed the equipment rota", "handled different departments"]
+      .every((t) => shapeOf(t).negations === 0),
+    JSON.stringify(["ran the pot wash through every service", "managed the equipment rota", "handled different departments"].map((t) => [t, shapeOf(t).negations])));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

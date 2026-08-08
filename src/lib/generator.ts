@@ -2179,9 +2179,16 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
       fallbackCompany: "Additional Company"
     }
   ]
-    .filter((role) => cleanWhitespace(role.title))
+    // Container vs contents, same rule as the export sanitizer. Filtering on
+    // TITLE ALONE meant that withholding a contaminated job title deleted the
+    // whole employment entry — and worse, it promoted the PREVIOUS employer to
+    // slot 0, so the current job's duties were printed under the previous
+    // employer's name. One line produced both an amputation and a fabrication.
+    .map((role, slot) => ({ ...role, slot }))
+    .filter((role) => cleanWhitespace(role.title) || cleanWhitespace(role.company) || cleanWhitespace(role.time))
     .slice(0, 3)
     .map((role) => ({
+      slot: role.slot,
       title: findIndependentWorkRole(role.title) || inferIndependentWorkCategory(role.title)
         ? formatIndependentTitle(findIndependentWorkRole(role.title)?.title ?? titleCase(role.title), data.independentWorkType)
         : titleCase(role.title),
@@ -2191,9 +2198,12 @@ function buildExperience(data: IntakeData): ExperienceRole[] {
       bullets: []
     }));
 
-  return roles.map((role, index) => ({
+  // Bullets follow the JOB they belong to, not whichever row survived filtering.
+  // Keying off the post-filter index is what re-attributed one employer's work
+  // to another as soon as a row above it was dropped.
+  return roles.map(({ slot, ...role }) => ({
     ...role,
-    bullets: buildExperienceBullets(data, role, index)
+    bullets: buildExperienceBullets(data, role, slot)
   }));
 }
 
