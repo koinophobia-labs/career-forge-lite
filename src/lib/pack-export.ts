@@ -1,4 +1,4 @@
-import { getUsableEvidenceForGeneration } from "@/lib/evidence-read";
+import { getUsableEvidenceForGeneration, revalidateResumeForExport } from "@/lib/evidence-read";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -305,7 +305,7 @@ export async function createPackBundle(
   };
   for (const variant of pack.variants.filter((item) => item.kind !== "job-specific")) {
     const laneTitle = lanes.find((lane) => lane.id === variant.laneId)?.title ?? "General";
-    const safeResume = sanitizeResumeForProfessionalUse(variant.resume);
+    const safeResume = sanitizeResumeForProfessionalUse(revalidateResumeForExport(variant.resume, dossier));
     for (const format of formats) {
       const filename = uniqueName(resumeVariantFilename(dossier.identity.fullName, laneTitle, variant.kind, format));
       const blob = format === "docx"
@@ -328,7 +328,7 @@ export async function createVariantFile(
   laneTitle: string,
   format: PackExportFormat
 ): Promise<{ blob: Blob; filename: string }> {
-  const safeResume = sanitizeResumeForProfessionalUse(variant.resume);
+  const safeResume = sanitizeResumeForProfessionalUse(revalidateResumeForExport(variant.resume, dossier));
   return {
     blob: format === "docx"
       ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)

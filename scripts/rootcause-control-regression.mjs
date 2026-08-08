@@ -51,6 +51,10 @@ const { polishResumeSentence } = load(path.join(root, "src/lib/resume-intelligen
 const { truthShape, checkTruthShape, transformPreservingTruth } = load(path.join(root, "src/lib/transformation-invariants.ts"));
 const { generateResumePackage } = load(path.join(root, "src/lib/generator.ts"));
 const { initialIntake } = load(path.join(root, "src/lib/career-data.ts"));
+const { getUsableIntake, intakeFieldCategory } = load(path.join(root, "src/lib/evidence-read.ts"));
+const { resumeToText } = load(path.join(root, "src/lib/resume-export.ts"));
+const { revalidateResumeForExport } = load(path.join(root, "src/lib/evidence-read.ts"));
+const { emptyDossier, evidenceRecord, resolveDisclosure } = load(path.join(root, "src/lib/dossier.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -205,6 +209,103 @@ console.log("\n=== PROGRAM 2 — actor, polarity, accomplishment ===");
   check("B7 end to end: team credit is not converted to a personal claim",
     !/\bCleared the whole discharge backlog\b/.test(whole) || /\bwe\b/i.test(whole), whole.slice(0, 260));
   check("   end to end: the verb keeps its object", !/find on the ward/i.test(whole), whole.slice(0, 260));
+}
+
+// ===========================================================================
+console.log("\n=== PROGRAM 3 — typed intake schema ===");
+{
+  const base = { ...initialIntake, fullName: "Raymond Nkemelu", email: "ray.n@sky.com", phone: "07700 900918",
+    targetJobTitle: "Warehouse Operative", currentTitle: "Warehouse Operative", currentCompany: "Wincanton",
+    currentTime: "2019-2025", responsibilities: "loaded the cages and kept the pick face topped up" };
+
+  // FABRICATION direction: a disclosure typed into an ORGANIZATION field must
+  // not print. The field name does not make the content safe.
+  const contaminated = { ...base,
+    currentCompany: "Wincanton (agency, until my position was cut)",
+    previousTitle: "Picker", previousCompany: "DHL, laid off when the site shut", previousTime: "2016-2019" };
+  const gated = getUsableIntake(contaminated);
+  check("C1 fabrication: an organization field is gated, not exempt",
+    !/position was cut/i.test(gated.currentCompany), JSON.stringify(gated.currentCompany));
+  check("   both employer fields are gated",
+    !/laid off/i.test(gated.previousCompany), JSON.stringify(gated.previousCompany));
+  const out = resumeToText(contaminated, generateResumePackage(contaminated));
+  check("   and neither reaches the exported résumé",
+    !/position was cut/i.test(out) && !/laid off/i.test(out), out.split("\n").filter((l) => /Wincanton|DHL/.test(l)).join(" | "));
+
+  // AMPUTATION direction: withholding the LABEL must not cost the JOB, and
+  // ordinary employers must be untouched.
+  const pkg = generateResumePackage(contaminated);
+  check("C2 amputation: the job survives even though its employer name was withheld",
+    pkg.experience.length >= 1, JSON.stringify(pkg.experience.map((r) => [r.title, r.company, r.time])));
+  check("   an ordinary employer is untouched",
+    /Wincanton/.test(JSON.stringify(getUsableIntake(base).currentCompany)), JSON.stringify(getUsableIntake(base).currentCompany));
+  check("   ordinary dates are untouched",
+    getUsableIntake(base).currentTime === "2019-2025", JSON.stringify(getUsableIntake(base).currentTime));
+
+  // Identity and targeting are not career claims and are not gated.
+  check("C3 identity fields are not gated", getUsableIntake(base).fullName === "Raymond Nkemelu");
+  check("   targeting fields are not gated", getUsableIntake(base).targetJobTitle === "Warehouse Operative");
+
+  // The structural property: an unclassified field defaults to EVIDENCE.
+  check("C4 an unknown field defaults to evidence (fails closed)",
+    intakeFieldCategory("someFieldAddedNextYear") === "evidence", intakeFieldCategory("someFieldAddedNextYear"));
+  const future = getUsableIntake({ ...base, someFieldAddedNextYear: "I was signed off after my operation and I was let go when the depot shut." });
+  check("   so a field nobody classified is still gated",
+    !/let go when the depot shut/i.test(String(future.someFieldAddedNextYear)), JSON.stringify(future.someFieldAddedNextYear));
+  check("   while identity stays classified as identity", intakeFieldCategory("fullName") === "identity");
+}
+
+// ===========================================================================
+console.log("\n=== PROGRAM 4 — snapshot revalidation at export ===");
+{
+  const T0 = "2026-08-07T09:00:00.000Z", T1 = "2026-08-07T14:00:00.000Z";
+  const KEPT = "Ran the goods-in bay on my own every morning.";
+  const LATER_EXCLUDED = "I covered my manager's job for three months while she was on maternity leave.";
+
+  const keptRec = evidenceRecord("responsibility", KEPT, "guided", true, T0, { roleId: "r1" });
+  const exRec = evidenceRecord("responsibility", LATER_EXCLUDED, "guided", true, T0, { roleId: "r1" });
+  let dossier = { ...emptyDossier(T0), evidence: [keptRec, exRec] };
+
+  // The snapshot was generated while BOTH were usable.
+  const snapshot = {
+    summary: `${KEPT} ${LATER_EXCLUDED}`,
+    coreSkills: ["Goods-In"],
+    experience: [{ title: "Warehouse Operative", company: "Wincanton", time: "2019 - 2025", bullets: [KEPT, LATER_EXCLUDED] }],
+    education: "", linkedinHeadline: "", linkedinSummary: LATER_EXCLUDED
+  };
+
+  // Hours later the user reviews the flag and chooses Exclude.
+  dossier = resolveDisclosure(dossier, exRec.id, "exclude", T1);
+
+  const out = revalidateResumeForExport(snapshot, dossier);
+  const whole = JSON.stringify(out);
+  check("D1 fabrication: an excluded sentence cannot ride out on an old snapshot",
+    !/maternity leave/i.test(whole), whole.slice(0, 260));
+  check("   not via the summary", !/maternity leave/i.test(out.summary), out.summary);
+  check("   not via the LinkedIn summary", !/maternity leave/i.test(out.linkedinSummary), out.linkedinSummary);
+
+  // AMPUTATION direction: revalidation must not eat the rest of the résumé.
+  check("D2 amputation: the kept sentence still exports",
+    /goods-in bay/i.test(whole), whole.slice(0, 260));
+  check("   the job container survives with heading and dates",
+    out.experience.length === 1 && out.experience[0].company === "Wincanton" && out.experience[0].time === "2019 - 2025",
+    JSON.stringify(out.experience[0]));
+  check("   the surviving bullet is still attached to it",
+    out.experience[0].bullets.some((b) => /goods-in bay/i.test(b)), JSON.stringify(out.experience[0].bullets));
+  check("D3 the stored snapshot is NOT mutated — history stays viewable",
+    snapshot.experience[0].bullets.length === 2 && /maternity leave/i.test(snapshot.summary),
+    JSON.stringify(snapshot.experience[0].bullets.length));
+
+  // A clean résumé with nothing ineligible passes through unchanged.
+  const cleanDossier = { ...emptyDossier(T0), evidence: [keptRec] };
+  const clean = revalidateResumeForExport({
+    summary: KEPT, coreSkills: ["Goods-In"], education: "",
+    experience: [{ title: "Warehouse Operative", company: "Wincanton", time: "2019 - 2025", bullets: [KEPT] }],
+    linkedinHeadline: "Warehouse Operative", linkedinSummary: KEPT
+  }, cleanDossier);
+  check("D4 control: a clean résumé is untouched by revalidation",
+    clean.summary === KEPT && clean.experience[0].bullets.length === 1 && clean.coreSkills.length === 1,
+    JSON.stringify(clean));
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

@@ -264,36 +264,67 @@ export function assertUsable(items: DossierEvidenceRecord[]): UsableEvidence[] {
  * ------------------------------------------------------------------------- */
 
 /**
- * Not career facts: identity, contact details, the target job, and the
- * approval list itself. Everything else on the intake is treated as something
- * the user said about their working life.
+ * INTAKE FIELD CATEGORIES.
+ *
+ * This replaces a hand-maintained exemption list. That list was holed twice in
+ * one day: it exempted `education` and the three `*Time` fields (fixed after an
+ * inventory named them), and it still exempted `currentCompany`,
+ * `previousCompany` and the title fields (found by Round 9, after I fixed only
+ * the four fields that had been named and never re-read the rest).
+ *
+ * The lesson is not "be more careful with the list". It is that asking *which
+ * fields should bypass the lifecycle* is the wrong question. A company name
+ * containing natural-language context does not become safe because the field
+ * happens to be called `currentCompany`. So the schema declares what each field
+ * IS, and the category decides how it may be consumed.
+ *
+ *   identity      — who the person is. Name, contact details. Not a career
+ *                   claim, never gated, never used as evidence.
+ *   organization  — labels naming an employer, job title or date range. These
+ *                   PRINT on the résumé, so they are gated exactly like
+ *                   evidence. Withholding one now costs the label, not the job:
+ *                   sanitizeResumeForProfessionalUse keeps the role container
+ *                   even when its heading is withheld.
+ *   evidence      — anything the user says about their working life. Fully
+ *                   gated. THE DEFAULT for any field not named below.
+ *   targeting     — the job being applied to. May frame output; may never
+ *                   become a claim about the user's own history.
+ *   ui            — bookkeeping the product wrote itself. Never content.
+ *
+ * Unknown fields fall through to `evidence`, so a field added next year is
+ * gated because nobody classified it — not exempted because nobody listed it.
  */
-const NON_EVIDENCE_INTAKE_FIELDS = new Set([
-  // NOT exempt, though an earlier version of this list wrongly exempted them:
-  // `education` prints as resume.education, and the *Time fields print as the
-  // dates beside each employer. Both carry user prose and both leaked while a
-  // byte-identical sentence in customRoleNotes was correctly withheld in the
-  // SAME generation call — "Dropped out of the plumbing diploma after the
-  // first term." reached the document, and "2019-2023, until my position was
-  // cut because I flagged the billing error" printed as an employment date.
-  // `withGuards` nets only summary/linkedinSummary/linkedinHeadline, so there
-  // was no second chance to catch either.
-  "sourceRoleId",
-  "fullName",
-  "email",
-  "phone",
-  "website",
-  "targetJobTitle",
-  "disclosureApproved",
-  "roleFamily",
-  "template",
-  "currentTitle",
-  "currentCompany",
-  "previousTitle",
-  "previousCompany",
-  "additionalTitle",
-  "additionalCompany"
-]);
+export type IntakeFieldCategory = "identity" | "organization" | "evidence" | "targeting" | "ui";
+
+const INTAKE_FIELD_CATEGORY: Record<string, IntakeFieldCategory> = {
+  fullName: "identity",
+  email: "identity",
+  phone: "identity",
+  website: "identity",
+
+  currentTitle: "organization",
+  currentCompany: "organization",
+  currentTime: "organization",
+  previousTitle: "organization",
+  previousCompany: "organization",
+  previousTime: "organization",
+  additionalTitle: "organization",
+  additionalCompany: "organization",
+  additionalTime: "organization",
+
+  targetJobTitle: "targeting",
+  roleFamily: "targeting",
+  template: "ui",
+  sourceRoleId: "ui",
+  disclosureApproved: "ui"
+};
+
+export function intakeFieldCategory(field: string): IntakeFieldCategory {
+  return INTAKE_FIELD_CATEGORY[field] ?? "evidence";
+}
+
+/** Categories whose text is read through the disclosure gate. */
+const GATED_CATEGORIES = new Set<IntakeFieldCategory>(["organization", "evidence"]);
 
 /** Split that keeps ellipses intact — "Closed, counted, locked up... every night." is ONE claim. */
 function splitSentences(value: string): string[] {
@@ -350,7 +381,7 @@ export function getUsableIntake<T extends Record<string, unknown>>(intake: T): U
   );
   const out: Record<string, unknown> = { ...intake };
   for (const [key, value] of Object.entries(intake)) {
-    if (NON_EVIDENCE_INTAKE_FIELDS.has(key)) continue;
+    if (!GATED_CATEGORIES.has(intakeFieldCategory(key))) continue;
     if (typeof value === "string") {
       out[key] = eligibleUserText(value, approved);
     } else if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
@@ -360,4 +391,105 @@ export function getUsableIntake<T extends Record<string, unknown>>(intake: T): U
     }
   }
   return out as UsableIntake<T>;
+}
+
+/* ------------------------------------------------------------------------- *
+ * SNAPSHOT REVALIDATION.
+ *
+ * A generated pack variant is a SNAPSHOT: prose rendered from the evidence as
+ * it stood at generation time, then stored. Exporting re-rendered that stored
+ * object, so everything the gate does was bypassed by the passage of time.
+ * Generate a pack, then exclude a disclosure, then download — and the excluded
+ * sentence shipped in the DOCX, the PDF and the materials file, with the export
+ * button enabled and the receipt reporting zero exclusions. Four Round 9 P0s
+ * were this one deferred question.
+ *
+ * The answer: an older snapshot may NOT reintroduce evidence that has since
+ * become ineligible, for professional export, without explicit revalidation.
+ *
+ * Historical snapshots stay viewable — the stored object is not modified, and
+ * the user can still see what they generated last month. What changes is that
+ * the bytes leaving the product are revalidated against the CURRENT evidence
+ * state every time. A snapshot is a record of what was said, not a licence to
+ * say it again.
+ *
+ * Withholding here never removes a job: the role container survives with its
+ * heading and dates even when every bullet is withheld (see
+ * sanitizeResumeForProfessionalUse).
+ * ------------------------------------------------------------------------- */
+
+type ExportableResume = {
+  summary: string;
+  coreSkills: string[];
+  experience: Array<{ title: string; company: string; time: string; bullets: string[]; [k: string]: unknown }>;
+  education: string;
+  linkedinHeadline: string;
+  linkedinSummary: string;
+  [k: string]: unknown;
+};
+
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Does this rendered sentence carry a now-ineligible record's content? The
+ * snapshot holds a transformed version of the user's words, so exact equality
+ * would never match. A long shared span is the signal — short ones would catch
+ * ordinary phrases that two unrelated bullets happen to share.
+ */
+function carriesIneligibleRecord(sentence: string, ineligible: string[]): boolean {
+  const hay = normalizeForMatch(sentence);
+  if (hay.length < 12) return false;
+  return ineligible.some((detail) => {
+    const needle = normalizeForMatch(detail);
+    if (needle.length < 12) return false;
+    if (hay.includes(needle) || needle.includes(hay)) return true;
+    // Transformation trims the ends (leading "I", trailing punctuation), so
+    // compare a generous interior span too.
+    const span = needle.slice(0, Math.max(24, Math.floor(needle.length * 0.6)));
+    return span.length >= 18 && hay.includes(span);
+  });
+}
+
+export function revalidateResumeForExport<T extends ExportableResume>(resume: T, dossier: Pick<CareerDossier, "evidence">): T {
+  const ineligible = dossier.evidence.filter((item) => !isUsable(item)).map((item) => item.detail);
+  const approved = new Set(
+    dossier.evidence
+      .filter((item) => isUsable(item) && item.disclosureReview === "keep")
+      .map((item) => approvalKey(item.detail))
+  );
+
+  const keepSentences = (value: string): string =>
+    value
+      .split(/\n/)
+      .map((line) =>
+        splitSentences(line)
+          .filter((sentence) => {
+            if (carriesIneligibleRecord(sentence, ineligible)) return false;
+            return !possibleDisclosure(sentence) || approved.has(approvalKey(sentence));
+          })
+          .join(" ")
+          .replace(/\s{2,}/g, " ")
+          .trim()
+      )
+      .join("\n")
+      .trim();
+
+  return {
+    ...resume,
+    summary: keepSentences(resume.summary ?? ""),
+    linkedinSummary: keepSentences(resume.linkedinSummary ?? ""),
+    linkedinHeadline: keepSentences(resume.linkedinHeadline ?? ""),
+    education: keepSentences(resume.education ?? ""),
+    coreSkills: (resume.coreSkills ?? []).filter(
+      (skill) => !carriesIneligibleRecord(skill, ineligible) && !possibleDisclosure(skill)
+    ),
+    // The role container is preserved whole. Only its bullets are revalidated,
+    // because a stale bullet is not evidence that the job did not happen.
+    experience: (resume.experience ?? []).map((role) => ({
+      ...role,
+      bullets: (role.bullets ?? []).map((b) => keepSentences(b)).filter((b) => b.trim().length > 0)
+    }))
+  };
 }
