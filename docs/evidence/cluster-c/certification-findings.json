@@ -1,0 +1,182 @@
+[
+ {
+  "id": "C1-01",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "contamination",
+  "title": "Separation reasons and health disclosures print as the employer name in the delivered DOCX and PDF (25/30 of an authored corpus)",
+  "file": "src/lib/employment-structure.ts:52-88 (BOUNDARIES / parseOrganizationField), consumed at src/lib/evidence-read.ts:399-401",
+  "mech": "parseOrganizationField only separates a trailing narrative when it sits behind one of three delimiters AND possibleDisclosure flags it, so any employer-box value whose disclosure phrasing the claim-classifier misses \u2014 or that has no delimiter, or narrative before the name \u2014 is returned whole as the structural identity and printed verbatim as the employer, with no review prompt or receipt note anywhere because the parsed narrative is consumed by nothing."
+ },
+ {
+  "id": "C1-03",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "A whole job disappears from the r\u00e9sum\u00e9 when its title and employer are both blanked and the date field is empty",
+  "file": "src/lib/generator.ts:2185 (buildExperience filter) fed by src/lib/evidence-read.ts:399-401",
+  "mech": "`organizationIdentity` returns an empty identity whenever a structural field's whole value trips the disclosure classifier with no comma/dash/paren boundary to split on, so both the title and the employer the user typed become \"\" at the point of read, and `buildExperience`'s OR-filter \u2014 which cannot tell a blanked field from a never-filled one \u2014 deletes the entire employment row."
+ },
+ {
+  "id": "C1-02",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "Real job titles containing a leave phrase are erased whole by the disclosure gate wired into the organization category",
+  "file": "src/lib/employment-structure.ts:85 (whole-value possibleDisclosure fallback), via src/lib/evidence-read.ts:399-401",
+  "mech": "parseOrganizationField's whole-value fallback (employment-structure.ts:85) returns identity \"\" whenever possibleDisclosure() matches the entire field, and evidence-read.ts:399-401 keeps only that identity \u2014 so any structural job title or employer name whose own words contain a leave phrase is silently deleted from every generated and exported surface, with the discarded narrative half consumed by nobody."
+ },
+ {
+  "id": "C1-05",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "The export sanitizer still runs the claim-admissibility classifier over structural fields and destroys \"No Boundaries Training Ltd\" on the way into the DOCX and PDF",
+  "file": "src/lib/evidence-admissibility.ts:568-569 (sanitizeResumeForProfessionalUse -> sanitizeProfessionalLine on role.title and role.company)",
+  "mech": "sanitizeResumeForProfessionalUse still passes role.title and role.company through sanitizeProfessionalLine, so the claim-admissibility classifier (GAP_PATTERNS[0]) blanks structural employer names at the export boundary \u2014 the C2 exemption was applied to sanitizeCareerDossier only, not to the document-building path."
+ },
+ {
+  "id": "C1-04",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "A blanked employer is replaced by the fabricated placeholder \"Current Company\" / \"Previous Company\" and printed as a real employer",
+  "file": "src/lib/generator.ts:2189-2192 (normalizeCompany(...) || role.fallbackCompany)",
+  "mech": "buildExperience substitutes a manufactured employer name (\"Current Company\"/\"Previous Company\") whenever the employer field reads empty, and that scaffold is then persisted into the saved r\u00e9sum\u00e9 version, where C3's harvestHistoricalRoles mistakes the product's own placeholder for a preserved record of the user's employer and \"recovers\" it into the dossier."
+ },
+ {
+  "id": "C1-06",
+  "lens": "c1-parser",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "An employer name written wholly in a non-Latin script is deleted and replaced with the fabricated placeholder",
+  "file": "src/lib/generator.ts:838-846 (isWeakFreeText: /^[^\\w]+$/ with \\w = [A-Za-z0-9_]) via normalizeCompany at :822-827",
+  "mech": "`isWeakFreeText`'s junk-input test `/^[^\\w]+$/` uses a non-Unicode `\\w` (`[A-Za-z0-9_]`), so any string containing no Latin letter or digit \u2014 i.e. every employer name written wholly in a non-Latin script \u2014 is classified as junk, blanked by `normalizeCompany`, and replaced downstream by the hard-coded fallback employer string."
+ },
+ {
+  "id": "C3-01",
+  "lens": "c3-migration",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "Migration writes a DIFFERENT job's employer into a damaged role and labels it \"recovered\" \u2014 reaches the DOCX",
+  "file": "src/lib/employment-structure.ts",
+  "mech": "historyFor() matches on title OR employer, so a sibling role's saved entries land in the damaged role's match set, and decide() collapses each version to one voice with `values.map(v=>v.trim()).find(Boolean)` BEFORE testing for destruction \u2014 the destroyed job's blank is skipped, `someDestroyed` stays false, and the sibling's employer is applied as a unanimous \"recovered\" answer."
+ },
+ {
+  "id": "C3-02",
+  "lens": "c3-migration",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "A user's own self-description line is parsed as a r\u00e9sum\u00e9 heading and becomes their employer",
+  "file": "src/lib/employment-structure.ts",
+  "mech": "harvestHistoricalRoles (src/lib/employment-structure.ts:174-184) admits any line whose split on \"|\" yields two non-empty segments, guarded only by /^[-\u2022]/ on the first, so product-rendered contact lines, user summaries, \"*\" bullets and education lines all become {title, company} employment records \u2014 and a single such entry is enough for decide() to report \"recovered\" and write segment two into DossierRole.employer."
+ },
+ {
+  "id": "C3-03",
+  "lens": "c3-migration",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "An unrecognised date range in a heading is restored as the company name",
+  "file": "src/lib/employment-structure.ts",
+  "mech": "The DATE_RANGE guard only recognises dash-separated numeric-year ranges, so any other user-typed date phrasing in the second segment of a product-rendered \"Title | <dates>\" heading is harvested as a company and confidently restored as the employer \u2014 and because the pre-fix build's own renderer emits that heading from the blanked snapshot, decide() sees the blank snapshot and the rendered line as one version with a single surviving witness and claims unanimity."
+ },
+ {
+  "id": "C3-04",
+  "lens": "c3-migration",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "An empty job title is filled from the sibling role at the same employer and marked \"recovered\"",
+  "file": "src/lib/employment-structure.ts",
+  "mech": "historyFor matches history entries on employer alone, so two distinct jobs at one employer land in the same version bucket, where decide()'s per-version find(Boolean) \u2014 written to merge duplicate representations of ONE job \u2014 collapses two genuinely different real titles to whichever sits first in the array and reports the arbitrary pick as a confident recovery, while the date ranges that would disambiguate are never consulted."
+ },
+ {
+  "id": "C3-05",
+  "lens": "c3-migration",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "The frozen head still runs education through the claims classifier: institution blanked, whole row deleted, persisted",
+  "file": "src/lib/evidence-admissibility.ts",
+  "mech": "Cluster C's structural-fact protection (roleHasStructure / return-as-typed) was scoped to dossier.roles only, so dossier.education still runs credential/institution/field through the r\u00e9sum\u00e9-claims classifier sanitizeProfessionalLine and deletes the row unless credential or institution survives it \u2014 on a read path whose output is written back to localStorage."
+ },
+ {
+  "id": "C2-01",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "The employer that Cluster C exists to protect is still blanked in every delivered document \u2014 and destroyed on disk in the saved snapshot",
+  "file": "src/lib/evidence-admissibility.ts:568-578 (sanitizeResumeForProfessionalUse), reached from src/lib/pack-export.ts:52,313,336 and src/lib/evidence-admissibility.ts:740 (sanitizeVersion)",
+  "mech": "sanitizeResumeForProfessionalUse still routes the structural fields role.title/role.company through sanitizeProfessionalLine \u2014 the claim-admissibility classifier that Cluster C removed from sanitizeCareerDossier \u2014 so any employer name matching a gap pattern is replaced with \"\" on the export path and, because that same sanitizer runs on every state read and its output is written back to storage, in the persisted resumeVersion snapshot as well."
+ },
+ {
+  "id": "C2-02",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "contamination",
+  "title": "A saved r\u00e9sum\u00e9 version loses a whole employment row and re-parents its bullet to the employer above \u2014 cross-role reassignment, written to disk",
+  "file": "src/lib/evidence-admissibility.ts:714-739 (sanitizeVersion, the resumeSnapshot === null branch)",
+  "mech": "sanitizeVersion's legacy branch runs each line of a saved resume through the claim-admissibility classifier, which mis-reads a structural employment heading as an evidence gap and deletes the row while leaving its bullets in place, and the sanitized result is written back to localStorage."
+ },
+ {
+  "id": "C3-06",
+  "lens": "c3-migration",
+  "sev": "P1",
+  "filed": "P1",
+  "dirn": "erasure",
+  "title": "A role the pre-fix build deleted outright is never recovered and never flagged, though the saved version still records the job",
+  "file": "src/lib/employment-structure.ts",
+  "mech": "C3 recovery is a map over surviving role containers, so a role the pre-fix classifier deleted outright has nothing to map over \u2014 the whole-container damage class is neither recovered nor flagged, and the migration's own scar-tissue corpus records a roleSurvived flag that is true in all four cases and asserted nowhere."
+ },
+ {
+  "id": "C2-03",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "A role whose title and employer are both empty is deleted on reload, even though its dates and bullets survive \u2014 and this fires before C3 recovery can run",
+  "file": "src/lib/dossier.ts:136 (reviveDossier)",
+  "mech": "reviveDossier applies its own stricter role-survival rule (`text(item.id) && (text(item.title) || text(item.employer))`) instead of the canonical `roleHasStructure`, and because it runs inside parseState/loadState it deletes the row before sanitizeCommandCenterState's C3 recovery ever sees it."
+ },
+ {
+  "id": "C2-04",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "false-recovery",
+  "title": "Recovery confidently assigns the WRONG employer and the WRONG job title when one saved version records two roles that share a title or an employer",
+  "file": "src/lib/employment-structure.ts:226-238 (decide) and 197-206 (historyFor)",
+  "mech": "decide() collapses every matched historical entry inside one saved version to the first non-empty value (\"any surviving witness within a version speaks for it\"), so two entries in that version that genuinely disagree on the field never register as a conflict and array order silently becomes the confidently-applied answer, while historyFor matches only on title/employer and never consults the role's dates that would disambiguate them."
+ },
+ {
+  "id": "C2-05",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "Rejecting a role's evidence, or excluding its only disclosure, silently deletes the whole employment container from the generated r\u00e9sum\u00e9 \u2014 with nothing in the receipt",
+  "file": "src/lib/resume-pack.ts:279 (`if (!support.length) return [];` in buildLaneResume roleEntries)",
+  "mech": "buildLaneResume's role loop has two exits for \"nothing printable under this heading\", and only the later one (empty bullets, lines 302-305) records the omission \u2014 the earlier `if (!support.length) return [];` at line 279 drops the whole employment container before any bookkeeping runs, so evidence-level suppression deletes a job from the r\u00e9sum\u00e9 with no receipt entry."
+ },
+ {
+  "id": "C2-06",
+  "lens": "c2-persistence",
+  "sev": "P0",
+  "filed": "P0",
+  "dirn": "erasure",
+  "title": "A real job title is erased from the r\u00e9sum\u00e9 because it contains \"maternity leave\" \u2014 the disclosure classifier is still judging a structural field",
+  "file": "src/lib/employment-structure.ts:85 (parseOrganizationField whole-value branch) via src/lib/evidence-read.ts:399-400",
+  "mech": "The whole-value branch of parseOrganizationField (employment-structure.ts:85) re-applies the claim-admissibility classifier possibleDisclosure to a structural field, so any job title containing the bigram \"<maternity|paternity|parental|bereavement|sick> leave\" is reduced to identity:\"\" at every read through getUsableIntake, and the emptied title is then rendered and persisted into the saved r\u00e9sum\u00e9 version."
+ }
+]
