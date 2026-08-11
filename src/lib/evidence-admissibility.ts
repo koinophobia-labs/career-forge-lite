@@ -660,6 +660,7 @@ function reconcileReferences(
       claimPath: claim.path,
       claimText: claim.text,
       evidenceIds: reference.evidenceIds,
+      evidenceRevisions: reference.evidenceRevisions,
       supportType: reference.supportType
     }];
   });

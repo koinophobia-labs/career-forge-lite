@@ -129,7 +129,8 @@ const backupSource = read("src/lib/backup.ts");
 
 check("job form: cleared dates save as null", tailorHook.includes("postingDate: form.postingDate || null") && tailorHook.includes("deadline: form.deadline || null"));
 check("job form: explicit none sentinel exists", tailorHook.includes('NO_SELECTION = "__none__"') && tailorPage.includes("No saved target") && tailorPage.includes("No baseline selected"));
-check("job form: replacement baseline validates current selection", tailorHook.includes("selectedBaseline") && tailorHook.includes("baselineIssue = form.baselineVariantId"));
+check("job form: replacement baseline validates current selection", tailorHook.includes("selectedBaseline") && tailorHook.includes("const baselineIssue = requestedBaselineIntegrityIssue"));
+check("job form: stale evidence-bound baseline is excluded", tailorHook.includes("validateVariantEvidenceIntegrity(variant, state.dossier).valid") && tailorHook.includes("evidenceIntegrityMessage"));
 check("job form: explicit applied action uses shared transition", tailorHook.includes("transitionApplicationStatus(record, finalStatus, nowIso)"));
 check("proof review: pending work is locked", sprintPage.includes('submittedLocked = evidenceState === "pending" || evidenceState === "approved"') && sprintPage.includes("disabled={submittedLocked}"));
 check("proof review: exact claim and source are visible", sprintPage.includes("Career Forge will save this claim") && sprintPage.includes("Submitted source excerpt"));

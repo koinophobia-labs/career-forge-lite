@@ -26,7 +26,10 @@ const sampleVariant = {
     education: "B.A. Communications — State University | 2020",
     linkedinHeadline: "Product Support Specialist", linkedinSummary: ""
   },
-  template: "Modern ATS", evidenceReferences: [], userAuthoredPaths: [],
+  // This disposable, synthetic fixture is product-authored and reviewed as a
+  // whole document. It must use the same exporter without masquerading as a
+  // legacy generated résumé that lacks evidence-revision receipts.
+  template: "Modern ATS", evidenceReferences: [], userAuthoredPaths: ["document"], reviewedUserAuthoredPaths: ["document"],
   sectionOrder: ["summary", "skills", "experience", "projects", "education"],
   sourceDossierUpdatedAt: "2026-01-01T00:00:00.000Z", baselineVariantId: null, applicationId: null,
   createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"

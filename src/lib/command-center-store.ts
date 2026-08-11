@@ -380,6 +380,9 @@ function reviveVariant(raw: Record<string, unknown>): ResumeVariant | null {
         if (!asString(item.claimText)) return [];
         return [{
           claimPath: asString(item.claimPath), claimText: asString(item.claimText), evidenceIds: asStringArray(item.evidenceIds),
+          evidenceRevisions: item.evidenceRevisions && typeof item.evidenceRevisions === "object" && !Array.isArray(item.evidenceRevisions)
+            ? Object.fromEntries(Object.entries(item.evidenceRevisions as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+            : undefined,
           supportType: item.supportType === "combined" || item.supportType === "transferred" ? item.supportType : "direct"
         }];
       })
@@ -396,6 +399,7 @@ function reviveVariant(raw: Record<string, unknown>): ResumeVariant | null {
     template: snapshot.template,
     evidenceReferences: references,
     userAuthoredPaths: asStringArray(raw.userAuthoredPaths),
+    reviewedUserAuthoredPaths: asStringArray(raw.reviewedUserAuthoredPaths),
     sectionOrder: sectionOrder.length ? sectionOrder : kind === "recruiter"
       ? ["summary", "projects", "experience", "skills", "education"]
       : ["summary", "skills", "experience", "projects", "education"],

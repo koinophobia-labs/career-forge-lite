@@ -12,13 +12,14 @@ import { deleteResumeVersion, loadState } from "@/lib/command-center-store";
 import { fieldLabel, fieldValueAtPath, isFieldConflict, resumeWithFieldValue, type FieldConflict } from "@/lib/edit-conflicts";
 import { LockedActionPill, LockedFeaturePanel } from "@/components/LockedFeature";
 import { useEntitlement } from "@/lib/entitlement";
-import { createPackBundle, createVariantFile, downloadBlob, exportSections, variantPlainText } from "@/lib/pack-export";
+import { createPackBundle, createVariantFile, downloadBlob, exportSections, validatedVariantPlainText } from "@/lib/pack-export";
 import { updatePackVariant } from "@/lib/resume-pack";
 import { syncBuilderVersionsWithPack } from "@/lib/version-sync";
 import { trackCareerEvent } from "@/lib/analytics";
 import { variantPurpose } from "@/lib/activation";
 import { deriveDefensibilityReceipt, uniqueUnclaimedReceiptItems } from "@/lib/defensibility";
 import { handoffFromApplication, saveHandoff } from "@/lib/tailor-handoff";
+import { evidenceIntegrityMessage, validateVariantEvidenceIntegrity } from "@/lib/evidence-integrity";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { ApplicationRecord, ResumeVersionRecord } from "@/types/command-center";
 import type { ResumePack, ResumeVariant } from "@/types/dossier";
@@ -33,15 +34,17 @@ type VersionCardProps = {
   laneTitle: string | null;
   onDelete: () => void;
   onTailorAgain: (() => void) | null;
+  integrityIssue: string | null;
 };
 
-function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain }: VersionCardProps) {
+function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain, integrityIssue }: VersionCardProps) {
   const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [copied, setCopied] = useState(false);
   const purpose = variantPurpose(version.source === "tailor" ? "job-specific" : version.label.toLowerCase().includes("recruiter") ? "recruiter" : "ats");
 
   async function copyText() {
+    if (integrityIssue) return;
     try {
       await navigator.clipboard.writeText(version.resumeText);
       setCopied(true);
@@ -97,7 +100,9 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
           <button
             type="button"
             onClick={copyText}
-            className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan"
+            disabled={Boolean(integrityIssue)}
+            title={integrityIssue ?? undefined}
+            className="rounded-md bg-gold px-3 py-1.5 text-xs font-black text-ink transition hover:bg-cyan disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copied ? "Copied" : "Copy resume text"}
           </button>
@@ -114,8 +119,9 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
           <button
             type="button"
             onClick={onTailorAgain}
-            title="Restart a tailored resume session using this application's saved job-post analysis"
-            className="rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-xs font-bold text-cyan transition hover:border-gold hover:text-gold"
+            disabled={Boolean(integrityIssue)}
+            title={integrityIssue ?? "Restart a tailored resume session using this application's saved job-post analysis"}
+            className="rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-xs font-bold text-cyan transition hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-40"
           >
             Tailor again
           </button>
@@ -147,6 +153,8 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
           </button>
         )}
       </div>
+
+      {integrityIssue && <p role="status" className="mt-3 rounded-lg border border-coral/35 bg-coral/10 px-3 py-2 text-xs font-bold leading-5 text-coral">{integrityIssue} <Link href="/profile" className="underline">Review evidence →</Link></p>}
 
       <p className="mt-3 rounded-lg border border-cyan/20 bg-cyan/5 px-3 py-2 text-xs leading-5 text-paper/65"><strong className="text-cyan">Use this for:</strong> {purpose.purpose}</p>
 
@@ -184,7 +192,11 @@ function VersionCard({ version, application, laneTitle, onDelete, onTailorAgain 
           )}
           <div>
             <p className="lab-mono text-[0.68rem] font-bold uppercase text-paper/55">Resume text</p>
-            {version.resumeText ? (
+            {integrityIssue ? (
+              <p className="mt-1.5 rounded-lg border border-coral/35 bg-coral/10 p-4 text-[0.8rem] font-bold leading-5 text-coral">
+                Stored résumé text is hidden until this version passes evidence review. Regenerate it before copying or selecting its contents.
+              </p>
+            ) : version.resumeText ? (
               <pre className="mt-1.5 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/12 bg-obsidian/50 p-4 font-sans text-[0.8rem] leading-5 text-paper/85">
                 {version.resumeText}
               </pre>
@@ -232,7 +244,9 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
   const identityMissing = !state.dossier.identity.fullName.trim();
   const uniqueUnclaimed = uniqueUnclaimedReceiptItems(pack.receipt);
   const defensibilityByVariant = new Map(pack.variants.map((variant) => [variant.id, deriveDefensibilityReceipt(variant, state.dossier)]));
-  const packExportBlocked = [...defensibilityByVariant.values()].some((receipt) => receipt.missingProvenance > 0);
+  const integrityByVariant = new Map(pack.variants.map((variant) => [variant.id, validateVariantEvidenceIntegrity(variant, state.dossier)]));
+  const packExportBlocked = [...defensibilityByVariant.values()].some((receipt) => receipt.missingProvenance > 0) || [...integrityByVariant.values()].some((result) => !result.valid);
+  const packIntegrityIssue = [...integrityByVariant.values()].map(evidenceIntegrityMessage).find(Boolean) ?? null;
 
   async function exportBundle() {
     if (packExportBlocked || !exportsUnlocked || identityMissing) return;
@@ -252,7 +266,7 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
 
   async function exportVariant(variant: ResumeVariant, format: "pdf" | "docx") {
     if (!exportsUnlocked || identityMissing) return;
-    if ((defensibilityByVariant.get(variant.id)?.missingProvenance ?? 1) > 0) return;
+    if ((defensibilityByVariant.get(variant.id)?.missingProvenance ?? 1) > 0 || !integrityByVariant.get(variant.id)?.valid) return;
     const lane = state.lanes.find((item) => item.id === variant.laneId);
     try {
       const file = await createVariantFile(variant, state.dossier, lane?.title ?? "General", format);
@@ -267,8 +281,9 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
   }
 
   async function copyVariant(variant: ResumeVariant) {
+    if (!integrityByVariant.get(variant.id)?.valid) return;
     try {
-      await navigator.clipboard.writeText(variantPlainText(state.dossier, variant.resume, variant.sectionOrder, variant.kind));
+      await navigator.clipboard.writeText(validatedVariantPlainText(state.dossier, variant));
       setExportNotice({ tone: "ok", text: "Copied the complete document — header, summary, skills, experience, and education — in your chosen section order." });
     } catch {
       setExportNotice({ tone: "error", text: "Clipboard unavailable in this browser. Open View / edit and copy the text manually." });
@@ -368,10 +383,21 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
     setUndoByVariant((current) => { const next = { ...current }; delete next[variant.id]; return next; });
   }
 
+  function confirmUserEdits(variant: ResumeVariant) {
+    const nowIso = new Date().toISOString();
+    onUpdate({
+      ...pack,
+      variants: pack.variants.map((item) => item.id === variant.id
+        ? { ...item, reviewedUserAuthoredPaths: [...item.userAuthoredPaths], updatedAt: nowIso }
+        : item),
+      updatedAt: nowIso
+    });
+  }
+
   return (
     <section className="trust-panel mt-8 overflow-hidden p-5 sm:p-6" aria-labelledby="pack-ready-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="trust-kicker text-xs font-bold uppercase">{packExportBlocked ? "Evidence integrity changed" : "Generation complete"}</p><h2 id="pack-ready-title" className="mt-2 text-3xl font-bold text-paper">{packExportBlocked ? "Your Résumé Pack needs evidence review." : "Your Résumé Pack is ready."}</h2><p className="mt-2 text-sm text-paper/65">{pack.lanePacks.length} active lane{pack.lanePacks.length === 1 ? "" : "s"} · {pack.variants.length} generated résumés · {pack.receipt.evidenceUsed.length} evidence items in the original generation receipt · {uniqueUnclaimed.length} unique gaps or unsupported claims left unclaimed</p>{packExportBlocked && <p className="mt-2 text-sm font-bold text-coral">A cited source is missing, rejected, or incomplete. Review dossier evidence and regenerate before tailoring or export.</p>}</div>
+        <div><p className="trust-kicker text-xs font-bold uppercase">{packExportBlocked ? "Evidence integrity changed" : "Generation complete"}</p><h2 id="pack-ready-title" className="mt-2 text-3xl font-bold text-paper">{packExportBlocked ? "Your Résumé Pack needs evidence review." : "Your Résumé Pack is ready."}</h2><p className="mt-2 text-sm text-paper/65">{pack.lanePacks.length} active lane{pack.lanePacks.length === 1 ? "" : "s"} · {pack.variants.length} generated résumés · {pack.receipt.evidenceUsed.length} evidence items in the original generation receipt · {uniqueUnclaimed.length} unique gaps or unsupported claims left unclaimed</p>{packExportBlocked && <p className="mt-2 text-sm font-bold text-coral">{packIntegrityIssue ?? "A cited source is missing, rejected, or incomplete. Review dossier evidence and regenerate before tailoring or export."}</p>}</div>
         <div className="flex flex-wrap gap-2">{packExportBlocked ? <Link href="/profile" className="inline-flex min-h-11 items-center rounded border border-coral/45 px-5 py-2.5 text-sm font-bold text-coral">Review dossier evidence →</Link> : <Link href="/tailor" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Tailor a résumé to a real job →</Link>}{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Export complete pack" /> : identityMissing ? <IdentityGatePrompt /> : <button type="button" onClick={exportBundle} disabled={working || packExportBlocked} title={packExportBlocked ? "Restore every cited source before exporting this pack." : undefined} className="min-h-11 rounded-md border border-gold/45 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">{working ? "Building ZIP…" : "Export complete pack"}</button>}{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} résumé files plus LinkedIn materials and a README.</p>}{exportNotice && <p role="status" aria-live="polite" className={`w-full text-xs font-bold ${exportNotice.tone === "ok" ? "text-mint" : "text-coral"}`}>{exportNotice.text}</p>}</div>
       </div>
       {!exportsUnlocked && (
@@ -383,6 +409,25 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
           />
         </div>
       )}
+      {[...integrityByVariant.entries()].some(([, result]) => !result.valid) && (
+        <div className="mt-5 grid gap-2" aria-label="Evidence integrity blockers">
+          {pack.variants.flatMap((variant) => {
+            const result = integrityByVariant.get(variant.id)!;
+            const message = evidenceIntegrityMessage(result);
+            if (!message) return [];
+            const userReviewOnly = result.issues.every((issue) => issue.reason === "user-authored-review-required");
+            return [
+              <div key={`${variant.id}-integrity`} className="rounded-lg border border-coral/35 bg-coral/10 p-3 text-xs font-bold leading-5 text-coral">
+                <p>{variant.title}: {message}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Link href="/profile" className="rounded border border-coral/50 px-3 py-1.5">Review source evidence →</Link>
+                  {userReviewOnly && <button type="button" onClick={() => confirmUserEdits(variant)} className="rounded border border-coral/50 px-3 py-1.5">I reviewed my edited fields</button>}
+                </div>
+              </div>
+            ];
+          })}
+        </div>
+      )}
       <div className="mt-5 grid gap-5">
         {pack.lanePacks.map((lanePack) => {
           const lane = state.lanes.find((item) => item.id === lanePack.laneId);
@@ -392,7 +437,8 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
               const previous = state.resumePacks.flatMap((item) => item.variants).filter((item) => item.id !== variant.id && item.laneId === variant.laneId && item.kind === variant.kind).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
               const purpose = variantPurpose(variant.kind);
               const defensibility = defensibilityByVariant.get(variant.id)!;
-              const exportBlocked = defensibility.missingProvenance > 0;
+              const integrity = integrityByVariant.get(variant.id)!;
+              const exportBlocked = defensibility.missingProvenance > 0 || !integrity.valid;
               const tracedClaimCount = defensibility.directlySupported + defensibility.combinedEvidence + defensibility.transferred;
               const withheldFacts = exportSections(variant.resume, variant.sectionOrder, variant.kind).withheldFacts;
               return <article key={variant.id} className="rounded-lg border border-white/10 bg-white/5 p-4"><div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="font-bold text-paper">{purpose.label} · {lane?.title ?? "Lane"}</p><p className="lab-mono mt-1 text-[0.62rem] font-bold uppercase text-paper/45">{variant.status.replace("-", " ")} · {tracedClaimCount} fully traced claims{variant.userEdited ? " · user edited" : ""}</p></div><button type="button" onClick={() => { setEditingId(editingId === variant.id ? null : variant.id); if (editingId !== variant.id) trackCareerEvent("resume_variant_opened"); }} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">{editingId === variant.id ? "Close" : "View / edit"}</button>{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Copy / PDF / DOCX" /> : identityMissing ? <IdentityGatePrompt compact /> : <><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before copying." : undefined} onClick={() => void copyVariant(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70 disabled:cursor-not-allowed disabled:opacity-40">Copy</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "pdf")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">Print / PDF</button><button type="button" disabled={exportBlocked} title={exportBlocked ? "Restore every cited source before exporting." : undefined} onClick={() => void exportVariant(variant, "docx")} className="min-h-11 rounded-full border border-cyan/30 px-3 py-1.5 text-xs text-cyan disabled:cursor-not-allowed disabled:opacity-40">DOCX</button></>}<button type="button" onClick={() => duplicate(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Duplicate</button><button type="button" onClick={() => rename(variant)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Rename</button><button type="button" onClick={() => markCanonical(variant)} className="min-h-11 rounded-full border border-gold/30 px-3 py-1.5 text-xs text-gold">{variant.canonical ? "Baseline" : "Make baseline"}</button>{previous && <button type="button" onClick={() => setCompareId(compareId === variant.id ? null : variant.id)} className="min-h-11 rounded-full border border-white/15 px-3 py-1.5 text-xs text-paper/70">Compare</button>}<button type="button" onClick={() => remove(variant)} className="min-h-11 rounded-full border border-coral/25 px-3 py-1.5 text-xs text-coral">Delete</button></div><div className="mt-3 grid gap-2 rounded-lg border border-cyan/20 bg-cyan/5 p-3 text-xs leading-5 text-paper/65"><p><strong className="text-cyan">Use this for:</strong> {purpose.purpose}</p><p><strong className="text-gold">Why it differs:</strong> {purpose.difference}</p>{withheldFacts.length > 0 && <p className="font-bold text-gold">{withheldFacts.length} fact{withheldFacts.length === 1 ? "" : "s"} withheld ({withheldFacts.join(", ")}) — deliberately kept out of every copy and export.</p>}</div><details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-3 rounded-lg border border-white/12 bg-obsidian/35 p-3"><summary className="cursor-pointer text-xs font-bold text-paper"><span className={defensibility.status.includes("review") || defensibility.status.includes("recheck") ? "text-coral" : "text-mint"}>{defensibility.status}</span> · Open Defensibility Receipt</summary><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-paper/60 sm:grid-cols-3"><p>Total claims: {defensibility.totalClaims}</p><p>Direct: {defensibility.directlySupported}</p><p>Combined: {defensibility.combinedEvidence}</p><p>Transferred: {defensibility.transferred}</p><p>Missing provenance: {defensibility.missingProvenance}</p><p>Incomplete cited sources: {defensibility.incompleteProvenance}</p><p>Verified durations: {defensibility.verifiedDurations}</p><p>Unverified durations: {defensibility.unverifiedDurations}</p><p>User edits to recheck: {defensibility.userEditedClaimsNeedingReview}</p></div></details>
@@ -506,6 +552,12 @@ export default function VersionsPage() {
           <div className="mt-8 grid gap-3">
             {sorted.map((version) => {
               const application = applicationFor(version);
+              const sourceVariant = state.resumePacks.flatMap((pack) => pack.variants).find((variant) =>
+                variant.id === version.id || variant.id === version.baselineVariantId
+              ) ?? null;
+              const integrityIssue = sourceVariant
+                ? evidenceIntegrityMessage(validateVariantEvidenceIntegrity(sourceVariant, state.dossier))
+                : "This saved output predates evidence-revision checks. Regenerate it before copying, exporting, printing, or tailoring.";
               return (
                 <VersionCard
                   key={version.id}
@@ -518,6 +570,7 @@ export default function VersionsPage() {
                       ? () => tailorAgain(application)
                       : null
                   }
+                  integrityIssue={integrityIssue}
                 />
               );
             })}

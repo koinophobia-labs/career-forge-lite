@@ -17,6 +17,7 @@ import { applicationJobPost, encodeJobPostText, isLikelyNewJobPost } from "@/lib
 import { createRoleSprint } from "@/lib/role-sprint";
 import { recommendRoleSprintRequirement } from "@/lib/role-sprint-ux";
 import { buildHandoff, saveHandoff } from "@/lib/tailor-handoff";
+import { evidenceIntegrityMessage, validateVariantEvidenceIntegrity } from "@/lib/evidence-integrity";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { ApplicationQuestion, ApplicationRecord } from "@/types/command-center";
 
@@ -90,8 +91,15 @@ export function useTailorWorkspace() {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .flatMap((pack) => [...pack.variants].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
       .filter((variant) => variant.kind !== "job-specific")
+      .filter((variant) => validateVariantEvidenceIntegrity(variant, state.dossier).valid)
       .filter((variant) => !seen.has(variant.id) && Boolean(seen.add(variant.id)));
-  }, [state.resumePacks]);
+  }, [state.dossier, state.resumePacks]);
+  const requestedBaseline = form.baselineVariantId && form.baselineVariantId !== NO_SELECTION
+    ? state.resumePacks.flatMap((pack) => pack.variants).find((variant) => variant.id === form.baselineVariantId) ?? null
+    : null;
+  const requestedBaselineIntegrityIssue = requestedBaseline
+    ? evidenceIntegrityMessage(validateVariantEvidenceIntegrity(requestedBaseline, state.dossier))
+    : null;
   const savedBaseline = currentApplication?.resumeVariantId
     ? allBaselines.find((variant) => variant.id === currentApplication.resumeVariantId) ?? null
     : null;
@@ -109,11 +117,12 @@ export function useTailorWorkspace() {
   const effectiveBaseline = form.baselineVariantId === NO_SELECTION
     ? null
     : selectedBaseline ?? recommendedBaseline;
-  const baselineIssue = form.baselineVariantId && form.baselineVariantId !== NO_SELECTION && !selectedBaseline
-    ? "The selected résumé baseline no longer exists. Choose a replacement before generating a tailored résumé."
+  const baselineIssue = requestedBaselineIntegrityIssue
+    ?? (form.baselineVariantId && form.baselineVariantId !== NO_SELECTION && !selectedBaseline
+    ? "The selected résumé baseline no longer exists or predates evidence-revision checks. Regenerate it before generating a tailored résumé."
     : effectiveBaseline && effectiveLane && effectiveBaseline.laneId !== effectiveLane.id
       ? "This résumé belongs to a different target lane. Choose the intended baseline or change the target role before generating a tailored résumé."
-      : null;
+      : null);
   const profileReady = hydrated && assessDossierReadiness(state.dossier).level !== "not-ready";
 
   useEffect(() => {

@@ -13,6 +13,7 @@ import {
   sanitizeResumeForProfessionalUse
 } from "@/lib/evidence-admissibility";
 import { possibleDisclosure } from "@/lib/truth-guards";
+import { assertVariantEvidenceIntegrity } from "@/lib/evidence-integrity";
 
 export type PackExportFormat = "pdf" | "docx";
 export type SectionKey = ResumeVariant["sectionOrder"][number];
@@ -127,6 +128,13 @@ export function variantPlainText(
     }
   }
   return parts.join("\n\n");
+}
+
+/** Outbound clipboard/plain-text entry point. Formatting-only callers may use
+ * variantPlainText; user-facing exports must pass the complete variant here. */
+export function validatedVariantPlainText(dossier: CareerDossier, variant: ResumeVariant): string {
+  assertVariantEvidenceIntegrity(variant, dossier);
+  return variantPlainText(dossier, variant.resume, variant.sectionOrder, variant.kind);
 }
 
 function slug(value: string, fallback: string): string {
@@ -317,6 +325,7 @@ export async function createPackBundle(
   lanes: TargetLane[],
   formats: PackExportFormat[]
 ): Promise<{ blob: Blob; filename: string; filenames: string[] }> {
+  pack.variants.filter((item) => item.kind !== "job-specific").forEach((variant) => assertVariantEvidenceIntegrity(variant, dossier));
   const zip = new JSZip();
   const filenames: string[] = [];
   const used = new Set<string>();
@@ -353,6 +362,7 @@ export async function createVariantFile(
   laneTitle: string,
   format: PackExportFormat
 ): Promise<{ blob: Blob; filename: string; unrepresentable: string[] }> {
+  assertVariantEvidenceIntegrity(variant, dossier);
   const safeResume = sanitizeResumeForProfessionalUse(revalidateResumeForExport(variant.resume, dossier));
   const blob = format === "docx"
     ? await docxBlob(dossier, safeResume, variant.kind, variant.sectionOrder)

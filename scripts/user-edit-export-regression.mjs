@@ -1,6 +1,6 @@
 // User-authored edit regression: editing generated text must preserve the exact
-// wording through reload and export without pretending the new wording is
-// evidence-backed.
+// wording through reload, require explicit review, and then export without
+// pretending the new wording is evidence-backed.
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -84,8 +84,20 @@ const roundTrip = parseState(JSON.stringify({ ...sanitized, resumeVersions: sync
 const restoredVersion = roundTrip.resumeVersions.find((item) => item.id === variant.id);
 check("saved version snapshot carries the exact edited wording after reload", restoredVersion?.resumeSnapshot?.resume.summary === editedText, restoredVersion?.resumeSnapshot?.resume.summary ?? "missing");
 check("saved plain text carries the exact edited wording", restoredVersion?.resumeText.includes(editedText) === true);
-const pdf = await createVariantFile(editedVariant, dossier, lane.title, "pdf");
-check("the edited document still produces a real PDF", pdf.filename.endsWith(".pdf") && pdf.blob.size > 500, `${pdf.filename} ${pdf.blob.size}`);
+let unreviewedBlocked = false;
+try {
+  await createVariantFile(editedVariant, dossier, lane.title, "pdf");
+} catch (error) {
+  unreviewedBlocked = error instanceof Error && error.message.includes("user authored review required");
+}
+check("the unreviewed edited document is blocked before PDF bytes", unreviewedBlocked);
+const reviewedVariant = { ...editedVariant, reviewedUserAuthoredPaths: ["summary"] };
+const pdf = await createVariantFile(reviewedVariant, dossier, lane.title, "pdf");
+check("the explicitly reviewed edited document produces a real PDF", pdf.filename.endsWith(".pdf") && pdf.blob.size > 500, `${pdf.filename} ${pdf.blob.size}`);
+const reviewedPack = { ...editedPack, variants: editedPack.variants.map((item) => item.id === variant.id ? reviewedVariant : item) };
+const editedAgain = updatePackVariant(reviewedPack, variant.id, { ...reviewedVariant.resume, summary: `${editedText} Reviewed again.` }, "2026-07-18T10:15:00.000Z", ["summary"]);
+const editedAgainVariant = editedAgain.variants.find((item) => item.id === variant.id);
+check("editing after explicit review invalidates the prior review receipt", !(editedAgainVariant?.reviewedUserAuthoredPaths ?? []).includes("summary"));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

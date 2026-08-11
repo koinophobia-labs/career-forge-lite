@@ -59,7 +59,7 @@ const NOW = "2026-08-07T09:00:00.000Z";
 async function deliveredPdfText(dossier, resume) {
   const variant = {
     id: "v1", laneId: null, kind: "ats", sectionOrder: undefined, userEdited: false,
-    userAuthoredPaths: [], status: "ready", evidenceReferences: [], createdAt: NOW, updatedAt: NOW, resume
+    userAuthoredPaths: ["document"], reviewedUserAuthoredPaths: ["document"], status: "ready", evidenceReferences: [], createdAt: NOW, updatedAt: NOW, resume
   };
   const { blob, unrepresentable } = await createVariantFile(variant, dossier, "Retail", "pdf");
   const data = new Uint8Array(await blob.arrayBuffer());

@@ -166,6 +166,12 @@ export type ResumeEvidenceReference = {
   claimPath: string;
   claimText: string;
   evidenceIds: string[];
+  /**
+   * Exact generation-time revisions for the evidence records above. Older
+   * stored variants intentionally omit this field and must be regenerated
+   * before generated text can cross an export boundary.
+   */
+  evidenceRevisions?: Record<string, string>;
   supportType: "direct" | "combined" | "transferred";
 };
 
@@ -181,6 +187,8 @@ export type ResumeVariant = {
   template: TemplateStyle;
   evidenceReferences: ResumeEvidenceReference[];
   userAuthoredPaths: string[];
+  /** User-authored fields the user explicitly reviewed after editing. */
+  reviewedUserAuthoredPaths?: string[];
   sectionOrder: Array<"summary" | "skills" | "experience" | "projects" | "education">;
   sourceDossierUpdatedAt: string;
   baselineVariantId: string | null;

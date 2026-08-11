@@ -1,6 +1,7 @@
 import { classifyEvidenceAdmissibility, isProfessionalEvidence, isUsableEvidence } from "@/lib/evidence-admissibility";
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import { getPendingReviews, getUserExcludedEvidence, isUsable } from "@/lib/evidence-read";
+import { bindEvidenceRevisions } from "@/lib/evidence-integrity";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
@@ -416,8 +417,8 @@ function createVariant(
     id: `${pack}-${lane.id}-${kind}`, laneId: lane.id, kind,
     title: `${lane.title} — ${kind === "ats" ? "ATS Submission" : "Recruiter / Networking"}`,
     status: built.references.length >= 3 ? "current" : "missing-evidence", canonical: true, userEdited: false,
-    resume: built.resume, template: kind === "ats" ? "Modern ATS" : "Corporate", evidenceReferences: built.references,
-    userAuthoredPaths: [], sectionOrder: kind === "ats"
+    resume: built.resume, template: kind === "ats" ? "Modern ATS" : "Corporate", evidenceReferences: bindEvidenceRevisions(built.references, dossier),
+    userAuthoredPaths: [], reviewedUserAuthoredPaths: [], sectionOrder: kind === "ats"
       ? ["summary", "skills", "experience", "projects", "education"]
       : ["summary", "projects", "experience", "skills", "education"],
     sourceDossierUpdatedAt: dossier.updatedAt, baselineVariantId: null, applicationId: null,
@@ -577,9 +578,19 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
 export function updatePackVariant(pack: ResumePack, variantId: string, resume: ResumePackage, nowIso = new Date().toISOString(), userAuthoredPaths: string[] = ["document"]): ResumePack {
   return {
     ...pack, status: "needs-review",
-    variants: pack.variants.map((item) => item.id === variantId ? {
-      ...item, resume, userEdited: true, userAuthoredPaths: unique([...item.userAuthoredPaths, ...userAuthoredPaths]), status: "needs-review", updatedAt: nowIso
-    } : item),
+    variants: pack.variants.map((item) => {
+      if (item.id !== variantId) return item;
+      const changed = new Set(userAuthoredPaths);
+      return {
+        ...item,
+        resume,
+        userEdited: true,
+        userAuthoredPaths: unique([...item.userAuthoredPaths, ...userAuthoredPaths]),
+        reviewedUserAuthoredPaths: (item.reviewedUserAuthoredPaths ?? []).filter((path) => !changed.has(path)),
+        status: "needs-review",
+        updatedAt: nowIso
+      };
+    }),
     updatedAt: nowIso
   };
 }

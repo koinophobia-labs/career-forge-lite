@@ -7,6 +7,7 @@ import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { isPlaceholderEducation, normalizeHeaderName, resumeToText, roleHasContent } from "@/lib/resume-export";
 import { useCommandCenter } from "@/lib/use-command-center";
+import { evidenceIntegrityMessage, validateVariantEvidenceIntegrity } from "@/lib/evidence-integrity";
 import type { TemplateStyle } from "@/types/career";
 
 const templateClasses: Record<TemplateStyle, string> = {
@@ -30,7 +31,15 @@ function VersionView() {
       state.applications.find((app) => app.resumeVersionId === version.id) ??
       null)
     : null;
-  const snapshot = version?.resumeSnapshot ?? null;
+  const sourceVariant = version
+    ? state.resumePacks.flatMap((pack) => pack.variants).find((variant) => variant.id === version.id || variant.id === version.baselineVariantId) ?? null
+    : null;
+  const integrityIssue = version
+    ? sourceVariant
+      ? evidenceIntegrityMessage(validateVariantEvidenceIntegrity(sourceVariant, state.dossier))
+      : "This saved output predates evidence-revision checks. Regenerate it before copying, exporting, printing, or tailoring."
+    : null;
+  const snapshot = integrityIssue ? null : version?.resumeSnapshot ?? null;
   const template = templateOverride ?? snapshot?.template ?? "Modern ATS";
   // A project is not an employer — split by kind so it renders under its own
   // heading instead of a fake-employer Experience row.
@@ -39,6 +48,7 @@ function VersionView() {
   const projectRows = experienceWithContent.filter((role) => role.kind === "project");
 
   async function copyText() {
+    if (integrityIssue) return;
     // Prefer serializing the stored snapshot: the full document (name header,
     // summary, skills, experience bullets, education) in the same order the
     // page renders — never just the summary sentence.
@@ -113,7 +123,7 @@ function VersionView() {
                   </label>
                 </>
               )}
-              {(snapshot || version.resumeText) && (
+              {!integrityIssue && (snapshot || version.resumeText) && (
                 <button
                   type="button"
                   onClick={copyText}
@@ -124,6 +134,13 @@ function VersionView() {
               )}
             </div>
 
+            {integrityIssue && (
+              <div role="status" className="mt-5 rounded-xl border border-coral/35 bg-coral/10 p-4 text-sm font-bold leading-6 text-coral">
+                <p>{integrityIssue}</p>
+                <Link href="/profile" className="mt-2 inline-block underline">Review source evidence →</Link>
+              </div>
+            )}
+
             {snapshot && (
               <p className="mt-3 text-xs leading-5 text-paper/50">
                 This is the exact document you generated — nothing is regenerated on export. In the print dialog, choose
@@ -131,7 +148,7 @@ function VersionView() {
               </p>
             )}
 
-            {!snapshot && (
+            {!snapshot && !integrityIssue && (
               <div className="mt-5 rounded-xl border border-gold/30 bg-gold/10 p-4 text-sm leading-6 text-paper/75">
                 Styled preview isn&apos;t available for this version — it was generated before Career Forge stored
                 document snapshots. {version.resumeText ? "Its plain text is below and printable." : "Only its metadata was saved."} New
@@ -142,7 +159,7 @@ function VersionView() {
         )}
       </section>
 
-      {hydrated && version && (snapshot || version.resumeText) && (
+      {hydrated && version && !integrityIssue && (snapshot || version.resumeText) && (
         <section className="mx-auto max-w-4xl px-5 py-8 sm:px-8" id="resume">
           {snapshot ? (
             <div className={`resume-paper rounded-md border border-white/18 bg-white p-5 shadow-glow sm:p-8 ${templateClasses[template]}`}>

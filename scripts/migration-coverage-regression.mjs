@@ -97,7 +97,7 @@ const contaminatedResume = {
 const contaminatedVariant = {
   id: "variant-1", laneId: "lane-old", kind: "ats", title: "ATS", status: "current", canonical: true,
   userEdited: true, resume: contaminatedResume, template: "Modern ATS",
-  evidenceReferences: [], userAuthoredPaths: ["experience.0.bullets"],
+  evidenceReferences: [], userAuthoredPaths: ["experience.0.bullets"], reviewedUserAuthoredPaths: ["experience.0.bullets"],
   sectionOrder: ["summary", "skills", "experience", "projects", "education"],
   sourceDossierUpdatedAt: NOW, baselineVariantId: null, applicationId: null, createdAt: NOW, updatedAt: NOW
 };
