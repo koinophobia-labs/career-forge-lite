@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivationFeedback } from "@/components/ActivationFeedback";
 import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
@@ -13,7 +13,7 @@ import {
   withRoleResponsibilitiesEdited,
   withUpdatedDossier
 } from "@/lib/dossier";
-import { extractLocalResumeFiles } from "@/lib/local-resume-import";
+import { extractLocalResumeFileBatch, type ResumeImportFailure } from "@/lib/local-resume-import";
 import { createId } from "@/lib/command-center-store";
 import { trackCareerEvent } from "@/lib/analytics";
 import { activationEventsForTransition } from "@/lib/activation";
@@ -134,6 +134,10 @@ export default function DossierPage() {
   const [education, setEducation] = useState({ credential: "", institution: "", dates: "" });
   const [resumeText, setResumeText] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [importFailures, setImportFailures] = useState<ResumeImportFailure[]>([]);
+  const [importingFiles, setImportingFiles] = useState(false);
+  const importOperation = useRef(0);
+  const activeImport = useRef<AbortController | null>(null);
   // Initializer runs client-side on first render; SSR sees `hydrated === false`
   // so the callout never renders before the stored dismissal is known.
   const [identityCalloutDismissed, setIdentityCalloutDismissed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(IDENTITY_CALLOUT_DISMISSED_KEY) === "1");
@@ -144,6 +148,12 @@ export default function DossierPage() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [stagedImport, setStagedImport] = useState<{ proposals: ImportProposalRecord[]; message: string } | null>(null);
   const activeBatch = state.pendingImportReviews.find((item) => item.id === selectedBatchId) ?? state.pendingImportReviews[0] ?? null;
+
+  useEffect(() => () => {
+    importOperation.current += 1;
+    activeImport.current?.abort();
+    activeImport.current = null;
+  }, []);
 
   function save(next: CareerDossier) {
     let events: ReturnType<typeof activationEventsForTransition> = [];
@@ -260,16 +270,52 @@ export default function DossierPage() {
   }
 
   async function importFiles(files: File[]) {
+    activeImport.current?.abort();
+    const controller = new AbortController();
+    const operation = importOperation.current + 1;
+    importOperation.current = operation;
+    activeImport.current = controller;
+    setImportingFiles(true);
+    setImportFailures([]);
+    setImportMessage(`Reading ${files.length} file${files.length === 1 ? "" : "s"} locally…`);
     try {
       trackCareerEvent("import_started");
-      const extracted = await extractLocalResumeFiles(files);
-      queueExtractedImport(parseResumePackToProposals(extracted), `${files.length} file${files.length === 1 ? "" : "s"} extracted locally. Raw files were not stored.`);
-      trackCareerEvent("resume_pack_imported");
-      trackCareerEvent("import_completed");
-      trackCareerEvent("proposal_review_started");
+      const result = await extractLocalResumeFileBatch(files, { signal: controller.signal });
+      if (operation !== importOperation.current) return;
+      setImportFailures(result.failures);
+      if (result.files.length) {
+        const mixedDetail = result.failures.length
+          ? ` ${result.failures.length} file${result.failures.length === 1 ? "" : "s"} failed and were not included.`
+          : "";
+        queueExtractedImport(
+          parseResumePackToProposals(result.files),
+          `${result.files.length} file${result.files.length === 1 ? "" : "s"} extracted locally. Raw files were not stored.${mixedDetail}`
+        );
+        trackCareerEvent("resume_pack_imported");
+        trackCareerEvent("import_completed");
+        trackCareerEvent("proposal_review_started");
+      } else if (result.failures.length) {
+        setImportMessage("No files were imported. Fix or remove the failed files, then choose files again.");
+      }
     } catch (error) {
+      if (operation !== importOperation.current) return;
       setImportMessage(error instanceof Error ? error.message : "Those files could not be read.");
+    } finally {
+      if (operation === importOperation.current) {
+        setImportingFiles(false);
+        activeImport.current = null;
+      }
     }
+  }
+
+  function cancelFileImport() {
+    if (!activeImport.current) return;
+    activeImport.current.abort();
+    importOperation.current += 1;
+    activeImport.current = null;
+    setImportingFiles(false);
+    setImportFailures([]);
+    setImportMessage("Import canceled. No résumé facts were added; choose a file to try again.");
   }
 
   function createReview(proposals: ImportProposalRecord[], message: string) {
@@ -501,9 +547,11 @@ export default function DossierPage() {
               <p className="trust-kicker text-xs font-bold uppercase">Recommended first entrance · local résumé import</p>
               <h2 id="import-title" className="mt-2 text-2xl font-bold text-paper">Start with the history you already have</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-paper/65">Upload old résumés, role-specific versions, or exported LinkedIn text. Career Forge groups repeated facts and conflicts for review. Multiple versions are useful; duplicates can be merged. Nothing becomes trusted evidence until you approve it.</p>
-              <label className="mt-4 block rounded-xl border border-dashed border-cyan/40 bg-cyan/5 p-4 text-sm text-paper/70"><span className="font-bold text-cyan">Choose PDF, DOCX, or text résumé files</span><span className="mt-1 block text-xs text-paper/50">Select more than one. Processing happens in this browser; raw files are never persisted or uploaded.</span><input aria-label="Resume pack files" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="mt-3 block min-h-11 w-full text-xs" onChange={(event) => { const files = [...(event.target.files ?? [])]; if (files.length) void importFiles(files); event.target.value = ""; }} /></label>
+              <label className="mt-4 block rounded-xl border border-dashed border-cyan/40 bg-cyan/5 p-4 text-sm text-paper/70"><span className="font-bold text-cyan">Choose PDF, DOCX, or text résumé files</span><span className="mt-1 block text-xs text-paper/50">Select up to 12 files (12 MB each, 48 MB total). PDFs may contain up to 40 pages. Processing happens in this browser; raw files are never persisted or uploaded.</span><input aria-label="Resume pack files" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="mt-3 block min-h-11 w-full text-xs" onChange={(event) => { const files = [...(event.target.files ?? [])]; if (files.length) void importFiles(files); event.target.value = ""; }} /></label>
+              {importingFiles && <div className="mt-3 flex items-center gap-3" role="status"><span className="text-sm text-cyan">Parsing locally in a bounded PDF worker…</span><button type="button" onClick={cancelFileImport} className="min-h-11 rounded border border-coral/45 px-3 py-2 text-xs font-bold text-coral">Cancel import</button></div>}
               <details className="mt-4 rounded-xl border border-white/12 bg-white/5 p-4" open={Boolean(resumeText || state.pendingImportReviews.length)}><summary className="cursor-pointer text-sm font-bold text-paper">No file handy? Paste résumé text</summary><textarea aria-label="Resume text import" className="trust-input mt-4 w-full border px-3 py-2 text-sm text-ink" rows={7} value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Paste the text from an existing résumé…" /><button type="button" onClick={importResume} className="mt-3 min-h-11 rounded-md border border-cyan/40 bg-cyan/10 px-4 py-2 text-sm font-bold text-cyan transition hover:border-gold hover:text-gold">Extract proposed evidence</button></details>
-              {importMessage && <p className="mt-3 text-sm text-mint" role="status" aria-live="polite">{importMessage}</p>}
+              {importMessage && <p className={`mt-3 text-sm ${importFailures.length ? "text-gold" : "text-mint"}`} role="status" aria-live="polite">{importMessage}</p>}
+              {importFailures.length > 0 && <div className="mt-3 rounded-xl border border-coral/45 bg-coral/10 p-4" role="alert" aria-label="Resume import failures"><p className="text-sm font-bold text-coral">Some files were not imported</p><ul className="mt-2 grid gap-2 text-xs leading-5 text-paper/70">{importFailures.map((failure) => <li key={`${failure.filename}-${failure.code}`}><span className="font-bold text-paper">{failure.filename}</span> — {failure.message.slice(failure.filename.length + 2)}</li>)}</ul><button type="button" onClick={() => setImportFailures([])} className="mt-3 min-h-11 rounded border border-white/20 px-3 py-2 text-xs font-bold text-paper/70">Remove failed-file notices</button></div>}
               <label className="mt-3 flex min-h-11 items-start gap-2 text-xs leading-5 text-paper/55"><input type="checkbox" checked={retainSourceFilenames} onChange={(event) => setRetainSourceFilenames(event.target.checked)} className="mt-1"/><span>Retain source filenames in local dossier metadata after approval. Leave off for maximum privacy; exact supporting text is retained either way.</span></label>
               {stagedImport && <div role="dialog" aria-modal="true" aria-labelledby="import-choice-title" className="mt-4 rounded-xl border border-gold/40 bg-gold/10 p-4"><h3 id="import-choice-title" className="font-bold text-paper">A Truth Inbox already exists</h3><p className="mt-1 text-sm text-paper/65">Choose how to handle the new files. Your current pending review will not be overwritten.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => resolveStagedImport("add")} className="min-h-11 rounded bg-mint px-3 py-2 text-xs font-black text-ink">Add files to current review</button><button type="button" onClick={() => resolveStagedImport("separate")} className="min-h-11 rounded border border-cyan/45 px-3 py-2 text-xs font-bold text-cyan">Start a separate review batch</button><button type="button" onClick={() => resolveStagedImport("cancel")} className="min-h-11 rounded border border-white/20 px-3 py-2 text-xs font-bold text-paper/65">Cancel</button></div></div>}
             </section>

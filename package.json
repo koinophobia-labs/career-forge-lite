@@ -21,6 +21,7 @@
     "test:state-integrity": "node scripts/state-integrity-regression.mjs",
     "test:trust-boundary": "node scripts/trust-boundary-regression.mjs",
     "test:truth-integrity": "node scripts/truth-integrity-regression.mjs",
+    "test:pdf-boundary": "node scripts/pdf-trust-boundary-browser.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke:generator": "node scripts/smoke-generator.mjs",
@@ -50,7 +51,7 @@
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "next": "^16.2.9",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "6.2.108",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
