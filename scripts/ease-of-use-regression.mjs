@@ -77,6 +77,17 @@ const proposal = (overrides = {}) => ({
   status: "proposed",
   edited: false,
   likelyDuplicateOf: null,
+  proposedField: "role",
+  candidateValue: "Customer Support Specialist · Northstar Software · 2021–2026",
+  disposition: "valid-candidate",
+  validation: "valid",
+  classificationReasons: ["Employer and title shapes are distinct."],
+  sourceSection: "experience",
+  sourcePositions: [0],
+  conflictGroup: null,
+  reviewRequired: false,
+  occurrenceCount: 1,
+  roleCandidate: { title: "Customer Support Specialist", employer: "Northstar Software", dates: "2021–2026", startDate: "2021", endDate: "2026", location: "", current: false, datePrecision: "year" },
   ...overrides
 });
 const review = createPendingImportReview("review-1", [
@@ -90,7 +101,7 @@ check("clear high-confidence facts are preselected", review.proposals.find((item
 check("metrics still require individual review", review.proposals.find((item) => item.id === "proposal-2")?.status === "proposed");
 check("low-confidence facts still require individual review", review.proposals.find((item) => item.id === "proposal-3")?.status === "proposed");
 check("explicit user decisions are never overwritten", review.proposals.find((item) => item.id === "proposal-4")?.status === "rejected");
-check("filename privacy remains intact", review.sourceFilenames.length === 0 && review.proposals.every((item) => item.sourceFilenames.length === 0));
+check("pending filenames remain visible for conflict review without enabling durable retention", review.retainSourceFilenames === false && review.sourceFilenames.includes("resume.txt") && review.proposals.every((item) => item.sourceFilenames.includes("resume.txt")));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

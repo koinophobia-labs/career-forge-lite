@@ -36,7 +36,7 @@ const batch = inbox.createPendingImportReview("inbox-1", parsed, NOW, true);
 const preselectedState = { ...store.emptyState(), pendingImportReviews: [batch] };
 check("Truth Inbox reports represented files", batch.sourceFileCount === 1 && batch.sourceFilenames[0] === "history.txt");
 const privateBatch = inbox.createPendingImportReview("inbox-private", parsed, NOW, false);
-check("filename privacy keeps count without retaining names", privateBatch.sourceFileCount === 1 && privateBatch.sourceFilenames.length === 0 && privateBatch.proposals.every((item) => item.sourceFilenames.length === 0));
+check("filename privacy keeps pending conflict provenance without enabling durable retention", privateBatch.sourceFileCount === 1 && privateBatch.retainSourceFilenames === false && privateBatch.sourceFilenames[0] === "history.txt" && privateBatch.proposals.every((item) => item.sourceFilenames[0] === "history.txt"));
 
 const preselectedCount = batch.proposals.filter((item) => item.status === "approved").length;
 const attentionCount = batch.proposals.filter((item) => item.status === "proposed").length;
@@ -63,7 +63,7 @@ check("finished queue clears only after all decisions commit", finished.complete
 check("discard removes only pending review", inbox.discardTruthInboxReview(state, batch.id).pendingImportReviews.length === 0 && inbox.discardTruthInboxReview(state, batch.id).dossier.id === state.dossier.id);
 const extra = dossierLib.parseResumePackToProposals([{ filename: "second.txt", text: "Independent Project — Career Forge | 2025–Present" }]);
 const added = inbox.addProposalsToReview(batch, extra, NOW);
-check("second import adds without overwriting first", added.proposals.length >= batch.proposals.length && added.proposals.some((item) => /Career Forge/i.test(item.detail)));
+check("second import adds without overwriting first", added.proposals.length >= batch.proposals.length && added.proposals.some((item) => item.projectCandidate?.organization === "Career Forge" || item.sourceExcerpts.some((source) => /Career Forge/i.test(source))));
 check("separate review batches coexist", [batch, inbox.createPendingImportReview("inbox-2", extra, NOW, false)].length === 2);
 const corrupt = store.parseState(JSON.stringify({ ...store.emptyState(), pendingImportReviews: [{ version: 99, id: "bad", proposals: "bad" }] }));
 check("corrupt pending review revives safely", corrupt.pendingImportReviews.length === 0);

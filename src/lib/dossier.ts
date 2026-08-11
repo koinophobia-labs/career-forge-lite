@@ -3,6 +3,7 @@ import { possibleDisclosure } from "@/lib/truth-guards";
 import { disclosureResolutionIsStale, isUsableEvidence, needsDisclosureReview } from "@/lib/evidence-admissibility";
 import { getUsableEvidenceForRole, isUsable } from "@/lib/evidence-read";
 import { roleHasStructure } from "@/lib/employment-structure";
+import { parseResumeFilesToImportProposals } from "@/lib/resume-import-contract";
 import type { IntakeData } from "@/types/career";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
 import type { DisclosureReason } from "@/lib/truth-guards";
@@ -14,7 +15,6 @@ import type {
   DossierRole,
   EvidenceKind,
   EvidenceSource,
-  ImportProposalGroup,
   ImportProposalRecord
 } from "@/types/dossier";
 
@@ -684,8 +684,11 @@ export function assessDossierReadiness(dossier: CareerDossier): DossierReadiness
   if (roleProof.length < 3) nextActions.push(`Approve ${Math.max(1, 3 - roleProof.length)} more evidence item${3 - roleProof.length === 1 ? "" : "s"} to support defensible bullets.`);
   if (!dossier.metrics.length) nextActions.push("Add one measurable outcome to strengthen lane résumé bullets.");
   if (!dossier.education.length) nextActions.push("Add education once and it can appear across every résumé.");
+  const hasStructuredExperience = dossier.roles.length > 0 || dossier.projects.length > 0;
   return {
-    level: quality >= 8 && (dossier.roles.length > 0 || dossier.projects.length > 0) ? "resume-ready" : quality >= 3 ? "foundation" : "not-ready",
+    // Saving isolated evidence is real progress, but it is not a usable career
+    // profile until at least one structured role or first-class project exists.
+    level: hasStructuredExperience ? quality >= 8 ? "resume-ready" : quality >= 3 ? "foundation" : "not-ready" : "not-ready",
     reasons,
     nextActions
   };
@@ -732,58 +735,14 @@ function normalizedImportKey(value: string): string {
     .replace(/\b(the|and|at|of|a|an)\b/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function classifyImportLine(line: string): { group: ImportProposalGroup; kind: EvidenceKind; label: string; confidence: ImportProposalRecord["confidence"] } {
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$|(?:https?:\/\/|linkedin\.com|github\.com)|\+?\d[\d ().-]{7,}/i.test(line))
-    return { group: "identity", kind: "identity", label: "Identity or link", confidence: "high" };
-  // A short line of 2-3 capitalized words with no digits or separators is a
-  // person's name (résumés lead with it) — misfiling it as "proof" used to
-  // print the user's own name as a résumé bullet.
-  if (/^[A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){1,2}$/.test(line.trim()) && line.trim().length <= 40 && !/\d|—|·|\||,|:/.test(line))
-    return { group: "identity", kind: "identity", label: "Name", confidence: "medium" };
-  if (/\b(university|college|bachelor|master|associate(?:'s)?\s+degree|degree|certificate|certification)\b/i.test(line))
-    return { group: "education", kind: "education", label: "Education", confidence: "high" };
-  if (/\b(project|founder|independent|freelance|open.source|volunteer|portfolio|labs?)\b/i.test(line))
-    return { group: "projects", kind: "project", label: "Project or independent work", confidence: "medium" };
-  if (/\b(19|20)\d{2}\b.*(?:present|current|\b(19|20)\d{2}\b)|\b(?:present|current)\b/i.test(line) || /\s[-—–|@]\s/.test(line))
-    return { group: "employment", kind: "role", label: "Employment", confidence: "medium" };
-  if (/\b(skills?|competencies|strengths?)\s*:/i.test(line)) return { group: "skills", kind: "skill", label: "Skill", confidence: "medium" };
-  if (/\b(tools?|technologies|platforms?|software)\s*:/i.test(line)) return { group: "tools", kind: "tool", label: "Tool", confidence: "medium" };
-  if (/\d|%|\$|\b(increased|reduced|improved|grew|saved|maintained|delivered|launched|resolved)\b/i.test(line))
-    return { group: "metrics-outcomes", kind: /\d|%|\$/.test(line) ? "metric" : "proof", label: "Metric or outcome", confidence: "medium" };
-  if (/^[\w .+#/&-]{2,40}(?:,\s*[\w .+#/&-]{2,40}){2,}$/.test(line)) return { group: "skills", kind: "skill", label: "Skills", confidence: "low" };
-  return { group: "other", kind: "proof", label: "Other proposed evidence", confidence: "low" };
-}
-
 /** Deduplicates text extracted from multiple local files. Raw binaries never
  * enter this function or persistent storage. */
 export function parseResumePackToProposals(files: Array<{ filename: string; text: string }>): ImportProposalRecord[] {
-  const proposals = new Map<string, ImportProposalRecord>();
-  for (const file of files) {
-    const lines = compact(file.text.split(/\r?\n+/)).flatMap((line) => line.length > 220 ? line.split(/(?<=[.;])\s+/) : [line])
-      .map((line) => line.replace(/^[\s\u2022*-]+/, "").trim()).filter((line) => line.length >= 3 && line.length <= 320).slice(0, 220);
-    for (const line of lines) {
-      const classification = classifyImportLine(line);
-      const normalized = normalizedImportKey(line);
-      if (!normalized) continue;
-      const key = `${classification.group}|${normalized}`;
-      const previous = proposals.get(key);
-      if (previous) {
-        previous.sourceFilenames = compact([...previous.sourceFilenames, file.filename]);
-        previous.sourceExcerpts = compact([...previous.sourceExcerpts, line]);
-      } else {
-        proposals.set(key, {
-          id: stableId("proposal", key), ...classification, detail: line,
-          sourceFilenames: [file.filename], sourceExcerpts: [line], status: "proposed",
-          edited: false, likelyDuplicateOf: null
-        });
-      }
-    }
-  }
-  return [...proposals.values()];
+  return parseResumeFilesToImportProposals(files);
 }
 
 export function mergeImportProposals(dossier: CareerDossier, proposals: ImportProposalRecord[], nowIso = new Date().toISOString(), retainSourceFilenames = false): CareerDossier {
-  const decided = proposals.filter((item) => item.status !== "proposed");
+  const decided = proposals.filter((item) => item.status !== "proposed" && item.proposedField !== "structure" && item.validation !== "structural" && item.validation !== "noise");
   const records = decided.map((item) => ({
     ...evidenceRecord(item.kind, item.detail, "resume-import", item.status === "approved", nowIso, {
       label: item.label, sourceText: item.sourceExcerpts[0] ?? item.detail, confidence: item.confidence
@@ -794,46 +753,43 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
   }));
   const evidence = mergeEvidence(dossier.evidence, records);
   const accepted = decided.filter((item) => item.status === "approved");
-  const recordFor = (proposal: ImportProposalRecord) => records.find((item) => item.detail === proposal.detail && item.approved);
+  const recordByProposalId = new Map(decided.map((proposal, index) => [proposal.id, records[index]]));
+  const recordFor = (proposal: ImportProposalRecord) => {
+    const record = recordByProposalId.get(proposal.id);
+    return record?.approved ? record : undefined;
+  };
   const importedRoles = accepted.filter((item) => item.group === "employment").flatMap((item): DossierRole[] => {
     const evidenceRecordForRole = recordFor(item);
-    if (!evidenceRecordForRole) return [];
-    const dates = item.detail.match(/(?:19|20)\d{2}\s*[–—-]\s*(?:present|current|(?:19|20)\d{2})/i)?.[0] ?? "";
-    const heading = item.detail.replace(dates, "").replace(/[|·,\s-]+$/, "").trim();
-    const parts = heading.split(/\s+(?:—|–|@|at|\|)\s+/i).map((value) => value.trim()).filter(Boolean);
-    return [{ id: stableId("role", normalizedImportKey(heading)), title: parts[0] ?? heading, employer: parts[1] ?? "", startDate: dates, endDate: "", current: /present|current/i.test(dates), responsibilities: [], tools: [], outcomes: [], evidenceIds: [evidenceRecordForRole.id] }];
+    const role = item.roleCandidate;
+    if (!evidenceRecordForRole || !role?.title || !role.employer) return [];
+    const identityKey = `${normalizedImportKey(role.title)}|${normalizedImportKey(role.employer)}`;
+    return [{ id: stableId("role", identityKey), title: role.title, employer: role.employer, startDate: role.startDate, endDate: role.endDate, current: role.current, responsibilities: [], tools: [], outcomes: [], evidenceIds: [evidenceRecordForRole.id] }];
   });
   const importedProjects = accepted.filter((item) => item.group === "projects").flatMap((item): DossierProject[] => {
     const support = recordFor(item);
-    if (!support) return [];
-    const dates = item.detail.match(/(?:19|20)\d{2}\s*[–—-]\s*(?:present|current|(?:19|20)\d{2})/i)?.[0] ?? "";
-    const segments = item.detail.replace(dates, "").split(/\s+(?:—|–|\|)\s+/).map((value) => value.replace(/[|·,\s-]+$/, "").trim()).filter(Boolean);
-    const name = segments[0]?.replace(/\s+project\b.*$/i, "").trim() || item.detail;
-    return [{ id: stableId("project", normalizedImportKey(name)), name, organization: segments[1] ?? "", dates, description: item.detail, responsibilities: [], tools: [], outcomes: [], metrics: [], links: [], defaultPlacement: "projects", evidenceIds: [support.id] }];
+    const project = item.projectCandidate;
+    if (!support || !project?.name) return [];
+    return [{ id: stableId("project", normalizedImportKey(project.name)), name: project.name, organization: project.organization, dates: project.dates, description: project.description, responsibilities: [], tools: [], outcomes: [], metrics: [], links: project.links, defaultPlacement: "projects", evidenceIds: [support.id] }];
   });
   const importedEducation = accepted.filter((item) => item.group === "education").flatMap((item): DossierEducation[] => {
     const support = recordFor(item);
-    if (!support) return [];
-    const parts = item.detail.split(/\s+(?:—|–|\|)\s+/).map((value) => value.trim()).filter(Boolean);
-    const institutionFirst = /college|university|school/i.test(parts[0] ?? "");
-    const dates = item.detail.match(/(?:19|20)\d{2}(?:\s*[–—-]\s*(?:19|20)\d{2})?/)?.[0] ?? "";
-    const rawCredential = institutionFirst ? parts.slice(1).join(" · ") : parts[0] ?? item.detail;
-    // The year lives in its own field; leaving it inside the credential too
-    // prints "BS in Communications · 2019, State University, 2019".
-    const credential = dates ? rawCredential.replace(dates, "").replace(/[·|,\s-]+$/, "").trim() || rawCredential : rawCredential;
-    return [{ id: stableId("education", normalizedImportKey(item.detail)), institution: institutionFirst ? parts[0] : parts[1] ?? "", credential, field: "", dates, evidenceIds: [support.id] }];
+    const education = item.educationCandidate;
+    if (!support || !education?.institution || !education.credential) return [];
+    return [{ id: stableId("education", `${normalizedImportKey(education.institution)}|${normalizedImportKey(education.credential)}|${normalizedImportKey(education.dates)}`), institution: education.institution, credential: education.credential, field: education.field, dates: education.dates, evidenceIds: [support.id] }];
   });
   const identity = { ...dossier.identity };
   accepted.filter((item) => item.group === "identity").forEach((item) => {
-    if (item.detail.includes("@")) identity.email ||= item.detail;
-    else if (/https?:\/\/|linkedin\.com|github\.com/i.test(item.detail)) identity.links = compact([...identity.links, item.detail]);
-    else if (/\d[\d ().-]{7,}/.test(item.detail)) identity.phone ||= item.detail;
-    else identity.fullName ||= item.detail;
+    const value = item.candidateValue ?? item.detail;
+    if (item.proposedField === "identity.email") identity.email = value;
+    else if (item.proposedField === "identity.phone") identity.phone = value;
+    else if (item.proposedField === "identity.location") identity.location = value;
+    else if (item.proposedField === "identity.link") identity.links = compact([...identity.links, value]);
+    else if (item.proposedField === "identity.fullName") identity.fullName = value;
   });
-  const tools = accepted.filter((item) => item.group === "tools").flatMap((item) => item.detail.replace(/^.*?:/, "").split(/[,;|]/));
-  const skills = accepted.filter((item) => item.group === "skills").flatMap((item) => item.detail.replace(/^.*?:/, "").split(/[,;|]/));
-  const metrics = accepted.filter((item) => item.kind === "metric").map((item) => item.detail);
-  const proofPoints = accepted.filter((item) => item.kind === "proof").map((item) => item.detail);
+  const tools = accepted.filter((item) => item.group === "tools").flatMap((item) => (item.candidateValue ?? item.detail).replace(/^.*?:/, "").split(/[,;|]/));
+  const skills = accepted.filter((item) => item.group === "skills").flatMap((item) => (item.candidateValue ?? item.detail).replace(/^.*?:/, "").split(/[,;|]/));
+  const metrics = accepted.filter((item) => item.kind === "metric").map((item) => item.candidateValue ?? item.detail);
+  const proofPoints = accepted.filter((item) => item.kind === "proof").map((item) => item.candidateValue ?? item.detail);
 
   // Imported roles used to carry only their own heading record, leaving every
   // approved responsibility/metric/proof stranded — the pack generator then
@@ -854,14 +810,15 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
   // as a secondary signal; facts with neither signal stay unattached and the
   // generator surfaces them under "Selected accomplishments".
   const mergedProjects = [...dossier.projects.filter((project) => !importedProjects.some((item) => item.id === project.id)), ...importedProjects];
-  const roleIdForHeading = (detail: string): string | null => {
-    const dates = detail.match(/(?:19|20)\d{2}\s*[–—-]\s*(?:present|current|(?:19|20)\d{2})/i)?.[0] ?? "";
-    const heading = detail.replace(dates, "").replace(/[|·,\s-]+$/, "").trim();
-    const id = stableId("role", normalizedImportKey(heading));
+  const roleIdForHeading = (proposal: ImportProposalRecord): string | null => {
+    const role = proposal.roleCandidate;
+    if (!role) return null;
+    const id = stableId("role", `${normalizedImportKey(role.title)}|${normalizedImportKey(role.employer)}`);
     return mergedRoles.some((role) => role.id === id) ? id : null;
   };
-  const projectIdForHeading = (detail: string): string | null => {
-    const name = detail.split(/\s+(?:—|–|\||project\b)/i)[0]?.trim() || detail;
+  const projectIdForHeading = (proposal: ImportProposalRecord): string | null => {
+    const name = proposal.projectCandidate?.name;
+    if (!name) return null;
     const id = stableId("project", normalizedImportKey(name));
     return mergedProjects.some((project) => project.id === id) ? id : null;
   };
@@ -869,12 +826,12 @@ export function mergeImportProposals(dossier: CareerDossier, proposals: ImportPr
   let positionalTarget: { kind: "role" | "project"; id: string } | null = null;
   for (const item of accepted) {
     if (item.group === "employment") {
-      const roleId = roleIdForHeading(item.detail);
+      const roleId = roleIdForHeading(item);
       positionalTarget = roleId ? { kind: "role", id: roleId } : null;
       continue;
     }
     if (item.group === "projects") {
-      const projectId = projectIdForHeading(item.detail);
+      const projectId = projectIdForHeading(item);
       positionalTarget = projectId ? { kind: "project", id: projectId } : null;
       continue;
     }

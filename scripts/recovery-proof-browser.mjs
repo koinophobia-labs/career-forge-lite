@@ -107,12 +107,14 @@ try {
     { name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("Customer Support Specialist — HelpDesk Co | 2021–2025\nResolved escalated billing disputes\nWrote 45 knowledge-base articles\nTools: Zendesk\nState University — Bachelor's degree") }
   ]);
   await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
-  const approveSections = page.getByRole("button", { name: "Approve section" });
-  for (let index = 0; index < await approveSections.count(); index += 1) await approveSections.nth(index).click();
   // Reject one specific proposal so the rejected state is part of the proof.
   await page.getByRole("button", { name: "Reject", exact: true }).first().click();
+  const proposedArticles = page.locator("article").filter({ hasText: /proposed$/ });
+  for (let index = (await proposedArticles.count()) - 1; index >= 0; index -= 1) {
+    await proposedArticles.nth(index).getByRole("button", { name: "Approve", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Finish review" }).click();
-  await page.getByText(/Truth Inbox complete:.*1 rejected/).waitFor();
+  await page.getByRole("status").filter({ hasText: /Import (?:review complete|decisions saved):.*1 rejected/ }).waitFor();
   await page.getByRole("textbox", { name: "Full name" }).fill("Rae Recovery");
   await page.getByLabel("Role title", { exact: true }).fill("Customer Support Specialist");
   await page.getByLabel("Employer", { exact: true }).fill("HelpDesk Co");

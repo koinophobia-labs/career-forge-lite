@@ -124,10 +124,12 @@ try {
     { name: "resume-alt.txt", mimeType: "text/plain", buffer: Buffer.from("Customer Support Specialist — HelpDesk Co | 2021–2025\nResolved escalated billing disputes\nTrained 6 new support agents\nCommunity Food Drive project\nOrganized quarterly volunteer logistics for 40 people") }
   ]);
   await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
-  const approveSections = page.getByRole("button", { name: "Approve section" });
-  for (let index = 0; index < await approveSections.count(); index += 1) await approveSections.nth(index).click();
+  const proposedArticles = page.locator("article").filter({ hasText: /proposed$/ });
+  for (let index = (await proposedArticles.count()) - 1; index >= 0; index -= 1) {
+    await proposedArticles.nth(index).getByRole("button", { name: "Approve", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Finish review" }).click();
-  await page.getByText(/Truth Inbox complete:/).waitFor();
+  await page.getByRole("status").filter({ hasText: /Import review complete:/ }).waitFor();
   verify(true, "import → structured review → approval works without manual re-typing of the source résumé");
 
   // --- 2. Save state is affirmatively visible -------------------------------

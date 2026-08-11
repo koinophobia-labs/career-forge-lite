@@ -13,7 +13,7 @@ export type ActivationStage = {
 
 export function activationStages(state: CommandCenterState): ActivationStage[] {
   const approved = state.dossier.evidence.filter((item) => item.approved && !item.rejected);
-  const hasHistory = state.dossier.roles.length > 0 || state.dossier.projects.length > 0 || state.dossier.evidence.length > 0;
+  const hasHistory = state.dossier.roles.length > 0 || state.dossier.projects.length > 0;
   const activeLanes = state.lanes.filter((lane) => lane.status === "active");
   const currentPack = [...state.resumePacks]
     .filter((pack) => pack.status !== "archived")

@@ -239,6 +239,63 @@ export type ImportProposalGroup =
   | "metrics-outcomes"
   | "other";
 
+export type ImportProposalField =
+  | "identity.fullName"
+  | "identity.email"
+  | "identity.phone"
+  | "identity.location"
+  | "identity.link"
+  | "role"
+  | "education"
+  | "project"
+  | "skill"
+  | "tool"
+  | "metric"
+  | "proof"
+  | "unresolved"
+  | "structure";
+
+export type ImportProposalDisposition =
+  | "valid-candidate"
+  | "ambiguous-candidate"
+  | "conflicting-candidate"
+  | "duplicate-candidate"
+  | "structural-heading"
+  | "formatting-noise"
+  | "unsupported-candidate"
+  | "unresolved";
+
+export type ImportProposalValidation = "valid" | "ambiguous" | "conflicting" | "structural" | "noise" | "unsupported";
+export type ImportSourceSection = "contact" | "summary" | "experience" | "education" | "projects" | "skills" | "certifications" | "volunteer" | "leadership" | "awards" | "unknown";
+
+export type ImportRoleCandidate = {
+  title: string;
+  employer: string;
+  /** Exact source chronology is kept in `dates`; endpoints never gain precision. */
+  dates: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  current: boolean;
+  datePrecision: "year" | "month" | "day" | "unknown";
+};
+
+export type ImportEducationCandidate = {
+  institution: string;
+  credential: string;
+  field: string;
+  dates: string;
+  location: string;
+};
+
+export type ImportProjectCandidate = {
+  name: string;
+  organization: string;
+  dates: string;
+  description: string;
+  links: string[];
+};
+
 export type ImportProposalRecord = {
   id: string;
   group: ImportProposalGroup;
@@ -251,6 +308,20 @@ export type ImportProposalRecord = {
   status: "proposed" | "approved" | "rejected";
   edited: boolean;
   likelyDuplicateOf: string | null;
+  /** Deterministic field contract for new imports. Missing on legacy queues. */
+  proposedField?: ImportProposalField;
+  candidateValue?: string;
+  disposition?: ImportProposalDisposition;
+  validation?: ImportProposalValidation;
+  classificationReasons?: string[];
+  sourceSection?: ImportSourceSection;
+  sourcePositions?: number[];
+  conflictGroup?: string | null;
+  reviewRequired?: boolean;
+  occurrenceCount?: number;
+  roleCandidate?: ImportRoleCandidate;
+  educationCandidate?: ImportEducationCandidate;
+  projectCandidate?: ImportProjectCandidate;
 };
 
 export type PendingImportReview = {

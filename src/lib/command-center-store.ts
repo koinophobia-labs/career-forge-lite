@@ -90,6 +90,10 @@ function asTimestampArray(value: unknown): string[] {
 
 const evidenceKinds = ["identity", "role", "project", "education", "responsibility", "tool", "skill", "metric", "proof", "story", "constraint", "goal"] as const;
 const proposalGroups = ["identity", "employment", "projects", "education", "tools", "skills", "metrics-outcomes", "other"] as const;
+const proposalFields = ["identity.fullName", "identity.email", "identity.phone", "identity.location", "identity.link", "role", "education", "project", "skill", "tool", "metric", "proof", "unresolved", "structure"] as const;
+const proposalDispositions = ["valid-candidate", "ambiguous-candidate", "conflicting-candidate", "duplicate-candidate", "structural-heading", "formatting-noise", "unsupported-candidate", "unresolved"] as const;
+const proposalValidations = ["valid", "ambiguous", "conflicting", "structural", "noise", "unsupported"] as const;
+const proposalSections = ["contact", "summary", "experience", "education", "projects", "skills", "certifications", "volunteer", "leadership", "awards", "unknown"] as const;
 
 function reviveImportProposal(raw: Record<string, unknown>): ImportProposalRecord | null {
   if (!asString(raw.id) || !asString(raw.detail)) return null;
@@ -99,7 +103,14 @@ function reviveImportProposal(raw: Record<string, unknown>): ImportProposalRecor
   const kind = evidenceKinds.includes(raw.kind as (typeof evidenceKinds)[number])
     ? raw.kind as ImportProposalRecord["kind"]
     : "proof";
-  const status = raw.status === "approved" || raw.status === "rejected" ? raw.status : "proposed";
+  const legacyContract = !proposalFields.includes(raw.proposedField as (typeof proposalFields)[number]);
+  const storedStatus = raw.status === "approved" || raw.status === "rejected" ? raw.status : "proposed";
+  // Old queues cannot prove that a high-confidence identity approval was an
+  // explicit user choice rather than the retired auto-preselection rule.
+  const status = legacyContract && group === "identity" && storedStatus === "approved" ? "proposed" : storedStatus;
+  const roleRaw = raw.roleCandidate && typeof raw.roleCandidate === "object" && !Array.isArray(raw.roleCandidate) ? raw.roleCandidate as Record<string, unknown> : null;
+  const educationRaw = raw.educationCandidate && typeof raw.educationCandidate === "object" && !Array.isArray(raw.educationCandidate) ? raw.educationCandidate as Record<string, unknown> : null;
+  const projectRaw = raw.projectCandidate && typeof raw.projectCandidate === "object" && !Array.isArray(raw.projectCandidate) ? raw.projectCandidate as Record<string, unknown> : null;
   return {
     id: asString(raw.id),
     group,
@@ -111,7 +122,36 @@ function reviveImportProposal(raw: Record<string, unknown>): ImportProposalRecor
     confidence: raw.confidence === "high" || raw.confidence === "medium" ? raw.confidence : "low",
     status,
     edited: raw.edited === true,
-    likelyDuplicateOf: asStringOrNull(raw.likelyDuplicateOf)
+    likelyDuplicateOf: asStringOrNull(raw.likelyDuplicateOf),
+    proposedField: legacyContract ? "unresolved" : raw.proposedField as ImportProposalRecord["proposedField"],
+    candidateValue: asString(raw.candidateValue, asString(raw.detail)),
+    disposition: proposalDispositions.includes(raw.disposition as (typeof proposalDispositions)[number])
+      ? raw.disposition as ImportProposalRecord["disposition"] : "unresolved",
+    validation: proposalValidations.includes(raw.validation as (typeof proposalValidations)[number])
+      ? raw.validation as ImportProposalRecord["validation"] : "ambiguous",
+    classificationReasons: asStringArray(raw.classificationReasons).length
+      ? asStringArray(raw.classificationReasons)
+      : [legacyContract ? "Legacy proposal metadata requires explicit review." : "No classification reason was stored."],
+    sourceSection: proposalSections.includes(raw.sourceSection as (typeof proposalSections)[number])
+      ? raw.sourceSection as ImportProposalRecord["sourceSection"] : "unknown",
+    sourcePositions: Array.isArray(raw.sourcePositions)
+      ? raw.sourcePositions.filter((value): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0)
+      : [],
+    conflictGroup: asStringOrNull(raw.conflictGroup),
+    reviewRequired: legacyContract ? true : raw.reviewRequired === true,
+    occurrenceCount: typeof raw.occurrenceCount === "number" && Number.isFinite(raw.occurrenceCount) && raw.occurrenceCount >= 1 ? Math.floor(raw.occurrenceCount) : 1,
+    ...(roleRaw ? { roleCandidate: {
+      title: asString(roleRaw.title), employer: asString(roleRaw.employer), dates: asString(roleRaw.dates), location: asString(roleRaw.location),
+      startDate: asString(roleRaw.startDate, asString(roleRaw.dates)), endDate: asString(roleRaw.endDate),
+      current: roleRaw.current === true,
+      datePrecision: roleRaw.datePrecision === "year" || roleRaw.datePrecision === "month" || roleRaw.datePrecision === "day" ? roleRaw.datePrecision : "unknown"
+    } } : {}),
+    ...(educationRaw ? { educationCandidate: {
+      institution: asString(educationRaw.institution), credential: asString(educationRaw.credential), field: asString(educationRaw.field), dates: asString(educationRaw.dates), location: asString(educationRaw.location)
+    } } : {}),
+    ...(projectRaw ? { projectCandidate: {
+      name: asString(projectRaw.name), organization: asString(projectRaw.organization), dates: asString(projectRaw.dates), description: asString(projectRaw.description), links: asStringArray(projectRaw.links)
+    } } : {})
   };
 }
 
