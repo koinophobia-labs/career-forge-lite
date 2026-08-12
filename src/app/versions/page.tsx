@@ -432,7 +432,8 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
         {pack.lanePacks.map((lanePack) => {
           const lane = state.lanes.find((item) => item.id === lanePack.laneId);
           const variants = pack.variants.filter((item) => item.laneId === lanePack.laneId);
-          return <div key={lanePack.laneId} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="text-lg font-bold text-paper">{lane?.title ?? "Lane"}</h3><p className="mt-1 text-sm leading-5 text-paper/55">{lanePack.positioningPitch}</p><div className="mt-3 grid gap-3">
+          const selectedReceipts = [...(lanePack.relevanceReceipts ?? [])].filter((receipt) => receipt.selected).sort((a, b) => a.rank - b.rank).slice(0, 8);
+          return <div key={lanePack.laneId} data-lane-pack={lanePack.laneId} className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="text-lg font-bold text-paper">{lane?.title ?? "Lane"}</h3><p className="mt-1 text-sm leading-5 text-paper/55">{lanePack.positioningPitch}</p>{lanePack.targetContract && <details aria-label={`${lane?.title ?? "Lane"} role priority receipt`} className="mt-3 rounded-lg border border-white/10 p-3 text-xs leading-5 text-paper/60"><summary className="cursor-pointer font-bold text-paper/75">Why these facts lead · {lanePack.targetContract.basis === "description-backed" ? "description-backed" : "title-only"}</summary><p className="mt-2"><strong className="text-cyan">Target signals:</strong> {lanePack.targetContract.competencies.join(", ") || "No bounded signal match"}</p><ol className="mt-2 grid gap-1">{selectedReceipts.map((receipt) => <li key={receipt.evidenceId} data-selected-evidence={receipt.evidenceId}>#{receipt.rank} · {state.dossier.evidence.find((item) => item.id === receipt.evidenceId)?.label ?? receipt.evidenceId} · {receipt.competencies.join(", ") || "general approved evidence"}</li>)}</ol></details>}<div className="mt-3 grid gap-3">
             {variants.map((variant) => {
               const previous = state.resumePacks.flatMap((item) => item.variants).filter((item) => item.id !== variant.id && item.laneId === variant.laneId && item.kind === variant.kind).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
               const purpose = variantPurpose(variant.kind);
@@ -449,6 +450,24 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
           </div></div>;
         })}
       </div>
+      {pack.roleDistinctnessAudits && pack.roleDistinctnessAudits.length > 0 && (
+        <section aria-label="Role distinctness" className="mt-5 rounded-xl border border-white/12 bg-white/5 p-4">
+          <h3 className="text-sm font-bold text-paper">Role-priority check</h3>
+          <div className="mt-3 grid gap-3">
+            {pack.roleDistinctnessAudits.map((audit) => {
+              const laneA = state.lanes.find((lane) => lane.id === audit.laneA)?.title ?? "Lane A";
+              const laneB = state.lanes.find((lane) => lane.id === audit.laneB)?.title ?? "Lane B";
+              return <div key={`${audit.laneA}-${audit.laneB}`} data-distinctness-decision={audit.decision} className="rounded-lg border border-white/10 p-3 text-xs leading-5 text-paper/65">
+                <p className="font-bold text-paper">{laneA} ↔ {laneB}</p>
+                <p className={audit.decision === "meaningfully-distinct" ? "text-mint" : audit.insufficientEvidence ? "text-gold" : "text-coral"}>
+                  {audit.decision === "meaningfully-distinct" ? `Meaningfully different priorities · ${audit.score}/100` : audit.insufficientEvidence ? "Limited role distinctness — shared approved evidence is doing most of the work." : `Not yet meaningfully distinct · ${audit.score}/100`}
+                </p>
+                <p>{audit.reasons.join(" ")}</p>
+              </div>;
+            })}
+          </div>
+        </section>
+      )}
       <details onClick={(event) => { if ((event.target as HTMLElement).tagName === "SUMMARY") trackCareerEvent("defensibility_receipt_opened"); }} className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4"><summary className="cursor-pointer text-sm font-bold text-paper">Open pack-level evidence receipt</summary><div className="mt-3 grid gap-4 text-sm text-paper/60 sm:grid-cols-2"><p>Evidence used: {pack.receipt.evidenceUsed.length}</p><p>Evidence omitted: {pack.receipt.evidenceOmitted.length}</p><p>Keywords included: {pack.receipt.keywordsIncluded.join(", ") || "None without evidence"}</p><p>Claims transferred from related experience: {pack.receipt.transferredClaims.length}</p><div><p className="font-bold text-gold">Known evidence gaps</p><p className="mt-1">{pack.receipt.gapsLeftUnclaimed.join(" · ") || "None"}</p></div>{pack.receipt.unsupportedClaimsRefused.length > 0 && <div><p className="font-bold text-coral">Claims Career Forge refused to generate</p><p className="mt-1">{pack.receipt.unsupportedClaimsRefused.join(" · ")}</p></div>}</div></details>
       {conflict && (
         <EditConflictDialog

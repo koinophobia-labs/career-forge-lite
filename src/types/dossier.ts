@@ -239,6 +239,83 @@ export type LanePack = {
   evidenceUsed: string[];
   evidenceOmitted: string[];
   gapsAvoided: string[];
+  targetContract?: TargetRoleContract;
+  relevanceReceipts?: EvidenceRelevanceReceipt[];
+  supportingMaterial?: LaneSupportingMaterial;
+};
+
+export type TargetSignal = {
+  id: string;
+  concept: string;
+  source: "title" | "description" | "lane-taxonomy";
+  sourceExcerpt: string;
+  importance: "required" | "preferred" | "unspecified";
+  confidence: "high" | "medium";
+};
+
+export type TargetRoleContract = {
+  laneId: string;
+  title: string;
+  description: string;
+  basis: "title-only" | "description-backed";
+  signals: TargetSignal[];
+  competencies: string[];
+  responsibilities: string[];
+  outcomes: string[];
+  toolsAndSkills: string[];
+  emphases: Record<"customerFacing" | "operations" | "technical" | "analytical" | "coordination" | "documentation" | "leadership", number>;
+  ambiguity: string[];
+};
+
+export type EvidenceRelevanceReceipt = {
+  evidenceId: string;
+  evidenceRevision: string;
+  laneId: string;
+  targetSignalIds: string[];
+  competencies: string[];
+  skillConcepts: string[];
+  relevanceScore: number;
+  specificityScore: number;
+  evidenceStrength: number;
+  evidenceType: EvidenceKind;
+  selected: boolean;
+  rank: number;
+  exclusionReason: string | null;
+  tieBreakReason: string;
+  selectedFor: Array<"summary" | "skills" | "experience" | "project" | "supporting-material">;
+  claimPaths: string[];
+};
+
+export type LaneSupportingMaterial = {
+  headline: string;
+  about: string;
+  evidenceIds: string[];
+  targetSignalIds: string[];
+};
+
+export type RoleDistinctnessAudit = {
+  laneA: string;
+  laneB: string;
+  evidenceOverlap: string[];
+  topEvidenceUniqueA: string[];
+  topEvidenceUniqueB: string[];
+  evidenceRankChanges: Array<{ evidenceId: string; rankA: number; rankB: number; delta: number }>;
+  skillOverlap: string[];
+  uniqueSkillsA: string[];
+  uniqueSkillsB: string[];
+  bulletEvidenceOverlap: string[];
+  cosmeticBulletDuplicates: number;
+  uniqueClaimPathsA: string[];
+  uniqueClaimPathsB: string[];
+  projectSelectionDifference: boolean;
+  summaryTargetSignalDifference: string[];
+  supportingMaterialDifference: boolean;
+  truthIntegrityFailures: string[];
+  insufficientEvidence: boolean;
+  reasons: string[];
+  components: { evidence: number; bullets: number; skills: number; projects: number; summary: number; supportingMaterial: number };
+  score: number | null;
+  decision: "meaningfully-distinct" | "not-distinct" | "insufficient-evidence-for-distinctness";
 };
 
 export type PackGenerationReceipt = {
@@ -381,6 +458,7 @@ export type ResumePack = {
   linkedinSkills: string[];
   masterProofBank: string[];
   coverLetterFoundation: string;
+  roleDistinctnessAudits?: RoleDistinctnessAudit[];
   receipt: PackGenerationReceipt;
   createdAt: string;
   updatedAt: string;

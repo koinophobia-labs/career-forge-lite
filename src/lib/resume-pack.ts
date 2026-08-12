@@ -2,12 +2,14 @@ import { classifyEvidenceAdmissibility, isProfessionalEvidence, isUsableEvidence
 import { isUncertaintyStatement, stripTerminationReasons, toResumeVoice, withholdSeparationFromGeneratedProse } from "@/lib/truth-guards";
 import { getPendingReviews, getUserExcludedEvidence, isUsable } from "@/lib/evidence-read";
 import { bindEvidenceRevisions } from "@/lib/evidence-integrity";
+import { auditRoleDistinctness, buildTargetRoleContract, rankEligibleEvidence } from "@/lib/role-targeting";
 import type { ResumePackage } from "@/types/career";
 import type { TargetLane } from "@/types/command-center";
 import type {
   CareerDossier,
   DossierEvidenceRecord,
   DossierRole,
+  EvidenceRelevanceReceipt,
   ResumeEvidenceReference,
   ResumePack,
   ResumeVariant
@@ -105,19 +107,6 @@ function packId(nowIso: string): string {
   return `pack-${nowIso.replace(/\D/g, "").slice(0, 17)}`;
 }
 
-function words(value: string): Set<string> {
-  return new Set(value.toLowerCase().match(/[a-z0-9+#.]{3,}/g)?.filter((word) => !["with", "from", "that", "this", "your", "their", "into", "using", "years", "role"].includes(word)) ?? []);
-}
-
-function relevance(item: DossierEvidenceRecord, lane: TargetLane): number {
-  const evidenceWords = words(`${item.label} ${item.detail}`);
-  const laneWords = words(`${lane.title} ${lane.resumeAngle} ${lane.keywords.join(" ")} ${lane.proof.join(" ")}`);
-  let score = 0;
-  laneWords.forEach((word) => { if (evidenceWords.has(word)) score += 2; });
-  if (["role", "project", "responsibility", "proof", "metric"].includes(item.kind)) score += 1;
-  return score;
-}
-
 function approvedEvidence(dossier: CareerDossier): DossierEvidenceRecord[] {
   // Admissibility is derived, never stored on the record — sanitization does
   // not rewrite `kind`, so approval alone says nothing about whether a record
@@ -159,7 +148,7 @@ function buildLaneResume(
   dossier: CareerDossier,
   lane: TargetLane,
   kind: "ats" | "recruiter"
-): { resume: ResumePackage; references: ResumeEvidenceReference[]; evidenceUsed: string[]; withheldFacts: string[]; omittedRoles: string[] } {
+): { resume: ResumePackage; references: ResumeEvidenceReference[]; evidenceUsed: string[]; withheldFacts: string[]; omittedRoles: string[]; relevanceReceipts: EvidenceRelevanceReceipt[]; targetContract: ReturnType<typeof buildTargetRoleContract> } {
   const approved = approvedEvidence(dossier);
   const withheldFacts: string[] = [];
   const omittedRoles: string[] = [];
@@ -180,17 +169,25 @@ function buildLaneResume(
   const identityValues = identityValueSet(dossier);
   const isDocumentFact = (item: DossierEvidenceRecord) =>
     !isIdentityFact(item.detail, identityValues) && !looksLikeHeading(item.detail);
-  const ranked = [...approved].sort((a, b) => relevance(b, lane) - relevance(a, lane));
-  const relevant = ranked.filter((item) => relevance(item, lane) > 0);
-  const chosen = unique((relevant.length ? relevant : ranked).slice(0, kind === "ats" ? 18 : 10).map((item) => item.id));
+  const targetContract = buildTargetRoleContract(lane);
+  const relevanceReceipts = rankEligibleEvidence(approved, targetContract, dossier);
+  const receiptById = new Map(relevanceReceipts.map((receipt) => [receipt.evidenceId, receipt]));
+  const ranked = relevanceReceipts.map((receipt) => approved.find((item) => item.id === receipt.evidenceId)).filter((item): item is DossierEvidenceRecord => Boolean(item));
+  // One role-ranking authority feeds both ATS and recruiter styles. Selection
+  // is bounded to meaningfully matched evidence; generic strength is the
+  // fallback only when the target contract has no match at all.
+  const matched = ranked.filter((item) => (receiptById.get(item.id)?.targetSignalIds.length ?? 0) > 0);
+  // A sparse dossier has no safe pool of alternatives to focus: retain every
+  // eligible fact and let the distinctness audit report the limitation. That
+  // preserves corrected/general evidence instead of silently dropping it just
+  // because one other fact happened to match a bounded target signal.
+  const selectionPool = approved.length < 8 ? ranked : (matched.length ? matched : ranked);
+  const chosen = unique(selectionPool.slice(0, 14).map((item) => item.id));
   const chosenSet = new Set(chosen);
-  // Education, skills/tools, and role/project support are structural: they
-  // render whenever approved, regardless of lane-relevance ranking (a résumé
-  // with the education or skills silently missing is broken, not "focused").
+  // Education is structural. Skills, projects and role bullets are content,
+  // so re-adding all of them here would erase the role ranking we just made.
   approved.forEach((item) => {
-    const structural = item.kind === "education" || item.kind === "skill" || item.kind === "tool" ||
-      dossier.roles.some((role) => role.evidenceIds.includes(item.id)) ||
-      dossier.projects.some((project) => project.evidenceIds.includes(item.id));
+    const structural = item.kind === "education";
     if (structural && !chosenSet.has(item.id)) {
       chosenSet.add(item.id);
       chosen.push(item.id);
@@ -277,7 +274,8 @@ function buildLaneResume(
   const roleEntries = dossier.roles.flatMap((role) => {
     const support = evidenceByIds(approved, role.evidenceIds)
       .filter((item) => chosenSet.has(item.id))
-      .filter((item) => roleOwnsEvidence(role, item));
+      .filter((item) => roleOwnsEvidence(role, item))
+      .sort((a, b) => (receiptById.get(a.id)?.rank ?? 9999) - (receiptById.get(b.id)?.rank ?? 9999));
     // NO EARLY EXIT HERE. This used to `return []` when a role's evidence was
     // all ineligible, which deleted the entire employment container — heading,
     // dates and all — from every variant, from the exported DOCX, and from the
@@ -298,8 +296,8 @@ function buildLaneResume(
       if (cleaned.withheld) withheldFacts.push("Withheld from this document");
       if (!cleaned.text) return [];
       mapClaim(cleaned.text, exact.map((item) => item.id));
-      return [cleaned.text];
-    });
+      return [{ text: cleaned.text, rank: Math.min(...exact.map((item) => receiptById.get(item.id)?.rank ?? 9999)) }];
+    }).sort((a, b) => a.rank - b.rank).map((item) => item.text);
     const headingKey = `${role.title} ${role.employer}`.toLowerCase();
     const evidenceBullets = support
       .filter((item) => bulletEvidenceKinds.has(item.kind) && isDocumentFact(item))
@@ -324,7 +322,8 @@ function buildLaneResume(
     // this filter the current job's duties were printed again under a project
     // heading.
     const support = evidenceByIds(approved, project.evidenceIds)
-      .filter((item) => chosenSet.has(item.id) && !roleOwnedEvidenceIds.has(item.id));
+      .filter((item) => chosenSet.has(item.id) && !roleOwnedEvidenceIds.has(item.id))
+      .sort((a, b) => (receiptById.get(a.id)?.rank ?? 9999) - (receiptById.get(b.id)?.rank ?? 9999));
     if (!support.length) return [];
     // A project is not an employer. No fake "Independent project" company
     // label — the organization line is whatever the user actually recorded
@@ -357,8 +356,10 @@ function buildLaneResume(
     // for. Every other placement ("projects"/"selected-projects", and the
     // default) renders as a project.
     const entryKind: "role" | "project" = project.defaultPlacement === "experience" ? "role" : "project";
-    return [{ title: project.name, company: project.organization, time: project.dates, bullets, kind: entryKind }];
-  });
+    return [{ title: project.name, company: project.organization, time: project.dates, bullets, kind: entryKind, relevanceRank: Math.min(...support.map((item) => receiptById.get(item.id)?.rank ?? 9999)) }];
+  }).sort((a, b) => a.relevanceRank - b.relevanceRank).slice(0, 3).map((entry) => ({
+    title: entry.title, company: entry.company, time: entry.time, bullets: entry.bullets, kind: entry.kind
+  }));
 
   // Approved metrics and proof that no role or project claimed still belong
   // on the document — a "Selected accomplishments" block beats silently
@@ -369,7 +370,7 @@ function buildLaneResume(
     .flatMap((item) => bulletsFromEvidence(item, withheldFacts).map((bullet) => { mapClaim(bullet, [item.id]); looseIds.push(item.id); return bullet; }))
     .slice(0, kind === "ats" ? 5 : 3);
   const accomplishmentEntries = looseAccomplishments.length
-    ? [{ title: "Selected accomplishments", company: "", time: "", bullets: looseAccomplishments }]
+    ? [{ title: "Selected accomplishments", company: "", time: "", bullets: looseAccomplishments, kind: "role" as const }]
     : [];
   if (accomplishmentEntries.length) mapClaim("Selected accomplishments", looseIds);
 
@@ -402,7 +403,26 @@ function buildLaneResume(
   const linkedinSummary = summary;
   mapClaim(linkedinSummary, summaryEvidence.map((item) => item.id), "transferred");
   const resume = { summary, coreSkills: skills, experience, education, linkedinHeadline: headline, linkedinSummary };
-  return { resume, references: refsForResume(resume, mapping), evidenceUsed: chosen, withheldFacts: unique(withheldFacts), omittedRoles };
+  const references = refsForResume(resume, mapping);
+  const selectedIds = new Set(references.flatMap((reference) => reference.evidenceIds));
+  relevanceReceipts.forEach((receipt) => {
+    const matching = references.filter((reference) => reference.evidenceIds.includes(receipt.evidenceId));
+    receipt.claimPaths = matching.map((reference) => reference.claimPath);
+    const selectedFor = new Set<EvidenceRelevanceReceipt["selectedFor"][number]>();
+    matching.forEach((reference) => {
+      if (reference.claimPath === "summary") selectedFor.add("summary");
+      else if (reference.claimPath.startsWith("coreSkills")) selectedFor.add("skills");
+      else if (reference.claimPath === "linkedinHeadline" || reference.claimPath === "linkedinSummary") selectedFor.add("supporting-material");
+      else if (reference.claimPath.startsWith("experience.")) {
+        const index = Number(reference.claimPath.split(".")[1]);
+        selectedFor.add(resume.experience[index]?.kind === "project" ? "project" : "experience");
+      }
+    });
+    receipt.selectedFor = [...selectedFor];
+    receipt.selected = selectedIds.has(receipt.evidenceId);
+    receipt.exclusionReason = receipt.selected ? null : receipt.targetSignalIds.length ? "Lower-ranked than the bounded lane selection." : "No target signal matched this approved evidence.";
+  });
+  return { resume, references, evidenceUsed: [...selectedIds], withheldFacts: unique(withheldFacts), omittedRoles, relevanceReceipts, targetContract };
 }
 
 function createVariant(
@@ -411,7 +431,7 @@ function createVariant(
   kind: "ats" | "recruiter",
   dossier: CareerDossier,
   nowIso: string
-): { variant: ResumeVariant; withheldFacts: string[]; omittedRoles: string[] } {
+): { variant: ResumeVariant; withheldFacts: string[]; omittedRoles: string[]; relevanceReceipts: EvidenceRelevanceReceipt[]; targetContract: ReturnType<typeof buildTargetRoleContract> } {
   const built = buildLaneResume(dossier, lane, kind);
   const variant: ResumeVariant = {
     id: `${pack}-${lane.id}-${kind}`, laneId: lane.id, kind,
@@ -424,7 +444,7 @@ function createVariant(
     sourceDossierUpdatedAt: dossier.updatedAt, baselineVariantId: null, applicationId: null,
     createdAt: nowIso, updatedAt: nowIso
   };
-  return { variant, withheldFacts: built.withheldFacts, omittedRoles: built.omittedRoles };
+  return { variant, withheldFacts: built.withheldFacts, omittedRoles: built.omittedRoles, relevanceReceipts: built.relevanceReceipts, targetContract: built.targetContract };
 }
 
 // A lane pitch that ships in documents must be first-person-safe fact, not
@@ -455,9 +475,18 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
       laneId: lane.id,
       positioningPitch: composePositioningPitch(lane, ats.variant.resume.coreSkills, ats.variant.evidenceReferences.length),
       variantIds: [ats.variant.id, recruiter.variant.id], evidenceUsed,
-      evidenceOmitted: approved.filter((item) => !evidenceUsed.includes(item.id)).map((item) => item.id), gapsAvoided: lane.gaps
+      evidenceOmitted: approved.filter((item) => !evidenceUsed.includes(item.id)).map((item) => item.id), gapsAvoided: lane.gaps,
+      targetContract: ats.targetContract,
+      relevanceReceipts: ats.relevanceReceipts,
+      supportingMaterial: {
+        headline: ats.variant.resume.linkedinHeadline,
+        about: ats.variant.resume.linkedinSummary,
+        evidenceIds: unique(ats.variant.evidenceReferences.filter((reference) => reference.claimPath === "linkedinHeadline" || reference.claimPath === "linkedinSummary").flatMap((reference) => reference.evidenceIds)),
+        targetSignalIds: unique(ats.relevanceReceipts.filter((receipt) => receipt.selectedFor.includes("supporting-material")).flatMap((receipt) => receipt.targetSignalIds))
+      }
     };
   });
+  const roleDistinctnessAudits = lanePacks.flatMap((lanePack, index) => lanePacks.slice(index + 1).map((other) => auditRoleDistinctness(lanePack, other, variants, dossier)));
   // The receipt is a factual claim about this document, so it is derived from
   // what the document ACTUALLY CONTAINS — not from generation success and not
   // from the count of approved facts. Deriving it from evidenceReferences
@@ -520,6 +549,7 @@ export function generateResumePack(dossier: CareerDossier, lanes: TargetLane[], 
             ? `Approved evidence to draw from: ${usable.join("; ")}`
             : "Approve proof points before drafting a cover letter.";
         })() : "Approve proof points before drafting a cover letter.",
+    roleDistinctnessAudits,
     receipt: {
       id: `${id}-receipt`, generatedAt: nowIso, evidenceUsed: used,
       // Unresolved items are not "omitted" — nobody has decided yet. Counting

@@ -16,6 +16,8 @@ export type CareerProfile = {
 export type TargetLane = {
   id: string; title: string; status: LaneStatus; whyFit: string; resumeAngle: string; proof: string[];
   gaps: string[]; keywords: string[]; source: "library" | "custom"; createdAt: string;
+  /** Optional user-supplied role description. Absence remains distinguishable from description-backed targeting. */
+  targetDescription?: string;
 };
 
 export type ResumeVersionRecord = {

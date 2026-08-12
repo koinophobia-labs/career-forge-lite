@@ -46,6 +46,7 @@ export default function TargetsPage() {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [customTitle, setCustomTitle] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
   const [forging, setForging] = useState(false);
   const dossierReadiness = assessDossierReadiness(state.dossier);
   // Exploring and activating lanes is free; the purchased pack decides how
@@ -75,7 +76,8 @@ export default function TargetsPage() {
         gaps: blueprint.gaps,
         keywords: blueprint.keywords,
         source: "library",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        targetDescription: ""
       };
       const next = { ...current, lanes: [...current.lanes, lane] };
       events = activationEventsForTransition(current, next);
@@ -89,7 +91,7 @@ export default function TargetsPage() {
     const title = customTitle.trim();
     if (!title) return;
     update((current) => {
-      if (current.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase())) return current;
+      if (current.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase() && (lane.targetDescription ?? "").trim().toLowerCase() === customDescription.trim().toLowerCase())) return current;
       // Prefer evidence that actually relates to the requested lane; falling
       // back to strongest general proof beats rendering empty sections.
       const titleWords = title.toLowerCase().split(/\s+/).filter((word) => word.length >= 4);
@@ -113,11 +115,13 @@ export default function TargetsPage() {
         gaps: [`Only claim ${title} qualifications your approved evidence supports.`],
         keywords: current.dossier.tools.slice(0, 8),
         source: "custom",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        targetDescription: customDescription.trim()
       };
       return { ...current, lanes: [...current.lanes, lane] };
     });
     setCustomTitle("");
+    setCustomDescription("");
   }
 
   function setLaneStatus(id: string, nextStatus: LaneStatus) {
@@ -137,7 +141,7 @@ export default function TargetsPage() {
     update((current) => ({ ...current, lanes: current.lanes.filter((lane) => lane.id !== id) }));
   }
 
-  function editLaneField(id: string, field: "whyFit" | "resumeAngle", value: string) {
+  function editLaneField(id: string, field: "whyFit" | "resumeAngle" | "targetDescription", value: string) {
     update((current) => ({
       ...current,
       lanes: current.lanes.map((lane) => (lane.id === id ? { ...lane, [field]: value } : lane))
@@ -288,6 +292,17 @@ export default function TargetsPage() {
                     <div className="mt-4 grid gap-5 border-t border-white/10 pt-4 lg:grid-cols-2">
                       <div className="grid gap-4">
                         <label className="block">
+                          <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Target description (optional)</span>
+                          <textarea
+                            value={lane.targetDescription ?? ""}
+                            rows={4}
+                            placeholder="Paste the responsibilities or requirements you want this lane to prioritize. This text guides ranking; it never becomes candidate experience."
+                            onChange={(event) => editLaneField(lane.id, "targetDescription", event.target.value)}
+                            className="trust-input mt-1.5 w-full border px-3 py-2 text-sm text-ink"
+                          />
+                          <span className="mt-1 block text-xs text-paper/45">{lane.targetDescription?.trim() ? "Description-backed targeting" : "Title-only targeting using Career Forge’s bounded lane vocabulary"}</span>
+                        </label>
+                        <label className="block">
                           <span className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Why this fits</span>
                           <textarea
                             value={lane.whyFit}
@@ -340,8 +355,8 @@ export default function TargetsPage() {
                 Nine entry lanes for the operations-to-tech transition. Recommendations below reflect only approved evidence that overlaps the lane; they are not hiring predictions.
               </p>
             </div>
-            <div>
-              <div className="flex gap-2">
+            <div className="w-full max-w-2xl">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <input
                   value={customTitle}
                   placeholder="Or add a custom lane, e.g. Payments Operations"
@@ -358,6 +373,13 @@ export default function TargetsPage() {
                 >
                   Add
                 </button>
+                <textarea
+                  value={customDescription}
+                  rows={3}
+                  placeholder="Optional target description — requirements, responsibilities, and outcomes"
+                  onChange={(event) => setCustomDescription(event.target.value)}
+                  className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2"
+                />
               </div>
               <p className="mt-1.5 max-w-xs text-xs leading-4 text-paper/45">
                 Custom lanes start with dossier-backed proof, transferable skills, and an explicit honesty gap.

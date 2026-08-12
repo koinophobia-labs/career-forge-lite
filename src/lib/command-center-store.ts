@@ -203,7 +203,8 @@ function reviveLane(raw: Record<string, unknown>): TargetLane | null {
     gaps: asStringArray(raw.gaps),
     keywords: asStringArray(raw.keywords),
     source: raw.source === "custom" ? "custom" : "library",
-    createdAt: asString(raw.createdAt, new Date(0).toISOString())
+    createdAt: asString(raw.createdAt, new Date(0).toISOString()),
+    targetDescription: asString(raw.targetDescription) || undefined
   };
 }
 
@@ -462,7 +463,10 @@ function reviveResumePack(raw: Record<string, unknown>): ResumePack | null {
         return [{
           laneId: asString(item.laneId), positioningPitch: asString(item.positioningPitch),
           variantIds: asStringArray(item.variantIds), evidenceUsed: asStringArray(item.evidenceUsed),
-          evidenceOmitted: asStringArray(item.evidenceOmitted), gapsAvoided: asStringArray(item.gapsAvoided)
+          evidenceOmitted: asStringArray(item.evidenceOmitted), gapsAvoided: asStringArray(item.gapsAvoided),
+          targetContract: item.targetContract && typeof item.targetContract === "object" && !Array.isArray(item.targetContract) ? item.targetContract as ResumePack["lanePacks"][number]["targetContract"] : undefined,
+          relevanceReceipts: Array.isArray(item.relevanceReceipts) ? item.relevanceReceipts as ResumePack["lanePacks"][number]["relevanceReceipts"] : undefined,
+          supportingMaterial: item.supportingMaterial && typeof item.supportingMaterial === "object" && !Array.isArray(item.supportingMaterial) ? item.supportingMaterial as ResumePack["lanePacks"][number]["supportingMaterial"] : undefined
         }];
       })
     : [];
@@ -476,6 +480,7 @@ function reviveResumePack(raw: Record<string, unknown>): ResumePack | null {
     linkedinHeadlines: asStringArray(raw.linkedinHeadlines), linkedinAbout: asString(raw.linkedinAbout),
     linkedinSkills: asStringArray(raw.linkedinSkills), masterProofBank: asStringArray(raw.masterProofBank),
     coverLetterFoundation: asString(raw.coverLetterFoundation),
+    roleDistinctnessAudits: Array.isArray(raw.roleDistinctnessAudits) ? raw.roleDistinctnessAudits as ResumePack["roleDistinctnessAudits"] : undefined,
     receipt: {
       id: asString(receiptRaw.id, `${asString(raw.id)}-receipt`),
       generatedAt: asString(receiptRaw.generatedAt, new Date(0).toISOString()),
