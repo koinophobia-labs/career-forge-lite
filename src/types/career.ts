@@ -91,7 +91,7 @@ export type ResumePackage = {
   linkedinSummary: string;
 };
 
-export type AtsCheckStatus = "PASS" | "WARNING";
+export type AtsCheckStatus = "PASS" | "WARNING" | "FAIL" | "NEEDS REVIEW" | "NOT APPLICABLE";
 
 export type AtsCheck = {
   label: string;

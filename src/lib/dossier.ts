@@ -5,6 +5,7 @@ import { getUsableEvidenceForRole, isUsable } from "@/lib/evidence-read";
 import { roleHasStructure } from "@/lib/employment-structure";
 import { parseResumeFilesToImportProposals } from "@/lib/resume-import-contract";
 import type { IntakeData } from "@/types/career";
+import type { StoryFactContract } from "@/lib/story-facts";
 import type { CareerProfile, CommandCenterState, ResumeSnapshot } from "@/types/command-center";
 import type { DisclosureReason } from "@/lib/truth-guards";
 import type {
@@ -16,6 +17,7 @@ import type {
   EvidenceKind,
   EvidenceSource,
   ImportProposalRecord
+  , StoryFact
 } from "@/types/dossier";
 
 // Only body content is flagged for disclosure review.
@@ -56,6 +58,8 @@ export function emptyDossier(nowIso = new Date(0).toISOString()): CareerDossier 
     targetRoleInterests: [],
     approvedClaims: [],
     evidence: [],
+    storyFacts: [],
+    storyRawSources: [],
     unstructuredNotes: [],
     migrationReview: [],
     createdAt: nowIso,
@@ -148,6 +152,13 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
           id: text(item.id), title: text(item.title), employer: text(item.employer), startDate: text(item.startDate),
           endDate: text(item.endDate), current: item.current === true, responsibilities: strings(item.responsibilities),
           tools: strings(item.tools), outcomes: strings(item.outcomes), evidenceIds: strings(item.evidenceIds),
+          ...(item.chronology && typeof item.chronology === "object" && !Array.isArray(item.chronology)
+            ? { chronology: {
+                sourceText: text((item.chronology as Record<string, unknown>).sourceText),
+                certainty: text((item.chronology as Record<string, unknown>).certainty) as DossierRole["chronology"] extends infer C ? C extends { certainty: infer T } ? T : never : never,
+                precision: text((item.chronology as Record<string, unknown>).precision) as DossierRole["chronology"] extends infer C ? C extends { precision: infer T } ? T : never : never
+              } }
+            : {}),
           // The recovery migration's own findings. Dropped by this whitelist,
           // a candidate the user was about to confirm vanished on reload and
           // the refusal half of the invariant became invisible — the migration
@@ -169,7 +180,14 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
           defaultPlacement: item.defaultPlacement === "experience" || item.defaultPlacement === "selected-projects" || item.defaultPlacement === "omit"
             ? item.defaultPlacement
             : "projects",
-          evidenceIds: strings(item.evidenceIds)
+          evidenceIds: strings(item.evidenceIds), volunteer: item.volunteer === true,
+          ...(item.chronology && typeof item.chronology === "object" && !Array.isArray(item.chronology)
+            ? { chronology: {
+                sourceText: text((item.chronology as Record<string, unknown>).sourceText),
+                certainty: text((item.chronology as Record<string, unknown>).certainty) as DossierProject["chronology"] extends infer C ? C extends { certainty: infer T } ? T : never : never,
+                precision: text((item.chronology as Record<string, unknown>).precision) as DossierProject["chronology"] extends infer C ? C extends { precision: infer T } ? T : never : never
+              } }
+            : {})
         }];
       })
     : [];
@@ -179,6 +197,33 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
         const item = entry as Record<string, unknown>;
         if (!text(item.id) || !text(item.credential)) return [];
         return [{ id: text(item.id), institution: text(item.institution), credential: text(item.credential), field: text(item.field), dates: text(item.dates), evidenceIds: strings(item.evidenceIds) }];
+      })
+    : [];
+  const storyFacts = Array.isArray(source.storyFacts)
+    ? source.storyFacts.flatMap((entry): StoryFact[] => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const item = entry as Record<string, unknown>;
+        const categories = ["identity", "employer", "title", "role-date", "responsibility", "achievement", "metric", "skill", "project", "project-date", "volunteer-role", "informal-work", "education", "career-gap", "career-transition", "aspiration", "personal-context", "unresolved"];
+        const certainties = ["exact", "approximate", "bounded-range", "user-estimated", "unknown", "conflicting", "not-applicable", "unsupported"];
+        const precisions = ["day", "month", "year", "range", "duration", "current", "qualitative", "unknown", "not-applicable"];
+        const dispositions = ["represented", "needs-review", "user-confirmed", "user-corrected", "user-rejected", "intentionally-omitted", "non-resume-context", "duplicate", "conflicting", "unresolved"];
+        if (!text(item.id) || !categories.includes(text(item.category)) || !text(item.sourceExcerpt)) return [];
+        return [{
+          id: text(item.id), category: text(item.category) as StoryFact["category"], sourceExcerpt: text(item.sourceExcerpt),
+          sourceStart: typeof item.sourceStart === "number" ? item.sourceStart : 0,
+          sourceEnd: typeof item.sourceEnd === "number" ? item.sourceEnd : 0,
+          candidateValue: text(item.candidateValue), userWording: text(item.userWording) || text(item.sourceExcerpt),
+          certainty: certainties.includes(text(item.certainty)) ? text(item.certainty) as StoryFact["certainty"] : "unsupported",
+          precision: precisions.includes(text(item.precision)) ? text(item.precision) as StoryFact["precision"] : "unknown",
+          reviewRequired: item.reviewRequired === true,
+          disposition: dispositions.includes(text(item.disposition)) ? text(item.disposition) as StoryFact["disposition"] : "unresolved",
+          ...(text(item.omissionReason) ? { omissionReason: text(item.omissionReason) } : {}),
+          ...(text(item.conflictGroup) ? { conflictGroup: text(item.conflictGroup) } : {}),
+          ...(text(item.associationId) ? { associationId: text(item.associationId) } : {}),
+          origin: item.origin === "user-supplied" || item.origin === "generated-wording" ? item.origin : "parser-separated",
+          ...(text(item.evidenceId) ? { evidenceId: text(item.evidenceId) } : {}),
+          downstreamClaims: strings(item.downstreamClaims), updatedAt: text(item.updatedAt) || base.createdAt
+        }];
       })
     : [];
   return {
@@ -209,6 +254,8 @@ export function reviveDossier(raw: unknown, fallbackProfile?: CareerProfile): Ca
     targetRoleInterests: strings(source.targetRoleInterests),
     approvedClaims: strings(source.approvedClaims),
     evidence,
+    storyFacts,
+    storyRawSources: strings(source.storyRawSources),
     unstructuredNotes: strings(source.unstructuredNotes),
     migrationReview: strings(source.migrationReview),
     createdAt: text(source.createdAt) || base.createdAt,
@@ -595,6 +642,143 @@ export function mergeIntakeIntoDossier(
     approvedClaims,
     evidence,
     unstructuredNotes: compact([...current.unstructuredNotes, intake.customRoleNotes]),
+    updatedAt: nowIso
+  };
+}
+
+function storyFactApproved(item: StoryFact): boolean {
+  return item.disposition === "user-confirmed" || item.disposition === "user-corrected";
+}
+
+/**
+ * Converts reviewed typed-story facts into the canonical dossier. The ledger is
+ * always persisted; only explicitly confirmed/corrected facts become evidence.
+ * Approximate chronology is metadata, never an exact date field.
+ */
+export function mergeStoryFactsIntoDossier(
+  current: CareerDossier,
+  contract: StoryFactContract,
+  nowIso = new Date().toISOString()
+): CareerDossier {
+  const approvedFacts = contract.facts.filter(storyFactApproved);
+  const evidenceByFact = new Map<string, DossierEvidenceRecord>();
+  const proposed: DossierEvidenceRecord[] = [];
+  const addEvidence = (item: StoryFact, kind: EvidenceKind, detail = item.candidateValue, roleId?: string) => {
+    if (!detail.trim()) return undefined;
+    const record = evidenceRecord(kind, detail, "story", true, nowIso, {
+      label: `Story ${item.category}`,
+      sourceText: item.sourceExcerpt,
+      confidence: item.certainty === "exact" ? "high" : "low",
+      roleId
+    });
+    proposed.push(record);
+    evidenceByFact.set(item.id, record);
+    return record;
+  };
+
+  const roles = contract.roles.flatMap((candidate): DossierRole[] => {
+    const associated = approvedFacts.filter((item) => item.associationId === candidate.id);
+    const employerFact = associated.find((item) => item.category === "employer");
+    const titleFact = associated.find((item) => item.category === "title" && item.candidateValue);
+    if (!employerFact && !titleFact) return [];
+    const employer = employerFact?.candidateValue ?? "";
+    const title = titleFact?.candidateValue ?? "";
+    const dateFact = associated.find((item) => item.category === "role-date");
+    const exactDate = dateFact && dateFact.certainty === "exact" ? dateFact.candidateValue : "";
+    const roleId = stableId("role", `story|${candidate.id}|${title}|${employer}`.toLowerCase());
+    const responsibilities = associated.filter((item) => item.category === "responsibility").map((item) => item.candidateValue);
+    const tools = associated.filter((item) => item.category === "skill").map((item) => item.candidateValue);
+    const metrics = associated.filter((item) => item.category === "metric" && item.certainty !== "not-applicable").map((item) => item.candidateValue);
+    const evidenceIds = associated.flatMap((item) => {
+      if (item.category === "responsibility") {
+        const record = addEvidence(item, "responsibility", item.candidateValue, roleId);
+        return record ? [record.id] : [];
+      }
+      if (item.category === "skill") {
+        const record = addEvidence(item, "skill", item.candidateValue, roleId);
+        return record ? [record.id] : [];
+      }
+      if (item.category === "metric" && item.certainty !== "not-applicable") {
+        const record = addEvidence(item, "metric", item.candidateValue, roleId);
+        return record ? [record.id] : [];
+      }
+      return [];
+    });
+    const headingSource = employerFact ?? titleFact!;
+    const heading = [title, employer, exactDate].filter(Boolean).join(" · ");
+    const roleRecord = addEvidence(headingSource, "role", heading, roleId);
+    if (roleRecord) evidenceIds.push(roleRecord.id);
+    return [{
+      id: roleId,
+      title,
+      employer,
+      startDate: exactDate,
+      endDate: "",
+      current: dateFact?.precision === "current",
+      responsibilities,
+      tools,
+      outcomes: metrics,
+      evidenceIds: [...new Set(evidenceIds)],
+      ...(dateFact ? { chronology: { sourceText: dateFact.sourceExcerpt, certainty: dateFact.certainty, precision: dateFact.precision } } : {})
+    }];
+  });
+
+  const projects = contract.projects.flatMap((candidate): DossierProject[] => {
+    const associated = approvedFacts.filter((item) => item.associationId === candidate.id);
+    const projectFact = associated.find((item) => item.category === "project" || item.category === "informal-work");
+    if (!projectFact) return [];
+    const volunteer = associated.some((item) => item.category === "volunteer-role") || candidate.volunteer;
+    const dateFact = associated.find((item) => item.category === "project-date");
+    const exactDate = dateFact && dateFact.certainty === "exact" ? dateFact.candidateValue : "";
+    const record = addEvidence(projectFact, "project", projectFact.candidateValue);
+    if (!record) return [];
+    return [{
+      id: stableId("project", `story|${candidate.id}|${projectFact.candidateValue}`.toLowerCase()),
+      name: projectFact.category === "informal-work" ? candidate.name : projectFact.candidateValue,
+      organization: "",
+      dates: exactDate,
+      description: candidate.description,
+      responsibilities: associated.filter((item) => item.category === "responsibility").map((item) => item.candidateValue),
+      tools: associated.filter((item) => item.category === "skill").map((item) => item.candidateValue), outcomes: [], metrics: [], links: [], defaultPlacement: "projects",
+      evidenceIds: [record.id], volunteer,
+      ...(dateFact ? { chronology: { sourceText: dateFact.sourceExcerpt, certainty: dateFact.certainty, precision: dateFact.precision } } : {})
+    }];
+  });
+
+  const identity = { ...current.identity };
+  approvedFacts.filter((item) => item.category === "identity").forEach((item) => {
+    addEvidence(item, "identity");
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(item.candidateValue)) identity.email = item.candidateValue;
+    else if (!identity.fullName) identity.fullName = item.candidateValue;
+  });
+  const education = approvedFacts.filter((item) => item.category === "education").map((item): DossierEducation => {
+    const record = addEvidence(item, "education");
+    return { id: stableId("education", `story|${item.id}`), institution: "", credential: item.candidateValue, field: "", dates: "", evidenceIds: record ? [record.id] : [] };
+  });
+  const aspirations = approvedFacts.filter((item) => item.category === "aspiration").map((item) => item.candidateValue);
+  const evidence = mergeEvidence(current.evidence, proposed);
+  const mergedRoles = [...current.roles.filter((item) => !roles.some((candidate) => candidate.id === item.id)), ...roles];
+  const mergedProjects = [...current.projects.filter((item) => !projects.some((candidate) => candidate.id === item.id)), ...projects];
+  const persistedFacts = contract.facts.map((item) => {
+    const record = evidenceByFact.get(item.id);
+    return { ...item, ...(record ? { evidenceId: record.id } : {}), updatedAt: nowIso };
+  });
+  return {
+    ...current,
+    identity,
+    roles: mergedRoles,
+    projects: mergedProjects,
+    education: [...current.education.filter((item) => !education.some((candidate) => candidate.id === item.id)), ...education],
+    responsibilities: compact([...current.responsibilities, ...roles.flatMap((item) => item.responsibilities)]),
+    tools: compact([...current.tools, ...roles.flatMap((item) => item.tools), ...projects.flatMap((item) => item.tools)]),
+    transferableSkills: compact([...current.transferableSkills, ...approvedFacts.filter((item) => item.category === "skill").map((item) => item.candidateValue)]),
+    metrics: compact([...current.metrics, ...approvedFacts.filter((item) => item.category === "metric" && item.certainty !== "not-applicable").map((item) => item.candidateValue)]),
+    proofPoints: compact([...current.proofPoints, ...approvedFacts.filter((item) => item.category === "achievement").map((item) => item.candidateValue)]),
+    targetRoleInterests: compact([...current.targetRoleInterests, ...aspirations]),
+    evidence,
+    approvedClaims: compact(evidence.filter((item) => item.approved && !item.rejected).map((item) => item.detail)),
+    storyFacts: persistedFacts,
+    storyRawSources: compact([...(current.storyRawSources ?? []), contract.rawStory]),
     updatedAt: nowIso
   };
 }

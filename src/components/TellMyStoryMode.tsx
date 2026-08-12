@@ -10,9 +10,11 @@ import { trackCareerEvent, trackCareerForgeCompletion, trackCareerForgeStart, tr
 import { generateResumePackage } from "@/lib/generator";
 import { hasEnoughResumeSignal } from "@/lib/interview-state";
 import { parseStoryToDossier, type StoryDossier } from "@/lib/story-mode";
-import { mergeIntakeIntoDossier, withUpdatedDossier } from "@/lib/dossier";
+import { mergeStoryFactsIntoDossier, withUpdatedDossier } from "@/lib/dossier";
+import { updateStoryFact } from "@/lib/story-facts";
 import { useCommandCenter } from "@/lib/use-command-center";
 import type { IntakeData, ResumePackage } from "@/types/career";
+import type { StoryFact, StoryFactDisposition } from "@/types/dossier";
 
 type StoryModeState = "story" | "dossier" | "edit" | "review";
 
@@ -65,9 +67,11 @@ export function TellMyStoryMode() {
   const [dossier, setDossier] = useState<StoryDossier | null>(null);
   const [resume, setResume] = useState<ResumePackage>(() => generateResumePackage(initialIntake));
   const [approvedForDossier, setApprovedForDossier] = useState(false);
+  const [hydratedStory, setHydratedStory] = useState(false);
 
   const combinedStory = useMemo(() => [story, context].filter(Boolean).join(" "), [story, context]);
-  const canGenerate = dossier ? hasEnoughResumeSignal(intake) && !dossier.needsRolePriority : false;
+  const hasUnresolvedFacts = dossier?.factContract.facts.some((item) => item.reviewRequired && !["user-confirmed", "user-corrected", "user-rejected", "intentionally-omitted"].includes(item.disposition)) ?? false;
+  const canGenerate = dossier ? hasEnoughResumeSignal(intake) && !dossier.needsRolePriority && !hasUnresolvedFacts : false;
   const shouldShowFocusedFollowUp = dossier
     ? dossier.stillHelpfulFields.length > 0 && (!canGenerate || !dossier.focusedFollowUp.includes("enough signal"))
     : false;
@@ -79,6 +83,22 @@ export function TellMyStoryMode() {
   useEffect(() => {
     trackCareerForgeStart("story");
   }, []);
+
+  useEffect(() => {
+    if (hydratedStory) return;
+    const raw = state.dossier.storyRawSources?.at(-1);
+    if (!raw || !state.dossier.storyFacts?.length) return;
+    const restored = parseStoryToDossier(raw, intake);
+    restored.factContract = { ...restored.factContract, facts: state.dossier.storyFacts };
+    queueMicrotask(() => {
+      setHydratedStory(true);
+      setStory(raw);
+      setDossier(restored);
+      setIntake(restored.intake);
+      setMode("dossier");
+      setApprovedForDossier(state.dossier.storyFacts?.some((item) => item.disposition === "user-confirmed" || item.disposition === "user-corrected") ?? false);
+    });
+  }, [hydratedStory, intake, state.dossier.storyFacts, state.dossier.storyRawSources]);
 
   function parseStory(nextStory = combinedStory) {
     const nextDossier = parseStoryToDossier(nextStory, intake);
@@ -114,10 +134,34 @@ export function TellMyStoryMode() {
   }
 
   function approveAndSave() {
-    const next = mergeIntakeIntoDossier(state.dossier, intake, "story", true, combinedStory || story);
+    if (!dossier) return;
+    const reviewedFacts = dossier.factContract.facts.map((item) =>
+      item.disposition === "represented" && item.certainty === "exact"
+        ? { ...item, disposition: "user-confirmed" as const, reviewRequired: false }
+        : item
+    );
+    const reviewed = { ...dossier, factContract: { ...dossier.factContract, facts: reviewedFacts } };
+    const next = mergeStoryFactsIntoDossier(state.dossier, reviewed.factContract);
     update((current) => withUpdatedDossier(current, next));
+    setDossier(reviewed);
     trackCareerEvent("dossier_evidence_added");
     setApprovedForDossier(true);
+  }
+
+  function changeFact(id: string, patch: Partial<StoryFact>) {
+    setDossier((current) => current ? {
+      ...current,
+      factContract: { ...current.factContract, facts: updateStoryFact(current.factContract.facts, id, patch) }
+    } : current);
+    setApprovedForDossier(false);
+  }
+
+  function decideFact(id: string, disposition: StoryFactDisposition) {
+    changeFact(id, {
+      disposition,
+      reviewRequired: !["user-confirmed", "user-corrected", "user-rejected", "intentionally-omitted"].includes(disposition),
+      ...(disposition === "intentionally-omitted" ? { omissionReason: "User chose not to include this fact in career materials." } : {})
+    });
   }
 
   function updateField<K extends keyof IntakeData>(key: K, value: IntakeData[K]) {
@@ -312,7 +356,51 @@ export function TellMyStoryMode() {
               <DossierRow label="Scope" value={dossier.extracted.scope} />
               <DossierRow label="Transferable signals" value={dossier.extracted.transferableSignals} />
               <DossierRow label="Education" value={dossier.extracted.education} />
+              <DossierRow label="Projects" value={dossier.factContract.projects.map((project) => project.name)} />
             </div>
+
+            <section className="mt-5 rounded-md border border-white/12 bg-obsidian/45 p-4" aria-label="Story fact ledger">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Story fact ledger</p>
+                  <h3 className="mt-2 text-lg font-bold text-paper">What Career Forge heard — and what still needs you</h3>
+                  <p className="mt-1 text-sm leading-6 text-paper/55">Exact facts can be confirmed together. Approximate, unknown, conflicting, omitted, and rejected facts keep their own visible state.</p>
+                </div>
+                <span className="rounded-full border border-white/15 px-3 py-1 text-xs font-bold text-paper/60">
+                  {dossier.factContract.facts.length} facts · {dossier.factContract.silentlyLostCount} silently lost
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {dossier.factContract.facts.map((item) => (
+                  <article key={item.id} className="rounded-md border border-white/10 bg-white/5 p-3" data-story-fact={item.category}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-cyan/10 px-2 py-1 text-[0.68rem] font-black uppercase text-cyan">{item.category}</span>
+                      <span className="rounded bg-gold/10 px-2 py-1 text-[0.68rem] font-black uppercase text-gold">{item.certainty} · {item.precision}</span>
+                      <span className="ml-auto text-xs font-bold text-paper/50">{item.disposition}</span>
+                    </div>
+                    <label className="mt-3 block text-xs font-bold uppercase tracking-[0.1em] text-paper/45">
+                      Proposed value
+                      <input
+                        aria-label={`Correct ${item.category} fact`}
+                        value={item.candidateValue}
+                        onChange={(event) => changeFact(item.id, { candidateValue: event.target.value, disposition: "user-corrected", certainty: "exact", reviewRequired: false })}
+                        className="mt-1 min-h-10 w-full rounded border border-white/10 bg-obsidian/70 px-3 text-sm normal-case tracking-normal text-paper"
+                      />
+                    </label>
+                    <p className="mt-2 text-xs leading-5 text-paper/55"><span className="font-bold text-paper/65">Original wording:</span> “{item.sourceExcerpt}”</p>
+                    {item.conflictGroup && <p className="mt-2 text-xs font-semibold text-ember">Conflicting candidates remain unresolved until you choose one.</p>}
+                    {item.omissionReason && <p className="mt-2 text-xs text-gold">{item.omissionReason}</p>}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => decideFact(item.id, "user-confirmed")} className="rounded border border-mint/35 px-2.5 py-1.5 text-xs font-bold text-mint">Confirm</button>
+                      <button type="button" onClick={() => changeFact(item.id, { certainty: "approximate", precision: item.precision === "unknown" ? "unknown" : item.precision, disposition: "user-confirmed", reviewRequired: false })} className="rounded border border-gold/35 px-2.5 py-1.5 text-xs font-bold text-gold">Keep approximate</button>
+                      <button type="button" onClick={() => changeFact(item.id, { candidateValue: "", certainty: "unknown", precision: "unknown", disposition: "user-confirmed", reviewRequired: false })} className="rounded border border-white/20 px-2.5 py-1.5 text-xs font-bold text-paper/65">Mark unknown</button>
+                      <button type="button" onClick={() => decideFact(item.id, "intentionally-omitted")} className="rounded border border-white/20 px-2.5 py-1.5 text-xs font-bold text-paper/65">Omit intentionally</button>
+                      <button type="button" onClick={() => decideFact(item.id, "user-rejected")} className="rounded border border-ember/35 px-2.5 py-1.5 text-xs font-bold text-ember">Reject</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
 
             <div className="mt-5 rounded-md border border-white/12 bg-obsidian/50 p-4">
               <p className="lab-mono text-[0.68rem] font-bold uppercase text-gold">Source and assumption review</p>
@@ -407,7 +495,7 @@ export function TellMyStoryMode() {
                 onClick={approveAndSave}
                 className={`min-h-11 rounded-md px-5 text-sm font-black transition ${approvedForDossier ? "border border-mint/40 bg-mint/10 text-mint" : "bg-mint text-ink hover:bg-cyan"}`}
               >
-                {approvedForDossier ? "Approved and saved to dossier" : "Approve facts and save to dossier"}
+                {approvedForDossier ? "Review saved to career foundation" : "Confirm safe facts and save review"}
               </button>
               <button
                 type="button"
@@ -434,7 +522,7 @@ export function TellMyStoryMode() {
             </div>
             {!canGenerate && (
               <p className="mt-3 text-sm leading-6 text-paper/55">
-                Add the focused detail above before generating so the resume does not come out generic. You will not need to restart.
+                Story saved does not mean application-ready. Resolve the visible fact questions and add enough supported evidence before generating. You can return later without restarting.
               </p>
             )}
           </section>

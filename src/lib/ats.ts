@@ -1,5 +1,6 @@
 import type { AtsCheck, IntakeData, ResumePackage } from "@/types/career";
 import { isPlaceholderEducation, roleHasContent } from "@/lib/resume-export";
+import { hasAchievementMetric } from "@/lib/story-facts";
 
 const actionVerbs = [
   "coordinated",
@@ -66,8 +67,15 @@ function hasQuantifiedContent(data: IntakeData, resume: ResumePackage) {
     data.reportsCreated
   ];
   const outcomeValues = [data.outcomes, ...data.selectedOutcomes];
-
-  return Boolean(scopeValues.some((value) => value.trim()) || outcomeValues.some((value) => value.trim()) || /\d/.test(resumeText(data, resume)));
+  const supported = [...scopeValues, ...outcomeValues].map((value) => value.trim()).filter((value) => value && hasAchievementMetric(value));
+  const assessedOutput = [resume.summary, ...resume.experience.flatMap((role) => role.bullets)].join(" ");
+  if (!hasAchievementMetric(assessedOutput)) return false;
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9%$]+/g, " ").trim();
+  const output = normalize(assessedOutput);
+  return supported.some((value) => {
+    const metricTokens = normalize(value).split(" ").filter((token) => /\d|%|\$/.test(token));
+    return metricTokens.length > 0 && metricTokens.every((token) => output.includes(token));
+  });
 }
 
 export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[] {
@@ -123,35 +131,37 @@ export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[
     },
     {
       label: "Quantified achievements present",
-      status: hasQuantifiedContent(data, resume) ? "PASS" : "WARNING",
+      status: resume.experience.length === 0 ? "NOT APPLICABLE" : hasQuantifiedContent(data, resume) ? "PASS" : "NEEDS REVIEW",
       detail: hasQuantifiedContent(data, resume)
-        ? "Scope or outcome fields give the resume measurable achievement context."
-        : "Missing scope or outcome context. Add estimates for customers, tickets, calls, projects, reports, revenue, team support, or what the work improved so bullets read as evidence instead of duties."
+        ? "A numerical achievement appears in the assessed material and matches the current supported scope or outcome evidence."
+        : resume.experience.length === 0
+          ? "No experience material is present to assess for quantified achievements."
+          : "No supported numerical achievement appears in the assessed material. Dates, phone numbers, ZIP codes, versions, and incidental digits do not count. Qualitative evidence remains usable without inventing a metric."
     },
     {
       label: "Action verbs present",
-      status: hasActionVerb ? "PASS" : "WARNING",
+      status: hasActionVerb ? "PASS" : "NEEDS REVIEW",
       detail: hasActionVerb
         ? "Experience bullets include resume action verbs."
         : "Start bullets with clear verbs such as supported, coordinated, resolved, tracked, or maintained."
     },
     {
       label: "Skills section present",
-      status: hasSkills ? "PASS" : "WARNING",
+      status: hasSkills ? "PASS" : "NEEDS REVIEW",
       detail: hasSkills
         ? "Core Skills includes multiple ATS-searchable phrases."
         : "Add more tools, responsibilities, or role skills to strengthen keyword coverage."
     },
     {
       label: "Contact section present",
-      status: hasContact ? "PASS" : "WARNING",
+      status: hasContact ? "PASS" : "FAIL",
       detail: hasContact
         ? "Name and email are present for recruiter contact."
         : "Name and email are required for a complete resume header."
     },
     {
       label: "Excessive filler language",
-      status: fillerMatches.length <= 1 ? "PASS" : "WARNING",
+      status: fillerMatches.length <= 1 ? "PASS" : "NEEDS REVIEW",
       detail:
         fillerMatches.length <= 1
           ? "Resume avoids heavy generic filler language."
@@ -159,37 +169,37 @@ export function runAtsChecks(data: IntakeData, resume: ResumePackage): AtsCheck[
     },
     {
       label: "Duplicate bullets",
-      status: duplicateBulletCount === 0 ? "PASS" : "WARNING",
+      status: duplicateBulletCount === 0 ? "PASS" : "FAIL",
       detail: duplicateBulletCount === 0 ? "Experience bullets are not duplicated." : "Duplicate bullets make the resume feel generated. Revise repeated experience bullets."
     },
     {
       label: "Bullet count",
-      status: bulletCountsHealthy ? "PASS" : "WARNING",
+      status: bulletCountsHealthy ? "PASS" : "NEEDS REVIEW",
       detail: bulletCountsHealthy ? "Each role has a reasonable number of bullets." : "Aim for 2-4 bullets per role so experience is substantial but not padded."
     },
     {
       label: "Repeated opening verbs",
-      status: repeatedOpeners ? "WARNING" : "PASS",
+      status: repeatedOpeners ? "NEEDS REVIEW" : "PASS",
       detail: repeatedOpeners ? "Some bullets in the same role start with the same verb. Vary action verbs where possible." : "Opening verbs are varied within roles."
     },
     {
       label: "Role context",
-      status: missingRoleContext ? "WARNING" : "PASS",
+      status: missingRoleContext ? "NEEDS REVIEW" : "PASS",
       detail: missingRoleContext ? "One or more roles are missing company or date context. Add company names and time ranges for recruiter credibility." : "Roles include company and time context."
     },
     {
       label: "Education placeholder",
-      status: isPlaceholderEducation(resume.education) ? "WARNING" : "PASS",
+      status: isPlaceholderEducation(resume.education) ? "FAIL" : "PASS",
       detail: isPlaceholderEducation(resume.education) ? "Education is still using placeholder text. Edit it or leave it out of export." : "Education no longer uses placeholder text."
     },
     {
       label: "Empty resume sections",
-      status: hasEmptySections ? "WARNING" : "PASS",
+      status: hasEmptySections ? "FAIL" : "PASS",
       detail: hasEmptySections ? "One or more core sections are empty. Add summary, skills, and at least one role before exporting." : "Core resume sections contain content."
     },
     {
       label: "Suspicious phrasing",
-      status: suspiciousMatches.length ? "WARNING" : "PASS",
+      status: suspiciousMatches.length ? "NEEDS REVIEW" : "PASS",
       detail: suspiciousMatches.length ? `Review awkward repeated wording: ${suspiciousMatches.join(", ")}.` : "No obvious repeated-noun or awkward template phrases detected."
     }
   ];

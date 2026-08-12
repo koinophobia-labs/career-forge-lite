@@ -21,6 +21,36 @@ export type EvidenceKind =
 // partial support and the record's detail text carries the practice label.
 export type EvidenceSource = "guided" | "story" | "resume-import" | "legacy-profile" | "manual" | "role-sprint";
 
+export type StoryFactCategory =
+  | "identity" | "employer" | "title" | "role-date" | "responsibility" | "achievement" | "metric"
+  | "skill" | "project" | "project-date" | "volunteer-role" | "informal-work" | "education"
+  | "career-gap" | "career-transition" | "aspiration" | "personal-context" | "unresolved";
+export type StoryFactCertainty = "exact" | "approximate" | "bounded-range" | "user-estimated" | "unknown" | "conflicting" | "not-applicable" | "unsupported";
+export type StoryFactPrecision = "day" | "month" | "year" | "range" | "duration" | "current" | "qualitative" | "unknown" | "not-applicable";
+export type StoryFactDisposition = "represented" | "needs-review" | "user-confirmed" | "user-corrected" | "user-rejected" | "intentionally-omitted" | "non-resume-context" | "duplicate" | "conflicting" | "unresolved";
+
+/** Durable, source-positioned ledger entry for typed story intake. */
+export type StoryFact = {
+  id: string;
+  category: StoryFactCategory;
+  sourceExcerpt: string;
+  sourceStart: number;
+  sourceEnd: number;
+  candidateValue: string;
+  userWording: string;
+  certainty: StoryFactCertainty;
+  precision: StoryFactPrecision;
+  reviewRequired: boolean;
+  disposition: StoryFactDisposition;
+  omissionReason?: string;
+  conflictGroup?: string;
+  associationId?: string;
+  origin: "user-supplied" | "parser-separated" | "generated-wording";
+  evidenceId?: string;
+  downstreamClaims: string[];
+  updatedAt: string;
+};
+
 export type DossierEvidenceRecord = {
   id: string;
   kind: EvidenceKind;
@@ -80,6 +110,7 @@ export type DossierRole = {
   tools: string[];
   outcomes: string[];
   evidenceIds: string[];
+  chronology?: { sourceText: string; certainty: StoryFactCertainty; precision: StoryFactPrecision };
   /**
    * Set by the C3 recovery migration when a structural field was found
    * destroyed on disk. "recovered" values are already restored; "candidate"
@@ -102,6 +133,8 @@ export type DossierProject = {
   links: string[];
   defaultPlacement: "projects" | "experience" | "selected-projects" | "omit";
   evidenceIds: string[];
+  volunteer?: boolean;
+  chronology?: { sourceText: string; certainty: StoryFactCertainty; precision: StoryFactPrecision };
 };
 
 export type DossierEducation = {
@@ -153,6 +186,8 @@ export type CareerDossier = {
   targetRoleInterests: string[];
   approvedClaims: string[];
   evidence: DossierEvidenceRecord[];
+  storyFacts?: StoryFact[];
+  storyRawSources?: string[];
   unstructuredNotes: string[];
   migrationReview: string[];
   createdAt: string;

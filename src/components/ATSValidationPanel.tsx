@@ -10,6 +10,12 @@ type ATSValidationPanelProps = {
 
 export function ATSValidationPanel({ data, resume }: ATSValidationPanelProps) {
   const checks = runAtsChecks(data, resume);
+  const checkStyle = (status: (typeof checks)[number]["status"]) => {
+    if (status === "PASS") return { border: "border-cyan/30", badge: "bg-cyan/12 text-cyan" };
+    if (status === "NOT APPLICABLE") return { border: "border-white/15", badge: "bg-white/10 text-paper/60" };
+    if (status === "NEEDS REVIEW" || status === "WARNING") return { border: "border-gold/45", badge: "bg-gold/10 text-gold" };
+    return { border: "border-ember/45", badge: "bg-ember/12 text-ember" };
+  };
 
   return (
     <section className="mx-auto max-w-6xl px-5 pb-12 sm:px-8" id="ats-checks">
@@ -22,26 +28,25 @@ export function ATSValidationPanel({ data, resume }: ATSValidationPanelProps) {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        {checks.map((check) => (
+        {checks.map((check) => {
+          const style = checkStyle(check.status);
+          return (
           <div
             key={check.label}
-            className={`trust-card rounded-md p-4 ${
-              check.status === "PASS" ? "border-cyan/30" : "border-ember/45"
-            }`}
+            className={`trust-card rounded-md p-4 ${style.border}`}
           >
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-base font-bold text-paper">{check.label}</h3>
               <span
-                className={`rounded-md px-2 py-1 text-xs font-bold ${
-                  check.status === "PASS" ? "bg-cyan/12 text-cyan" : "bg-ember/12 text-ember"
-                }`}
+                className={`rounded-md px-2 py-1 text-xs font-bold ${style.badge}`}
               >
                 {check.status}
               </span>
             </div>
             <p className="mt-3 text-sm leading-6 text-paper/70">{check.detail}</p>
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

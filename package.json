@@ -23,6 +23,8 @@
     "test:truth-integrity": "node scripts/truth-integrity-regression.mjs",
     "test:pdf-boundary": "node scripts/pdf-trust-boundary-browser.mjs",
     "test:import-contract": "node scripts/resume-import-field-contract-regression.mjs",
+    "test:story-contract": "node scripts/story-fact-contract-regression.mjs",
+    "acceptance:story": "node scripts/story-truth-browser.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke:generator": "node scripts/smoke-generator.mjs",

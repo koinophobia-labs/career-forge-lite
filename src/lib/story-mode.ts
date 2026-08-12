@@ -19,6 +19,7 @@ import { getMissingSignals, getNextUsefulPrompt, hasEnoughResumeSignal } from "@
 import { isUncertaintyStatement } from "@/lib/truth-guards";
 import { aiWorkflowOptions, normalizeAiWorkflow, selectedAiTools } from "@/lib/modern-work-intelligence";
 import { parseRoleAnswer } from "@/lib/natural-role-parser";
+import { parseStoryFacts, type StoryFactContract } from "@/lib/story-facts";
 import { inferTransferTarget } from "@/lib/transferable-targets";
 import type { IntakeData, RoleFamily } from "@/types/career";
 
@@ -45,6 +46,7 @@ export type StoryDossier = {
   missingCriticalDetails: string[];
   nextMissingField: string;
   focusedFollowUp: string;
+  factContract: StoryFactContract;
 };
 
 const roleFamilyKeywords: Array<[RoleFamily, RegExp]> = [
@@ -306,7 +308,7 @@ function extractRole(story: string) {
   };
 }
 
-function extractTools(story: string) {
+export function extractTools(story: string) {
   const knownTools = allToolOptions
     .filter((tool) => new RegExp(`\\b${tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(story))
     .filter((tool) => !(tool.toLowerCase() === "front" && /front area|front counter|front of/i.test(story)));
@@ -333,7 +335,7 @@ function isNegatedSignal(story: string, value: string) {
   return new RegExp(`\\b(?:not|no|without|never)\\s+(?:a\\s+|any\\s+)?${escaped}\\b`, "i").test(story);
 }
 
-function extractResponsibilities(story: string, roleFamily: RoleFamily) {
+export function extractResponsibilities(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
   const keywordMatches = responsibilityKeywords.filter((item) => lower.includes(item) && !isNegatedSignal(story, item)).map(titleCase);
   const handledClause = story.match(/\b(?:assisted|answered|cared for|checked|cleaned|coached|cut|delivered|documented|drove|fixed|followed|handled|loaded|maintained|managed|mopped|operated|organized|packed|picked|planned|prepared|processed|repaired|resolved|sanitized|scheduled|shipped|stocked|styled|supported|swept|tested|tracked|trained|unloaded|updated|wrote)\s+([^.;]+)/i)?.[1] ?? "";
@@ -363,11 +365,11 @@ function extractScope(story: string) {
   return unique(clauses).slice(0, 8);
 }
 
-function extractEducation(story: string) {
+export function extractEducation(story: string) {
   return formatEducationEntries(extractEducationEntries(story));
 }
 
-function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
+export function extractTransferableSignals(story: string, roleFamily: RoleFamily) {
   const lower = story.toLowerCase();
   const keywordMatches = transferableKeywords.filter((item) => lower.includes(item) && !isNegatedSignal(story, item)).map(titleCase);
   const inferredProof = [
@@ -445,11 +447,21 @@ function buildInfoChecklist(story: string, intake: IntakeData, role: { title: st
 export function parseStoryToDossier(story: string, previousIntake: IntakeData = initialIntake): StoryDossier {
   // Uncertainty statements ("I don't know my numbers") advance the story but
   // never become extracted evidence.
+  const factContract = parseStoryFacts(story);
   const factualStory = splitSentences(story)
     .filter((sentence) => !isUncertaintyStatement(sentence))
     .join(". ");
   const detectedRoles = detectRoleMentions(story);
-  const role = extractRole(story);
+  const legacyRole = extractRole(story);
+  const contractRole = factContract.roles.find((item) => item.employer || item.title);
+  const role = contractRole
+    ? {
+        title: contractRole.title,
+        company: contractRole.employer,
+        dates: factContract.facts.find((item) => item.associationId === contractRole.id && item.category === "role-date" && item.certainty === "exact")?.candidateValue ?? "",
+        family: legacyRole.family
+      }
+    : { title: "", company: "", dates: "", family: undefined };
   const initialRoleFamily = role.family ?? inferRoleFamily(story, role.title);
   const independentCategory = inferIndependentWorkCategory([story, role.title].join(" "));
   const independentRole = findIndependentWorkRole(role.title);
@@ -459,19 +471,19 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
   const founderProductStory =
     /\b(founder|founded|product studio|product lab|websites?|apps?|deployment|github|vercel)\b/i.test(story) &&
     /\b(product operations|product|technical)\b/i.test(rawTarget);
-  const targetRole = founderProductStory ? "Product Operations Associate" : inferTargetRole(story, role.title, initialRoleFamily);
+  const aspiration = factContract.facts.find((item) => item.category === "aspiration")?.candidateValue ?? "";
+  const aspirationTarget = aspiration ? inferTransferTarget(aspiration)?.title ?? titleCase(aspiration) : "";
+  const targetRole = aspirationTarget || (founderProductStory ? "Product Operations Associate" : role.title ? inferTargetRole(story, role.title, initialRoleFamily) : "");
   const roleFamily: RoleFamily = founderProductStory ? "Tech" : transferTarget?.roleFamily ?? (explicitTarget ? inferRoleFamily(targetRole, targetRole) : initialRoleFamily);
   const email = extractEmail(story);
   const name = extractName(story);
-  const responsibilities = extractResponsibilities(factualStory, roleFamily);
-  const tools = extractTools(factualStory);
+  const responsibilities = unique(factContract.facts.filter((item) => item.category === "responsibility" && item.associationId === contractRole?.id).map((item) => titleCase(item.candidateValue)));
+  const tools = unique(factContract.facts.filter((item) => item.category === "skill" && item.associationId === contractRole?.id).map((item) => titleCase(item.candidateValue)));
   const aiWorkflows = extractAiWorkflows(factualStory, tools);
-  const scope = extractScope(factualStory);
-  const education = extractEducation(story);
-  const transferableSignals = extractTransferableSignals(factualStory, roleFamily);
-  const selectedOutcomes = transferableSignals.filter((item) =>
-    /accuracy|satisfaction|efficiency|reliability|compliance|speed|retention|revenue|problem|de-escalation|documentation|safety|sanitation|time management|patient care/i.test(item)
-  );
+  const scope = factContract.explicitNoMetrics ? [] : extractScope(factualStory);
+  const education = factContract.facts.filter((item) => item.category === "education").map((item) => item.candidateValue).join("; ");
+  const transferableSignals = tools;
+  const selectedOutcomes: string[] = [];
   const roleSummary = [role.title, role.company, role.dates].filter(Boolean).join(" | ");
   const extracted = {
     targetRole,
@@ -486,17 +498,17 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     email: previousIntake.email || email,
     targetJobTitle: explicitTarget ? targetRole : previousIntake.targetJobTitle || targetRole,
     roleFamily,
-    currentTitle: previousIntake.currentTitle || (independentRole || independentCategory ? formatIndependentTitle(role.title, previousIntake.independentWorkType || "Independent") : role.title),
+    currentTitle: previousIntake.currentTitle || (role.title ? (independentRole || independentCategory ? formatIndependentTitle(role.title, previousIntake.independentWorkType || "Independent") : role.title) : ""),
     currentCompany: previousIntake.currentCompany || role.company,
     currentTime: previousIntake.currentTime || role.dates,
     tools: unique([previousIntake.tools, ...tools]).join(", "),
     selectedAiWorkflows: unique([...previousIntake.selectedAiWorkflows, ...aiWorkflows]).slice(0, 8),
-    independentWorkType: previousIntake.independentWorkType || (independentCategory ? "Independent" : ""),
+    independentWorkType: previousIntake.independentWorkType,
     // Arsenal skills are template taxonomy: only entries grounded in the
     // user's own story may seed the dossier.
     selectedIndependentWorkSignals: unique([
       ...previousIntake.selectedIndependentWorkSignals,
-      ...(independentCategory
+      ...(contractRole && independentCategory
         ? independentWorkArsenals[independentCategory].skills.filter((skill) => isGroundedClaim(skill, story.toLowerCase())).slice(0, 4)
         : [])
     ]),
@@ -549,6 +561,7 @@ export function parseStoryToDossier(story: string, previousIntake: IntakeData = 
     nextMissingField: needsRolePriority ? "Priority role" : nextUsefulPrompt.key === "ready" ? "" : nextUsefulPrompt.label,
     focusedFollowUp: needsRolePriority
       ? `I found several roles: ${detectedRoles.join("; ")}. Which one should this resume prioritize?`
-      : nextUsefulPrompt.prompt || focusedFollowUp(missingCriticalDetails)
+      : nextUsefulPrompt.prompt || focusedFollowUp(missingCriticalDetails),
+    factContract
   };
 }
