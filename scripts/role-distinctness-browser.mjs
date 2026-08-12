@@ -62,7 +62,7 @@ function laneCard(page, title, index = 0) {
 }
 async function adoptAndDescribe(page, title, description) {
   const card = laneCard(page, title).last();
-  await card.getByRole("button", { name: "Make this lane active", exact: true }).click();
+  await card.getByTestId("adopt-lane").click();
   const adopted = laneCard(page, title).first();
   await adopted.getByRole("button", { name: "Details", exact: true }).click();
   await adopted.getByRole("textbox", { name: /Target description/ }).fill(description);
@@ -72,7 +72,7 @@ async function addCustomLane(page, title, description) {
   await page.getByPlaceholder("Optional target description — requirements, responsibilities, and outcomes").fill(description);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const card = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) }).last();
-  await card.getByRole("button", { name: "Make this lane active", exact: true }).click();
+  await card.getByRole("button", { name: `Make ${title} active`, exact: true }).click();
 }
 async function forge(page) {
   await page.getByRole("button", { name: "Forge complete résumé pack →", exact: true }).click();

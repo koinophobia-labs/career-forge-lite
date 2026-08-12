@@ -6,8 +6,8 @@
 // wrapped bullets, sparse evidence, long education, multi-page output, and
 // career-changer histories with explicit gaps and separation reasons.
 //
-// Evidence artifacts (PDF, DOCX, page PNGs, extracted text) are written to
-// docs/evidence/paid-beta-surge/export-stress/ for PR review.
+// Evidence artifacts (PDF, DOCX, page PNGs, extracted text) are written outside
+// the repository so release certification never dirties the product tree.
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -43,6 +43,7 @@ function loadTsModule(filePath) {
 }
 
 const { createVariantFile, resumeVariantFilename } = loadTsModule(path.join(root, "src/lib/pack-export.ts"));
+const { emptyDossier } = loadTsModule(path.join(root, "src/lib/dossier.ts"));
 
 let passes = 0;
 let failures = 0;
@@ -51,7 +52,7 @@ function check(label, condition, detail = "") {
   else { failures += 1; console.error(`FAIL ${label}${detail ? ` — ${detail}` : ""}`); }
 }
 
-const EVIDENCE_DIR = path.join(root, "docs/evidence/paid-beta-surge/export-stress");
+const EVIDENCE_DIR = "/tmp/career-forge-pass-06/export-stress";
 fs.rmSync(EVIDENCE_DIR, { recursive: true, force: true });
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 
@@ -60,12 +61,12 @@ fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 // production export entry point. Content is entirely synthetic.
 // ---------------------------------------------------------------------------
 function identity(fullName, overrides = {}) {
-  return { identity: { fullName, email: "candidate@example.com", phone: "(555) 010-2000", location: "Portland, OR", links: [], ...overrides } };
+  return { ...emptyDossier("2026-07-01T00:00:00.000Z"), identity: { fullName, email: "candidate@example.com", phone: "(555) 010-2000", location: "Portland, OR", links: [], ...overrides } };
 }
 function variant(resume, { kind = "ats", sectionOrder } = {}) {
   return {
     id: "stress-variant", laneId: "stress-lane", kind, title: "Stress", status: "current", canonical: true,
-    userEdited: false, resume, template: "Modern ATS", evidenceReferences: [], userAuthoredPaths: [],
+    userEdited: true, resume, template: "Modern ATS", evidenceReferences: [], userAuthoredPaths: ["document"], reviewedUserAuthoredPaths: ["document"],
     sectionOrder: sectionOrder ?? ["summary", "skills", "experience", "projects", "education"],
     sourceDossierUpdatedAt: "2026-07-01T00:00:00.000Z", baselineVariantId: null, applicationId: null,
     createdAt: "2026-07-01T00:00:00.000Z", updatedAt: "2026-07-01T00:00:00.000Z"

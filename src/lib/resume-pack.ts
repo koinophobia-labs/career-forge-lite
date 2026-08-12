@@ -193,6 +193,24 @@ function buildLaneResume(
       chosen.push(item.id);
     }
   });
+  // A description-backed lane can rank only skill-shaped evidence at the
+  // boundary where the dossier stops being considered sparse (eight records).
+  // Without one supported responsibility/proof/metric, the summary falls back
+  // to uncited coaching copy and a freshly generated pack blocks its own
+  // exports. Keep the highest-ranked supported proof in that case; this does
+  // not invent lane evidence or disturb the ranking, it gives the generated
+  // summary provenance from the user's approved record.
+  const chosenHasProof = ranked.some((item) => chosenSet.has(item.id) && ["responsibility", "proof", "metric"].includes(item.kind) && isDocumentFact(item));
+  if (!chosenHasProof) {
+    ranked
+      .filter((item) => ["responsibility", "proof", "metric"].includes(item.kind) && isDocumentFact(item))
+      .slice(0, 2)
+      .forEach((item) => {
+        if (chosenSet.has(item.id)) return;
+        chosenSet.add(item.id);
+        chosen.push(item.id);
+      });
+  }
   const mapping = new Map<string, { evidenceIds: string[]; supportType: ResumeEvidenceReference["supportType"] }>();
   const mapClaim = (claim: string, ids: string[], supportType: ResumeEvidenceReference["supportType"] = "direct") => {
     const valid = unique(ids).filter((id) => chosenSet.has(id));

@@ -245,6 +245,7 @@ export default function TargetsPage() {
                       {lane.status !== "active" && (
                         <button
                           type="button"
+                          aria-label={`Make ${lane.title} active`}
                           onClick={() => setLaneStatus(lane.id, "active")}
                           disabled={activeLaneCount >= 3}
                           title={activeLaneCount >= 3 ? "Three lanes are already active — pause one first." : "Include this lane when you forge your résumé pack."}
@@ -404,6 +405,7 @@ export default function TargetsPage() {
                   <button
                     type="button"
                     data-testid="adopt-lane"
+                    aria-label={adopted ? `${blueprint.title} is in your lanes` : `${view.label === "Strong lane" || view.label === "Credible transition" ? "Make" : "Explore"} ${blueprint.title} lane`}
                     disabled={adopted}
                     onClick={() => adoptLane(blueprint.key)}
                     className={`mt-4 rounded-md px-4 py-2 text-sm font-black transition ${

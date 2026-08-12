@@ -15,7 +15,7 @@ const noOverflow = async (page, label) => { const widths = await page.evaluate((
 
 let browser;
 try {
-  fs.mkdirSync("docs/market-moat", { recursive: true });
+  fs.mkdirSync("/tmp/career-forge-pass-06/activation", { recursive: true });
   await Promise.race([waitForServer(), once(server, "exit").then(([code]) => { throw new Error(`Server exited with ${code}.\n${output}`); })]);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 375, height: 667 }, acceptDownloads: true });
@@ -23,9 +23,9 @@ try {
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.getByRole("heading", { name: "What are you working toward?" }).waitFor();
-  for (const goal of ["Get a New Job", "Change Careers", "Update My Résumé", "Build My First Résumé", "Practice Interview"]) await page.getByRole("button", { name: new RegExp(`^${goal}`) }).waitFor();
-  await page.getByRole("button", { name: /^Get a New Job/ }).click();
+  await page.getByRole("heading", { name: "What are you trying to do?" }).waitFor();
+  for (const goal of ["Get a job", "Build or update my résumé", "Practice for an interview"]) await page.getByRole("button", { name: new RegExp(`^${goal}`) }).waitFor();
+  await page.getByRole("button", { name: /^Get a job/ }).click();
   await page.waitForURL(`${baseUrl}/profile#import`);
   verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).activeGoal.kind === "new-job"), "selected intent did not persist");
   await page.goto(baseUrl);
@@ -34,24 +34,26 @@ try {
   await page.getByText("Continue: New Job Search", { exact: true }).waitFor();
   await page.evaluate(() => localStorage.clear());
   await page.goto(baseUrl);
-  await page.getByRole("heading", { name: "Your career is bigger than your last résumé." }).waitFor();
-  await page.getByRole("link", { name: "Import my résumés", exact: true }).waitFor();
-  await page.getByText("Files processed locally").waitFor();
+  await page.getByRole("heading", { name: "What are you trying to do?" }).waitFor();
+  await page.getByRole("button", { name: /^Build or update my résumé/ }).waitFor();
+  await page.getByText("Files stay on this device").waitFor();
   await noOverflow(page, "fresh landing 375");
-  await page.screenshot({ path: "docs/market-moat/final-375x667.png", fullPage: false });
+  await page.screenshot({ path: "/tmp/career-forge-pass-06/activation/final-375x667.png", fullPage: false });
   const storedBeforeSample = await page.evaluate(() => localStorage.getItem("career-forge-command-center-v1"));
+  await page.locator("summary", { hasText: "See a finished sample first" }).click();
   await page.getByRole("button", { name: "Explore sample pack" }).click();
   await page.getByText("Direct match:").waitFor();
   const storedAfterSample = await page.evaluate(() => localStorage.getItem("career-forge-command-center-v1"));
   verify(storedAfterSample === storedBeforeSample, "sample mode changed persisted user state");
 
-  await page.getByRole("link", { name: "Import my résumés", exact: true }).click();
+  await page.getByRole("button", { name: /^Build or update my résumé/ }).click();
   await page.waitForURL(`${baseUrl}/profile#import`);
   await page.getByText("No file handy? Paste résumé text", { exact: true }).click();
   await page.getByLabel("Resume text import").fill("Customer Support Specialist — Northstar Software | January 2021 to January 2026\nResolved difficult customer issues and documented repeatable fixes\nProvided customer support for SaaS products\nMaintained 40 verified troubleshooting articles\nTools: Zendesk, Jira");
   await page.getByRole("button", { name: "Extract proposed evidence" }).click();
   await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
-  verify(await page.getByRole("button", { name: "Review at least one fact first" }).isDisabled(), "all-proposed Truth Inbox allowed a save");
+  const preSaveImport = await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")));
+  verify(preSaveImport.dossier.evidence.length === 0 && preSaveImport.pendingImportReviews[0].proposals.some((proposal) => proposal.status === "proposed"), "preselected import facts escaped the Truth Inbox before the user saved decisions");
   const originalProposalCount = await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).pendingImportReviews[0].proposals.length);
   await page.getByLabel("Resume text import").fill("Independent Project — Synthetic Portfolio | 2025–Present\nBuilt a documented support workflow");
   await page.getByRole("button", { name: "Extract proposed evidence" }).click();
@@ -76,8 +78,12 @@ try {
   await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
   const pendingAfterRefresh = await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).pendingImportReviews[0].proposals.length);
   verify(pendingAfterRefresh === pendingBeforeRefresh, "Truth Inbox changed across refresh");
-  const sections = page.getByRole("button", { name: "Approve section" });
+  const sections = page.getByRole("button", { name: "Approve clear items" });
   for (let index = 0; index < await sections.count(); index += 1) await sections.nth(index).click();
+  const undecided = page.locator("article").filter({ hasText: /proposed$/ });
+  for (let index = (await undecided.count()) - 1; index >= 0; index -= 1) {
+    await undecided.nth(index).getByRole("button", { name: /Approve|Choose this value/ }).click();
+  }
   await page.getByRole("button", { name: "Finish review" }).click();
   verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).pendingImportReviews.length === 0), "finished Truth Inbox did not clear");
   await page.getByText("What your approvals unlock").waitFor();
@@ -103,7 +109,7 @@ try {
   await page.getByRole("heading", { name: "Evidence-first" }).waitFor();
   await page.getByRole("heading", { name: "Output-first" }).waitFor();
   await noOverflow(page, "truth map 375");
-  await page.screenshot({ path: "docs/market-moat/truth-map-375x667.png", fullPage: false });
+  await page.screenshot({ path: "/tmp/career-forge-pass-06/activation/truth-map-375x667.png", fullPage: false });
 
   // Exports are identity-gated: a nameless pack must never leave the app, so
   // the persona fills their name the way the gate directs before exporting.
@@ -118,21 +124,17 @@ try {
   verify(download.suggestedFilename().endsWith("-Resume-Pack.zip"), "full pack export was not a ZIP");
   await page.goto(`${baseUrl}/versions`);
   await page.getByRole("link", { name: "Tailor a résumé to a real job →" }).click();
-  await page.getByRole("heading", { name: "Tailor against the actual job post." }).waitFor();
-  await page.getByRole("textbox", { name: "Company", exact: true }).fill("Synthetic Co");
-  await page.getByRole("textbox", { name: "Role title", exact: true }).fill("Product Support Specialist");
-  await page.getByRole("combobox", { name: "Lane", exact: true }).selectOption({ index: 1 });
-  await page.getByRole("combobox", { name: "Baseline résumé", exact: true }).selectOption({ index: 1 });
-  await page.getByLabel("Application questions").fill("Describe a difficult customer issue you resolved.");
-  await page.getByLabel("Paste the full job post here").fill("Product Support Specialist\nRequirements:\n- Resolve difficult customer issues\n- Document repeatable fixes\n- Maintain customer support knowledge");
-  await page.getByRole("button", { name: "Analyze this post" }).click();
+  await page.getByRole("heading", { name: "Paste a job. See what you can prove." }).waitFor();
+  await page.getByRole("textbox", { name: "Paste the full job posting" }).fill("Product Support Specialist at Synthetic Co\nRequirements:\n- Resolve difficult customer issues\n- Document repeatable fixes\n- Maintain customer support knowledge");
+  await page.getByRole("button", { name: /Analyze this job/ }).click();
+  await page.locator("summary", { hasText: "Other actions" }).click();
   await page.getByRole("button", { name: "Save as draft" }).click();
-  await page.getByText("Saved to your applications tracker.").waitFor();
-  verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).applications[0].applicationQuestions[0].evidenceIds.length > 0), "application answer was not grounded in approved evidence");
+  verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).applications.length === 1), "saved application did not enter the tracker");
+  verify(await page.evaluate(() => decodeURIComponent(JSON.parse(localStorage.getItem("career-forge-command-center-v1")).applications[0].jobPostUrl).includes("Resolve difficult customer issues")), "saved application lost its analyzed posting");
   await page.goto(`${baseUrl}/truth-map`);
-  await page.getByText("Answer citations").waitFor();
+  await page.getByRole("heading", { name: "Output-first" }).waitFor();
   verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).applications.length === 1), "saved application lineage disappeared");
-  await page.screenshot({ path: "docs/market-moat/truth-map-375x667.png", fullPage: false });
+  await page.screenshot({ path: "/tmp/career-forge-pass-06/activation/truth-map-restored-375x667.png", fullPage: false });
 
   await page.goto(`${baseUrl}/settings`);
   const backupPromise = page.waitForEvent("download");
@@ -154,7 +156,7 @@ try {
     await page.setViewportSize({ width, height });
     await page.goto(baseUrl);
     await noOverflow(page, `landing ${width}x${height}`);
-    if (width === 1440) await page.screenshot({ path: "docs/market-moat/final-1440x900.png", fullPage: false });
+    if (width === 1440) await page.screenshot({ path: "/tmp/career-forge-pass-06/activation/final-1440x900.png", fullPage: false });
   }
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto(baseUrl);

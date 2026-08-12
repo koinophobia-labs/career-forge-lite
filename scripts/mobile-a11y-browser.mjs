@@ -1,8 +1,7 @@
-// Mobile keyboard-accessibility acceptance at 390×844: audits EVERY route for
-// horizontally scrollable regions and requires each one to be keyboard
-// focusable, accessibly named, and keyboard scrollable. Also captures a
-// keyboard-only trace (screenshots) of the landing comparison table as PR
-// evidence. Runs against a real dev server.
+// Release responsive/semantic acceptance. Audits every durable route at the
+// supported mobile, tablet, desktop, and reduced-CSS viewport sizes. Assertions
+// use landmarks, accessible names, focus state, and observable overflow rather
+// than retired landing-page copy or DOM position.
 import fs from "node:fs";
 import path from "node:path";
 import { once } from "node:events";
@@ -11,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EVIDENCE_DIR = path.join(root, "docs/evidence/paid-beta-surge/mobile-a11y");
+const EVIDENCE_DIR = "/tmp/career-forge-pass-06/mobile-a11y";
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 let passes = 0;
@@ -37,7 +36,15 @@ async function waitForServer() {
   throw new Error(`Server did not start.\n${output}`);
 }
 
-const ROUTES = ["/", "/profile", "/targets", "/versions", "/tailor", "/applications", "/outreach", "/interview", "/pricing", "/settings", "/story", "/truth-map", "/unlock", "/weekly", "/resume-builder"];
+const ROUTES = ["/", "/profile", "/story", "/targets", "/truth-map", "/versions", "/versions/view", "/tailor", "/applications", "/outreach", "/interview", "/weekly", "/role-sprint", "/settings", "/pricing", "/privacy", "/terms"];
+const VIEWPORTS = [
+  { name: "mobile-320", width: 320, height: 720 },
+  { name: "mobile-375", width: 375, height: 812 },
+  { name: "mobile-390", width: 390, height: 844 },
+  { name: "tablet", width: 768, height: 1024 },
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "zoom-200-equivalent", width: 640, height: 450 }
+];
 
 // Every horizontally scrollable element on the page, with its keyboard/a11y
 // affordances. An element that can overflow but currently fits is fine.
@@ -61,6 +68,28 @@ async function auditScrollRegions(page) {
   });
 }
 
+async function semanticAudit(page) {
+  return page.evaluate(() => {
+    const interactive = [...document.querySelectorAll("button, a[href], input, select, textarea, summary")];
+    const unnamed = interactive.filter((element) => {
+      if (element instanceof HTMLInputElement && element.type === "hidden") return false;
+      const labelled = element.getAttribute("aria-label") || element.getAttribute("aria-labelledby") || element.getAttribute("placeholder");
+      const label = (element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)?.textContent : "") || element.closest("label")?.textContent;
+      return !(labelled || label || element.textContent?.trim() || element.getAttribute("title"));
+    });
+    const ids = [...document.querySelectorAll("[id]")].map((element) => element.id).filter(Boolean);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    return {
+      main: document.querySelectorAll("main").length,
+      headings: document.querySelectorAll("h1, h2").length,
+      unnamed: unnamed.map((element) => element.outerHTML.slice(0, 120)),
+      duplicateIds: [...new Set(duplicateIds)],
+      bodyWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth
+    };
+  });
+}
+
 let browser;
 try {
   await Promise.race([waitForServer(), once(server, "exit").then(([code]) => { throw new Error(`Server exited with ${code}.\n${output}`); })]);
@@ -68,38 +97,34 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
 
-  // --- Route sweep: no anonymous, keyboard-unreachable scroll regions --------
-  for (const route of ROUTES) {
-    await page.goto(`${baseUrl}${route}`);
-    await page.waitForLoadState("networkidle");
-    const regions = await auditScrollRegions(page);
-    const violations = regions.filter((region) => !region.focusable || !region.name);
-    verify(violations.length === 0, `${route}: ${regions.length} horizontally scrollable region(s), all keyboard-focusable and accessibly named${violations.length ? ` — VIOLATIONS: ${JSON.stringify(violations)}` : ""}`);
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    for (const route of ROUTES) {
+      await page.goto(`${baseUrl}${route}`);
+      await page.waitForLoadState("networkidle");
+      const regions = await auditScrollRegions(page);
+      const violations = regions.filter((region) => !region.focusable || !region.name);
+      const semantic = await semanticAudit(page);
+      verify(violations.length === 0, `${viewport.name} ${route}: scroll regions are named and keyboard reachable${violations.length ? ` (${JSON.stringify(violations)})` : ""}`);
+      verify(semantic.main === 1 && semantic.headings > 0, `${viewport.name} ${route}: one main landmark and visible heading hierarchy`);
+      verify(semantic.unnamed.length === 0, `${viewport.name} ${route}: every interactive control has an accessible name${semantic.unnamed.length ? ` (${semantic.unnamed.join(" | ")})` : ""}`);
+      verify(semantic.duplicateIds.length === 0, `${viewport.name} ${route}: no duplicate form or landmark ids`);
+      verify(semantic.bodyWidth <= semantic.viewportWidth + 1, `${viewport.name} ${route}: no page-level horizontal overflow`);
+    }
   }
 
-  // --- Keyboard-only trace: landing comparison table -------------------------
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(baseUrl);
-  await page.waitForLoadState("networkidle");
-  const region = page.getByRole("region", { name: /comparison table/i });
-  await region.scrollIntoViewIfNeeded();
-  verify((await region.count()) === 1, "comparison table region exposes an accessible name to screen readers");
-  verify(/scroll horizontally/i.test(await region.getAttribute("aria-label")), "accessible name includes navigation instructions");
-
-  // Reach it with the keyboard alone.
-  await region.focus();
-  verify(await region.evaluate((element) => document.activeElement === element), "comparison region is keyboard focusable at 390×844");
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, "comparison-focused-before-scroll.png") });
-
-  const before = await region.evaluate((element) => element.scrollLeft);
-  for (let press = 0; press < 12; press += 1) await page.keyboard.press("ArrowRight");
-  await page.waitForTimeout(300);
-  const after = await region.evaluate((element) => element.scrollLeft);
-  verify(after > before, `arrow keys scroll the focused comparison region (scrollLeft ${before} → ${after})`);
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, "comparison-after-arrow-scroll.png") });
-
-  // The whole page must never scroll horizontally on mobile.
-  const widths = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
-  verify(widths.content <= widths.viewport + 1, `page body has no horizontal overflow at 390×844 (${widths.content} <= ${widths.viewport})`);
+  await page.keyboard.press("Tab");
+  const focus = await page.evaluate(() => {
+    const element = document.activeElement;
+    if (!(element instanceof HTMLElement)) return null;
+    const style = getComputedStyle(element);
+    return { tag: element.tagName, outline: style.outlineStyle, boxShadow: style.boxShadow, visible: element.getBoundingClientRect().width > 0 };
+  });
+  verify(Boolean(focus?.visible && focus.tag), "keyboard focus reaches a visible control on first run");
+  verify(focus?.outline !== "none" || focus?.boxShadow !== "none", "focused control has a visible focus treatment");
+  await page.screenshot({ path: path.join(EVIDENCE_DIR, "first-run-keyboard-focus-390.png"), fullPage: false });
 
   console.log(`\n${passes} passed, 0 failed`);
 } finally {

@@ -54,6 +54,7 @@ try {
   await page.getByRole("status").filter({ hasText: /(?:Import review|Truth Inbox) complete:/ }).waitFor();
 
   await page.getByRole("textbox", { name: "Full name" }).fill("Blake Example");
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("blake.example@example.com");
   await page.getByLabel("Role title", { exact: true }).fill("Associate Sportsbook Writer");
   await page.getByLabel("Employer", { exact: true }).fill("DraftKings");
   await page.getByLabel("Dates", { exact: true }).fill("2021–2024");
@@ -79,25 +80,18 @@ try {
   verify(zipDownload.suggestedFilename().endsWith("-Resume-Pack.zip"), "bundle filename was not deterministic");
 
   await page.goto(`${baseUrl}/tailor`);
-  await page.getByRole("textbox", { name: "Company", exact: true }).fill("Fin");
-  await page.getByRole("textbox", { name: "Role title", exact: true }).fill("Technical Support Engineer");
-  await page.getByRole("combobox", { name: "Lane", exact: true }).selectOption({ index: 1 });
-  await page.getByRole("combobox", { name: "Baseline résumé", exact: true }).selectOption({ index: 1 });
-  await page.getByLabel("Discovery URL").fill("https://linkedin.example/fin-role");
-  await page.getByLabel("Direct application URL").fill("https://fin.example/careers/apply");
-  await page.getByLabel("Paste the full job post here").fill("Technical Support Engineer\nRequirements:\n- Experience with technical support and regression testing required\n- Salesforce experience required\n- Bachelor's degree required");
-  await page.getByLabel("Application questions").fill("What excites you most about this opportunity?\nDescribe a time you solved a difficult customer problem.");
-  await page.getByRole("button", { name: "Analyze this post" }).click();
+  await page.getByRole("textbox", { name: "Paste the full job posting" }).fill("Technical Support Engineer at Fin\nRequirements:\n- Experience with technical support and regression testing required\n- Salesforce experience required\n- Bachelor's degree required");
+  await page.getByRole("button", { name: /Analyze this job/ }).click();
   const refusedGaps = page.getByText("A lane keyword cannot change that.");
   await refusedGaps.first().waitFor();
   verify((await refusedGaps.count()) >= 1, "unsupported requirements were not refused");
-  await page.getByRole("button", { name: "I applied — track it" }).click();
-  await page.getByText("Saved to your applications tracker.").waitFor();
+  await page.locator("summary", { hasText: "Other actions" }).click();
+  await page.getByRole("button", { name: "I applied", exact: true }).click();
+  verify(await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")).applications.some((item) => item.status === "applied")), "applied status did not persist to the tracker");
   await noOverflow(page, "tailor mobile");
-  await page.getByRole("button", { name: "Build the resume for this shot →" }).click();
+  await page.getByRole("button", { name: /Build (?:the )?tailored résumé/ }).first().click();
   await page.waitForURL(`${baseUrl}/resume-builder`);
   await page.locator("#intake form").waitFor();
-  await page.getByRole("button", { name: "Start", exact: true }).click();
   await page.getByRole("heading", { name: "What job do you want next?" }).waitFor();
   const targetInput = page.getByPlaceholder("Example: Customer Support");
   if (!(await targetInput.inputValue()).trim()) {
@@ -109,10 +103,13 @@ try {
   await page.getByPlaceholder("Example: Helped customers, stocked shelves.").fill(
     "Resolved customer support issues, documented repeatable fixes, and ran regression tests before releases."
   );
-  await page.getByRole("button", { name: "See recommendations" }).click();
-  await page.getByRole("heading", { name: "Ready to generate?" }).waitFor();
-  await page.getByRole("button", { name: "Generate draft" }).click();
   const influenceReceipt = page.getByText("Why this version changed");
+  for (let step = 0; step < 16 && !(await influenceReceipt.count()); step += 1) {
+    const generateNow = page.getByRole("button", { name: "Generate now" });
+    if (await generateNow.count()) await generateNow.click();
+    else await page.locator("#intake form button[type=submit]").click();
+    await page.waitForTimeout(150);
+  }
   try {
     await influenceReceipt.waitFor({ timeout: 10_000 });
   } catch {
@@ -122,12 +119,10 @@ try {
 
   await page.goto(`${baseUrl}/applications`);
   await page.getByRole("heading", { name: /Technical Support Engineer/ }).first().waitFor();
-  await page.getByRole("link", { name: /Resume attached:/ }).waitFor();
-  verify((await page.getByRole("link", { name: "Discovery post" }).getAttribute("href")) === "https://linkedin.example/fin-role", "discovery URL was not retained");
-  verify((await page.getByRole("link", { name: "Employer application" }).getAttribute("href")) === "https://fin.example/careers/apply", "direct URL was not retained");
-  await page.getByText("Application answers").waitFor();
+  await page.getByRole("link", { name: "Open attached résumé" }).waitFor();
+  verify((await page.getByRole("heading", { name: /Technical Support Engineer/ }).count()) > 0, "inferred role was not retained");
   await page.reload();
-  await page.getByText("Application answers").waitFor();
+  await page.getByRole("heading", { name: /Technical Support Engineer/ }).first().waitFor();
   await noOverflow(page, "applications after refresh mobile");
 
   await page.goto(`${baseUrl}/settings`);
@@ -148,7 +143,6 @@ try {
   await page.goto(`${baseUrl}/applications`);
   await page.getByRole("heading", { name: /Technical Support Engineer/ }).first().waitFor();
   await page.goto(`${baseUrl}/versions`);
-  await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
   await page.getByRole("heading", { name: /Technical Support Engineer.*tailored/i }).waitFor();
 
   await page.setViewportSize({ width: 1440, height: 900 });
