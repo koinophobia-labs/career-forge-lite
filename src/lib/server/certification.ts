@@ -27,7 +27,7 @@
 import { createHash } from "node:crypto";
 
 /** Bump when the certification procedure changes shape. */
-export const DRILL_VERSION = "4.0.0";
+export const DRILL_VERSION = "5.0.0";
 
 export const CERTIFICATION_RECORD_ID = "certification:operational";
 export const APPROVAL_RECORD_ID = "approval:live-commerce";
@@ -43,6 +43,7 @@ export const CERTIFIED_SURFACE = [
   "src/app/api/stripe-webhook/route.ts",
   "src/app/api/license/route.ts",
   "src/app/api/redeem/route.ts",
+  "src/app/api/entitlement/authorize/route.ts",
   "src/app/pricing/page.tsx",
   "src/app/unlock/page.tsx",
   "src/components/PremiumAccess.tsx",
@@ -52,8 +53,11 @@ export const CERTIFIED_SURFACE = [
   "src/lib/server/license-mint.ts",
   "src/lib/server/redemption-code.ts",
   "src/lib/server/redemption-rate-limit.ts",
+  "src/lib/server/revocation.ts",
   "src/lib/server/fulfillment-store.ts",
   "src/lib/server/fulfillment-readiness.ts",
+  "src/lib/entitlement.ts",
+  "src/lib/license.ts",
   "src/lib/packages.ts",
 ] as const;
 
@@ -81,6 +85,9 @@ export type CertificationEvidence = {
   licenseTierVerified: string;
   /** The emailed short code redeemed into the same purchased tier. */
   redemptionTierVerified: string;
+  licenseRevocationAuthorized: boolean;
+  redemptionRevocationAuthorized: boolean;
+  authorizationWindowMs: number;
   successRouteStatus: number;
   cancellationRouteStatus: number;
   completedAt: string;
@@ -225,6 +232,14 @@ export function evaluateEvidence(
 
   if (evidence.redemptionTierVerified !== evidence.tier) {
     reasons.push("Evidence does not prove the emailed access code activates the purchased package.");
+  }
+
+  if (!evidence.licenseRevocationAuthorized || !evidence.redemptionRevocationAuthorized) {
+    reasons.push("Evidence does not prove both issued entitlements passed online revocation authorization.");
+  }
+
+  if (evidence.authorizationWindowMs !== 86_400_000) {
+    reasons.push("Evidence does not prove the required 24-hour authorization window.");
   }
 
   if (evidence.successRouteStatus !== 200 || evidence.cancellationRouteStatus !== 200) {

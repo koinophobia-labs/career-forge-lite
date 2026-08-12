@@ -24,7 +24,7 @@ Supporting stations: `/truth-map` (claim→evidence lineage), `/weekly` (honest 
 Three configurable packs — Career Reset ($49), Job Search ($79), Career Switch ($99) — defined entirely in [src/lib/packages.ts](src/lib/packages.ts). Prices are product hypotheses; change them in that one file.
 
 - Building, reviewing, and editing are free; **exporting and power features unlock with a pack**.
-- Fulfillment is a signed **license key** (ECDSA P-256), minted server-side after Stripe Checkout and verified offline in the browser. No account, no career data server-side. See [docs/PAYMENTS.md](docs/PAYMENTS.md) for architecture, setup, and the go-live checklist.
+- Fulfillment is a signed, revocable **entitlement** (ECDSA P-256). Its signature verifies locally, while a server revocation check grants a device-local authorization window of at most 24 hours. No account or career data is stored server-side. See [docs/PAYMENTS.md](docs/PAYMENTS.md).
 - `NEXT_PUBLIC_COMMERCE_MODE=off` (default) keeps everything free-beta: no gates, no buy buttons, no dead checkout.
 
 ## Development
@@ -43,7 +43,7 @@ Env vars: copy `.env.example` and see [docs/PAYMENTS.md](docs/PAYMENTS.md). With
 Useful scripts:
 
 - `node scripts/generate-license-keys.mjs` — mint an ECDSA keypair for license signing
-- `node scripts/mint-license.mjs <tier> [ref]` — mint a license manually (support/QA)
+- `node scripts/mint-license.mjs` — documents and enforces the retirement of unsafe standalone offline minting
 - `npm run acceptance:browser` / `acceptance:activation` — Playwright end-to-end suites against a local server
 
 ## Testing philosophy

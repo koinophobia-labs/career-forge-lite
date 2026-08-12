@@ -4,7 +4,7 @@ import { normalizeRedemptionCode } from "@/lib/redemption-code";
 import { getPackage, isPackageTier } from "@/lib/packages";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
-import { getSigningKeyB64, mintLicenseKey } from "@/lib/server/license-mint";
+import { getSigningKeyB64, mintRevocableLicenseKey } from "@/lib/server/license-mint";
 import {
   getRedemptionCodePepper,
   hashRedemptionCode,
@@ -84,12 +84,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   const issuedAt = Math.floor(new Date(redemption.purchaseTimestamp).getTime() / 1000);
   if (!Number.isFinite(issuedAt)) return fail("bad_entitlement_timestamp");
 
-  const signedEntitlement = mintLicenseKey(
+  const signedEntitlement = redemption.entitlementId ? mintRevocableLicenseKey(
     redemption.tier,
     redemption.entitlementReference,
     issuedAt,
+    redemption.entitlementId,
     signingKey
-  );
+  ) : null;
   if (!signedEntitlement) {
     logCommerceEvent("license_mint_failed", { sessionId: redemption.sessionId, via: "redemption" });
     return NextResponse.json(

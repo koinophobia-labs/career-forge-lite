@@ -4,6 +4,7 @@ import { isPackageTier } from "@/lib/packages";
 import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { createCheckoutSession, getStripeSecretKey } from "@/lib/server/stripe";
+import { generateEntitlementId } from "@/lib/server/redemption-code";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
 // input is the tier name; the price comes from the server-side package config.
@@ -75,7 +76,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 503 }
       );
     }
-    const created = await createCheckoutSession(tier, requestOrigin(request), liveSecret);
+    const created = await createCheckoutSession(
+      tier,
+      requestOrigin(request),
+      liveSecret,
+      undefined,
+      { entitlement_id: generateEntitlementId() }
+    );
     if (!created.ok) {
       logCommerceEvent("checkout_blocked_unsafe", { reason: "stripe_rejected", tier });
       return NextResponse.json({ error: created.error }, { status: created.status });
@@ -92,7 +99,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const result = await createCheckoutSession(tier, requestOrigin(request), secretKey);
+  const result = await createCheckoutSession(
+    tier,
+    requestOrigin(request),
+    secretKey,
+    undefined,
+    { entitlement_id: generateEntitlementId() }
+  );
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }

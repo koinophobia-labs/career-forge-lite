@@ -22,10 +22,10 @@ export function formatNormalizedRedemptionCode(normalized: string): string | nul
   return `${REDEMPTION_CODE_PREFIX}-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 13)}`;
 }
 
-/** Mobile-friendly display formatting while preserving legacy CF1 keys. */
+/** Mobile-friendly display formatting while preserving signed CF1/CF2 tokens. */
 export function formatAccessCodeInput(value: string): string {
   const trimmedStart = value.trimStart();
-  if (/^CF1\./i.test(trimmedStart)) return trimmedStart;
+  if (/^CF[12]\./i.test(trimmedStart)) return trimmedStart;
 
   const compact = value.toUpperCase().replace(/[\s-]+/g, "").replace(/[^A-Z0-9]/g, "").slice(0, 15);
   if (compact.length <= 2) return compact;
@@ -38,4 +38,8 @@ export function formatAccessCodeInput(value: string): string {
 
 export function isLegacyLicenseKey(value: string): boolean {
   return value.trim().startsWith("CF1.");
+}
+
+export function isSignedEntitlementKey(value: string): boolean {
+  return /^CF[12]\./.test(value.trim());
 }

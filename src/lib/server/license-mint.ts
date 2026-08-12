@@ -4,7 +4,14 @@
 // WebCrypto verifies.
 
 import { createPrivateKey, sign } from "node:crypto";
-import { LICENSE_PREFIX, type LicensePayload } from "@/lib/license";
+import {
+  LEGACY_LICENSE_PREFIX,
+  LICENSE_PREFIX,
+  AUTHORIZATION_PREFIX,
+  type AuthorizationPayload,
+  type LegacyLicensePayload,
+  type RevocableLicensePayload,
+} from "@/lib/license";
 import type { PackageTier } from "@/lib/packages";
 
 function toBase64Url(buffer: Buffer): string {
@@ -29,10 +36,70 @@ export function mintLicenseKey(
       format: "der",
       type: "pkcs8"
     });
-    const payload: LicensePayload = { v: 1, tier, ref, iat: Math.floor(issuedAtUnixSeconds) };
+    const payload: LegacyLicensePayload = { v: 1, tier, ref, iat: Math.floor(issuedAtUnixSeconds) };
     const payloadBytes = Buffer.from(JSON.stringify(payload), "utf8");
     const signature = sign("sha256", payloadBytes, { key: privateKey, dsaEncoding: "ieee-p1363" });
+    return `${LEGACY_LICENSE_PREFIX}.${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`;
+  } catch {
+    return null;
+  }
+}
+
+export function mintRevocableLicenseKey(
+  tier: PackageTier,
+  ref: string,
+  issuedAtUnixSeconds: number,
+  entitlementId: string,
+  privateKeyB64: string | null = getSigningKeyB64()
+): string | null {
+  if (!privateKeyB64 || !/^[0-9a-f]{32}$/.test(entitlementId)) return null;
+  try {
+    const privateKey = createPrivateKey({
+      key: Buffer.from(privateKeyB64, "base64"),
+      format: "der",
+      type: "pkcs8",
+    });
+    const payload: RevocableLicensePayload = {
+      v: 2,
+      tier,
+      ref,
+      iat: Math.floor(issuedAtUnixSeconds),
+      entitlementId,
+    };
+    const payloadBytes = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = sign("sha256", payloadBytes, {
+      key: privateKey,
+      dsaEncoding: "ieee-p1363",
+    });
     return `${LICENSE_PREFIX}.${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`;
+  } catch {
+    return null;
+  }
+}
+
+export function mintAuthorizationReceipt(
+  tier: PackageTier,
+  entitlementId: string,
+  checkedAt: number,
+  expiresAt: number,
+  privateKeyB64: string | null = getSigningKeyB64()
+): string | null {
+  if (
+    !privateKeyB64 ||
+    !/^[0-9a-f]{32}$/.test(entitlementId) ||
+    !Number.isFinite(checkedAt) ||
+    expiresAt - checkedAt !== 86_400_000
+  ) return null;
+  try {
+    const privateKey = createPrivateKey({
+      key: Buffer.from(privateKeyB64, "base64"),
+      format: "der",
+      type: "pkcs8",
+    });
+    const payload: AuthorizationPayload = { v: 1, tier, entitlementId, checkedAt, expiresAt };
+    const payloadBytes = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = sign("sha256", payloadBytes, { key: privateKey, dsaEncoding: "ieee-p1363" });
+    return `${AUTHORIZATION_PREFIX}.${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`;
   } catch {
     return null;
   }

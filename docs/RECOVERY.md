@@ -36,23 +36,19 @@ an unfulfilled customer.
 > retention window, treat Stripe as the source of truth and assume nothing was
 > delivered unless the customer says otherwise.
 
-## 2. Mint and send the key by hand
+## 2. Reissue the existing entitlement
 
-```
-node scripts/mint-license.mjs --tier reset --session <checkout_session_id>
-```
-
-The entitlement payload is deterministic: the same session id, tier, and issue
-time always represent the same grant. P-256 ECDSA signatures may produce
-different valid bytes when re-minted; both keys activate the same package. A
-manual recovery must not be sent until the durable record and provider history
-confirm that it will not duplicate an earlier fulfillment email.
+Use `/api/license?session_id=<checkout_session_id>` only after Stripe verifies
+the paid session. It reissues CF2 against the existing durable `entitlement_id`.
+Standalone offline minting is retired because an untracked token cannot be
+revoked and a fabricated durable record would bypass purchase authority.
 
 ## 3. If you can't deliver, refund
 
-Refund from the Stripe dashboard (full, `requested_by_customer`). Tell them it
-was on your side. A refunded customer who was told what happened is recoverable;
-a silent one is not.
+Refund from the Stripe dashboard (full, `requested_by_customer`). Confirm the
+existing webhook receives `refund.created` or `refund.updated`, maps the
+PaymentIntent, and persists `revoked_at`. Then verify `/api/entitlement/authorize`
+denies the refunded CF2 before considering recovery complete.
 
 ## 4. Recovery facts
 

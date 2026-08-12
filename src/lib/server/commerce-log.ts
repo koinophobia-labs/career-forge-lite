@@ -28,6 +28,11 @@ export type CommerceEvent =
   | "redemption_succeeded"
   | "redemption_failed"
   | "redemption_rate_limited"
+  | "entitlement_authorized"
+  | "entitlement_authorization_denied"
+  | "entitlement_revoked"
+  | "refund_partial_recorded"
+  | "refund_revocation_failed"
   | "founder_invite_minted"
   | "founder_invite_blocked"
   | "PAID_BUT_UNFULFILLED";

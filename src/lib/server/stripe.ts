@@ -82,6 +82,27 @@ export type CheckoutSession = {
   currency?: string | null;
   livemode?: boolean;
   line_items?: { data?: Array<{ price?: { id?: string; product?: string } | null }> } | null;
+  payment_intent?: string | { id?: string } | null;
+};
+
+export type StripeRefund = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string | null;
+  payment_intent: string | { id?: string } | null;
+  charge: string | { id?: string } | null;
+  livemode: boolean;
+};
+
+export type StripeCharge = {
+  id: string;
+  amount: number;
+  amount_refunded: number;
+  currency: string;
+  refunded: boolean;
+  payment_intent: string | { id?: string } | null;
+  livemode: boolean;
 };
 
 async function stripeRequest(path: string, secretKey: string, body?: URLSearchParams): Promise<Response> {
@@ -141,6 +162,11 @@ export async function createCheckoutSession(
   for (const [key, value] of Object.entries(extraMetadata)) {
     if (key === "tier" || !/^[a-zA-Z0-9_]+$/.test(key)) continue;
     params.set(`metadata[${key}]`, value);
+    // Refund objects correlate through the PaymentIntent, so mirror only the
+    // opaque entitlement identity there at Checkout creation time.
+    if (key === "entitlement_id") {
+      params.set("payment_intent_data[metadata][entitlement_id]", value);
+    }
   }
   if (customerEmail?.trim()) params.set("customer_email", customerEmail.trim());
 
@@ -150,6 +176,34 @@ export async function createCheckoutSession(
   }
   const session = (await response.json()) as CheckoutSession;
   return { ok: true, session };
+}
+
+export async function retrieveRefund(
+  refundId: string,
+  secretKey: string
+): Promise<{ ok: true; refund: StripeRefund } | { ok: false; status: number; error: string }> {
+  if (!/^re_[a-zA-Z0-9_]+$/.test(refundId)) {
+    return { ok: false, status: 400, error: "Invalid refund id." };
+  }
+  const response = await stripeRequest(`/refunds/${refundId}`, secretKey);
+  if (!response.ok) {
+    return { ok: false, status: response.status === 404 ? 404 : 502, error: "Could not verify that refund." };
+  }
+  return { ok: true, refund: (await response.json()) as StripeRefund };
+}
+
+export async function retrieveCharge(
+  chargeId: string,
+  secretKey: string
+): Promise<{ ok: true; charge: StripeCharge } | { ok: false; status: number; error: string }> {
+  if (!/^ch_[a-zA-Z0-9_]+$/.test(chargeId)) {
+    return { ok: false, status: 400, error: "Invalid charge id." };
+  }
+  const response = await stripeRequest(`/charges/${chargeId}`, secretKey);
+  if (!response.ok) {
+    return { ok: false, status: response.status === 404 ? 404 : 502, error: "Could not verify that charge." };
+  }
+  return { ok: true, charge: (await response.json()) as StripeCharge };
 }
 
 export async function retrieveCheckoutSession(

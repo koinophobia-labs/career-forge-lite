@@ -8,7 +8,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { trackCareerEvent } from "@/lib/analytics";
 import { activateSignedEntitlement, removeLicense, useEntitlement } from "@/lib/entitlement";
 import { PACKAGES } from "@/lib/packages";
-import { formatAccessCodeInput, isLegacyLicenseKey } from "@/lib/redemption-code";
+import { formatAccessCodeInput, isSignedEntitlementKey } from "@/lib/redemption-code";
 
 type FulfillmentState =
   | { phase: "idle" }
@@ -28,8 +28,8 @@ type ManualState =
   | { phase: "valid"; packageName: string }
   | { phase: "invalid" };
 
-// A purchase or short redemption returns a signed entitlement that is verified
-// and stored offline. The long token never needs to be shown to the customer.
+// A purchase or short redemption returns a signed entitlement that is stored
+// only after the server grants a current 24-hour revocation authorization.
 function UnlockContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
@@ -51,6 +51,13 @@ function UnlockContent() {
           trackCareerEvent("checkout_completed");
           const outcome = await activateSignedEntitlement(data.signedEntitlement);
           trackCareerEvent(outcome.status === "valid" ? "license_activated" : "license_invalid");
+          if (outcome.status !== "valid") {
+            setFulfillment({
+              phase: "error",
+              message: "Your purchase was verified, but this device could not receive current access authorization. Check your connection and reload.",
+            });
+            return;
+          }
           setFulfillment({
             phase: "issued",
             packageName: data.packageName ?? "your pack",
@@ -112,8 +119,8 @@ function UnlockContent() {
     try {
       let signedEntitlement: string | null = null;
       let packageName = "Career Forge pack";
-      if (isLegacyLicenseKey(submitted)) {
-        // Existing CF1 keys stay valid and are verified offline exactly as before.
+      if (isSignedEntitlementKey(submitted)) {
+        // CF1 exchanges once; CF2 still receives a fresh online check.
         signedEntitlement = submitted;
       } else {
         const response = await fetch("/api/redeem", {
@@ -142,7 +149,7 @@ function UnlockContent() {
       }
       setManualState({
         phase: "valid",
-        packageName: isLegacyLicenseKey(submitted) ? PACKAGES[outcome.tier].name : packageName,
+        packageName: isSignedEntitlementKey(submitted) ? PACKAGES[outcome.tier].name : packageName,
       });
       setAccessCode("");
       trackCareerEvent("license_activated");
@@ -329,7 +336,12 @@ function UnlockContent() {
               </button>
             </div>
           ) : entitlement.status === "checking" ? (
-            <p className="mt-3 text-sm text-paper/60">Checking stored license…</p>
+            <p className="mt-3 text-sm text-paper/60">Checking stored access and revocation status…</p>
+          ) : entitlement.status === "invalid" ? (
+            <p role="alert" className="mt-3 text-sm leading-6 text-paper/60">
+              Stored paid access is not currently authorized. Connect to the internet and enter your access code again.
+              Your local Career Forge work remains safe and editable.
+            </p>
           ) : (
             <p className="mt-3 text-sm leading-6 text-paper/60">
               No license is active on this device.{" "}

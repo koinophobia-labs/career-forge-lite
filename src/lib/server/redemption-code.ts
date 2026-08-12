@@ -83,7 +83,22 @@ export type RedemptionIssueInput = {
   tier: PackageTier;
   entitlementReference: string;
   purchaseTimestamp: string;
+  entitlementId?: string;
+  paymentIntentId?: string | null;
+  amountTotal?: number | null;
+  currency?: string | null;
 };
+
+export function generateEntitlementId(): string {
+  return randomBytes(16).toString("hex");
+}
+
+export function deriveEntitlementId(sessionId: string, pepper: string): string {
+  return createHmac("sha256", pepper)
+    .update(`career-forge-entitlement:${sessionId}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
+}
 
 export async function issueRedemptionCode(
   store: FulfillmentStore,
@@ -91,8 +106,21 @@ export async function issueRedemptionCode(
   pepper: string,
   generate: () => string = () => generateRedemptionCode()
 ): Promise<{ redemptionCode: string; record: RedemptionRecord }> {
-  const existing = await store.getRedemptionBySession(input.sessionId);
+  let existing = await store.getRedemptionBySession(input.sessionId);
   if (existing) {
+    if (
+      !existing.entitlementId ||
+      (!existing.paymentIntentId && input.paymentIntentId) ||
+      (existing.amountTotal == null && input.amountTotal != null) ||
+      (!existing.currency && input.currency)
+    ) {
+      existing = await store.updateRedemptionIdentity(existing.sessionId, {
+        entitlementId: existing.entitlementId ?? input.entitlementId ?? deriveEntitlementId(input.sessionId, pepper),
+        paymentIntentId: existing.paymentIntentId ?? input.paymentIntentId ?? null,
+        amountTotal: existing.amountTotal ?? input.amountTotal ?? null,
+        currency: existing.currency ?? input.currency?.toLowerCase() ?? null,
+      }) ?? existing;
+    }
     const pending = existing.pendingCodeCiphertext
       ? decryptPendingRedemptionCode(existing.pendingCodeCiphertext, pepper)
       : null;
@@ -109,12 +137,17 @@ export async function issueRedemptionCode(
       sessionId: input.sessionId,
       tier: input.tier,
       entitlementReference: input.entitlementReference,
+      entitlementId: input.entitlementId ?? deriveEntitlementId(input.sessionId, pepper),
+      paymentIntentId: input.paymentIntentId ?? null,
+      amountTotal: input.amountTotal ?? null,
+      currency: input.currency?.toLowerCase() ?? null,
       purchaseTimestamp: input.purchaseTimestamp,
       createdAt: new Date().toISOString(),
       lastRedeemedAt: null,
       redemptionCount: 0,
       revoked: false,
       revocationReason: null,
+      revokedAt: null,
       pendingCodeCiphertext: encryptPendingRedemptionCode(redemptionCode, pepper),
     };
     try {

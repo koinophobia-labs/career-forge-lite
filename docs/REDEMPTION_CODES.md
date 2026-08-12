@@ -2,9 +2,10 @@
 
 Customers receive a short redemption code such as `CF-7K9M-P4TX-W8Q2R`.
 The code is a lookup credential, not the entitlement itself. A successful
-redemption returns a freshly signed `CF1.<payload>.<signature>` entitlement to
-the browser, where the existing public-key verifier checks and stores it for
-offline use. The signed entitlement is never rendered or emailed.
+redemption returns a freshly signed `CF2.<payload>.<signature>` entitlement to
+the browser. Signature verification is necessary, then an online revocation
+check grants a device-local authorization for at most 24 hours. The signed
+entitlement is never rendered or emailed.
 
 ## Security and storage
 
@@ -24,24 +25,25 @@ offline use. The signed entitlement is never rendered or emailed.
 ## Neon schema
 
 `cf_redemptions` contains the code hash, Checkout Session ID, package tier,
-entitlement reference, purchase time, creation time, redemption audit fields,
-revocation fields, and the nullable temporary retry ciphertext. The table is
+entitlement reference, stable `entitlement_id`, PaymentIntent mapping, amount,
+currency, purchase time, creation time, redemption audit fields, revocation
+fields/timestamp, and the nullable temporary retry ciphertext. The table is
 created idempotently by the existing fulfillment-store initializer.
 
-## Revocation limitation
+## Revocation contract
 
-Setting `revoked = TRUE` prevents every future redemption of that short code.
-It does **not** erase a signed entitlement that was already verified and stored
-offline on a customer device. Refund-based removal of existing access therefore
-requires a separate entitlement-revocation policy and online revocation model;
-this change deliberately does not invent one.
+Setting `revoked = TRUE` denies both future code redemption and every subsequent
+CF2 authorization. Connected devices lock at once on revalidation. Previously
+authorized offline devices lock when their 24-hour authorization expires.
+Authorization cache is device-local and is never present in Career Forge backups.
 
 Operators can revoke by the non-personal Stripe reconciliation key:
 
 ```sql
 UPDATE cf_redemptions
 SET revoked = TRUE,
-    revocation_reason = 'support-approved reason'
+    revocation_reason = 'support-approved reason',
+    revoked_at = NOW()
 WHERE session_id = 'cs_...';
 ```
 

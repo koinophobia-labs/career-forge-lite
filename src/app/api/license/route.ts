@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
 import { getPackage } from "@/lib/packages";
-import { getSigningKeyB64, mintLicenseKey } from "@/lib/server/license-mint";
+import { getSigningKeyB64, mintRevocableLicenseKey } from "@/lib/server/license-mint";
+import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
+import { deriveEntitlementId, getRedemptionCodePepper, issueRedemptionCode } from "@/lib/server/redemption-code";
 import {
   getCertificationStripeConfig,
   getStripeSecretKey,
@@ -60,11 +62,53 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const tier = verification.session.tier;
+  const store = getFulfillmentStore();
+  const pepper = getRedemptionCodePepper();
+  if (!store || !pepper) {
+    return NextResponse.json({ error: "Entitlement service is unavailable." }, { status: 503 });
+  }
+  let redemption = await store.getRedemptionBySession(verification.session.sessionId);
+  if (!redemption) {
+    try {
+      const issued = await issueRedemptionCode(
+        store,
+        {
+          sessionId: verification.session.sessionId,
+          tier,
+          entitlementReference: verification.session.sessionId.slice(-10),
+          entitlementId: verification.session.entitlementId ?? undefined,
+          paymentIntentId: verification.session.paymentIntentId,
+          amountTotal: verification.session.amountTotal,
+          currency: verification.session.currency,
+          purchaseTimestamp: new Date(verification.session.created * 1000).toISOString(),
+        },
+        pepper
+      );
+      redemption = issued.record;
+    } catch {
+      return NextResponse.json({ error: "Entitlement identity could not be persisted." }, { status: 503 });
+    }
+  }
+  if (redemption && !redemption.entitlementId) {
+    redemption = await store.updateRedemptionIdentity(redemption.sessionId, {
+      entitlementId: deriveEntitlementId(redemption.sessionId, pepper),
+      paymentIntentId: verification.session.paymentIntentId,
+      amountTotal: verification.session.amountTotal,
+      currency: verification.session.currency,
+    });
+  }
+  if (!redemption) {
+    return NextResponse.json({ error: "Entitlement identity could not be persisted." }, { status: 503 });
+  }
+  if (redemption.revoked || !redemption.entitlementId) {
+    return NextResponse.json({ error: "This purchase is no longer authorized." }, { status: 403 });
+  }
 
-  const signedEntitlement = mintLicenseKey(
+  const signedEntitlement = mintRevocableLicenseKey(
     tier,
     verification.session.sessionId.slice(-10),
     verification.session.created,
+    redemption.entitlementId,
     signingKey
   );
   if (!signedEntitlement) {

@@ -38,11 +38,18 @@ function loadTsModule(filePath) {
   return cjsModule.exports;
 }
 
-const { mintLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-mint.ts"));
+const { mintAuthorizationReceipt, mintRevocableLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-mint.ts"));
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
 const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-const licenseKey = mintLicenseKey("career-switch", "recovery-test", Math.floor(Date.now() / 1000), privateB64);
+const entitlementId = "0123456789abcdef0123456789abcdef";
+const licenseKey = mintRevocableLicenseKey(
+  "career-switch",
+  "recovery-test",
+  Math.floor(Date.now() / 1000),
+  entitlementId,
+  privateB64
+);
 
 let passes = 0;
 const verify = (condition, message) => {
@@ -98,6 +105,33 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  // The server-side mapping/refund behavior has its own deterministic contract
+  // suite. This recovery proof keeps the browser journey hermetic while still
+  // exercising the real CF2 + signed 24-hour authorization contract.
+  await page.route("**/api/entitlement/authorize", async (route) => {
+    const checkedAt = Date.now();
+    const expiresAt = checkedAt + 86_400_000;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authorized: true,
+        signedEntitlement: licenseKey,
+        tier: "career-switch",
+        packageName: "Career Switch Pack",
+        entitlementId,
+        checkedAt,
+        expiresAt,
+        authorizationReceipt: mintAuthorizationReceipt(
+          "career-switch",
+          entitlementId,
+          checkedAt,
+          expiresAt,
+          privateB64
+        ),
+      }),
+    });
+  });
 
   // --- Build a real dossier with approved AND rejected evidence -------------
   await page.goto(`${baseUrl}/profile`);

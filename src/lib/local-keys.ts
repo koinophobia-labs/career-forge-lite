@@ -15,7 +15,7 @@ import { APPLICATION_ACTIVITY_KEY } from "@/lib/application-activity";
 import { LAST_BACKUP_KEY } from "@/lib/backup";
 import { BETA_FEEDBACK_KEY } from "@/lib/beta-feedback-store";
 import { RECOVERY_KEY, STORAGE_KEY } from "@/lib/command-center-store";
-import { LICENSE_STORAGE_KEY } from "@/lib/entitlement";
+import { AUTHORIZATION_STORAGE_KEY, LICENSE_STORAGE_KEY } from "@/lib/entitlement";
 import { PREP_DRAFT_KEY } from "@/lib/interview-prep";
 import { INTERVIEW_SESSION_KEY } from "@/lib/interview-session-store";
 import { HANDOFF_KEY } from "@/lib/tailor-handoff";
@@ -55,7 +55,7 @@ export const IDENTITY_BOUND_KEYS = [
 ] as const;
 
 /** Excluded from clearing by design; stated in the settings UI. */
-export const PRESERVED_KEYS = [LICENSE_STORAGE_KEY] as const;
+export const PRESERVED_KEYS = [LICENSE_STORAGE_KEY, AUTHORIZATION_STORAGE_KEY] as const;
 
 export function clearCareerDataKeys(): void {
   if (typeof window === "undefined") return;

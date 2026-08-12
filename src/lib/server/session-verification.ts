@@ -32,6 +32,8 @@ export type VerifiedSession = {
   stripeAccountId: string | null;
   priceId: string | null;
   created: number;
+  paymentIntentId: string | null;
+  entitlementId: string | null;
 };
 
 export type VerificationFailure = {
@@ -89,6 +91,7 @@ type StripeSessionShape = {
   metadata?: Record<string, string> | null;
   customer_details?: { email?: string | null } | null;
   line_items?: { data?: Array<{ price?: { id?: string; product?: string } | null }> } | null;
+  payment_intent?: string | { id?: string } | null;
 };
 
 /**
@@ -182,6 +185,12 @@ export async function verifyPaidSession(
     return { ok: false, reason: "no_email", detail: "Retrieved session carries no customer email." };
   }
 
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+  const entitlementId = session.metadata?.entitlement_id ?? null;
+
   return {
     ok: true,
     session: {
@@ -194,6 +203,9 @@ export async function verifyPaidSession(
       stripeAccountId: looked.accountId ?? null,
       priceId,
       created: session.created ?? 0,
+      paymentIntentId,
+      entitlementId:
+        entitlementId && /^[0-9a-f]{32}$/.test(entitlementId) ? entitlementId : null,
     },
   };
 }

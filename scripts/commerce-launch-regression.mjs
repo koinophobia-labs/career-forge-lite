@@ -73,6 +73,7 @@ check("temporary credential directory is deleted", /rmSync\(tempDir, \{ recursiv
 check("signing key file must stay outside the repository", launchSource.includes("--signing-key-file must not be stored inside the repository"));
 check("signing key file is created mode 0600", /openSync\(resolved, "wx", 0o600\)/.test(launchSource));
 check("production requires charges and payouts", /charges_enabled !== true \|\| account\.payouts_enabled !== true/.test(launchSource));
+check("production helper refuses absent live objects instead of creating replacements", launchSource.includes("Live object creation is not authorized") && !launchSource.includes('"/v1/products"') && !launchSource.includes('"/v1/prices"'));
 check("preview deployment is attached to its canonical alias", /runVercel\(\["alias", "set", deploymentUrl, previewAlias\]\)/.test(launchSource));
 check("protected Preview probes use authenticated Vercel curl", launchSource.includes('"vercel",\n        "curl"'));
 
@@ -99,7 +100,7 @@ check("live checkout hard-codes the only paid tier to reset", checkoutSource.inc
 check("live checkout fails closed if PAID_BETA_TIER drifts", checkoutSource.includes('process.env.PAID_BETA_TIER !== "reset"'));
 check(
   "live checkout rejects closed tiers before creating a session",
-  checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("createCheckoutSession(tier")
+  checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("const created = await createCheckoutSession")
 );
 
 console.log(`\n${passes} passed, ${failures} failed`);

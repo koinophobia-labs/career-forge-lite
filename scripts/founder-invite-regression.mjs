@@ -221,7 +221,7 @@ const req = (code) => ({ json: async () => ({ code }) });
   const ok = await route.POST(req(code));
   check("route: sell-safe mint returns 200", ok.status === 200);
   check("route: minted tier is 'reset' (not job-search)", ok.body.tier === "reset");
-  check("route: returns a signed CF1 entitlement", typeof ok.body.signedEntitlement === "string" && ok.body.signedEntitlement.startsWith("CF1."));
+  check("route: returns a revocable signed CF2 entitlement", typeof ok.body.signedEntitlement === "string" && ok.body.signedEntitlement.startsWith("CF2."));
   check("route: package name is the Career Reset Pack", ok.body.packageName === "Career Reset Pack");
 
   const capped = await route.POST(req(code));

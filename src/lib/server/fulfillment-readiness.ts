@@ -129,7 +129,7 @@ export function configurationReadiness(): ConfigurationReadiness {
     {
       name: "STRIPE_WEBHOOK_SECRET",
       consequence:
-        "No server-side fulfillment. If the customer's browser does not return from Stripe, the purchase is lost silently and nothing records it.",
+        "No verified fulfillment or refund revocation. A purchase may be lost, or refunded access may remain authorized.",
       present: present("STRIPE_WEBHOOK_SECRET"),
     },
     {

@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getPackage, isPackageTier } from "@/lib/packages";
-import { getSigningKeyB64, mintLicenseKey } from "@/lib/server/license-mint";
+import { getSigningKeyB64, mintRevocableLicenseKey } from "@/lib/server/license-mint";
 import {
   getCertificationStripeConfig,
   getStripeSecretKey,
   retrieveCheckoutSession,
+  retrieveCharge,
+  retrieveRefund,
   stripeKeyMode,
   verifyStripeWebhookSignature,
   type CheckoutSession,
@@ -16,6 +18,7 @@ import {
   issueRedemptionCode,
 } from "@/lib/server/redemption-code";
 import { verifyPaidSession } from "@/lib/server/session-verification";
+import { decideRefundRevocation } from "@/lib/server/revocation";
 
 // Durable fulfillment: emails a short access code on completed checkout so buyers
 // who close the success tab still receive it. Duplicate delivery is claimed in
@@ -25,7 +28,7 @@ type StripeEvent = {
   id?: string;
   type: string;
   livemode?: boolean;
-  data?: { object?: CheckoutSession };
+  data?: { object?: CheckoutSession | { id?: string } };
 };
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -68,11 +71,83 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Webhook mode mismatch." }, { status: 400 });
   }
 
+  if (event.type === "refund.created" || event.type === "refund.updated") {
+    const refundId = event.data?.object?.id;
+    if (!refundId) return NextResponse.json({ received: true });
+    const verified = await retrieveRefund(refundId, secretKey);
+    if (!verified.ok) {
+      logCommerceEvent("webhook_rejected", { eventId: event.id, reason: "refund_lookup_failed" });
+      return NextResponse.json({ error: "Refund verification failed." }, { status: 502 });
+    }
+    if (verified.refund.id !== refundId || verified.refund.livemode !== (event.livemode === true)) {
+      return NextResponse.json({ error: "Refund verification mismatch." }, { status: 400 });
+    }
+    if (verified.refund.status !== "succeeded") {
+      return NextResponse.json({ received: true, pending: true });
+    }
+    const chargeId =
+      typeof verified.refund.charge === "string"
+        ? verified.refund.charge
+        : verified.refund.charge?.id ?? null;
+    if (!chargeId) return NextResponse.json({ error: "Refund charge mapping unavailable." }, { status: 503 });
+    const verifiedCharge = await retrieveCharge(chargeId, secretKey);
+    const refundPaymentIntentId =
+      typeof verified.refund.payment_intent === "string"
+        ? verified.refund.payment_intent
+        : verified.refund.payment_intent?.id ?? null;
+    const chargePaymentIntentId = verifiedCharge.ok
+      ? typeof verifiedCharge.charge.payment_intent === "string"
+        ? verifiedCharge.charge.payment_intent
+        : verifiedCharge.charge.payment_intent?.id ?? null
+      : null;
+    if (
+      !verifiedCharge.ok ||
+      verifiedCharge.charge.id !== chargeId ||
+      verifiedCharge.charge.livemode !== (event.livemode === true) ||
+      !refundPaymentIntentId ||
+      chargePaymentIntentId !== refundPaymentIntentId ||
+      verifiedCharge.charge.currency.toLowerCase() !== verified.refund.currency.toLowerCase() ||
+      !Number.isInteger(verifiedCharge.charge.amount_refunded) ||
+      verifiedCharge.charge.amount_refunded < 0 ||
+      verifiedCharge.charge.amount_refunded > verifiedCharge.charge.amount
+    ) {
+      return NextResponse.json({ error: "Refund charge verification failed." }, { status: 502 });
+    }
+    const store = getFulfillmentStore();
+    if (!store) {
+      return NextResponse.json({ error: "Refund mapping unavailable." }, { status: 503 });
+    }
+    const decision = await decideRefundRevocation(
+      store,
+      verified.refund,
+      verifiedCharge.charge.amount_refunded
+    );
+    if (!decision.revoke && decision.reason !== "partial_refund") {
+      logCommerceEvent("refund_revocation_failed", { eventId: event.id, reason: decision.reason });
+      return NextResponse.json({ error: "Refund entitlement mapping unavailable." }, { status: 503 });
+    }
+    if (!decision.revoke) {
+      logCommerceEvent("refund_partial_recorded", {
+        eventId: event.id,
+        entitlementId: decision.record?.entitlementId,
+      });
+      return NextResponse.json({ received: true, revoked: false });
+    }
+    const revoked = await store.revokeRedemption(decision.record.codeHash, `stripe_refund:${refundId}`);
+    if (!revoked) return NextResponse.json({ error: "Refund revocation failed." }, { status: 503 });
+    logCommerceEvent("entitlement_revoked", {
+      eventId: event.id,
+      entitlementId: revoked.entitlementId,
+      reason: "stripe_refund",
+    });
+    return NextResponse.json({ received: true, revoked: true });
+  }
+
   if (event.type !== "checkout.session.completed") {
     return NextResponse.json({ received: true });
   }
 
-  const session = event.data?.object;
+  const session = event.data?.object as CheckoutSession | undefined;
   if (!session?.id) {
     return NextResponse.json({ received: true });
   }
@@ -171,7 +246,43 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const entitlementReference = session.id.slice(-10);
-  const signedEntitlement = mintLicenseKey(tier, entitlementReference, session.created, signingKey);
+  let redemptionCode: string;
+  let redemption;
+  try {
+    const issued = await issueRedemptionCode(
+      store,
+      {
+        sessionId: session.id,
+        tier,
+        entitlementReference,
+        entitlementId: verification.session.entitlementId ?? undefined,
+        paymentIntentId: verification.session.paymentIntentId,
+        amountTotal: verification.session.amountTotal,
+        currency: verification.session.currency,
+        purchaseTimestamp: new Date(session.created * 1000).toISOString(),
+      },
+      redemptionPepper
+    );
+    redemptionCode = issued.redemptionCode;
+    redemption = issued.record;
+  } catch {
+    await store.update(session.id, { status: "failed", lastError: "unknown" });
+    logCommerceEvent("PAID_BUT_UNFULFILLED", {
+      sessionId: session.id,
+      reason: "redemption_code_issue_failed",
+      tier,
+    });
+    return NextResponse.json({ error: "Fulfillment code creation failed." }, { status: 500 });
+  }
+  const signedEntitlement = redemption.entitlementId
+    ? mintRevocableLicenseKey(
+        tier,
+        entitlementReference,
+        session.created,
+        redemption.entitlementId,
+        signingKey
+      )
+    : null;
   if (!signedEntitlement) {
     await store.update(session.id, { status: "failed", lastError: "license_mint_failed" });
     logCommerceEvent("PAID_BUT_UNFULFILLED", {
@@ -187,29 +298,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   // same package. Durable emailSent state prevents a second fulfillment email.
   await store.update(session.id, { status: "license_minted", licenseMinted: true });
   logCommerceEvent("license_minted", { sessionId: session.id, tier, via: "webhook" });
-
-  let redemptionCode: string;
-  try {
-    const issued = await issueRedemptionCode(
-      store,
-      {
-        sessionId: session.id,
-        tier,
-        entitlementReference,
-        purchaseTimestamp: new Date(session.created * 1000).toISOString(),
-      },
-      redemptionPepper
-    );
-    redemptionCode = issued.redemptionCode;
-  } catch {
-    await store.update(session.id, { status: "failed", lastError: "unknown" });
-    logCommerceEvent("PAID_BUT_UNFULFILLED", {
-      sessionId: session.id,
-      reason: "redemption_code_issue_failed",
-      tier,
-    });
-    return NextResponse.json({ error: "Fulfillment code creation failed." }, { status: 500 });
-  }
 
   const pack = getPackage(tier);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");

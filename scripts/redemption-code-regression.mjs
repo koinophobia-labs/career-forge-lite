@@ -91,6 +91,7 @@ for (const candidate of ["CF-7K9M-P4TX-W8Q2", "CF-7K9M-P4TX-W8Q20", "CF-7K9M-P4T
 check("typing auto-formats short codes", pure.formatAccessCodeInput("cf7k9mp4txw8q2r") === fixedA);
 check("spaces and hyphens remain optional", pure.formatAccessCodeInput("cf 7k9m-p4tx w8q2r") === fixedA);
 check("legacy signed keys are preserved by input formatting", pure.formatAccessCodeInput("CF1.payload.signature") === "CF1.payload.signature");
+check("revocable signed tokens are preserved by input formatting", pure.formatAccessCodeInput("CF2.payload.signature") === "CF2.payload.signature");
 
 const store = new MemoryFulfillmentStore();
 const purchase = {
@@ -142,7 +143,7 @@ const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("ba
 const signedEntitlement = mintLicenseKey("reset", foundFromFreshServiceInstance.entitlementReference, 1_752_600_000, privateB64);
 const verified = await verifyLicenseKey(signedEntitlement, publicB64);
 check("short-code mapping produces a valid signed entitlement", verified.ok && verified.payload.tier === "reset");
-check("existing long CF1 keys remain valid", verified.ok && pure.isLegacyLicenseKey(signedEntitlement));
+check("existing CF1 signatures remain valid only as legacy exchange inputs", verified.ok && pure.isLegacyLicenseKey(signedEntitlement));
 
 const storeSource = fs.readFileSync(path.join(root, "src/lib/server/fulfillment-store.ts"), "utf8");
 const webhookSource = fs.readFileSync(path.join(root, "src/app/api/stripe-webhook/route.ts"), "utf8");

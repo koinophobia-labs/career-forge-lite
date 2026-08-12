@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { getPackage } from "@/lib/packages";
 import {
   FOUNDER_INVITE_TIER,
   founderInviteCodeMatches,
-  mintFounderInviteLicense
 } from "@/lib/server/founder-invite";
-import { getSigningKeyB64 } from "@/lib/server/license-mint";
+import { getSigningKeyB64, mintRevocableLicenseKey } from "@/lib/server/license-mint";
+import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
+import { generateEntitlementId } from "@/lib/server/redemption-code";
 import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { reserveFounderInvite } from "@/lib/server/founder-invite-quota";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
@@ -65,7 +67,38 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const signedEntitlement = mintFounderInviteLicense(signingKey);
+  const store = getFulfillmentStore();
+  if (!store) return json({ error: "Founder invites are temporarily unavailable." }, 503);
+  const entitlementId = generateEntitlementId();
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const reference = `founder-${entitlementId.slice(-12)}`;
+  const sessionId = `invite_${entitlementId}`;
+  const codeHash = createHash("sha256").update(`founder-entitlement:${entitlementId}`).digest("hex");
+  const persisted = await store.createRedemption({
+    codeHash,
+    sessionId,
+    tier: FOUNDER_INVITE_TIER,
+    entitlementReference: reference,
+    entitlementId,
+    paymentIntentId: null,
+    amountTotal: 0,
+    currency: "usd",
+    purchaseTimestamp: new Date(issuedAt * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+    lastRedeemedAt: null,
+    redemptionCount: 0,
+    revoked: false,
+    revocationReason: null,
+    revokedAt: null,
+    pendingCodeCiphertext: null,
+  });
+  const signedEntitlement = mintRevocableLicenseKey(
+    FOUNDER_INVITE_TIER,
+    reference,
+    issuedAt,
+    persisted.record.entitlementId!,
+    signingKey
+  );
   if (!signedEntitlement) {
     return json({ error: "Could not issue the founder license." }, 500);
   }

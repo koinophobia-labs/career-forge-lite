@@ -250,48 +250,10 @@ async function provisionLivePaymentLink(appUrl, secretKey) {
     if (!isPaymentLinkUrl(updated.url)) throw new Error("Stripe returned an invalid Payment Link URL.");
     return updated.url;
   }
-
-  const product = await stripeRequest(
-    "/v1/products",
-    secretKey,
-    form({
-      name: "Career Forge — Career Reset Pack",
-      description: "Founding Career Reset cohort: reviewed local-first career foundation and export pack.",
-      "metadata[tier]": "reset",
-      "metadata[career_forge_offer]": OFFER_KEY
-    }),
-    `${OFFER_KEY}-product-v1`
+  throw new Error(
+    "No unambiguous existing Career Forge live Payment Link matches repository authority. " +
+      "Live object creation is not authorized; stop for owner review."
   );
-  const price = await stripeRequest(
-    "/v1/prices",
-    secretKey,
-    form({
-      currency: "usd",
-      unit_amount: RESET_PRICE_CENTS,
-      product: product.id,
-      "metadata[tier]": "reset",
-      "metadata[career_forge_offer]": OFFER_KEY
-    }),
-    `${OFFER_KEY}-price-v1`
-  );
-  const link = await stripeRequest(
-    "/v1/payment_links",
-    secretKey,
-    form({
-      "line_items[0][price]": price.id,
-      "line_items[0][quantity]": 1,
-      allow_promotion_codes: false,
-      submit_type: "pay",
-      "metadata[tier]": "reset",
-      "metadata[career_forge_offer]": OFFER_KEY,
-      "after_completion[type]": "redirect",
-      "after_completion[redirect][url]": `${appUrl}/unlock?session_id={CHECKOUT_SESSION_ID}`,
-      "restrictions[completed_sessions][limit]": COHORT_LIMIT
-    }),
-    `${OFFER_KEY}-payment-link-v1`
-  );
-  if (!isPaymentLinkUrl(link.url)) throw new Error("Stripe returned an invalid Payment Link URL.");
-  return link.url;
 }
 
 async function probeDeployment(url, target) {
@@ -401,7 +363,7 @@ async function main() {
     console.log(`Vercel variables: ${plannedVariables.join(", ")}`);
     console.log("Signing keys: preserve a valid existing pair or generate a new P-256 pair; reject cross-environment reuse.");
     if (target === "production") {
-      console.log(`Stripe: require charges+payouts, statement descriptor, and support email; enforce $49 reset link cap=${COHORT_LIMIT}.`);
+      console.log(`Stripe: discover the existing $49 reset offer; refuse missing or ambiguous objects; create nothing.`);
     }
     console.log(`Deploy and probe: ${appUrl}`);
     console.log("Signing-key file: absolute mode-0600 path outside the repository; delete after verified launch.");

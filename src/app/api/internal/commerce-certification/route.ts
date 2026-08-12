@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { verifyLicenseKey } from "@/lib/license";
+import { verifyAuthorizationReceipt, verifyLicenseKey } from "@/lib/license";
 import {
   CERTIFICATION_RECORD_ID,
   DRILL_VERSION,
@@ -11,6 +11,7 @@ import {
 import { CERTIFIED_SURFACE_HASH } from "@/lib/server/certified-surface-hash";
 import { getFulfillmentStore } from "@/lib/server/fulfillment-store";
 import { verifyPaidSession } from "@/lib/server/session-verification";
+import { generateEntitlementId } from "@/lib/server/redemption-code";
 import {
   createCheckoutSession,
   getCertificationStripeConfig,
@@ -107,6 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       config.secretKey,
       config.priceReset,
       {
+        entitlement_id: generateEntitlementId(),
         certification_commit: identity.commitSha,
         certification_host: identity.host,
         certification_proof: proof,
@@ -224,6 +226,45 @@ export async function POST(request: Request): Promise<NextResponse> {
   const verifiedRedemption = redemptionBody?.signedEntitlement
     ? await verifyLicenseKey(redemptionBody.signedEntitlement)
     : { ok: false as const };
+  const [licenseAuthorization, redemptionAuthorization] = await Promise.all([
+    licenseBody?.signedEntitlement
+      ? fetchDeployment(request, "/api/entitlement/authorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signedEntitlement: licenseBody.signedEntitlement }),
+        })
+      : null,
+    redemptionBody?.signedEntitlement
+      ? fetchDeployment(request, "/api/entitlement/authorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signedEntitlement: redemptionBody.signedEntitlement }),
+        })
+      : null,
+  ]);
+  const licenseAuthorizationBody = licenseAuthorization
+    ? (await licenseAuthorization.json().catch(() => null)) as {
+        authorized?: boolean; tier?: string; checkedAt?: number; expiresAt?: number; authorizationReceipt?: string;
+      } | null
+    : null;
+  const redemptionAuthorizationBody = redemptionAuthorization
+    ? (await redemptionAuthorization.json().catch(() => null)) as {
+        authorized?: boolean; tier?: string; checkedAt?: number; expiresAt?: number; authorizationReceipt?: string;
+      } | null
+    : null;
+  const authorizationWindowMs =
+    typeof licenseAuthorizationBody?.checkedAt === "number" &&
+    typeof licenseAuthorizationBody.expiresAt === "number"
+      ? licenseAuthorizationBody.expiresAt - licenseAuthorizationBody.checkedAt
+      : 0;
+  const [verifiedLicenseAuthorization, verifiedRedemptionAuthorization] = await Promise.all([
+    licenseAuthorizationBody?.authorizationReceipt
+      ? verifyAuthorizationReceipt(licenseAuthorizationBody.authorizationReceipt)
+      : Promise.resolve({ ok: false as const }),
+    redemptionAuthorizationBody?.authorizationReceipt
+      ? verifyAuthorizationReceipt(redemptionAuthorizationBody.authorizationReceipt)
+      : Promise.resolve({ ok: false as const }),
+  ]);
   if (
     !licenseResponse.ok ||
     !verifiedLicense.ok ||
@@ -231,6 +272,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     !redemptionResponse.ok ||
     !verifiedRedemption.ok ||
     verifiedRedemption.payload.tier !== verification.session.tier ||
+    !licenseAuthorization?.ok ||
+    licenseAuthorizationBody?.authorized !== true ||
+    licenseAuthorizationBody.tier !== verification.session.tier ||
+    !verifiedLicenseAuthorization.ok ||
+    verifiedLicenseAuthorization.payload.entitlementId !== redemptionRecord.entitlementId ||
+    !redemptionAuthorization?.ok ||
+    redemptionAuthorizationBody?.authorized !== true ||
+    redemptionAuthorizationBody.tier !== verification.session.tier ||
+    !verifiedRedemptionAuthorization.ok ||
+    verifiedRedemptionAuthorization.payload.entitlementId !== redemptionRecord.entitlementId ||
+    authorizationWindowMs !== 86_400_000 ||
     successResponse.status !== 200 ||
     cancellationResponse.status !== 200
   ) {
@@ -254,6 +306,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     fulfillmentAttempts: record.attempts,
     licenseTierVerified: verifiedLicense.payload.tier,
     redemptionTierVerified: verifiedRedemption.payload.tier,
+    licenseRevocationAuthorized: true,
+    redemptionRevocationAuthorized: true,
+    authorizationWindowMs,
     successRouteStatus: successResponse.status,
     cancellationRouteStatus: cancellationResponse.status,
     completedAt: new Date().toISOString(),

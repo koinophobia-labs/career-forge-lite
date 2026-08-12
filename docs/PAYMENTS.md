@@ -2,10 +2,11 @@
 
 Career Forge sells three one-time packs (config: `src/lib/packages.ts` — names,
 prices, deliverables, feature grants all live there). Fulfillment is a signed
-**license key**, not an account: the buyer's browser exchanges the Stripe
-checkout session id for a key at `/unlock`, and the key verifies offline with
-a public key baked into the client. No database, no auth, no career data
-server-side.
+**revocable entitlement**, not an account: the buyer's browser exchanges the
+Stripe checkout session for a signed CF2 token at `/unlock`. The signature is
+verified locally, but paid authority requires a successful server revocation
+check. The resulting device-local authorization expires after 24 hours. Career
+data remains local; only PII-free payment/entitlement state is server-side.
 
 ## Architecture at a glance
 
@@ -15,16 +16,20 @@ server-side.
    │                                        ▼
    └──────────── /unlock?session_id=cs_… ──GET /api/license──▶ verify paid
                                             │                  mint ECDSA key
-                    localStorage ◀──────────┘ (idempotent — same session
-                    career-forge-license-v1     always re-issues a valid key)
+                    localStorage ◀──────────┘ (CF2 token + device-only 24h
+                                                revocation authorization)
 
 Stripe webhook checkout.session.completed ──▶ /api/stripe-webhook
   signature + direct Stripe verification ──▶ durable claim ──▶ Resend direct-unlock email
+
+Stripe webhook refund.created/refund.updated ──▶ verify refund with Stripe
+  payment_intent ──▶ durable entitlement_id ──▶ revoke full successful refund
 ```
 
-- **Client enforcement**: `src/lib/entitlement.ts` re-verifies the stored key
-  cryptographically on every load. Tampering (e.g. editing the payload tier)
-  fails signature verification — verified by `scripts/entitlement-regression.mjs`.
+- **Client enforcement**: `src/lib/entitlement.ts` verifies the signature and
+  requires a current revocation authorization. Launching online revalidates;
+  after 24 hours without success, paid features fail closed while local work
+  remains available.
 - **Server price authority**: `/api/checkout` accepts only a tier name and
   prices it from `packages.ts`; the client can never send an amount.
 - **Idempotent fulfillment**: re-requesting `/api/license` with the same
@@ -38,7 +43,7 @@ Stripe webhook checkout.session.completed ──▶ /api/stripe-webhook
 | --- | --- | --- |
 | `STRIPE_SECRET_KEY` | server (secret) | `sk_test_…` or `sk_live_…`. Used to create and directly verify Checkout Sessions. |
 | `STRIPE_PRICE_RESET` | server | Authoritative one-time $49 Price ID for the open package. |
-| `STRIPE_WEBHOOK_SECRET` | server (secret) | `whsec_…` for `checkout.session.completed`; required in live configuration. |
+| `STRIPE_WEBHOOK_SECRET` | server (secret) | `whsec_…` for `checkout.session.completed`, `refund.created`, and `refund.updated`; required in live configuration. |
 | `LICENSE_SIGNING_PRIVATE_KEY` | server (secret) | base64 PKCS8 ECDSA P-256 key. Generate with `node scripts/generate-license-keys.mjs`. |
 | `NEXT_PUBLIC_LICENSE_PUBLIC_KEY` | build-time (public) | Matching base64 SPKI public key — ships in the client bundle. |
 | `NEXT_PUBLIC_COMMERCE_MODE` | build-time (public) | `off` (default — free beta, no gates, no buy buttons), `test`, or `live`. |
@@ -65,7 +70,7 @@ keypairs, or test-mode purchases would unlock production.
 6. Simulate failure paths: cancel mid-checkout (returns to `/pricing?checkout=cancelled`),
    and hit `/unlock?session_id=cs_test_garbage` (clean error, retry guidance).
 7. Add a webhook endpoint in Stripe → `https://<host>/api/stripe-webhook`,
-   event `checkout.session.completed`; set `STRIPE_WEBHOOK_SECRET` + Resend vars;
+   events `checkout.session.completed`, `refund.created`, and `refund.updated`; set `STRIPE_WEBHOOK_SECRET` + Resend vars;
    confirm the key email arrives.
 
 ## Production-host test certification
@@ -139,18 +144,19 @@ and Blake's approval are separate required gates.
 
 ## Refunds and revocation
 
-Refund in the Stripe dashboard. v1 has **no revocation list** — a refunded
-buyer's key keeps working (documented, deliberate: no server state). If abuse
-appears, add a small denylist of `ref` values checked in `/api/license` and
-ship a client denylist with the next deploy.
+Every CF2 entitlement carries a stable opaque `entitlement_id`. A verified,
+successful full Stripe refund maps `payment_intent` to that identity and stores
+durable revocation. Connected devices lock on the next check; an offline device
+locks when its current authorization expires, no later than 24 hours. Partial
+refunds do not revoke automatically. CF1 keys must exchange online and unmapped
+or ambiguous legacy keys remain locked.
 
 ## Support playbook
 
-- "I lost my key" → use the direct link in the Career Forge license email, or
-  verify the Stripe purchase through the support runbook. Stripe receipts do
-  not link back to Career Forge. For an audited manual recovery, mint with:
-  `LICENSE_SIGNING_PRIVATE_KEY=… node scripts/mint-license.mjs <tier> <order-ref>`
-- "Key says invalid" → almost always a partial paste; keys are long and must
-  include the `CF1.` prefix. Confirm the key was minted for the same
+- "I lost my key" → use the direct link in the Career Forge access email or
+  recover the verified Stripe session through `/api/license`; never mint an
+  untracked standalone token.
+- "Key says invalid" → confirm the complete CF2 token was pasted and that the
+  device can reach the revocation service. Legacy CF1 requires one online exchange. Confirm the key was minted for the same
   environment (test keys don't unlock live builds).
 - Review/press copy → mint with ref `review-<name>` so grants are auditable.

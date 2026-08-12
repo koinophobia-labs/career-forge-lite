@@ -66,12 +66,19 @@ export type RedemptionRecord = {
   sessionId: string;
   tier: string;
   entitlementReference: string;
+  /** Stable opaque revocation identity carried by CF2 entitlements. */
+  entitlementId: string | null;
+  /** Stripe mapping is server-side only and never becomes revocation authority. */
+  paymentIntentId: string | null;
+  amountTotal: number | null;
+  currency: string | null;
   purchaseTimestamp: string;
   createdAt: string;
   lastRedeemedAt: string | null;
   redemptionCount: number;
   revoked: boolean;
   revocationReason: string | null;
+  revokedAt: string | null;
   /** AES-GCM retry material, erased immediately after delivery is recorded. */
   pendingCodeCiphertext: string | null;
 };
@@ -89,6 +96,13 @@ export interface FulfillmentStore {
   createRedemption(record: RedemptionRecord): Promise<{ record: RedemptionRecord; created: boolean }>;
   getRedemptionByHash(codeHash: string): Promise<RedemptionRecord | null>;
   getRedemptionBySession(sessionId: string): Promise<RedemptionRecord | null>;
+  getRedemptionByEntitlementId(entitlementId: string): Promise<RedemptionRecord | null>;
+  getRedemptionByPaymentIntent(paymentIntentId: string): Promise<RedemptionRecord | null>;
+  getRedemptionByReference(reference: string): Promise<RedemptionRecord | null>;
+  updateRedemptionIdentity(
+    sessionId: string,
+    patch: Pick<RedemptionRecord, "entitlementId" | "paymentIntentId" | "amountTotal" | "currency">
+  ): Promise<RedemptionRecord | null>;
   markRedemptionDelivered(sessionId: string): Promise<void>;
   markRedemptionRedeemed(codeHash: string): Promise<RedemptionRecord | null>;
   revokeRedemption(codeHash: string, reason: string): Promise<RedemptionRecord | null>;
@@ -138,6 +152,9 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   private docs = new Map<string, string>();
   private redemptionsByHash = new Map<string, RedemptionRecord>();
   private redemptionHashBySession = new Map<string, string>();
+  private redemptionHashByEntitlement = new Map<string, string>();
+  private redemptionHashByPaymentIntent = new Map<string, string>();
+  private redemptionHashByReference = new Map<string, string | null>();
 
   async claim(sessionId: string, eventId: string | null, seed: Partial<FulfillmentRecord>) {
     const existing = this.records.get(sessionId);
@@ -177,6 +194,13 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     const stored = { ...record };
     this.redemptionsByHash.set(record.codeHash, stored);
     this.redemptionHashBySession.set(record.sessionId, record.codeHash);
+    if (record.entitlementId) this.redemptionHashByEntitlement.set(record.entitlementId, record.codeHash);
+    if (record.paymentIntentId) this.redemptionHashByPaymentIntent.set(record.paymentIntentId, record.codeHash);
+    const existingReference = this.redemptionHashByReference.get(record.entitlementReference);
+    this.redemptionHashByReference.set(
+      record.entitlementReference,
+      existingReference === undefined || existingReference === record.codeHash ? record.codeHash : null
+    );
     return { record: { ...stored }, created: true };
   }
 
@@ -188,6 +212,40 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
   async getRedemptionBySession(sessionId: string) {
     const hash = this.redemptionHashBySession.get(sessionId);
     return hash ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByEntitlementId(entitlementId: string) {
+    const hash = this.redemptionHashByEntitlement.get(entitlementId);
+    return hash ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByPaymentIntent(paymentIntentId: string) {
+    const hash = this.redemptionHashByPaymentIntent.get(paymentIntentId);
+    return hash ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByReference(reference: string) {
+    const hash = this.redemptionHashByReference.get(reference);
+    return hash ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async updateRedemptionIdentity(
+    sessionId: string,
+    patch: Pick<RedemptionRecord, "entitlementId" | "paymentIntentId" | "amountTotal" | "currency">
+  ) {
+    const record = await this.getRedemptionBySession(sessionId);
+    if (!record) return null;
+    const updated = {
+      ...record,
+      entitlementId: record.entitlementId ?? patch.entitlementId,
+      paymentIntentId: record.paymentIntentId ?? patch.paymentIntentId,
+      amountTotal: record.amountTotal ?? patch.amountTotal,
+      currency: record.currency ?? patch.currency,
+    };
+    this.redemptionsByHash.set(record.codeHash, updated);
+    if (updated.entitlementId) this.redemptionHashByEntitlement.set(updated.entitlementId, record.codeHash);
+    if (updated.paymentIntentId) this.redemptionHashByPaymentIntent.set(updated.paymentIntentId, record.codeHash);
+    return { ...updated };
   }
 
   async markRedemptionDelivered(sessionId: string) {
@@ -211,6 +269,7 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     if (!record) return null;
     record.revoked = true;
     record.revocationReason = reason;
+    record.revokedAt = now();
     this.redemptionsByHash.set(codeHash, record);
     return { ...record };
   }
@@ -234,6 +293,9 @@ export class MemoryFulfillmentStore implements FulfillmentStore {
     this.docs.clear();
     this.redemptionsByHash.clear();
     this.redemptionHashBySession.clear();
+    this.redemptionHashByEntitlement.clear();
+    this.redemptionHashByPaymentIntent.clear();
+    this.redemptionHashByReference.clear();
   }
 }
 
@@ -257,6 +319,9 @@ export class KvFulfillmentStore implements FulfillmentStore {
   private indexKey = "cf:fulfillment:index";
   private redemptionKey = (codeHash: string) => `cf:redemption:${codeHash}`;
   private redemptionSessionKey = (sessionId: string) => `cf:redemption-session:${sessionId}`;
+  private redemptionEntitlementKey = (entitlementId: string) => `cf:redemption-entitlement:${entitlementId}`;
+  private redemptionPaymentKey = (paymentIntentId: string) => `cf:redemption-payment:${paymentIntentId}`;
+  private redemptionReferenceKey = (reference: string) => `cf:redemption-reference:${reference}`;
 
   private async command(body: unknown[]): Promise<unknown> {
     const res = await fetch(KV_URL()!, {
@@ -343,6 +408,24 @@ export class KvFulfillmentStore implements FulfillmentStore {
       if (raced) return { record: raced, created: false };
       throw new Error("redemption_session_link_failed");
     }
+    if (record.entitlementId) {
+      await this.command(["SET", this.redemptionEntitlementKey(record.entitlementId), record.codeHash, "NX"]);
+    }
+    if (record.paymentIntentId) {
+      await this.command(["SET", this.redemptionPaymentKey(record.paymentIntentId), record.codeHash, "NX"]);
+    }
+    const referenceLinked = await this.command([
+      "SET",
+      this.redemptionReferenceKey(record.entitlementReference),
+      record.codeHash,
+      "NX",
+    ]);
+    if (referenceLinked !== "OK") {
+      const existingReference = await this.command(["GET", this.redemptionReferenceKey(record.entitlementReference)]);
+      if (existingReference !== record.codeHash) {
+        await this.command(["SET", this.redemptionReferenceKey(record.entitlementReference), "__ambiguous__"]);
+      }
+    }
     return { record, created: true };
   }
 
@@ -359,6 +442,44 @@ export class KvFulfillmentStore implements FulfillmentStore {
   async getRedemptionBySession(sessionId: string) {
     const hash = await this.command(["GET", this.redemptionSessionKey(sessionId)]);
     return typeof hash === "string" ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByEntitlementId(entitlementId: string) {
+    const hash = await this.command(["GET", this.redemptionEntitlementKey(entitlementId)]);
+    return typeof hash === "string" ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByPaymentIntent(paymentIntentId: string) {
+    const hash = await this.command(["GET", this.redemptionPaymentKey(paymentIntentId)]);
+    return typeof hash === "string" ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async getRedemptionByReference(reference: string) {
+    const hash = await this.command(["GET", this.redemptionReferenceKey(reference)]);
+    return typeof hash === "string" && hash !== "__ambiguous__" ? this.getRedemptionByHash(hash) : null;
+  }
+
+  async updateRedemptionIdentity(
+    sessionId: string,
+    patch: Pick<RedemptionRecord, "entitlementId" | "paymentIntentId" | "amountTotal" | "currency">
+  ) {
+    const record = await this.getRedemptionBySession(sessionId);
+    if (!record) return null;
+    const updated = {
+      ...record,
+      entitlementId: record.entitlementId ?? patch.entitlementId,
+      paymentIntentId: record.paymentIntentId ?? patch.paymentIntentId,
+      amountTotal: record.amountTotal ?? patch.amountTotal,
+      currency: record.currency ?? patch.currency,
+    };
+    await this.putRedemption(updated);
+    if (updated.entitlementId) {
+      await this.command(["SET", this.redemptionEntitlementKey(updated.entitlementId), record.codeHash, "NX"]);
+    }
+    if (updated.paymentIntentId) {
+      await this.command(["SET", this.redemptionPaymentKey(updated.paymentIntentId), record.codeHash, "NX"]);
+    }
+    return updated;
   }
 
   private async putRedemption(record: RedemptionRecord) {
@@ -386,7 +507,7 @@ export class KvFulfillmentStore implements FulfillmentStore {
   async revokeRedemption(codeHash: string, reason: string) {
     const record = await this.getRedemptionByHash(codeHash);
     if (!record) return null;
-    const updated = { ...record, revoked: true, revocationReason: reason };
+    const updated = { ...record, revoked: true, revocationReason: reason, revokedAt: now() };
     await this.putRedemption(updated);
     return updated;
   }
@@ -483,16 +604,32 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
           session_id               TEXT UNIQUE NOT NULL,
           tier                     TEXT NOT NULL,
           entitlement_reference    TEXT NOT NULL,
+          entitlement_id           TEXT,
+          payment_intent_id        TEXT,
+          amount_total             INTEGER,
+          currency                 TEXT,
           purchase_timestamp       TIMESTAMPTZ NOT NULL,
           created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           last_redeemed_at         TIMESTAMPTZ,
           redemption_count         INTEGER NOT NULL DEFAULT 0,
           revoked                  BOOLEAN NOT NULL DEFAULT FALSE,
           revocation_reason        TEXT,
+          revoked_at               TIMESTAMPTZ,
           pending_code_ciphertext  TEXT
         )`;
+        await sql`ALTER TABLE cf_redemptions ADD COLUMN IF NOT EXISTS entitlement_id TEXT`;
+        await sql`ALTER TABLE cf_redemptions ADD COLUMN IF NOT EXISTS payment_intent_id TEXT`;
+        await sql`ALTER TABLE cf_redemptions ADD COLUMN IF NOT EXISTS amount_total INTEGER`;
+        await sql`ALTER TABLE cf_redemptions ADD COLUMN IF NOT EXISTS currency TEXT`;
+        await sql`ALTER TABLE cf_redemptions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ`;
         await sql`CREATE INDEX IF NOT EXISTS cf_redemptions_session_idx
           ON cf_redemptions (session_id)`;
+        await sql`CREATE UNIQUE INDEX IF NOT EXISTS cf_redemptions_entitlement_idx
+          ON cf_redemptions (entitlement_id) WHERE entitlement_id IS NOT NULL`;
+        await sql`CREATE UNIQUE INDEX IF NOT EXISTS cf_redemptions_payment_idx
+          ON cf_redemptions (payment_intent_id) WHERE payment_intent_id IS NOT NULL`;
+        await sql`CREATE INDEX IF NOT EXISTS cf_redemptions_reference_idx
+          ON cf_redemptions (entitlement_reference)`;
       })().catch((error) => {
         // Reset so a transient failure doesn't poison every later call.
         this.ready = null;
@@ -528,6 +665,10 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
       sessionId: String(row.session_id),
       tier: String(row.tier),
       entitlementReference: String(row.entitlement_reference),
+      entitlementId: row.entitlement_id ? String(row.entitlement_id) : null,
+      paymentIntentId: row.payment_intent_id ? String(row.payment_intent_id) : null,
+      amountTotal: row.amount_total == null ? null : Number(row.amount_total),
+      currency: row.currency ? String(row.currency) : null,
       purchaseTimestamp: new Date(String(row.purchase_timestamp)).toISOString(),
       createdAt: new Date(String(row.created_at)).toISOString(),
       lastRedeemedAt: row.last_redeemed_at
@@ -536,6 +677,7 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
       redemptionCount: Number(row.redemption_count),
       revoked: Boolean(row.revoked),
       revocationReason: row.revocation_reason ? String(row.revocation_reason) : null,
+      revokedAt: row.revoked_at ? new Date(String(row.revoked_at)).toISOString() : null,
       pendingCodeCiphertext: row.pending_code_ciphertext
         ? String(row.pending_code_ciphertext)
         : null,
@@ -619,11 +761,13 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
 
     const inserted = await sql`
       INSERT INTO cf_redemptions
-        (code_hash, session_id, tier, entitlement_reference, purchase_timestamp,
+        (code_hash, session_id, tier, entitlement_reference, entitlement_id,
+         payment_intent_id, amount_total, currency, purchase_timestamp,
          created_at, pending_code_ciphertext)
       VALUES
         (${record.codeHash}, ${record.sessionId}, ${record.tier},
-         ${record.entitlementReference}, ${record.purchaseTimestamp},
+         ${record.entitlementReference}, ${record.entitlementId},
+         ${record.paymentIntentId}, ${record.amountTotal}, ${record.currency}, ${record.purchaseTimestamp},
          ${record.createdAt}, ${record.pendingCodeCiphertext})
       ON CONFLICT DO NOTHING
       RETURNING *`;
@@ -645,6 +789,44 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     await this.ensure();
     const sql = await this.sql();
     const rows = await sql`SELECT * FROM cf_redemptions WHERE session_id = ${sessionId}`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async getRedemptionByEntitlementId(entitlementId: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_redemptions WHERE entitlement_id = ${entitlementId}`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async getRedemptionByPaymentIntent(paymentIntentId: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_redemptions WHERE payment_intent_id = ${paymentIntentId}`;
+    return rows.length ? this.toRedemption(rows[0]) : null;
+  }
+
+  async getRedemptionByReference(reference: string) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`SELECT * FROM cf_redemptions WHERE entitlement_reference = ${reference} LIMIT 2`;
+    return rows.length === 1 ? this.toRedemption(rows[0]) : null;
+  }
+
+  async updateRedemptionIdentity(
+    sessionId: string,
+    patch: Pick<RedemptionRecord, "entitlementId" | "paymentIntentId" | "amountTotal" | "currency">
+  ) {
+    await this.ensure();
+    const sql = await this.sql();
+    const rows = await sql`
+      UPDATE cf_redemptions SET
+        entitlement_id = COALESCE(entitlement_id, ${patch.entitlementId}),
+        payment_intent_id = COALESCE(payment_intent_id, ${patch.paymentIntentId}),
+        amount_total = COALESCE(amount_total, ${patch.amountTotal}),
+        currency = COALESCE(currency, ${patch.currency})
+      WHERE session_id = ${sessionId}
+      RETURNING *`;
     return rows.length ? this.toRedemption(rows[0]) : null;
   }
 
@@ -674,7 +856,8 @@ export class PostgresFulfillmentStore implements FulfillmentStore {
     const rows = await sql`
       UPDATE cf_redemptions
          SET revoked = TRUE,
-             revocation_reason = ${reason}
+             revocation_reason = ${reason},
+             revoked_at = NOW()
        WHERE code_hash = ${codeHash}
       RETURNING *`;
     return rows.length ? this.toRedemption(rows[0]) : null;

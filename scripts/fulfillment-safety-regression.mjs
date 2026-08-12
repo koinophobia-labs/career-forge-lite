@@ -180,6 +180,9 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     fulfillmentAttempts: 2,
     licenseTierVerified: "reset",
     redemptionTierVerified: "reset",
+    licenseRevocationAuthorized: true,
+    redemptionRevocationAuthorized: true,
+    authorizationWindowMs: 86_400_000,
     successRouteStatus: 200,
     cancellationRouteStatus: 200,
     completedAt: "2026-07-20T12:00:00.000Z",
@@ -251,6 +254,8 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     ["evidence without a durable store fails", { fulfillmentStoreKind: "memory" }, /durable fulfillment store/i],
     ["evidence without license activation fails", { licenseTierVerified: "job-search" }, /issued license activates/i],
     ["evidence without short-code redemption fails", { redemptionTierVerified: "job-search" }, /emailed access code activates/i],
+    ["evidence without online revocation authorization fails", { licenseRevocationAuthorized: false }, /online revocation authorization/i],
+    ["evidence with an unbounded authorization window fails", { authorizationWindowMs: 0 }, /24-hour authorization window/i],
     ["evidence without both return routes fails", { cancellationRouteStatus: 500 }, /return routes/i],
     ["evidence from an older drill version fails", { drillVersion: "1.0.0" }, /drill 1\.0\.0/i],
   ];
@@ -545,7 +550,7 @@ check(
 check("a manual recovery runbook exists", fs.existsSync(path.join(root, "docs/RECOVERY.md")));
 const recovery = read("docs/RECOVERY.md");
 check("runbook explains how to find unfulfilled purchases", recovery.includes("PAID_BUT_UNFULFILLED"));
-check("runbook covers manual license minting", recovery.includes("mint-license"));
+check("runbook retires unsafe standalone license minting", recovery.includes("Standalone offline minting is retired"));
 check("runbook covers refunds", /refund/i.test(recovery));
 
 console.log(`\n${passes} passed, ${failures} failed`);

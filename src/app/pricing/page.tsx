@@ -55,6 +55,10 @@ const purchaseFaqs: Array<[string, string]> = [
     "No. Your access code contains no career data, and your career information remains on your device."
   ],
   [
+    "Can I use paid features offline?",
+    "Yes, for up to 24 hours after a successful revocation check. Opening Career Forge while online refreshes that authorization. If it expires offline, paid features pause until Career Forge reconnects; your local work remains safe and editable."
+  ],
+  [
     "What can I do before buying?",
     "You can build and review the dossier, explore lanes, and preview generated materials. The selected package determines which export and power features unlock."
   ],
