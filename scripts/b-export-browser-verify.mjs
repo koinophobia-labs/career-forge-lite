@@ -1,4 +1,4 @@
-// Stream B end-to-end verification against the running dev server (port 3100):
+// Stream B self-contained end-to-end verification:
 // identity export gate, identity quick-fill, full-document copy, working
 // per-variant PDF/DOCX download with visible feedback, pack bundle export,
 // /versions/view full-text copy, and the metrics uncertainty guard.
@@ -6,10 +6,13 @@
 // Optional compatibility form:
 //   node scripts/b-export-browser-verify.mjs <state-with-identity.json> <state-no-identity.json> <license.txt>
 import fs from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
-const baseUrl = "http://localhost:3100";
+const port = 3240;
+const baseUrl = `http://127.0.0.1:${port}`;
 const fixtureArgs = process.argv.slice(2);
 if (fixtureArgs.length !== 0 && fixtureArgs.length !== 3) {
   throw new Error("Pass either no fixture arguments or all three: <state-with-identity.json> <state-no-identity.json> <license.txt>");
@@ -30,10 +33,51 @@ const license = fixtureArgs.length ? fs.readFileSync(fixtureArgs[2], "utf8").tri
 let passes = 0;
 const verify = (condition, message) => { if (!condition) throw new Error(`FAIL ${message}`); passes += 1; console.log(`PASS ${message}`); };
 
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ acceptDownloads: true });
-await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
-const page = await context.newPage();
+const server = spawn(
+  "npm",
+  ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
+  {
+    detached: process.platform !== "win32",
+    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
+    stdio: ["ignore", "pipe", "pipe"]
+  }
+);
+let serverOutput = "";
+server.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
+server.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
+
+async function waitForServer() {
+  const started = Date.now();
+  while (Date.now() - started < 90_000) {
+    if (server.exitCode !== null) throw new Error(`Dev server exited early.\n${serverOutput}`);
+    try {
+      const response = await fetch(baseUrl);
+      if (response.ok) return;
+    } catch {
+      // The server is still starting.
+    }
+    await delay(250);
+  }
+  throw new Error(`Dev server did not become ready.\n${serverOutput}`);
+}
+
+async function stopServer() {
+  if (server.exitCode !== null) return;
+  const signal = (name) => {
+    try {
+      if (process.platform !== "win32" && server.pid) process.kill(-server.pid, name);
+      else server.kill(name);
+    } catch {
+      // The process may have exited between checks.
+    }
+  };
+  signal("SIGTERM");
+  await Promise.race([once(server, "exit").catch(() => undefined), delay(5_000)]);
+  if (server.exitCode === null) signal("SIGKILL");
+}
+
+let browser;
+let page;
 const seed = async (state) => {
   await page.goto(baseUrl);
   await page.evaluate(([s, l]) => {
@@ -44,6 +88,15 @@ const seed = async (state) => {
 };
 
 try {
+  await Promise.race([
+    waitForServer(),
+    once(server, "exit").then(([code]) => { throw new Error(`Dev server exited with ${code}.\n${serverOutput}`); })
+  ]);
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ acceptDownloads: true });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
+  page = await context.newPage();
+
   // --- No identity: exports blocked with a real explanation, not a dead button ---
   await seed(stateNoIdentity);
   await page.goto(`${baseUrl}/versions`);
@@ -122,5 +175,6 @@ try {
 
   console.log(`\n${passes} browser checks passed`);
 } finally {
-  await browser.close();
+  await browser?.close();
+  await stopServer();
 }
