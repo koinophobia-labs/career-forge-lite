@@ -16,7 +16,7 @@ import { createPackBundle, createVariantFile, downloadBlob, exportSections, vari
 import { updatePackVariant } from "@/lib/resume-pack";
 import { syncBuilderVersionsWithPack } from "@/lib/version-sync";
 import { trackCareerEvent } from "@/lib/analytics";
-import { variantPurpose } from "@/lib/activation";
+import { currentActivationStage, variantPurpose } from "@/lib/activation";
 import { deriveDefensibilityReceipt, uniqueUnclaimedReceiptItems } from "@/lib/defensibility";
 import { handoffFromApplication, saveHandoff } from "@/lib/tailor-handoff";
 import { useCommandCenter } from "@/lib/use-command-center";
@@ -421,6 +421,7 @@ export default function VersionsPage() {
   const router = useRouter();
   const [deletedLabel, setDeletedLabel] = useState<string | null>(null);
   const currentPack = useMemo(() => [...state.resumePacks].filter((pack) => pack.status !== "archived").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? [...state.resumePacks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null, [state.resumePacks]);
+  const nextStage = useMemo(() => currentActivationStage(state), [state]);
 
   const sorted = useMemo(
     () => [...state.resumeVersions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -475,6 +476,18 @@ export default function VersionsPage() {
 
         {hydrated && currentPack && <PackDashboard pack={currentPack} state={state} onUpdate={updatePack} onRecordExport={recordPackExport} />}
         {hydrated && currentPack && currentPack.variants.length > 0 && <div className="mt-4"><BetaFeedbackCard milestone="pack" /></div>}
+        {hydrated && currentPack && currentPack.variants.length > 0 && (
+          <aside className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6" aria-labelledby="human-review-title">
+            <div>
+              <p className="trust-kicker text-xs font-bold uppercase">Optional human review</p>
+              <h2 id="human-review-title" className="mt-2 text-lg font-bold text-paper">Want a person to pressure-test the final package?</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-paper/65">Self-serve stays free during beta. The separate $149 Résumé Rebuild adds a human diagnostic, reviewed PDF and DOCX, a LinkedIn headline, three target-role directions, a Loom walkthrough, and one revision.</p>
+            </div>
+            <Link href="/reviewed-service" className="mt-4 inline-flex min-h-11 shrink-0 items-center rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan sm:mt-0">
+              See the human-reviewed option →
+            </Link>
+          </aside>
+        )}
 
         {deletedLabel && (
           <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-paper/80">
@@ -484,21 +497,11 @@ export default function VersionsPage() {
 
         {hydrated && !sorted.length && (
           <div className="mt-8 rounded-xl border border-cyan/25 bg-cyan/10 p-5 text-sm leading-6 text-paper/72">
-            <p>
-              No resume versions yet. Generate one in the builder — or better, start from a job post so the version is
-              tailored and linked to an application.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/tailor" className="rounded-md bg-cyan px-4 py-2 text-sm font-black text-ink transition hover:bg-gold">
-                Tailor against a job post
-              </Link>
-              <Link
-                href="/resume-builder"
-                className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-cyan hover:text-cyan"
-              >
-                Open the builder
-              </Link>
-            </div>
+            <p className="font-bold text-paper">Your résumé is not ready yet.</p>
+            <p className="mt-1">Finish the next step below. Career Forge saves your work in this browser and will bring you back here when a version is ready.</p>
+            <Link href={nextStage.href} className="mt-3 inline-flex min-h-11 items-center rounded-md bg-cyan px-4 py-2 text-sm font-black text-ink transition hover:bg-gold">
+              {nextStage.action} →
+            </Link>
           </div>
         )}
 

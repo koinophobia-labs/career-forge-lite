@@ -44,7 +44,7 @@ export function SiteFooter() {
           <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Product</h2>
           <div className="mt-4 grid gap-2.5">
             <Link href="/pricing" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
-              Beta access &amp; future packaging
+              Free beta &amp; human review
             </Link>
             <Link href="/unlock" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
               Manage an access code

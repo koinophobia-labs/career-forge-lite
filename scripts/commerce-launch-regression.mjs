@@ -97,6 +97,8 @@ check("live checkout creates a real Stripe Checkout Session", checkoutSource.inc
 check("live checkout no longer hands out a static Payment Link", !checkoutSource.includes("getLiveResetPaymentLinkUrl"));
 check("live checkout hard-codes the only paid tier to reset", checkoutSource.includes('liveMode && tier !== "reset"'));
 check("live checkout fails closed if PAID_BETA_TIER drifts", checkoutSource.includes('process.env.PAID_BETA_TIER !== "reset"'));
+check("off mode rejects direct checkout API calls", checkoutSource.includes('commerceMode !== "live" && commerceMode !== "test"'));
+check("test mode cannot use a live Stripe key", checkoutSource.includes('stripeKeyMode(secretKey) !== "test"'));
 check(
   "live checkout rejects closed tiers before creating a session",
   checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("createCheckoutSession(tier")

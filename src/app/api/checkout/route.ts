@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isPackageTier } from "@/lib/packages";
 import { sellVerdict } from "@/lib/server/fulfillment-readiness";
 import { logCommerceEvent } from "@/lib/server/commerce-log";
-import { createCheckoutSession, getStripeSecretKey } from "@/lib/server/stripe";
+import { createCheckoutSession, getStripeSecretKey, stripeKeyMode } from "@/lib/server/stripe";
 
 // Starts a one-time-purchase checkout for a package tier. The only client
 // input is the tier name; the price comes from the server-side package config.
@@ -25,7 +25,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isPackageTier(tier)) {
     return NextResponse.json({ error: "Unknown package." }, { status: 400 });
   }
-  const liveMode = process.env.NEXT_PUBLIC_COMMERCE_MODE === "live";
+  const commerceMode = process.env.NEXT_PUBLIC_COMMERCE_MODE?.trim() ?? "off";
+  if (commerceMode !== "live" && commerceMode !== "test") {
+    return NextResponse.json(
+      { error: "Automated checkout is not available during the free beta.", code: "commerce_off" },
+      { status: 403 }
+    );
+  }
+  const liveMode = commerceMode === "live";
   if (liveMode && process.env.PAID_BETA_TIER !== "reset") {
     return NextResponse.json({ error: "Live commerce is not safely configured." }, { status: 503 });
   }
@@ -78,6 +85,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!secretKey) {
     return NextResponse.json(
       { error: "Payments are not configured on this deployment." },
+      { status: 503 }
+    );
+  }
+  if (stripeKeyMode(secretKey) !== "test") {
+    return NextResponse.json(
+      { error: "Test payments are not safely configured." },
       { status: 503 }
     );
   }

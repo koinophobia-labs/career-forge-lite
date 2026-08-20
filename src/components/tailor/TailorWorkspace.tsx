@@ -18,7 +18,7 @@ export function TailorWorkspace() {
   const workspace = useTailorWorkspace();
   const {
     state, hydrated, form, setField, handleJobPostChange, analysis, runAnalysis,
-    saveAsApplication, startRoleSprint, startTailoredResume, effectiveLane, recommendedLane,
+    saveAsApplication, startRoleSprint, startTailoredResume, recommendedLane,
     baselines, effectiveBaseline, recommendedBaseline, savedApplicationId, currentApplication, profileReady,
     recommendation, baselineIssue, canTailorResume
   } = workspace;

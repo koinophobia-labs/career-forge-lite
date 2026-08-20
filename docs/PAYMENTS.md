@@ -1,4 +1,14 @@
-# Career Forge Payments — Setup & Go-Live Guide
+# Career Forge Automated Pack Payments — Dormant Reactivation Guide
+
+The public-beta release keeps `NEXT_PUBLIC_COMMERCE_MODE=off`: the self-serve
+product is free, and the separate $149 human-reviewed service uses a manual
+availability inquiry followed by a founder-sent, single-use Stripe payment link. Do not run
+the automated-commerce launcher for that release.
+
+The implementation below is retained for a future, explicitly approved Career
+Pack cohort. Reactivating it is a separate launch with its own production-host
+certification and human approval; a green application release does not authorize
+automated checkout.
 
 Career Forge sells three one-time packs (config: `src/lib/packages.ts` — names,
 prices, deliverables, feature grants all live there). Fulfillment is a signed
@@ -41,6 +51,7 @@ Stripe webhook checkout.session.completed ──▶ /api/stripe-webhook
 | `STRIPE_WEBHOOK_SECRET` | server (secret) | `whsec_…` for `checkout.session.completed`; required in live configuration. |
 | `LICENSE_SIGNING_PRIVATE_KEY` | server (secret) | base64 PKCS8 ECDSA P-256 key. Generate with `node scripts/generate-license-keys.mjs`. |
 | `NEXT_PUBLIC_LICENSE_PUBLIC_KEY` | build-time (public) | Matching base64 SPKI public key — ships in the client bundle. |
+| `REDEMPTION_CODE_PEPPER` | server (secret) | Independent high-entropy secret used to hash and temporarily encrypt short recovery codes. |
 | `NEXT_PUBLIC_COMMERCE_MODE` | build-time (public) | `off` (default — free beta, no gates, no buy buttons), `test`, or `live`. |
 | `NEXT_PUBLIC_APP_URL` | build-time | Canonical origin for checkout success/cancel URLs, e.g. `https://career-forge-lite.vercel.app`. |
 | `RESEND_API_KEY` | server (secret) | Dedicated sending-only key for license fulfillment. |

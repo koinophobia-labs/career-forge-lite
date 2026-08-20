@@ -61,8 +61,8 @@ check("desktop navigation exposes four plain primary destinations", ["Today", "R
 check("advanced workflow tools are grouped behind Workspace", nav.includes("const workspaceStations") && /<summary[\s\S]*?>\s*Workspace\s*<\/summary>/.test(nav) && nav.includes("Data & Backup"));
 check("first-run router promises one clear next step", routerComponent.includes("What are you trying to do?") && routerComponent.includes("Pick one. Career Forge will take you to the next step."));
 check("returning progress uses plain-language milestones", ["Work history added", "Facts reviewed", "Target role chosen", "Résumé ready"].every((label) => routerLogic.includes(label)));
-check("founding cohort routes to live pricing checkout", founding.includes('href="/pricing"') && founding.includes("Secure checkout is live"));
-check("founding cohort no longer uses a mail application", !founding.includes("mailto:") && !founding.includes("Automated checkout is being finalized"));
+check("retired founding cohort route preserves old links", founding.includes('redirect("/pricing")'));
+check("retired founding cohort makes no checkout promise", !founding.includes("Secure checkout is live") && !founding.includes("mailto:"));
 
 const { createPendingImportReview } = loadTsModule(path.join(root, "src/lib/truth-inbox.ts"));
 const proposal = (overrides = {}) => ({

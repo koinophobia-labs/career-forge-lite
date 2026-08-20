@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivationFeedback } from "@/components/ActivationFeedback";
 import { ActivationPath } from "@/components/ActivationPath";
 import { CommandNav } from "@/components/CommandNav";
@@ -127,6 +127,8 @@ export default function DossierPage() {
   // Initializer runs client-side on first render; SSR sees `hydrated === false`
   // so the callout never renders before the stored dismissal is known.
   const [identityCalloutDismissed, setIdentityCalloutDismissed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(IDENTITY_CALLOUT_DISMISSED_KEY) === "1");
+  const [showManualHistory, setShowManualHistory] = useState<boolean | null>(null);
+  const [hashOpensManualHistory, setHashOpensManualHistory] = useState(false);
   const [retainSourceFilenames, setRetainSourceFilenames] = useState(false);
   // Optional supporting-evidence block is collapsed for first-timers so the page
   // never opens as a wall of empty textareas; expanded once anything is in it.
@@ -134,6 +136,15 @@ export default function DossierPage() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [stagedImport, setStagedImport] = useState<{ proposals: ImportProposalRecord[]; message: string } | null>(null);
   const activeBatch = state.pendingImportReviews.find((item) => item.id === selectedBatchId) ?? state.pendingImportReviews[0] ?? null;
+  const manualHistoryOpen = showManualHistory ?? hashOpensManualHistory;
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const syncHash = () => setHashOpensManualHistory(["#manual-history", "#identity"].includes(window.location.hash));
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, [hydrated]);
 
   function save(next: CareerDossier) {
     let events: ReturnType<typeof activationEventsForTransition> = [];
@@ -450,7 +461,7 @@ export default function DossierPage() {
           <>
             <div className="mt-8"><ActivationPath state={state} compact /></div>
 
-            {(!dossier.identity.fullName.trim() || !dossier.identity.email.trim()) && !identityCalloutDismissed && (
+            {state.resumePacks.length > 0 && (!dossier.identity.fullName.trim() || !dossier.identity.email.trim()) && !identityCalloutDismissed && (
               <section className="trust-panel mt-6 border-gold/45 p-5 sm:p-6" aria-labelledby="identity-quickfill-title">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -524,10 +535,35 @@ export default function DossierPage() {
 
             {approvedEvidence.length > 0 && <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.72fr]" id="unlocks"><div className="rounded-xl border border-mint/35 bg-mint/10 p-5"><p className="trust-kicker text-xs font-bold uppercase">What your approvals unlock</p><h2 className="mt-2 text-xl font-bold text-paper">{readiness.level === "not-ready" ? "A truthful foundation is taking shape" : readiness.level === "foundation" ? "You can begin testing credible role lanes" : "You have enough proof to forge lane résumés"}</h2><ul className="mt-3 grid gap-2 text-sm leading-6 text-paper/70"><li>• Roles and projects can become traced experience sections and bullets.</li><li>• Tools and skills can support matching only when the underlying work is approved.</li><li>• Missing credentials and unverified duration remain visible gaps—not generated claims.</li></ul><Link href="/targets" className="mt-4 inline-flex min-h-11 items-center rounded-md bg-mint px-4 py-2 text-sm font-black text-ink">See dossier-backed role lanes →</Link></div><ActivationFeedback milestone="dossier" question="Did the review make it clear what Career Forge now trusts?" /></section>}
 
-            <section className="mt-8 grid gap-6 lg:grid-cols-2" id="manual-history">
-              <div className="trust-panel scroll-mt-28 p-5" id="identity">
+            <section className="trust-panel mt-8 scroll-mt-28 p-5 sm:p-6" id="manual-history">
+              <button
+                type="button"
+                onClick={() => {
+                  if (manualHistoryOpen) {
+                    if (hashOpensManualHistory) {
+                      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+                      setHashOpensManualHistory(false);
+                    }
+                    setShowManualHistory(false);
+                  } else {
+                    setShowManualHistory(true);
+                  }
+                }}
+                aria-expanded={manualHistoryOpen}
+                aria-controls="manual-history-fields"
+                className="flex w-full flex-wrap items-center justify-between gap-3 text-left"
+              >
+                <span>
+                  <span className="block text-xl font-bold text-paper">No résumé handy? Add your history manually.</span>
+                  <span className="mt-1 block text-sm leading-6 text-paper/55">Start with one recent role or project. Contact details can wait until you are ready to export.</span>
+                </span>
+                <span className="lab-mono shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs font-bold uppercase text-paper/45">{manualHistoryOpen ? "Hide" : "Add manually +"}</span>
+              </button>
+
+              {manualHistoryOpen && <div className="mt-5 grid gap-6 lg:grid-cols-2" id="manual-history-fields">
+              <div className="scroll-mt-28 rounded-xl border border-white/12 bg-obsidian/35 p-5" id="identity">
                 <h2 className="text-xl font-bold text-paper">Identity &amp; professional links</h2>
-                <p className="mt-1 text-sm text-paper/55">Add once; it appears across every résumé.</p>
+                <p className="mt-1 text-sm text-paper/55">Optional for now. Add once and it appears across every résumé.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {([[
                     "fullName", "Full name", "Name"
@@ -538,7 +574,7 @@ export default function DossierPage() {
                 <label className="mt-3 block"><span className="text-xs font-bold text-paper/60">LinkedIn / portfolio links</span><input className="trust-input mt-1 w-full border px-3 py-2 text-sm text-ink" value={dossier.identity.links.join(", ")} onChange={(event) => patchIdentity("links", values(event.target.value))} /></label>
               </div>
 
-              <div className="trust-panel p-5">
+              <div className="rounded-xl border border-white/12 bg-obsidian/35 p-5">
                 <h2 className="text-xl font-bold text-paper">Add an employment record</h2>
                 <p className="mt-1 text-sm text-paper/55">Structured roles unlock reusable experience sections and interview stories.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -550,18 +586,19 @@ export default function DossierPage() {
                 <button type="button" onClick={addRole} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan">Add approved role</button>
                 {dossier.roles.length > 0 && <div className="mt-4 grid gap-2">{dossier.roles.map((item) => <details key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-paper/75"><summary className="cursor-pointer font-bold">{item.title || "Role"}{item.employer ? ` · ${item.employer}` : ""}{item.startDate ? ` · ${item.startDate}` : ""}</summary><form action={(form) => editRole(item.id, form)} className="mt-3 grid gap-2"><input name="title" aria-label="Edit role title" defaultValue={item.title} className="trust-input border px-3 py-2 text-ink"/><input name="employer" aria-label="Edit role employer" defaultValue={item.employer} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit role dates" defaultValue={item.startDate} className="trust-input border px-3 py-2 text-ink"/><textarea name="responsibilities" aria-label="Edit role responsibilities" defaultValue={item.responsibilities.join("\n")} className="trust-input border px-3 py-2 text-ink"/><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save role</button><button type="button" onClick={() => deleteRecord("roles", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete role</button></div></form></details>)}</div>}
               </div>
+              </div>}
             </section>
 
             {approvedEvidence.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Approved evidence lifecycle</h2><p className="mt-1 text-sm text-paper/55">Edit, reject, or delete individual facts. Existing outputs are preserved and marked out of date.</p><div className="mt-4 grid gap-2">{approvedEvidence.map((item) => <details key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3"><summary className="cursor-pointer text-sm font-bold text-paper/75">{item.label}: {item.detail}</summary><div className="mt-3 grid gap-2"><input aria-label={`Edit evidence ${item.label}`} defaultValue={item.detail} onBlur={(event) => { if (event.target.value.trim() !== item.detail) editEvidence(item.id, event.target.value); }} className="trust-input border px-3 py-2 text-sm text-ink"/><p className="text-xs text-paper/45">Sources: {item.sourceFilenames.join(", ") || item.source} · Exact text: {item.sourceExcerpts[0] ?? item.sourceText}</p><div className="flex flex-wrap gap-2"><button type="button" onClick={() => approveEvidence(item.id, false)} className="rounded border border-gold/50 px-3 py-1.5 text-xs font-bold text-gold">Reject evidence</button><button type="button" onClick={() => deleteEvidence(item.id)} className="rounded border border-coral/50 px-3 py-1.5 text-xs font-bold text-coral">Delete evidence</button></div></div></details>)}</div></section>}
 
-            <section className="trust-panel mt-6 p-5 sm:p-6">
-              <h2 className="text-xl font-bold text-paper">Projects, independent work &amp; education</h2>
-              <p className="mt-1 text-sm text-paper/55">Founders and recent graduates can build a defensible dossier without conventional employment.</p>
+            <details className="trust-panel mt-6 p-5 sm:p-6">
+              <summary className="cursor-pointer text-xl font-bold text-paper">Add projects, independent work, or education <span className="text-sm font-bold text-paper/45">(optional)</span></summary>
+              <p className="mt-2 text-sm text-paper/55">Useful for founders, recent graduates, and anyone whose strongest proof is outside conventional employment.</p>
               <div className="mt-5 grid gap-6 lg:grid-cols-2">
                 <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add a project or independent venture</h3><div className="mt-3 grid gap-3 sm:grid-cols-2"><input aria-label="Project name" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Project name" value={project.name} onChange={(event) => setProject({ ...project, name: event.target.value })} /><input aria-label="Project organization" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Organization or Independent" value={project.organization} onChange={(event) => setProject({ ...project, organization: event.target.value })} /><input aria-label="Project dates" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" placeholder="Dates" value={project.dates} onChange={(event) => setProject({ ...project, dates: event.target.value })} /><textarea aria-label="Project description" className="trust-input border px-3 py-2 text-sm text-ink sm:col-span-2" rows={3} placeholder="What you built, did, or shipped—no assumed outcomes" value={project.description} onChange={(event) => setProject({ ...project, description: event.target.value })} /></div><button type="button" onClick={addProject} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved project</button>{dossier.projects.map((item) => <details key={item.id} className="mt-3 rounded-lg border border-white/10 p-3 text-sm text-paper/70"><summary className="cursor-pointer font-bold">{item.name}{item.organization ? ` · ${item.organization}` : ""}</summary><form action={(form) => editProject(item.id, form)} className="mt-3 grid gap-2"><input name="name" aria-label="Edit project name" defaultValue={item.name} className="trust-input border px-3 py-2 text-ink"/><input name="organization" aria-label="Edit project organization" defaultValue={item.organization} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit project dates" defaultValue={item.dates} className="trust-input border px-3 py-2 text-ink"/><textarea name="description" aria-label="Edit project description" defaultValue={item.description} className="trust-input border px-3 py-2 text-ink"/><textarea name="responsibilities" aria-label="Edit project responsibilities" defaultValue={item.responsibilities.join("\n")} placeholder="Responsibilities" className="trust-input border px-3 py-2 text-ink"/><textarea name="tools" aria-label="Edit project tools" defaultValue={item.tools.join("\n")} placeholder="Tools" className="trust-input border px-3 py-2 text-ink"/><textarea name="outcomes" aria-label="Edit project outcomes" defaultValue={item.outcomes.join("\n")} placeholder="Outcomes" className="trust-input border px-3 py-2 text-ink"/><textarea name="metrics" aria-label="Edit project metrics" defaultValue={item.metrics.join("\n")} placeholder="Metrics" className="trust-input border px-3 py-2 text-ink"/><textarea name="links" aria-label="Edit project links" defaultValue={item.links.join("\n")} placeholder="Links" className="trust-input border px-3 py-2 text-ink"/><select name="placement" aria-label="Project resume placement" defaultValue={item.defaultPlacement} className="trust-input border px-3 py-2 text-ink"><option value="projects">Projects</option><option value="experience">Experience</option><option value="selected-projects">Selected Projects</option><option value="omit">Omit by default</option></select><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save project</button><button type="button" onClick={() => deleteRecord("projects", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete project</button></div></form></details>)}</div>
                 <div className="rounded-xl border border-white/12 bg-obsidian/35 p-4"><h3 className="font-bold text-paper">Add education or a credential</h3><div className="mt-3 grid gap-3"><input aria-label="Credential" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Degree, certificate, course, or training" value={education.credential} onChange={(event) => setEducation({ ...education, credential: event.target.value })} /><input aria-label="Institution" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Institution" value={education.institution} onChange={(event) => setEducation({ ...education, institution: event.target.value })} /><input aria-label="Education dates" className="trust-input border px-3 py-2 text-sm text-ink" placeholder="Dates" value={education.dates} onChange={(event) => setEducation({ ...education, dates: event.target.value })} /></div><button type="button" onClick={addEducation} className="mt-3 rounded-md bg-gold px-4 py-2 text-sm font-black text-ink">Add approved education</button>{dossier.education.map((item) => <details key={item.id} className="mt-3 rounded-lg border border-white/10 p-3 text-sm text-paper/70"><summary className="cursor-pointer font-bold">{item.credential}{item.institution ? ` · ${item.institution}` : ""}</summary><form action={(form) => editEducation(item.id, form)} className="mt-3 grid gap-2"><input name="credential" aria-label="Edit credential" defaultValue={item.credential} className="trust-input border px-3 py-2 text-ink"/><input name="institution" aria-label="Edit institution" defaultValue={item.institution} className="trust-input border px-3 py-2 text-ink"/><input name="field" aria-label="Edit education field" defaultValue={item.field} className="trust-input border px-3 py-2 text-ink"/><input name="dates" aria-label="Edit education dates" defaultValue={item.dates} className="trust-input border px-3 py-2 text-ink"/><div className="flex gap-2"><button className="rounded bg-mint px-3 py-1.5 font-bold text-ink">Save education</button><button type="button" onClick={() => deleteRecord("education", item.id, item.evidenceIds)} className="rounded border border-coral/50 px-3 py-1.5 text-coral">Delete education</button></div></form></details>)}</div>
               </div>
-            </section>
+            </details>
 
             <section className="trust-panel mt-6 p-5 sm:p-6">
               <button type="button" onClick={() => setShowMoreEvidence((open) => !open)} aria-expanded={evidenceOpen} aria-controls="more-evidence" className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
@@ -608,8 +645,13 @@ export default function DossierPage() {
             {rejected.length > 0 && <section className="trust-panel mt-6 p-5 sm:p-6"><h2 className="text-xl font-bold text-paper">Rejected evidence</h2><p className="mt-1 text-sm text-paper/55">Restore an item if it was rejected accidentally. It remains unusable until restored.</p><div className="mt-3 grid gap-2">{rejected.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-white/10 p-3 text-sm text-paper/65"><span className="mr-auto">{item.detail}</span><button type="button" onClick={() => approveEvidence(item.id, true)} className="rounded border border-mint/50 px-3 py-1 text-xs font-bold text-mint">Restore and approve</button></div>)}</div></section>}
 
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/12 bg-white/5 p-4">
-              <p className="text-sm text-paper/68">Your dossier is the foundation. Next, choose up to three credible career lanes.</p>
-              <Link href="/targets" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">Next: choose career lanes →</Link>
+              {approvedEvidence.length > 0 ? <>
+                <p className="text-sm text-paper/68">Your approved facts are ready to support a credible job direction.</p>
+                <Link href="/targets" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">Next: choose target roles →</Link>
+              </> : <>
+                <p className="text-sm text-paper/68">Add a résumé, role, or project before choosing a target. Career Forge needs at least one fact it can defend.</p>
+                <a href="#import" className="lab-pill-button px-5 py-2.5 text-sm font-black transition">Start with my work history ↑</a>
+              </>}
             </div>
           </>
         )}
