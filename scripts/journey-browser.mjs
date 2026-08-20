@@ -159,15 +159,15 @@ try {
   verify(true, "forge shows a working state and lands on an unambiguous 'pack is ready' confirmation");
 
   // --- 6. Entitlement gate is explained, not a dead end ---------------------
-  const lockedPill = page.getByRole("link", { name: /Export complete pack · \$\d+ pack/ });
+  const lockedPill = page.getByRole("link", { name: "Export complete career bundle · $25 pack" });
   await lockedPill.first().waitFor();
-  verify((await page.getByRole("button", { name: "Export complete pack" }).count()) === 0, "with commerce in test mode, export is gated — no dead button, a priced unlock path instead");
+  verify((await page.getByRole("button", { name: "Export complete career bundle" }).count()) === 0, "with commerce in test mode, export is gated — no dead button, a priced unlock path instead");
 
   // --- 7. License activation works without explanation ----------------------
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Career Switch Pack activated").waitFor();
+  await page.getByText("Career Pack activated").waitFor();
   verify(true, "pasting the purchase-issued license key activates on the first attempt with clear confirmation");
 
   // --- 8. Export succeeds on the first attempt ------------------------------
@@ -180,7 +180,7 @@ try {
   await page.getByRole("textbox", { name: "Name on your documents" }).fill("Jamie Journey");
   await page.getByRole("textbox", { name: "Email on your documents" }).fill("jamie@example.com");
   await page.goto(`${baseUrl}/versions`);
-  const exportButton = page.getByRole("button", { name: "Export complete pack" });
+  const exportButton = page.getByRole("button", { name: "Export complete career bundle" });
   await exportButton.waitFor();
   const downloadPromise = page.waitForEvent("download");
   await exportButton.click();
