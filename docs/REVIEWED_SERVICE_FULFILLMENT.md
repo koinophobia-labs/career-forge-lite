@@ -16,8 +16,9 @@ layer before delivery, and nothing here implies automated outputs get this revie
    constraints, timeline, anything they refuse to claim).
 4. **Payment-ready handoff:** after intake is complete, confirm the exact deliverables,
    five-business-day delivery date, revision window, privacy terms, and refund terms in
-   writing. Then send a Stripe payment link for the flat $149. Never before scope and
-   capacity are confirmed. (This uses a manually
+   writing. Then create and send a new Stripe payment link for the flat $149 with its
+   completed-session limit set to **1**. Never reuse a prior client link, and never send
+   it before scope and capacity are confirmed. (This uses a manually
    created payment link — automated-tier commerce in the app remains off.)
 5. **Fulfillment** (checklist below), within 5 business days of payment + complete intake.
 6. **Delivery** (checklist below).
@@ -35,6 +36,8 @@ layer before delivery, and nothing here implies automated outputs get this revie
 - Do not send a second payment link while another order is `paid`, `in-progress`, or
   `revision-open`. The founder may raise this limit only after measuring the first complete
   fulfillment cycle.
+- Confirm the link's completed-session limit is `1` before sending it. Deactivate the link
+  immediately after successful payment even when Stripe reports that its limit was reached.
 - If the promised date becomes unsafe, notify the client before the deadline and offer a
   new written date or a full refund.
 

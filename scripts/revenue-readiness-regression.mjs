@@ -50,7 +50,8 @@ check("test checkout refuses a live Stripe key", checkout.includes('stripeKeyMod
 check("retired $49 cohort page redirects to current pricing", founding.includes('redirect("/pricing")') && !founding.includes("Secure checkout is live"));
 check("Stripe link audit is read-only and redacts shareable URLs", stripeLinkAudit.includes("GET") === false && stripeLinkAudit.includes("method:") === false && !stripeLinkAudit.includes("link.url"));
 check("Stripe link audit accepts restricted live keys", stripeLinkAudit.includes("(?:sk|rk)_live_"));
-check("Stripe link audit enforces the manual-service posture", stripeLinkAudit.includes("zero active legacy $49 links") && stripeLinkAudit.includes("exactly one active $149 service link"));
+check("Stripe link audit enforces the manual-service posture", stripeLinkAudit.includes("zero active legacy $49 links") && stripeLinkAudit.includes("exactly one single-use $149 service link"));
+check("Stripe link audit enforces the one-client completion limit", stripeLinkAudit.includes("completionLimit !== 1") && stripeLinkAudit.includes("restrictions?.completed_sessions?.limit"));
 
 const criticalSurfaceFiles = [
   "src/app/api/commerce-health/route.ts",

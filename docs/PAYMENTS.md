@@ -2,7 +2,7 @@
 
 The public-beta release keeps `NEXT_PUBLIC_COMMERCE_MODE=off`: the self-serve
 product is free, and the separate $149 human-reviewed service uses a manual
-availability inquiry followed by a founder-sent Stripe payment link. Do not run
+availability inquiry followed by a founder-sent, single-use Stripe payment link. Do not run
 the automated-commerce launcher for that release.
 
 The implementation below is retained for a future, explicitly approved Career

@@ -54,14 +54,15 @@ const summaries = links.map((link) => {
     currency: items.currency,
     products: items.names,
     offer: link.metadata?.career_forge_offer ?? null,
-    tier: link.metadata?.tier ?? null
+    tier: link.metadata?.tier ?? null,
+    completionLimit: link.restrictions?.completed_sessions?.limit ?? null
   };
 });
 
 console.log(`Active live Stripe Payment Links: ${summaries.length}`);
 for (const summary of summaries) {
   const money = summary.currency === "usd" ? `$${(summary.amount / 100).toFixed(2)}` : `${summary.amount} ${summary.currency}`;
-  console.log(`- ${summary.id}: ${money}; ${summary.products.join(" + ")}; offer=${summary.offer ?? "none"}; tier=${summary.tier ?? "none"}`);
+  console.log(`- ${summary.id}: ${money}; ${summary.products.join(" + ")}; offer=${summary.offer ?? "none"}; tier=${summary.tier ?? "none"}; completion_limit=${summary.completionLimit ?? "none"}`);
 }
 
 const legacyPackLinks = summaries.filter((link) => link.amount === 4900 || link.offer === "career_reset_founding_beta");
@@ -70,9 +71,13 @@ console.log(`Legacy $49 links active: ${legacyPackLinks.length}`);
 console.log(`$149 reviewed-service links active: ${reviewedServiceLinks.length}`);
 
 if (process.argv.includes("--require-release-posture")) {
-  if (legacyPackLinks.length > 0 || reviewedServiceLinks.length !== 1) {
-    console.error("NOT READY: require zero active legacy $49 links and exactly one active $149 service link.");
+  if (
+    legacyPackLinks.length > 0 ||
+    reviewedServiceLinks.length !== 1 ||
+    reviewedServiceLinks.some((link) => link.completionLimit !== 1)
+  ) {
+    console.error("NOT READY: require zero active legacy $49 links and exactly one single-use $149 service link.");
     process.exit(1);
   }
-  console.log("READY: Stripe Payment Links match the manual-service release posture.");
+  console.log("READY: Stripe Payment Links match the single-use manual-service release posture.");
 }
