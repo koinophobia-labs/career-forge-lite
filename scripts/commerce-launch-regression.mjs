@@ -1,15 +1,13 @@
-// Credential-free regression coverage for the commerce launch command and
-// live Payment Link allowlist. This suite never contacts Stripe or Vercel.
+// Credential-free checks for the self-service catalog launch command and the
+// server-side checkout boundary. This suite never contacts Stripe or Vercel.
 
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
 
-const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 let passes = 0;
 let failures = 0;
 
@@ -23,86 +21,52 @@ function check(label, condition) {
   }
 }
 
-function loadStripeModule() {
-  const filePath = path.join(root, "src/lib/server/stripe.ts");
-  const source = fs.readFileSync(filePath, "utf8");
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-    fileName: filePath
-  });
-  const cjsModule = { exports: {} };
-  const localRequire = (request) => {
-    if (request === "node:crypto") return require(request);
-    if (request === "@/lib/packages") {
-      return {
-        getPackage: () => ({ name: "Career Reset Pack", priceUsd: 49, summary: "Reset" })
-      };
-    }
-    return require(request);
-  };
-  new Function("require", "module", "exports", outputText)(localRequire, cjsModule, cjsModule.exports);
-  return cjsModule.exports;
-}
-
-const { isStripePaymentLinkUrl } = loadStripeModule();
-for (const valid of ["https://buy.stripe.com/abc123", "https://buy.stripe.com/9AQ8xY6xZ"]){
-  check(`accepts exact Stripe Payment Link ${valid}`, isStripePaymentLinkUrl(valid));
-}
-for (const invalid of [
-  "http://buy.stripe.com/abc123",
-  "https://checkout.stripe.com/abc123",
-  "https://buy.stripe.com.evil.example/abc123",
-  "https://buy.stripe.com/abc123?coupon=free",
-  "https://buy.stripe.com/abc123#fragment",
-  "https://buy.stripe.com/a/b",
-  "not-a-url",
-  ""
-]) {
-  check(`rejects non-allowlisted link ${JSON.stringify(invalid)}`, !isStripePaymentLinkUrl(invalid));
-}
-
 const launchPath = path.join(root, "scripts/commerce-launch.mjs");
-const launchSource = fs.readFileSync(launchPath, "utf8");
-check("five-completed-session restriction is encoded", /COHORT_LIMIT = 5/.test(launchSource));
-check("founding price is fixed at $49", /RESET_PRICE_CENTS = 4_900/.test(launchSource));
-check("Stripe metadata fixes the tier to reset", /"metadata\[tier\]": "reset"/.test(launchSource));
-check("Vercel secrets are sent over stdin", /setVercelEnvironment[\s\S]*\{ input: value \}/.test(launchSource));
-check("launch command never uses Vercel --value", !launchSource.includes('"--value"'));
-check("temporary credential directory is mode 0700", /chmodSync\(tempDir, 0o700\)/.test(launchSource));
-check("temporary credential directory is deleted", /rmSync\(tempDir, \{ recursive: true, force: true \}\)/.test(launchSource));
-check("signing key file must stay outside the repository", launchSource.includes("--signing-key-file must not be stored inside the repository"));
-check("signing key file is created mode 0600", /openSync\(resolved, "wx", 0o600\)/.test(launchSource));
-check("production requires charges and payouts", /charges_enabled !== true \|\| account\.payouts_enabled !== true/.test(launchSource));
-check("preview deployment is attached to its canonical alias", /runVercel\(\["alias", "set", deploymentUrl, previewAlias\]\)/.test(launchSource));
-check("protected Preview probes use authenticated Vercel curl", launchSource.includes('"vercel",\n        "curl"'));
+const launch = read("scripts/commerce-launch.mjs");
+const checkout = read("src/app/api/checkout/route.ts");
+const stripe = read("src/lib/server/stripe.ts");
+const verification = read("src/lib/server/session-verification.ts");
+
+for (const [tier, cents] of [["resume", "900"], ["job", "1_500"], ["career", "2_500"], ["all-access", "3_900"]]) {
+  check(`${tier} is provisioned at the approved price`, launch.includes(`tier: "${tier}"`) && launch.includes(`priceCents: ${cents}`));
+  check(`${tier} uses server-side Stripe metadata`, launch.includes(`"metadata[tier]": item.tier`));
+}
+for (const envName of ["STRIPE_PRICE_RESUME", "STRIPE_PRICE_JOB", "STRIPE_PRICE_CAREER", "STRIPE_PRICE_ALL_ACCESS"]) {
+  check(`${envName} is provisioned and mapped`, launch.includes(envName) && stripe.includes(envName) && verification.includes(envName));
+}
+
+check("products and prices use Stripe idempotency keys", /provisionCatalog[\s\S]*CATALOG_KEY[\s\S]*Idempotency-Key/.test(launch) || (launch.includes("idempotencyKey") && launch.includes(`${"${CATALOG_KEY}"}/${"${item.tier}"}/product`)));
+check("Vercel secrets are sent over stdin", /setVercelEnvironment[\s\S]*\{ input: value \}/.test(launch));
+check("launch never uses Vercel --value", !launch.includes('"--value"'));
+check("temporary credential directory is mode 0700", /chmodSync\(tempDir, 0o700\)/.test(launch));
+check("temporary credential directory is deleted", /rmSync\(tempDir, \{ recursive: true, force: true \}\)/.test(launch));
+check("new signing key files are mode 0600", /openSync\(resolved, "wx", 0o600\)/.test(launch));
+check("signing key file stays outside the repository", launch.includes("--signing-key-file must not be stored inside the repository"));
+check("production requires charges and payouts", /charges_enabled !== true \|\| account\.payouts_enabled !== true/.test(launch));
+check("legacy Vercel checkout configuration is removed", ["STRIPE_PRICE_RESET", "PAID_BETA_TIER", "NEXT_PUBLIC_PAID_BETA_TIER", "STRIPE_LIVE_RESET_PAYMENT_LINK"].every((name) => launch.includes(name)) && launch.includes("removeVercelEnvironment"));
+check("only Career Forge legacy links are retired", launch.includes("belongsToCareerForge && legacy"));
+check("no Payment Link is created", !launch.includes('stripeRequest("/v1/payment_links", secretKey, form'));
+check("production diagnostic route must be 404", launch.includes("diagnostic.status !== 404"));
+check("technical packaging does not self-certify", !launch.includes("CERTIFICATION_RECORD_ID") && /Certification and[\s\S]*stay separate/i.test(launch));
 
 for (const target of ["preview", "production"]) {
-  const appUrl = target === "preview" ? "https://career-forge-lite-git-issue-20.example.vercel.app" : "https://career-forge-lite.vercel.app";
-  const result = spawnSync(process.execPath, [launchPath, "--dry-run", "--target", target, "--app-url", appUrl], {
-    cwd: root,
-    encoding: "utf8",
-    env: {}
-  });
+  const appUrl = target === "preview" ? "https://career-forge-lite-preview.example.vercel.app" : "https://career-forge-lite.vercel.app";
+  const result = spawnSync(process.execPath, [launchPath, "--dry-run", "--target", target, "--app-url", appUrl], { cwd: root, encoding: "utf8", env: {} });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  check(`${target} dry-run exits cleanly without credentials`, result.status === 0);
-  check(`${target} dry-run reports the non-mutating plan`, output.includes("DRY RUN:") && output.includes("value never logged"));
+  check(`${target} dry-run exits without credentials`, result.status === 0);
+  check(`${target} dry-run names all four prices`, ["resume=$9", "job=$15", "career=$25", "all-access=$39"].every((value) => output.includes(value)));
   check(`${target} dry-run emits no secret-shaped value`, !/sk_(?:test|live)_|whsec_|LICENSE_SIGNING_PRIVATE_KEY=/.test(output));
 }
 
-const checkoutSource = fs.readFileSync(path.join(root, "src/app/api/checkout/route.ts"), "utf8");
-// The Payment Link was fire-and-forget: the server never learned the session
-// id, so it could not verify payment, record it durably, or notice a purchase
-// that was never delivered. Live mode now creates a real Checkout Session.
-check("live checkout creates a real Stripe Checkout Session", checkoutSource.includes("createCheckoutSession"));
-check("live checkout no longer hands out a static Payment Link", !checkoutSource.includes("getLiveResetPaymentLinkUrl"));
-check("live checkout hard-codes the only paid tier to reset", checkoutSource.includes('liveMode && tier !== "reset"'));
-check("live checkout fails closed if PAID_BETA_TIER drifts", checkoutSource.includes('process.env.PAID_BETA_TIER !== "reset"'));
-check("off mode rejects direct checkout API calls", checkoutSource.includes('commerceMode !== "live" && commerceMode !== "test"'));
-check("test mode cannot use a live Stripe key", checkoutSource.includes('stripeKeyMode(secretKey) !== "test"'));
-check(
-  "live checkout rejects closed tiers before creating a session",
-  checkoutSource.indexOf('tier !== "reset"') < checkoutSource.indexOf("createCheckoutSession(tier")
-);
+check("checkout accepts only current package tiers", checkout.includes("isPackageTier(tier)"));
+check("off mode rejects direct API calls", checkout.includes('commerceMode !== "live" && commerceMode !== "test"'));
+check("test mode rejects live Stripe keys", checkout.includes('stripeKeyMode(secretKey) !== "test"'));
+check("live mode requires the full sell verdict", checkout.includes("sellVerdict()") && checkout.includes("!verdict.canSellSafely"));
+check("checkout requires a client retry identity", checkout.includes("requestId") && checkout.includes("Invalid checkout request."));
+check("checkout passes a scoped Stripe idempotency key", checkout.includes("`career-forge/${tier}/${requestId}`"));
+check("pricing synchronously suppresses double-click checkout", read("src/app/pricing/page.tsx").includes("checkoutInFlightRef.current") && read("src/app/pricing/page.tsx").includes("checkoutRequestRef.current?.tier"));
+check("checkout creates sessions, not static links", checkout.includes("createCheckoutSession") && !checkout.includes("getLiveResetPaymentLinkUrl"));
+check("server price mapping has no retired tier env", !stripe.includes("STRIPE_PRICE_RESET") && !verification.includes("STRIPE_PRICE_RESET"));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures) process.exit(1);

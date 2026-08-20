@@ -1,5 +1,8 @@
 # Career Forge Revenue Readiness Gauntlet
 
+> Historical evidence for the former $149-first manual-service posture. The
+> current self-service revenue release is governed by `docs/PAYMENTS.md`.
+
 Last run: August 20, 2026
 
 Candidate branch: `codex/career-forge-polish`

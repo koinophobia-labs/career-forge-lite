@@ -42,7 +42,7 @@ const { mintLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
 const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-const licenseKey = mintLicenseKey("career-switch", "recovery-test", Math.floor(Date.now() / 1000), privateB64);
+const licenseKey = mintLicenseKey("career", "recovery-test", Math.floor(Date.now() / 1000), privateB64);
 
 let passes = 0;
 const verify = (condition, message) => {

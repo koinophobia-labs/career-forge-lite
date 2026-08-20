@@ -2,14 +2,14 @@
 
 Target platform: Vercel (project `career-forge-lite`, production URL
 `career-forge-lite.vercel.app`). Standard Next.js App Router build — static
-pages plus three serverless API routes (`/api/checkout`, `/api/license`,
-`/api/stripe-webhook`).
+pages plus server-side checkout, verification, redemption, health, and webhook
+routes.
 
 ## Environments and payment modes
 
 | Mode | `NEXT_PUBLIC_COMMERCE_MODE` | Behavior |
 | --- | --- | --- |
-| Free beta (default) | `off` / unset | No gates, no buy buttons, pricing page shows "free during beta". Safe with zero env configuration. |
+| Checkout off (default) | `off` / unset | Useful Free features remain available; paid boundaries remain real; no buy buttons. Safe with zero payment configuration. |
 | Payment test | `test` | Gates active, checkout uses `sk_test_…`, "Test mode" banner on /pricing. |
 | Live | `live` | Real charges. Complete the go-live checklist in docs/PAYMENTS.md first. |
 
@@ -20,31 +20,37 @@ a redeploy, not just an env edit.
 
 1. Merge to `main` (or promote the feature branch after review).
 2. Verify locally first: `npm test && npm run lint && npm run typecheck && npm run build`.
-3. Set env vars in Vercel per the table in `.env.example` / docs/PAYMENTS.md
-   for the intended mode. For `off` mode, nothing is required.
+3. Set env vars in Vercel per `.env.example` / docs/PAYMENTS.md. Live mode
+   requires all four authoritative Price IDs plus the certified fulfillment
+   configuration. For `off` mode, nothing is required.
 4. Deploy (git push if the repo is Vercel-linked, else `vercel deploy`).
    Prefer a **preview deployment** first; promote to production after the
    smoke test below passes.
 
 ## Post-deploy smoke test
 
-Free-mode (always):
+Free experience (always):
 - [ ] `/` renders the goal picker; selecting a goal routes and persists (reload resumes it)
 - [ ] `/profile` paste-import → Truth Inbox → approve → facts land in the dossier
 - [ ] `/targets` activate a lane → forge → `/versions` shows the pack with real bullets
-- [ ] A variant exports to PDF and DOCX; the files open and carry the user's name
+- [ ] Résumé previews remain editable; locked exports clearly name the smallest pack that unlocks them
 - [ ] `/settings` backup downloads; restore preview shows correct counts
-- [ ] `/pricing`, `/terms`, `/privacy` render; with commerce off there is **no** buy button
+- [ ] `/pricing`, `/terms`, `/privacy` render; with commerce off there is **no** buy button and no $149 primary upsell
 - [ ] Mobile width: nav menu opens AND closes (Escape / outside tap)
 - [ ] No console errors on the routes above
 
-Payment modes (`test` before `live`, then repeat on `live` with one real purchase + refund):
-- [ ] Each tier's checkout opens Stripe with the right price
-- [ ] Completing checkout lands on `/unlock`, which issues + auto-activates the key
-- [ ] The same `session_id` re-issues a valid key (refresh the unlock page)
-- [ ] Gated surfaces unlock (versions export, tailor build, outreach templates, interview limit)
-- [ ] `/unlock` rejects a garbage key with usable guidance
-- [ ] Cancelled checkout returns to `/pricing?checkout=cancelled` with no side effects
+Payment modes (`test` before `live`):
+- [ ] Resume $9, Job $15, Career $25, and All Access $39 each create a Stripe Checkout Session with the authoritative Price
+- [ ] A repeated request with the same `requestId` is idempotent
+- [ ] Completing checkout lands on `/unlock`, which verifies and activates the signed entitlement
+- [ ] Reload preserves access; the emailed short code activates a second fresh browser
+- [ ] Package gates match the pricing table, including 1/1/3/10 role-direction limits
+- [ ] All Access expires at exactly 30 days and falls back to a permanent pack
+- [ ] `/unlock` rejects garbage and tampered keys with usable guidance
+- [ ] Cancel returns to `/pricing?checkout=cancelled` with no entitlement
+- [ ] Duplicate webhook delivery produces one durable fulfillment and one email
+- [ ] Production health says `canSellSafely: true`; the temporary certification route returns 404
+- [ ] Production Stripe audit reports zero active Career Forge Payment Links
 
 ## Rollback
 
@@ -55,7 +61,9 @@ newly issued keys would stop validating (the public key ships in the bundle).
 
 ## Migrations
 
-There is no server database. Client-side schema migrations run inside
-`parseState` (command-center-store) on load, with unreadable state quarantined
-to a recovery key rather than destroyed. Backups restore across versions via
-the same revival path.
+Career data has no server database. Client-side schema migrations run inside
+`parseState` on load, with unreadable state quarantined rather than destroyed.
+Payment fulfillment and recovery-code state are the narrow exception: they are
+stored durably without customer identity so charges can be reconciled and
+webhooks deduplicated. The legacy single-license browser key migrates into the
+multi-entitlement wallet on load.

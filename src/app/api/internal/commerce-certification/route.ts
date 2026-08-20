@@ -102,10 +102,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     const origin = `https://${identity.host}`;
     const created = await createCheckoutSession(
-      "reset",
+      "resume",
       origin,
       config.secretKey,
-      config.priceReset,
+      config.priceResume,
       {
         certification_commit: identity.commitSha,
         certification_host: identity.host,
@@ -161,10 +161,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         ? { ok: true as const, session: result.session, accountId: account.id }
         : { ok: false as const, status: result.status };
     },
-    new Map([[config.priceReset, "reset" as const]])
+    new Map([[config.priceResume, "resume" as const]])
   );
   if (!verification.ok || verification.session.livemode) {
-    return NextResponse.json({ error: "Stripe does not confirm a paid $49 test purchase." }, { status: 409 });
+    return NextResponse.json({ error: "Stripe does not confirm a paid $9 Resume Pack test purchase." }, { status: 409 });
   }
 
   const session = await stripeGet(

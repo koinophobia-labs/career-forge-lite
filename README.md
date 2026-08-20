@@ -19,13 +19,15 @@ Career Forge turns messy work history into a complete, truthful career package: 
 
 Supporting stations: `/truth-map` (claim→evidence lineage), `/weekly` (honest weekly review), `/settings` (backup/restore/clear), `/story` (free-text intake), `/resume-builder` (guided question-by-question builder).
 
-## Commerce (one-time packs, no accounts)
+## Commerce (self-service packs, no accounts)
 
-Three configurable packs — Career Reset ($49), Job Search ($79), Career Switch ($99) — defined entirely in [src/lib/packages.ts](src/lib/packages.ts). Prices are product hypotheses; change them in that one file.
+The product contract is centralized in [src/lib/packages.ts](src/lib/packages.ts): useful Free access, a $9 Resume Pack, $15 Job Pack, $25 Career Pack, and non-renewing $39 30-Day All Access.
 
-- Building, reviewing, and editing are free; **exporting and power features unlock with a pack**.
-- Fulfillment is a signed **license key** (ECDSA P-256), minted server-side after Stripe Checkout and verified offline in the browser. No account, no career data server-side. See [docs/PAYMENTS.md](docs/PAYMENTS.md) for architecture, setup, and the go-live checklist.
-- `NEXT_PUBLIC_COMMERCE_MODE=off` (default) keeps everything free-beta: no gates, no buy buttons, no dead checkout.
+- Free users can import or enter history, approve evidence, build and edit one role direction, inspect résumé drafts, analyze jobs, track applications, and try six interview answers.
+- Paid packs unlock the specific exports, workflows, and role-direction limits shown at checkout. Resume, Job, and Career Packs are permanent; All Access expires exactly 30 days after purchase.
+- Stripe Price IDs are authoritative server configuration. Fulfillment is a signed ECDSA P-256 entitlement plus a short emailed recovery code; the client never trusts a `paid=true` flag.
+- Multiple purchases coexist, an expired pass falls back to any permanent pack, and career data remains local to the browser. See [docs/PAYMENTS.md](docs/PAYMENTS.md).
+- `NEXT_PUBLIC_COMMERCE_MODE=off` (default) closes checkout but does not silently grant premium features.
 
 ## Development
 
@@ -35,10 +37,10 @@ npm run dev        # http://localhost:3000
 npm test           # regression suites (pure Node, no browser needed)
 npm run lint
 npm run typecheck
-npm run build      # production build: static pages + 3 API routes
+npm run build      # production Next.js build
 ```
 
-Env vars: copy `.env.example` and see [docs/PAYMENTS.md](docs/PAYMENTS.md). With nothing set, the app runs fully as the free beta.
+Env vars: copy `.env.example` and see [docs/PAYMENTS.md](docs/PAYMENTS.md). With nothing set, the useful Free experience runs and checkout stays closed.
 
 Useful scripts:
 

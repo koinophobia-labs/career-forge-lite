@@ -5,7 +5,7 @@
 
 import { createPrivateKey, sign } from "node:crypto";
 import { LICENSE_PREFIX, type LicensePayload } from "@/lib/license";
-import type { PackageTier } from "@/lib/packages";
+import { packageDurationSeconds, type PackageTier } from "@/lib/packages";
 
 function toBase64Url(buffer: Buffer): string {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -29,7 +29,15 @@ export function mintLicenseKey(
       format: "der",
       type: "pkcs8"
     });
-    const payload: LicensePayload = { v: 1, tier, ref, iat: Math.floor(issuedAtUnixSeconds) };
+    const issuedAt = Math.floor(issuedAtUnixSeconds);
+    const durationSeconds = packageDurationSeconds(tier);
+    const payload: LicensePayload = {
+      v: 2,
+      tier,
+      ref,
+      iat: issuedAt,
+      ...(durationSeconds === null ? {} : { exp: issuedAt + durationSeconds })
+    };
     const payloadBytes = Buffer.from(JSON.stringify(payload), "utf8");
     const signature = sign("sha256", payloadBytes, { key: privateKey, dsaEncoding: "ieee-p1363" });
     return `${LICENSE_PREFIX}.${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`;

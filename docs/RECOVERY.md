@@ -1,4 +1,4 @@
-# Recovery: someone paid and didn't get their key
+# Recovery: someone paid and did not receive access
 
 Career data never touches a server. Operational payment state is stored in a
 PII-free durable fulfillment table so Stripe payments can be reconciled without
@@ -36,14 +36,24 @@ an unfulfilled customer.
 > retention window, treat Stripe as the source of truth and assume nothing was
 > delivered unless the customer says otherwise.
 
-## 2. Mint and send the key by hand
+## 2. Verify the package and recover access
+
+Read the Checkout Session line-item Price and map it through the production
+`STRIPE_PRICE_RESUME`, `STRIPE_PRICE_JOB`, `STRIPE_PRICE_CAREER`, or
+`STRIPE_PRICE_ALL_ACCESS` setting. Never infer the package from customer text or
+Stripe metadata. Prefer retrying the webhook or the existing recovery-code
+delivery so the durable idempotency record remains authoritative.
+
+If the verified purchase still needs manual recovery:
 
 ```
-node scripts/mint-license.mjs --tier reset --session <checkout_session_id>
+node scripts/mint-license.mjs --tier <resume|job|career|all-access> --session <checkout_session_id> --issued-at <stripe_session_created_unix>
 ```
 
-The entitlement payload is deterministic: the same session id, tier, and issue
-time always represent the same grant. P-256 ECDSA signatures may produce
+Use the Stripe Session creation time as the issue time so a 30-Day All Access
+recovery does not reset its expiration window. The entitlement payload is
+deterministic: the same session id, tier, and issue time represent the same
+grant. P-256 ECDSA signatures may produce
 different valid bytes when re-minted; both keys activate the same package. A
 manual recovery must not be sent until the durable record and provider history
 confirm that it will not duplicate an earlier fulfillment email.
@@ -68,10 +78,10 @@ a silent one is not.
 `/api/commerce-health` reports whether this deployment may sell. It returns
 `canSellSafely: true` only when live mode is on, configuration and operational
 certification pass, and Blake's approval record matches the exact commit and
-evidence. Until then the pricing page shows a contact CTA
-instead of a buy button and `/api/checkout` refuses with 503.
+evidence. Until then the pricing page shows checkout as temporarily unavailable
+and `/api/checkout` refuses with 503; the Free experience stays open.
 
-The operator must configure the live Stripe key, Price ID, webhook secret,
+The operator must configure the live Stripe key, all four Price IDs, webhook secret,
 Resend key, verified sender, monitored reply address, and durable store; complete
 production-host test-mode certification; reconcile all live successes; and then
 wait for Blake's separate approval command.

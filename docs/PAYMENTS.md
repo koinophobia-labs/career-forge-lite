@@ -1,167 +1,140 @@
-# Career Forge Automated Pack Payments — Dormant Reactivation Guide
+# Career Forge self-service payments
 
-The public-beta release keeps `NEXT_PUBLIC_COMMERCE_MODE=off`: the self-serve
-product is free, and the separate $149 human-reviewed service uses a manual
-availability inquiry followed by a founder-sent, single-use Stripe payment link. Do not run
-the automated-commerce launcher for that release.
+Career Forge sells simple one-time access, not AI credits or an automatically
+renewing subscription. The optional $149 human résumé service is separate,
+inquiry-first, and has no automated checkout path.
 
-The implementation below is retained for a future, explicitly approved Career
-Pack cohort. Reactivating it is a separate launch with its own production-host
-certification and human approval; a green application release does not authorize
-automated checkout.
+## Product contract
 
-Career Forge sells three one-time packs (config: `src/lib/packages.ts` — names,
-prices, deliverables, feature grants all live there). Fulfillment is a signed
-**license key**, not an account: the buyer's browser exchanges the Stripe
-checkout session id for a key at `/unlock`, and the key verifies offline with
-a public key baked into the client. No database, no auth, no career data
-server-side.
+| Offer | Price | Access |
+| --- | ---: | --- |
+| Free | $0 | Import/enter history, evidence review, one role direction, editable previews, job analysis, tracking, and six interview answers. No card or account. |
+| Resume Pack | $9 once | Permanent baseline PDF/DOCX/ZIP résumé exports for one role direction. |
+| Job Pack | $15 once | Resume Pack plus one target-job tailoring, application/outreach materials, and unlimited interview answers. |
+| Career Pack | $25 once | Job Pack plus LinkedIn/profile materials, complete career ZIP, transition positioning, and up to three role directions. |
+| 30-Day All Access | $39 once | Every paid workflow and up to ten role directions for exactly 30 days. No auto-renewal. |
 
-## Architecture at a glance
+`src/lib/packages.ts` is the canonical definition for names, prices,
+deliverables, limits, durations, and feature grants.
 
+## Trust boundary and fulfillment
+
+```text
+/pricing ── POST /api/checkout {tier, requestId} ──▶ Stripe Checkout Session
+                                                         │
+                       cancel ◀───────────────────────────┤
+                                                         ▼ success
+/pricing?checkout=cancelled                  /unlock?session_id=cs_...
+                                                         │
+                                              GET /api/license
+                                                         │
+                    direct Stripe lookup + Price/amount/currency verification
+                                                         │
+                                          signed CF1 entitlement
+
+Stripe checkout.session.completed ──▶ signature check ──▶ Stripe re-query
+                                   ──▶ durable idempotent claim
+                                   ──▶ short recovery code via Resend
 ```
-/pricing ──POST /api/checkout {tier}──▶ Stripe Checkout (price from packages.ts)
-   ▲                                        │ success_url
-   │                                        ▼
-   └──────────── /unlock?session_id=cs_… ──GET /api/license──▶ verify paid
-                                            │                  mint ECDSA key
-                    localStorage ◀──────────┘ (idempotent — same session
-                    career-forge-license-v1     always re-issues a valid key)
 
-Stripe webhook checkout.session.completed ──▶ /api/stripe-webhook
-  signature + direct Stripe verification ──▶ durable claim ──▶ Resend direct-unlock email
-```
-
-- **Client enforcement**: `src/lib/entitlement.ts` re-verifies the stored key
-  cryptographically on every load. Tampering (e.g. editing the payload tier)
-  fails signature verification — verified by `scripts/entitlement-regression.mjs`.
-- **Server price authority**: `/api/checkout` accepts only a tier name and
-  prices it from `packages.ts`; the client can never send an amount.
-- **Idempotent fulfillment**: re-requesting `/api/license` with the same
-  session id re-issues a working key for the same entitlement. P-256 signature
-  bytes may differ. Duplicate webhooks are suppressed by durable session state
-  and never send a second fulfillment email.
+- The browser sends a tier, never an amount or Price ID. The server maps each
+  tier to one environment-configured Stripe Price.
+- Checkout requests carry a random retry identity, which becomes a Stripe
+  idempotency key. Repeating one click cannot create unrelated sessions.
+- Metadata never grants access. Session verification derives the tier from the
+  paid Price ID and separately checks amount, currency, paid status, and email.
+- The client stores server-signed ECDSA P-256 entitlements, never a trusted
+  boolean. Editing the tier or expiry breaks the signature.
+- Multiple signed purchases coexist. The highest active pack is shown for
+  compatibility, features are the union of active grants, and expired All
+  Access falls back to any permanent pack.
+- A short recovery code can activate another browser. No user account is
+  required; reloads preserve the local signed wallet. Career data is never sent
+  to Stripe or the fulfillment store.
+- Webhook delivery is durably idempotent by Checkout Session. A retry resumes
+  incomplete fulfillment and never sends a second successful delivery email.
 
 ## Environment variables
 
-| Variable | Where | Purpose |
-| --- | --- | --- |
-| `STRIPE_SECRET_KEY` | server (secret) | `sk_test_…` or `sk_live_…`. Used to create and directly verify Checkout Sessions. |
-| `STRIPE_PRICE_RESET` | server | Authoritative one-time $49 Price ID for the open package. |
-| `STRIPE_WEBHOOK_SECRET` | server (secret) | `whsec_…` for `checkout.session.completed`; required in live configuration. |
-| `LICENSE_SIGNING_PRIVATE_KEY` | server (secret) | base64 PKCS8 ECDSA P-256 key. Generate with `node scripts/generate-license-keys.mjs`. |
-| `NEXT_PUBLIC_LICENSE_PUBLIC_KEY` | build-time (public) | Matching base64 SPKI public key — ships in the client bundle. |
-| `REDEMPTION_CODE_PEPPER` | server (secret) | Independent high-entropy secret used to hash and temporarily encrypt short recovery codes. |
-| `NEXT_PUBLIC_COMMERCE_MODE` | build-time (public) | `off` (default — free beta, no gates, no buy buttons), `test`, or `live`. |
-| `NEXT_PUBLIC_APP_URL` | build-time | Canonical origin for checkout success/cancel URLs, e.g. `https://career-forge-lite.vercel.app`. |
-| `RESEND_API_KEY` | server (secret) | Dedicated sending-only key for license fulfillment. |
-| `LICENSE_EMAIL_FROM` | server | Verified sender, production: `Career Forge <keys@koinophobialabs.com>`. |
-| `LICENSE_EMAIL_REPLY_TO` | server | Monitored support address used by the license email. |
+| Variable | Purpose |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Server-only `sk_test_...` or `sk_live_...` used to create and verify Sessions. |
+| `STRIPE_PRICE_RESUME` | Authoritative one-time $9 Price ID. |
+| `STRIPE_PRICE_JOB` | Authoritative one-time $15 Price ID. |
+| `STRIPE_PRICE_CAREER` | Authoritative one-time $25 Price ID. |
+| `STRIPE_PRICE_ALL_ACCESS` | Authoritative one-time $39 Price ID. |
+| `STRIPE_WEBHOOK_SECRET` | Server-only signing secret for `checkout.session.completed`. |
+| `LICENSE_SIGNING_PRIVATE_KEY` | Server-only base64 PKCS8 P-256 signing key. |
+| `NEXT_PUBLIC_LICENSE_PUBLIC_KEY` | Matching base64 SPKI key embedded in the client. |
+| `REDEMPTION_CODE_PEPPER` | Independent server-only secret for recovery-code hashing/encryption. |
+| `DATABASE_URL` | Preferred durable Neon store. KV variables remain a supported fallback. |
+| `RESEND_API_KEY` | Server-only sending key for purchase recovery email. |
+| `LICENSE_EMAIL_FROM` | Verified transactional sender. |
+| `LICENSE_EMAIL_REPLY_TO` | Monitored support mailbox. |
+| `NEXT_PUBLIC_COMMERCE_MODE` | `off`, `test`, or `live`; a build-time value. |
+| `NEXT_PUBLIC_APP_URL` | Clean canonical origin used for Stripe return URLs. |
 
-**Key hygiene:** test and live deployments must use **different** license
-keypairs, or test-mode purchases would unlock production.
+Preview and production must use different license signing keypairs. Never put a
+secret in source, shell arguments, support tickets, or logs.
 
-## Test-mode bring-up (do this first)
+## Test-mode verification
 
-1. `node scripts/generate-license-keys.mjs` → set both license env vars
-   (Vercel → Project → Settings → Environment Variables, "Preview" scope).
-2. Set `STRIPE_SECRET_KEY` to your **test** key (`sk_test_…`).
-3. Set `NEXT_PUBLIC_COMMERCE_MODE=test`, `NEXT_PUBLIC_APP_URL` to the preview URL.
-4. Deploy. On `/pricing` you should see the "Test mode" banner.
-5. Buy the open `reset` tier with card `4242 4242 4242 4242` (any future date/CVC):
-   - Confirm `/unlock` shows and auto-activates the key.
-   - Confirm gated surfaces unlock (exports on Résumé Pack, tailor build
-     button, outreach templates, interview limit removed).
-   - Confirm `/api/license?session_id=<same id>` re-issues a valid key.
-6. Simulate failure paths: cancel mid-checkout (returns to `/pricing?checkout=cancelled`),
-   and hit `/unlock?session_id=cs_test_garbage` (clean error, retry guidance).
-7. Add a webhook endpoint in Stripe → `https://<host>/api/stripe-webhook`,
-   event `checkout.session.completed`; set `STRIPE_WEBHOOK_SECRET` + Resend vars;
-   confirm the key email arrives.
+1. Provision all four test Products/Prices with `npm run commerce:launch` or
+   configure their Price IDs manually.
+2. Set test Stripe, signing, webhook, durable store, Resend, and app URL values;
+   set `NEXT_PUBLIC_COMMERCE_MODE=test`; deploy the preview.
+3. Buy each package with Stripe test card `4242 4242 4242 4242`.
+4. For every purchase, verify the Stripe amount and Price ID, success return,
+   immediate activation, refresh persistence, emailed code, second-browser
+   redemption, and exact feature boundaries.
+5. Verify cancel returns to `/pricing?checkout=cancelled` with no entitlement.
+6. Re-deliver the webhook and prove only one email/access code exists.
+7. Move the clock to the exact All Access expiry boundary and prove paid
+   workflows re-lock while local work and permanent packs remain.
 
-## Production-host test certification
+## Catalog packaging command
 
-The production host must be certified with Stripe test mode while its normal
-live checkout remains closed. Temporarily set the four
-`CERTIFICATION_STRIPE_*` / `CERTIFICATION_OPERATOR_TOKEN` variables documented
-in `.env.example` on the exact production commit. Point a separate Stripe test
-webhook at the production webhook URL.
-
-`npm run certify` calls the bearer-protected recorder. The deployment—not the
-operator laptop—creates the test Checkout Session and re-queries Stripe's
-Session, event, account, authoritative $49 Price, durable Neon record, Resend
-message ID, license endpoint, and success/cancellation routes. A second delivery
-of the same Stripe event and a fresh same-commit deployment are required before
-the recorder accepts the evidence.
-
-After evidence is recorded, remove the temporary certification variables,
-revoke the Vercel automation bypass, and redeploy the same commit. The route
-then returns 404. It never writes human approval.
-
-## Safe launch command
-
-The repository launch command validates the linked Vercel project, keeps
-credentials out of arguments and logs, preserves or generates an ECDSA P-256
-signing pair, rejects reuse of the other environment's public key, configures
-the selected Vercel environment through stdin, deploys, and probes the public
-checkout/license boundary.
-
-Run the credential-free plan first:
+Start with the non-mutating plan:
 
 ```bash
 npm run commerce:launch -- --dry-run --target preview --app-url https://<preview-host>
 npm run commerce:launch -- --dry-run --target production --app-url https://career-forge-lite.vercel.app
 ```
 
-Then provide the mode-specific Stripe key only in the local process
-environment and run the same command without `--dry-run`:
+The live command reuses the deployed signing pair when valid, otherwise accepts
+a mode-0600 keypair file outside the repository. It provisions the exact four
+Prices idempotently, writes Vercel values over stdin, removes legacy environment
+variables, deactivates only obsolete Career Forge Payment Links, deploys, and
+probes all four checkout tiers. It does not certify or authorize live sales.
 
-```bash
-STRIPE_TEST_SECRET_KEY=... npm run commerce:launch -- --target preview --app-url https://<preview-host> --signing-key-file /absolute/restricted/test-license.json
-STRIPE_LIVE_SECRET_KEY=... npm run commerce:launch -- --target production --app-url https://career-forge-lite.vercel.app --signing-key-file /absolute/restricted/live-license.json
-```
+## Production certification and release
 
-Never paste either command with its populated value into chat, an issue, or a
-shell transcript. The two signing-key files must be different, outside the
-repository, and mode `0600`; retain them only through launch verification and
-delete them afterward. The older launcher still contains legacy Payment Link
-setup and must not be treated as production authorization. Runtime checkout
-ignores that link and creates a verified Checkout Session from
-`STRIPE_PRICE_RESET`. Production configuration, certification, reconciliation,
-and Blake's approval are separate required gates.
+Live checkout requires both configuration and operational proof. Presence of
+keys is not proof that delivery works.
 
-## Go-live checklist
+1. Deploy the final commit to the production host with live checkout still
+   fail-closed.
+2. Temporarily configure the `CERTIFICATION_STRIPE_*` values from `.env.example`
+   and a separate Stripe test webhook for the exact production host.
+3. Complete the $9 Resume Pack test purchase and fulfillment journey. Re-deliver
+   the event to prove durable duplicate suppression, then run `npm run certify`.
+4. Record explicit human authorization for that exact commit and evidence with
+   `scripts/approve-live-commerce.mjs`.
+5. Remove every temporary certification variable and bypass, redeploy the same
+   commit, and require `/api/internal/commerce-certification` to return 404.
+6. Require `/api/commerce-health` to report `canSellSafely: true` and verify all
+   four live checkout Sessions show the correct Price and amount. Do not place a
+   real charge merely to inspect a Session.
+7. Run `npm run audit:stripe-links`; it must find one exact live Price per pack
+   and zero active Career Forge Payment Links.
 
-- [ ] Owner has approved final pricing (current $49/$79/$99 are **hypotheses**;
-      no willingness-to-pay evidence exists — see docs/CAREER_FORGE_MARKET_MAP_2026.md).
-- [ ] Owner (or counsel) has reviewed `/terms` and `/privacy`.
-- [ ] `LICENSE_EMAIL_REPLY_TO` names a monitored support mailbox.
-- [ ] Fresh **production** license keypair generated and set (never the test pair).
-- [ ] `STRIPE_SECRET_KEY` = `sk_live_…`, `NEXT_PUBLIC_COMMERCE_MODE=live`,
-      `NEXT_PUBLIC_APP_URL` = production URL.
-- [ ] `STRIPE_PRICE_RESET` is the live one-time `$49` Career Reset Price ID.
-- [ ] Stripe account activated for live payments (business details, bank payout).
-- [ ] One real live-mode purchase + refund executed as a smoke test.
-- [ ] Statement descriptor set in Stripe (what buyers see on their card).
-- [ ] Live webhook created against the production URL with the live signing secret.
-- [ ] Dedicated production Resend key, verified sender, and monitored reply-to configured.
-- [ ] Production-host test-mode certification recorded for the exact production commit.
-- [ ] Human approval remains a separate final gate.
+Any checkout-surface edit changes the certified hash and closes live checkout
+until the new build is certified and approved again.
 
-## Refunds and revocation
+## Recovery, refunds, and limitations
 
-Refund in the Stripe dashboard. v1 has **no revocation list** — a refunded
-buyer's key keeps working (documented, deliberate: no server state). If abuse
-appears, add a small denylist of `ref` values checked in `/api/license` and
-ship a client denylist with the next deploy.
-
-## Support playbook
-
-- "I lost my key" → use the direct link in the Career Forge license email, or
-  verify the Stripe purchase through the support runbook. Stripe receipts do
-  not link back to Career Forge. For an audited manual recovery, mint with:
-  `LICENSE_SIGNING_PRIVATE_KEY=… node scripts/mint-license.mjs <tier> <order-ref>`
-- "Key says invalid" → almost always a partial paste; keys are long and must
-  include the `CF1.` prefix. Confirm the key was minted for the same
-  environment (test keys don't unlock live builds).
-- Review/press copy → mint with ref `review-<name>` so grants are auditable.
+Use `docs/RECOVERY.md` for a paid-but-unfulfilled purchase. Stripe is the source
+of truth and the paid Price determines the tier. Resume, Job, and Career Pack
+keys are deliberately permanent and offline; already activated keys cannot be
+remotely revoked. Revoking a short code prevents future redemption but not an
+entitlement already stored on a device.

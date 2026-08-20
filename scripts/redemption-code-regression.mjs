@@ -95,7 +95,7 @@ check("legacy signed keys are preserved by input formatting", pure.formatAccessC
 const store = new MemoryFulfillmentStore();
 const purchase = {
   sessionId: "cs_test_short_code_one",
-  tier: "reset",
+  tier: "resume",
   entitlementReference: "code-one",
   purchaseTimestamp: "2026-07-21T12:00:00.000Z",
 };
@@ -139,9 +139,9 @@ check("repeated abuse increases cooldown", secondStrike.cooldownUntil - (rate.co
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
 const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-const signedEntitlement = mintLicenseKey("reset", foundFromFreshServiceInstance.entitlementReference, 1_752_600_000, privateB64);
-const verified = await verifyLicenseKey(signedEntitlement, publicB64);
-check("short-code mapping produces a valid signed entitlement", verified.ok && verified.payload.tier === "reset");
+const signedEntitlement = mintLicenseKey("resume", foundFromFreshServiceInstance.entitlementReference, 1_752_600_000, privateB64);
+const verified = await verifyLicenseKey(signedEntitlement, publicB64, 1_752_600_001);
+check("short-code mapping produces a valid signed entitlement", verified.ok && verified.payload.tier === "resume");
 check("existing long CF1 keys remain valid", verified.ok && pure.isLegacyLicenseKey(signedEntitlement));
 
 const storeSource = fs.readFileSync(path.join(root, "src/lib/server/fulfillment-store.ts"), "utf8");

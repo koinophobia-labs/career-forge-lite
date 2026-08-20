@@ -27,7 +27,7 @@
 import { createHash } from "node:crypto";
 
 /** Bump when the certification procedure changes shape. */
-export const DRILL_VERSION = "4.0.0";
+export const DRILL_VERSION = "5.0.0";
 
 export const CERTIFICATION_RECORD_ID = "certification:operational";
 export const APPROVAL_RECORD_ID = "approval:live-commerce";

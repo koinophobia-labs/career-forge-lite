@@ -32,17 +32,23 @@ first — this checklist covers what only a human (or a browser pass) can judge.
 
 ## Commerce (with NEXT_PUBLIC_COMMERCE_MODE=test)
 
-- [ ] /pricing shows three packs + test-mode banner; FAQ reads honestly
+- [ ] `/pricing` shows useful Free plus $9 Resume, $15 Job, $25 Career, and $39 30-Day All Access; every card names its limit and after-purchase behavior
+- [ ] No $49 legacy pack or $149 human-service upsell appears in the primary pricing, résumé-completion, or footer flow
 - [ ] Without a license: exports/tailor-build/outreach-templates show the
       locked panel with price and pricing link — never a dead button
 - [ ] Interview mode stops at 6 answers with the upgrade panel; transcript
       survives refresh
-- [ ] Buy with 4242… → /unlock issues + activates key; gated surfaces unlock
-- [ ] Paste the key in a second browser → unlocks there too
+- [ ] Buy each pack with 4242… → `/unlock` activates exactly the sold features and the Stripe Session has the expected Price/amount
+- [ ] Emailed short code in a second fresh browser restores access; the signed entitlement is never displayed or emailed
+- [ ] Buy a second permanent pack → both purchases remain in the wallet after reload
+- [ ] Expired All Access → paid workflows re-lock, work remains, and any permanent pack still works
 - [ ] Tamper with the stored key (change tier) → reload → invalid, not upgraded
 - [ ] "Clear local data" wipes career data but NOT the license
-- [ ] With COMMERCE_MODE=off: no gates anywhere, no buy buttons, pricing page
-      shows free-beta panel
+- [ ] With COMMERCE_MODE=off: paid gates remain honest, no buy buttons appear,
+      and the useful Free workflow still works
+- [ ] Cancel checkout → `/pricing?checkout=cancelled`; no access is granted
+- [ ] Reuse the same checkout request identity → Stripe creates no duplicate Session
+- [ ] Production `/api/internal/commerce-certification` returns 404 after temporary credentials are removed
 
 ## Resilience
 
@@ -61,7 +67,7 @@ first — this checklist covers what only a human (or a browser pass) can judge.
       /pricing; mobile menu opens AND closes (Escape, outside tap)
 - [ ] Every form control announces a label (spot-check with VoiceOver)
 
-## Exports (paid or commerce-off)
+## Exports (with the matching paid entitlement)
 
 - [ ] PDF and DOCX open in real apps; name/contact present; sections in the
       order chosen in the editor; no internal ids or debug text anywhere

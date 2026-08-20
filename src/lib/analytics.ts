@@ -50,9 +50,10 @@ export type CareerForgeEventName =
   // was viewed/bought is a product fact, not a person fact, so the tier rides
   // in the event name itself rather than as a property.
   | "pricing_viewed"
-  | "checkout_started_reset"
-  | "checkout_started_job_search"
-  | "checkout_started_career_switch"
+  | "checkout_started_resume"
+  | "checkout_started_job"
+  | "checkout_started_career"
+  | "checkout_started_all_access"
   | "checkout_completed"
   | "license_activated"
   | "license_invalid"

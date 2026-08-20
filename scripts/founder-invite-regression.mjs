@@ -1,7 +1,7 @@
 // Founder-invite integrity + CF-01 remediation proof.
 //
 // CF-01 (red-team, High): a default-ENABLED, guessable, unsalted-hash founder
-// invite minted an UNLIMITED number of higher-tier ($79 job-search) licenses for
+// invite minted an UNLIMITED number of higher-tier licenses for
 // free via one unauthenticated POST, bypassing every sell-approval gate.
 //
 // This suite proves the executed attack now fails and the invite only works when
@@ -10,7 +10,7 @@
 //   * No shipped default hash anywhere in src.
 //   * Opt-in requires BOTH FOUNDER_INVITE_ENABLED=true AND a configured hash.
 //   * The route is bound to canSellSafely (Blake's approval), rate-limited, and
-//     capped, and comps only the entry "reset" tier — never a higher tier.
+//     capped, and comps only the entry Resume Pack — never a higher tier.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -117,16 +117,16 @@ function resetInviteEnv() {
   check("rejects non-string input", !invite.founderInviteCodeMatches(null));
   check("fails closed when hash is explicitly null", !invite.founderInviteCodeMatches(testCode, null));
 
-  // --- tier lowered to entry 'reset', and mint/sign integrity intact ---
-  check("FOUNDER_INVITE_TIER lowered to 'reset'", invite.FOUNDER_INVITE_TIER === "reset");
+  // --- invite remains constrained to the lowest paid pack ---
+  check("FOUNDER_INVITE_TIER is the entry Resume Pack", invite.FOUNDER_INVITE_TIER === "resume");
 
   const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
   const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
   const publicB64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
   const license = invite.mintFounderInviteLicense(privateB64, 1_752_600_000, "founder-regression");
-  const verified = await verifyLicenseKey(license, publicB64);
+  const verified = await verifyLicenseKey(license, publicB64, 1_752_600_001);
   check("mints a signed founder license", typeof license === "string" && license.startsWith("CF1."));
-  check("founder license now unlocks the entry 'reset' tier (not job-search)", verified.ok && verified.payload.tier === "reset");
+  check("founder license unlocks only the entry Resume Pack", verified.ok && verified.payload.tier === "resume");
   check("founder license carries a support-safe reference", verified.ok && verified.payload.ref === "founder-regression");
   check("minting fails closed without the signing key", invite.mintFounderInviteLicense(null) === null);
   resetInviteEnv();
@@ -205,7 +205,7 @@ const req = (code) => ({ json: async () => ({ code }) });
   check("route: valid code but not sell-safe => 503 not_sell_safe", res.status === 503 && res.body.code === "not_sell_safe");
 }
 
-// 3c. Valid code + sell-safe + signing key + durable store => 200 mint of 'reset'.
+// 3c. Valid code + sell-safe + signing key + durable store => Resume Pack.
 {
   resetInviteEnv();
   const code = "s3cure-founder-code-9f3a";
@@ -220,9 +220,9 @@ const req = (code) => ({ json: async () => ({ code }) });
 
   const ok = await route.POST(req(code));
   check("route: sell-safe mint returns 200", ok.status === 200);
-  check("route: minted tier is 'reset' (not job-search)", ok.body.tier === "reset");
+  check("route: minted tier is Resume Pack", ok.body.tier === "resume");
   check("route: returns a signed CF1 entitlement", typeof ok.body.signedEntitlement === "string" && ok.body.signedEntitlement.startsWith("CF1."));
-  check("route: package name is the Career Reset Pack", ok.body.packageName === "Career Reset Pack");
+  check("route: package name is Resume Pack", ok.body.packageName === "Resume Pack");
 
   const capped = await route.POST(req(code));
   check("route: second mint over the cap => 429 total_cap_reached", capped.status === 429 && capped.body.code === "total_cap_reached");

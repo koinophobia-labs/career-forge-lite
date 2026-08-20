@@ -13,7 +13,7 @@ import { formatAccessCodeInput, isLegacyLicenseKey } from "@/lib/redemption-code
 type FulfillmentState =
   | { phase: "idle" }
   | { phase: "fetching" }
-  | { phase: "issued"; packageName: string; source: "purchase" | "invite" }
+  | { phase: "issued"; packageName: string; source: "purchase" | "invite"; expiresAt: number | null }
   | { phase: "pending" }
   | { phase: "error"; message: string };
 
@@ -26,6 +26,7 @@ type ManualState =
   | { phase: "idle" }
   | { phase: "redeeming" }
   | { phase: "valid"; packageName: string }
+  | { phase: "expired"; packageName: string; expiresAt: number | null }
   | { phase: "invalid" };
 
 // A purchase or short redemption returns a signed entitlement that is verified
@@ -51,10 +52,20 @@ function UnlockContent() {
           trackCareerEvent("checkout_completed");
           const outcome = await activateSignedEntitlement(data.signedEntitlement);
           trackCareerEvent(outcome.status === "valid" ? "license_activated" : "license_invalid");
+          if (outcome.status !== "valid") {
+            setFulfillment({
+              phase: "error",
+              message: outcome.status === "expired"
+                ? "This 30-Day All Access purchase has expired. Your saved work is still available."
+                : "The purchase was verified, but its signed access could not be activated."
+            });
+            return;
+          }
           setFulfillment({
             phase: "issued",
             packageName: data.packageName ?? "your pack",
-            source: "purchase"
+            source: "purchase",
+            expiresAt: outcome.expiresAt
           });
           return;
         }
@@ -96,7 +107,8 @@ function UnlockContent() {
       setFulfillment({
         phase: "issued",
         packageName: data.packageName ?? "your pack",
-        source: "invite"
+        source: "invite",
+        expiresAt: outcome.expiresAt
       });
     } catch {
       setInviteState({ phase: "error", message: "Could not reach the founder invite service. Check your connection and try again." });
@@ -135,6 +147,15 @@ function UnlockContent() {
       }
 
       const outcome = await activateSignedEntitlement(signedEntitlement);
+      if (outcome.status === "expired") {
+        setManualState({
+          phase: "expired",
+          packageName: outcome.tier ? PACKAGES[outcome.tier].name : packageName,
+          expiresAt: outcome.expiresAt
+        });
+        trackCareerEvent("license_invalid");
+        return;
+      }
       if (outcome.status !== "valid" || !outcome.tier) {
         setManualState({ phase: "invalid" });
         trackCareerEvent("license_invalid");
@@ -186,6 +207,11 @@ function UnlockContent() {
               Career Forge is active in this browser.
               {fulfillment.source === "purchase" && " Your short access code was sent to the email used at Checkout for unlocking another device."}
             </p>
+            {fulfillment.expiresAt && (
+              <p className="mt-2 text-sm font-bold text-gold">
+                All Access expires {new Date(fulfillment.expiresAt * 1_000).toLocaleDateString()} and does not renew automatically.
+              </p>
+            )}
             <Link href="/" className="mt-5 inline-block rounded-md bg-gold px-5 py-3 text-sm font-black text-ink transition hover:bg-cyan">
               Continue where you left off →
             </Link>
@@ -307,16 +333,26 @@ function UnlockContent() {
               That access code could not be activated. Check the code and try again.
             </p>
           )}
+          {manualState.phase === "expired" && (
+            <p role="status" className="mt-3 text-sm font-bold text-gold">
+              {manualState.packageName} expired{manualState.expiresAt ? ` on ${new Date(manualState.expiresAt * 1_000).toLocaleDateString()}` : ""}. Your saved work remains on this device.
+            </p>
+          )}
         </div>
 
         <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-lg font-bold text-paper">License on this device</h2>
-          {entitlement.status === "valid" && entitlement.tier ? (
+          {entitlement.activeEntitlements.length > 0 ? (
             <div className="mt-3">
-              <p className="text-sm leading-6 text-paper/80">
-                <span className="font-black text-cyan">{PACKAGES[entitlement.tier].name}</span> is active. Clearing
-                your career data in Settings does <span className="font-bold">not</span> remove your license.
-              </p>
+              <ul className="space-y-2 text-sm leading-6 text-paper/80">
+                {entitlement.activeEntitlements.map((grant) => (
+                  <li key={`${grant.tier}:${grant.issuedAt}`}>
+                    <span className="font-black text-cyan">{PACKAGES[grant.tier].name}</span>
+                    {grant.expiresAt ? ` · expires ${new Date(grant.expiresAt * 1_000).toLocaleDateString()}` : " · permanent pack access"}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-sm leading-6 text-paper/60">Clearing career data in Settings does not remove these access grants.</p>
               <button
                 type="button"
                 onClick={() => {
@@ -325,11 +361,16 @@ function UnlockContent() {
                 }}
                 className="mt-4 rounded-md border border-white/20 px-4 py-2 text-sm font-bold text-paper/70 transition hover:border-ember hover:text-ember"
               >
-                Remove license from this device
+                Remove all access codes from this device
               </button>
             </div>
           ) : entitlement.status === "checking" ? (
             <p className="mt-3 text-sm text-paper/60">Checking stored license…</p>
+          ) : entitlement.status === "expired" ? (
+            <p className="mt-3 text-sm leading-6 text-paper/60">
+              Your time-limited access has expired. Your saved work remains here.{" "}
+              <Link href="/pricing" className="font-bold text-cyan underline hover:text-gold">See current packs</Link>
+            </p>
           ) : (
             <p className="mt-3 text-sm leading-6 text-paper/60">
               No license is active on this device.{" "}

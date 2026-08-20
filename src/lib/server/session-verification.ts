@@ -62,9 +62,10 @@ export type VerificationResult = { ok: true; session: VerifiedSession } | Verifi
 export function priceTierMap(): Map<string, PackageTier> {
   const map = new Map<string, PackageTier>();
   const envKey: Record<PackageTier, string> = {
-    reset: "STRIPE_PRICE_RESET",
-    "job-search": "STRIPE_PRICE_JOB_SEARCH",
-    "career-switch": "STRIPE_PRICE_CAREER_SWITCH",
+    resume: "STRIPE_PRICE_RESUME",
+    job: "STRIPE_PRICE_JOB",
+    career: "STRIPE_PRICE_CAREER",
+    "all-access": "STRIPE_PRICE_ALL_ACCESS",
   };
   for (const tier of PACKAGE_ORDER) {
     const configured = process.env[envKey[tier]]?.trim();

@@ -77,7 +77,7 @@ const fabricated = (sessionId) =>
         id: sessionId,
         payment_status: "paid",
         created: Math.floor(Date.now() / 1000),
-        metadata: { tier: "reset" },
+        metadata: { tier: "resume" },
         customer_details: { email: "synthetic@example.invalid" },
       },
     },

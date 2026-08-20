@@ -4,7 +4,7 @@
 // (server-side); the client never sends an amount.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getPackage, type PackageTier } from "@/lib/packages";
+import { type PackageTier } from "@/lib/packages";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -15,7 +15,7 @@ export function getStripeSecretKey(): string | null {
 
 export type CertificationStripeConfig = {
   secretKey: string;
-  priceReset: string;
+  priceResume: string;
   webhookSecret: string;
   operatorToken: string;
 };
@@ -29,12 +29,12 @@ export type CertificationStripeConfig = {
  */
 export function getCertificationStripeConfig(): CertificationStripeConfig | null {
   const secretKey = process.env.CERTIFICATION_STRIPE_SECRET_KEY?.trim();
-  const priceReset = process.env.CERTIFICATION_STRIPE_PRICE_RESET?.trim();
+  const priceResume = process.env.CERTIFICATION_STRIPE_PRICE_RESUME?.trim();
   const webhookSecret = process.env.CERTIFICATION_STRIPE_WEBHOOK_SECRET?.trim();
   const operatorToken = process.env.CERTIFICATION_OPERATOR_TOKEN?.trim();
-  if (!secretKey || !priceReset || !webhookSecret || !operatorToken) return null;
+  if (!secretKey || !priceResume || !webhookSecret || !operatorToken) return null;
   if (!/^sk_test_|^rk_test_/.test(secretKey)) return null;
-  return { secretKey, priceReset, webhookSecret, operatorToken };
+  return { secretKey, priceResume, webhookSecret, operatorToken };
 }
 
 export function stripeKeyMode(secretKey: string): "test" | "live" | "unknown" {
@@ -62,11 +62,6 @@ export function isStripePaymentLinkUrl(value: unknown): value is string {
   }
 }
 
-export function getLiveResetPaymentLinkUrl(): string | null {
-  const configured = process.env.STRIPE_LIVE_RESET_PAYMENT_LINK;
-  return isStripePaymentLinkUrl(configured) ? configured.trim() : null;
-}
-
 export type CheckoutSession = {
   id: string;
   url: string | null;
@@ -84,11 +79,17 @@ export type CheckoutSession = {
   line_items?: { data?: Array<{ price?: { id?: string; product?: string } | null }> } | null;
 };
 
-async function stripeRequest(path: string, secretKey: string, body?: URLSearchParams): Promise<Response> {
+async function stripeRequest(
+  path: string,
+  secretKey: string,
+  body?: URLSearchParams,
+  idempotencyKey?: string
+): Promise<Response> {
   return fetch(`${STRIPE_API}${path}`, {
     method: body ? "POST" : "GET",
     headers: {
       Authorization: `Bearer ${secretKey}`,
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {})
     },
     body
@@ -98,9 +99,10 @@ async function stripeRequest(path: string, secretKey: string, body?: URLSearchPa
 /** Configured Stripe price id for a tier, if one exists. */
 export const configuredPriceId = (tier: PackageTier): string | null => {
   const key = {
-    reset: "STRIPE_PRICE_RESET",
-    "job-search": "STRIPE_PRICE_JOB_SEARCH",
-    "career-switch": "STRIPE_PRICE_CAREER_SWITCH",
+    resume: "STRIPE_PRICE_RESUME",
+    job: "STRIPE_PRICE_JOB",
+    career: "STRIPE_PRICE_CAREER",
+    "all-access": "STRIPE_PRICE_ALL_ACCESS",
   }[tier];
   return key ? process.env[key]?.trim() || null : null;
 };
@@ -111,28 +113,18 @@ export async function createCheckoutSession(
   secretKey: string,
   explicitPriceId?: string,
   extraMetadata: Record<string, string> = {},
-  customerEmail?: string
+  customerEmail?: string,
+  idempotencyKey?: string
 ): Promise<{ ok: true; session: CheckoutSession } | { ok: false; status: number; error: string }> {
-  const pack = getPackage(tier);
   const priceId = explicitPriceId?.trim() || configuredPriceId(tier);
-
-  // A configured price id is strongly preferred: fulfillment derives the tier
-  // from the price on the paid session, and an inline price_data line has no
-  // stable id to derive from. Inline pricing stays only as a local-dev
-  // fallback, and live readiness requires the id to be set.
-  const lineItem: Record<string, string> = priceId
-    ? { "line_items[0][price]": priceId }
-    : {
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][unit_amount]": String(pack.priceUsd * 100),
-        "line_items[0][price_data][product_data][name]": `Career Forge — ${pack.name}`,
-        "line_items[0][price_data][product_data][description]": pack.summary,
-      };
+  if (!priceId) {
+    return { ok: false, status: 503, error: "That package is temporarily unavailable." };
+  }
 
   const params = new URLSearchParams({
     mode: "payment",
     "line_items[0][quantity]": "1",
-    ...lineItem,
+    "line_items[0][price]": priceId,
     "metadata[tier]": tier,
     success_url: `${origin}/unlock?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/pricing?checkout=cancelled`,
@@ -144,7 +136,7 @@ export async function createCheckoutSession(
   }
   if (customerEmail?.trim()) params.set("customer_email", customerEmail.trim());
 
-  const response = await stripeRequest("/checkout/sessions", secretKey, params);
+  const response = await stripeRequest("/checkout/sessions", secretKey, params, idempotencyKey);
   if (!response.ok) {
     return { ok: false, status: response.status, error: "Stripe rejected the checkout request." };
   }
