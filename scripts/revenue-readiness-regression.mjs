@@ -26,6 +26,7 @@ const privacy = read("src/app/privacy/page.tsx");
 const runbook = read("docs/REVIEWED_SERVICE_FULFILLMENT.md");
 const versions = read("src/app/versions/page.tsx");
 const founding = read("src/app/founding-beta/page.tsx");
+const checkout = read("src/app/api/checkout/route.ts");
 const envExample = read(".env.example");
 const hashScript = read("scripts/compute-surface-hash.mjs");
 const certification = read("src/lib/server/certification.ts");
@@ -44,6 +45,8 @@ check("terms require availability before payment", terms.includes("one active pa
 check("privacy separates inquiry from file transfer", privacy.includes("An availability inquiry does not require résumé files"));
 check("customer-facing deliverables agree on LinkedIn headline", service.includes("LinkedIn headline") && versions.includes("a LinkedIn headline") && !versions.includes("LinkedIn positioning"));
 check("commerce defaults to off", /^NEXT_PUBLIC_COMMERCE_MODE=off$/m.test(envExample));
+check("checkout API fails closed unless mode is explicitly test or live", checkout.includes('commerceMode !== "live" && commerceMode !== "test"') && checkout.includes('code: "commerce_off"'));
+check("test checkout refuses a live Stripe key", checkout.includes('stripeKeyMode(secretKey) !== "test"'));
 check("retired $49 cohort page redirects to current pricing", founding.includes('redirect("/pricing")') && !founding.includes("Secure checkout is live"));
 check("Stripe link audit is read-only and redacts shareable URLs", stripeLinkAudit.includes("GET") === false && stripeLinkAudit.includes("method:") === false && !stripeLinkAudit.includes("link.url"));
 check("Stripe link audit accepts restricted live keys", stripeLinkAudit.includes("(?:sk|rk)_live_"));
