@@ -2,6 +2,13 @@ import Link from "next/link";
 import { CommandNav } from "@/components/CommandNav";
 import { SiteFooter } from "@/components/SiteFooter";
 
+export const metadata = {
+  title: "$149 Human-Reviewed Résumé Rebuild — Career Forge",
+  description: "A capacity-limited, human-reviewed résumé rebuild with clear scope, turnaround, privacy, and revision terms."
+};
+
+const SERVICE_EMAIL = "koinophobia999@gmail.com";
+
 const deliverables: Array<[string, string]> = [
   ["Career diagnostic", "A human reviews your current résumé, goals, and strongest evidence before rebuilding anything."],
   ["Rebuilt résumé", "One professionally reviewed résumé delivered in editable DOCX and finished PDF formats."],
@@ -12,8 +19,8 @@ const deliverables: Array<[string, string]> = [
 ];
 
 const processSteps: Array<[string, string]> = [
-  ["1. Inquire", "Email your current background, target roles, and what is not working in your résumé. No payment is collected yet."],
-  ["2. Confirm scope", "Koinophobia Labs confirms the deliverables, intake needs, privacy terms, and 48-hour delivery window in writing."],
+  ["1. Check availability", "Email your current background, target roles, timeline, and what is not working in your résumé. No payment is collected yet."],
+  ["2. Confirm scope", "Koinophobia Labs confirms availability, deliverables, intake needs, privacy terms, and the delivery date in writing."],
   ["3. Pay", "You receive a secure payment link for the flat $149 after the scope is confirmed."],
   ["4. Review and rebuild", "Blake reviews the supplied material, rebuilds the package, and checks the PDF and DOCX page by page."],
   ["5. Delivery", "You receive the files, three target-role directions, LinkedIn headline, Loom walkthrough, and revision instructions."]
@@ -26,9 +33,11 @@ export default function ReviewedServicePage() {
   "Name:",
   "Current role or background:",
   "Target roles:",
+  "Preferred deadline:",
+  "Do you have an existing résumé or Career Forge export?",
   "What is not working in my current résumé:"
 ].join(String.fromCharCode(10));
-const inquiry = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("Career Forge Résumé Rebuild ($149) — inquiry")}&body=${encodeURIComponent(inquiryBody)}`;
+const inquiry = `mailto:${SERVICE_EMAIL}?subject=${encodeURIComponent("Career Forge Résumé Rebuild ($149) — availability")}&body=${encodeURIComponent(inquiryBody)}`;
   return (
     <main>
       <CommandNav active="/pricing" />
@@ -64,11 +73,14 @@ const inquiry = `mailto:koinophobia999@gmail.com?subject=${encodeURIComponent("C
             ))}
           </ol>
           <div className="mt-4 grid gap-2 text-xs leading-5 text-paper/70 sm:grid-cols-2">
-            <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2"><strong className="text-gold">Turnaround:</strong> within 48 hours after payment and complete intake.</p>
+            <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2"><strong className="text-gold">Turnaround:</strong> within 5 business days after payment and complete intake.</p>
             <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2"><strong className="text-gold">Revision:</strong> one focused round included within 14 days of delivery.</p>
           </div>
+          <p className="mt-3 rounded-lg border border-cyan/25 bg-cyan/5 px-3 py-2 text-xs leading-5 text-paper/70">
+            <strong className="text-cyan">Founding capacity:</strong> one paid rebuild is handled at a time. If that slot is occupied, you can join the waitlist without paying. Your start date is confirmed before any payment link is sent.
+          </p>
           <a href={inquiry} className="lab-pill-button mt-5 inline-flex min-h-11 items-center px-6 py-2.5 text-sm font-black">
-            Request the rebuild — no payment yet →
+            Check availability — no payment yet →
           </a>
         </div>
 

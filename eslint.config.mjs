@@ -3,7 +3,7 @@ import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
   {
-    ignores: ["koinophobia-labs-site-source/**", "outputs/**", "work/**", ".next-sandbox/**"]
+    ignores: ["koinophobia-labs-site-source/**", "outputs/**", "work/**", ".next/**", ".next-sandbox/**"]
   },
   ...nextVitals,
   ...nextTypescript

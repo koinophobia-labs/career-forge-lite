@@ -16,8 +16,8 @@ const checkoutEventByTier: Record<PackageTier, "checkout_started_reset" | "check
 
 const betaFaqs: Array<[string, string]> = [
   [
-    "Is anything for sale during the public beta?",
-    "No. Paid packaging and prices remain provisional. The complete workflow is open while production behavior, artifact quality, and real user value are being validated."
+    "Is the self-serve product paid during the public beta?",
+    "No. The complete self-serve workflow is free during beta. A separate $149 human-reviewed Résumé Rebuild is available if you want a person to review and refine the final package."
   ],
   [
     "What can I test for free?",
@@ -33,7 +33,7 @@ const betaFaqs: Array<[string, string]> = [
   ],
   [
     "What happens to the proposed package scopes?",
-    "They remain product hypotheses. They may change or disappear after production re-audits and human testing; no current price or package should be treated as a commitment."
+    "They preview possible future one-time plans and may change after user testing. No proposed scope or price is a current commitment."
   ],
   [
     "How does Career Forge handle unsupported information?",
@@ -139,7 +139,7 @@ export default function PricingPage() {
       <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <p className="trust-kicker text-sm font-bold uppercase">
           {isPublicBeta
-            ? "Public beta · No purchases enabled"
+            ? "Public beta · Self-serve is free"
             : commerceMode === "live"
               ? checkoutClosed
                 ? "Paid beta paused · Checkout closed while I verify delivery"
@@ -148,30 +148,28 @@ export default function PricingPage() {
         </p>
         <h1 className="mt-3 max-w-3xl text-3xl font-bold text-paper sm:text-5xl">
           {isPublicBeta
-            ? "Use the complete workflow free while the paid outcome is being validated."
+            ? "Build your job-search materials free. Add human review only if you want it."
             : "Choose the feature scope that matches your current search."}
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
           {isPublicBeta
-            ? "The scopes below show how Career Forge may eventually be packaged. They are not offers, the prices are not displayed, and no commercial-readiness claim is being made."
+            ? "Import your history, build evidence-backed résumés, tailor them to jobs, and export everything at no charge during beta. The optional $149 service adds a person who reviews and rebuilds your final package."
             : "Build and review first. When you are ready to export or use power features, choose a one-time package. Career data remains on your device."}
         </p>
 
         {isPublicBeta && (
           <div className="mt-6 max-w-3xl rounded-xl border border-cyan/25 bg-cyan/5 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Release boundary</p>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan">Choose your level of help</p>
             <p className="mt-2 text-sm leading-6 text-paper/75">
-              Production re-audits and human use must independently support artifact quality, workflow value, and pricing before paid access opens. Every feature is included free during this period.
+              <strong className="text-paper">Free self-serve:</strong> use the complete workflow yourself and review every draft before sending it.
             </p>
             <p className="mt-3 border-t border-white/10 pt-3 text-sm leading-6 text-paper/75">
-              Available now, separately: a{" "}
-              <Link href="/reviewed-service" className="font-bold text-gold underline">
-                $149 human-reviewed résumé service
-              </Link>{" "}
-              where a person reviews your dossier, lanes, résumé, LinkedIn positioning, and final files before
-              delivery. It is a different offer from the automated beta — automated outputs do not receive that
-              review.
+              <strong className="text-paper">$149 human-reviewed rebuild:</strong> a person reviews your dossier and résumé, then delivers checked PDF and DOCX files, a LinkedIn headline, target-role direction, and a walkthrough. Automated beta outputs do not receive this review.
             </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href="/" className="inline-flex min-h-11 items-center rounded-md bg-cyan px-4 py-2 text-sm font-black text-ink transition hover:bg-gold">Continue with free self-serve →</Link>
+              <Link href="/reviewed-service" className="inline-flex min-h-11 items-center rounded-md border border-gold/50 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink">See the $149 human-reviewed rebuild</Link>
+            </div>
           </div>
         )}
         {commerceMode === "test" && (

@@ -135,13 +135,12 @@ try {
   const saveText = await page.getByTestId("save-status").first().textContent();
   verify(/saved on this device/i.test(saveText), `save-status pill is visible and affirmative ("${saveText.trim()}")`);
 
-  // --- 3. Identity + a real role so the dossier is forge-ready --------------
-  await page.getByRole("textbox", { name: "Full name" }).fill("Jamie Journey");
-  await page.getByLabel("Role title", { exact: true }).fill("Customer Support Specialist");
-  await page.getByLabel("Employer", { exact: true }).fill("HelpDesk Co");
-  await page.getByLabel("Dates", { exact: true }).fill("2021–2025");
-  await page.getByLabel("Responsibilities", { exact: true }).fill("Resolved escalated billing disputes\nWrote 45 knowledge-base articles");
-  await page.getByRole("button", { name: "Add approved role" }).click();
+  // --- 3. Import created the real role; no duplicate manual entry required --
+  const importedState = await page.evaluate(() => JSON.parse(localStorage.getItem("career-forge-command-center-v1")));
+  verify(
+    importedState.dossier.roles.some((role) => role.title.includes("Customer Support Specialist") && role.employer.includes("HelpDesk Co")),
+    "approved import creates the structured role without duplicate manual entry"
+  );
 
   // --- 4. Returning user gets one obvious next action -----------------------
   await page.goto(baseUrl);
@@ -172,6 +171,14 @@ try {
   verify(true, "pasting the purchase-issued license key activates on the first attempt with clear confirmation");
 
   // --- 8. Export succeeds on the first attempt ------------------------------
+  await page.goto(`${baseUrl}/versions`);
+  const identityLink = page.getByRole("link", { name: "Add your name first → one field, 10 seconds" }).first();
+  await identityLink.waitFor();
+  await identityLink.click();
+  await page.waitForURL(`${baseUrl}/profile#identity`);
+  await page.getByRole("heading", { name: "Put your name on your documents" }).waitFor();
+  await page.getByRole("textbox", { name: "Name on your documents" }).fill("Jamie Journey");
+  await page.getByRole("textbox", { name: "Email on your documents" }).fill("jamie@example.com");
   await page.goto(`${baseUrl}/versions`);
   const exportButton = page.getByRole("button", { name: "Export complete pack" });
   await exportButton.waitFor();

@@ -23,6 +23,9 @@ const intent = read("src/components/IntentRouter.tsx");
 const home = read("src/app/page.tsx");
 const tailor = `${read("src/components/tailor/TailorWorkspace.tsx")}\n${read("src/components/tailor/useTailorWorkspace.ts")}`;
 const sprint = read("src/components/role-sprint/RoleSprintWorkspacePage.tsx");
+const profile = read("src/app/profile/page.tsx");
+const versions = read("src/app/versions/page.tsx");
+const pricing = read("src/app/pricing/page.tsx");
 
 const primaryBlock = nav.match(/const primaryStations:[\s\S]*?= \[([\s\S]*?)\n\];/)?.[1] ?? "";
 const primaryEntries = [...primaryBlock.matchAll(/\["[^"]+",\s*"[^"]+"\]/g)];
@@ -43,6 +46,17 @@ check("home: optional sample is collapsed after the main choice", home.includes(
 check("home: no seven-station workflow wall", !home.includes("const loop") && !home.includes("lg:grid-cols-7") && !home.includes("Career Lanes") && !home.includes("Truth Map"));
 check("home: returning users still get one next step", home.includes("<IntentRouter />"));
 check("home: full workspace is collapsed", home.includes("Open full workspace") && home.includes("<details"));
+
+check("profile: fresh users do not see a duplicate identity form", profile.includes("state.resumePacks.length > 0") && profile.includes("showManualHistory"));
+check("profile: manual history is optional and collapsed", profile.includes("No résumé handy? Add your history manually.") && profile.includes("aria-expanded={manualHistoryOpen}"));
+check("profile: identity deep links reveal the collapsed fields", profile.includes("hashOpensManualHistory") && profile.includes('["#manual-history", "#identity"]'));
+check("profile: optional project and education forms are collapsed", profile.includes("Add projects, independent work, or education") && profile.includes("<details className=\"trust-panel mt-6"));
+
+check("resume pack: empty state follows the actual activation stage", versions.includes("currentActivationStage(state)") && versions.includes("{nextStage.action} →"));
+check("resume pack: completed work offers optional human review", versions.includes("Want a person to pressure-test the final package?") && versions.includes('href="/reviewed-service"'));
+
+check("pricing: free self-serve and human review are clearly separated", pricing.includes("Free self-serve:") && pricing.includes("$149 human-reviewed rebuild:"));
+check("pricing: both honest next actions are visible", pricing.includes("Continue with free self-serve") && pricing.includes("See the $149 human-reviewed rebuild"));
 
 check("tailor: job post is the only required input", tailor.includes("disabled={!form.jobPost.trim()}") && !tailor.includes("if (!form.jobPost.trim() || !effectiveBaseline)"));
 check("tailor: application details are collapsed", tailor.includes("Add application details") && tailor.indexOf("Paste the full job posting") < tailor.indexOf("Add application details"));

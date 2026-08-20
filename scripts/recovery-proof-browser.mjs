@@ -109,16 +109,14 @@ try {
   await page.getByRole("heading", { name: "Review what Career Forge found" }).waitFor();
   const approveSections = page.getByRole("button", { name: "Approve section" });
   for (let index = 0; index < await approveSections.count(); index += 1) await approveSections.nth(index).click();
-  // Reject one specific proposal so the rejected state is part of the proof.
-  await page.getByRole("button", { name: "Reject", exact: true }).first().click();
+  // Reject a non-role proposal so the rejected state is part of the proof
+  // without deleting the imported employment record needed for the journey.
+  await page.locator("article").filter({ hasText: "Tools: Zendesk" }).getByRole("button", { name: "Reject", exact: true }).click();
   await page.getByRole("button", { name: "Finish review" }).click();
   await page.getByText(/Truth Inbox complete:.*1 rejected/).waitFor();
-  await page.getByRole("textbox", { name: "Full name" }).fill("Rae Recovery");
-  await page.getByLabel("Role title", { exact: true }).fill("Customer Support Specialist");
-  await page.getByLabel("Employer", { exact: true }).fill("HelpDesk Co");
-  await page.getByLabel("Dates", { exact: true }).fill("2021–2025");
-  await page.getByLabel("Responsibilities", { exact: true }).fill("Resolved escalated billing disputes\nWrote 45 knowledge-base articles");
-  await page.getByRole("button", { name: "Add approved role" }).click();
+
+  const imported = await readState(page);
+  verify(imported.dossier.roles.some((role) => role.title.includes("Customer Support Specialist")), "approved import creates the structured role without duplicate manual entry");
 
   await page.goto(`${baseUrl}/targets`);
   await page.locator('[data-testid="adopt-lane"]:not(:disabled)').first().click();
@@ -130,6 +128,14 @@ try {
   await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
   await page.getByText("Career Switch Pack activated").waitFor();
+  await page.goto(`${baseUrl}/versions`);
+  const identityLink = page.getByRole("link", { name: "Add your name first → one field, 10 seconds" }).first();
+  await identityLink.waitFor();
+  await identityLink.click();
+  await page.waitForURL(`${baseUrl}/profile#identity`);
+  await page.getByRole("heading", { name: "Put your name on your documents" }).waitFor();
+  await page.getByRole("textbox", { name: "Name on your documents" }).fill("Rae Recovery");
+  await page.getByRole("textbox", { name: "Email on your documents" }).fill("rae@example.com");
   await page.goto(`${baseUrl}/versions`);
   const firstExport = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export complete pack" }).click();

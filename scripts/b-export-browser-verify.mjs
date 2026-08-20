@@ -2,14 +2,30 @@
 // identity export gate, identity quick-fill, full-document copy, working
 // per-variant PDF/DOCX download with visible feedback, pack bundle export,
 // /versions/view full-text copy, and the metrics uncertainty guard.
-// Usage: node scripts/b-export-browser-verify.mjs <state-with-identity.json> <state-no-identity.json> <license.txt>
+// Usage: node scripts/b-export-browser-verify.mjs
+// Optional compatibility form:
+//   node scripts/b-export-browser-verify.mjs <state-with-identity.json> <state-no-identity.json> <license.txt>
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { chromium } from "playwright";
 
 const baseUrl = "http://localhost:3100";
-const stateWithIdentity = fs.readFileSync(process.argv[2], "utf8");
-const stateNoIdentity = fs.readFileSync(process.argv[3], "utf8");
-const license = fs.readFileSync(process.argv[4], "utf8").trim();
+const fixtureArgs = process.argv.slice(2);
+if (fixtureArgs.length !== 0 && fixtureArgs.length !== 3) {
+  throw new Error("Pass either no fixture arguments or all three: <state-with-identity.json> <state-no-identity.json> <license.txt>");
+}
+
+function generatedState(withIdentity) {
+  return execFileSync(
+    process.execPath,
+    ["scripts/b-seed-export-state.mjs", ...(withIdentity ? ["--with-identity"] : [])],
+    { cwd: process.cwd(), encoding: "utf8" }
+  );
+}
+
+const stateWithIdentity = fixtureArgs.length ? fs.readFileSync(fixtureArgs[0], "utf8") : generatedState(true);
+const stateNoIdentity = fixtureArgs.length ? fs.readFileSync(fixtureArgs[1], "utf8") : generatedState(false);
+const license = fixtureArgs.length ? fs.readFileSync(fixtureArgs[2], "utf8").trim() : "";
 
 let passes = 0;
 const verify = (condition, message) => { if (!condition) throw new Error(`FAIL ${message}`); passes += 1; console.log(`PASS ${message}`); };
@@ -23,7 +39,7 @@ const seed = async (state) => {
   await page.evaluate(([s, l]) => {
     localStorage.clear();
     localStorage.setItem("career-forge-command-center-v1", s);
-    localStorage.setItem("career-forge-license-v1", l);
+    if (l) localStorage.setItem("career-forge-license-v1", l);
   }, [state, license]);
 };
 
@@ -39,6 +55,7 @@ try {
   await page.getByText("Exports are paused so you never send a résumé without your name on it.", { exact: false }).waitFor();
   await gateLinks.first().click();
   await page.waitForURL(`${baseUrl}/profile#identity`);
+  await page.locator("#identity").waitFor();
   verify(await page.locator("#identity").isVisible(), "gate link lands on the identity panel anchor");
 
   // --- Identity quick-fill callout on /profile ---

@@ -39,6 +39,7 @@ export const APPROVAL_RECORD_ID = "approval:live-commerce";
  */
 export const CERTIFIED_SURFACE = [
   "src/app/api/checkout/route.ts",
+  "src/app/api/commerce-health/route.ts",
   "src/app/api/internal/commerce-certification/route.ts",
   "src/app/api/stripe-webhook/route.ts",
   "src/app/api/license/route.ts",
@@ -46,7 +47,10 @@ export const CERTIFIED_SURFACE = [
   "src/app/pricing/page.tsx",
   "src/app/unlock/page.tsx",
   "src/components/PremiumAccess.tsx",
+  "src/lib/entitlement.ts",
+  "src/lib/license.ts",
   "src/lib/redemption-code.ts",
+  "src/lib/server/certification.ts",
   "src/lib/server/stripe.ts",
   "src/lib/server/session-verification.ts",
   "src/lib/server/license-mint.ts",
