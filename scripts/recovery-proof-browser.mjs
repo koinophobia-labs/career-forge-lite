@@ -127,7 +127,7 @@ try {
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Career Switch Pack activated").waitFor();
+  await page.getByText("Career Pack activated").waitFor();
   await page.goto(`${baseUrl}/versions`);
   const identityLink = page.getByRole("link", { name: "Add your name first → one field, 10 seconds" }).first();
   await identityLink.waitFor();
@@ -138,7 +138,7 @@ try {
   await page.getByRole("textbox", { name: "Email on your documents" }).fill("rae@example.com");
   await page.goto(`${baseUrl}/versions`);
   const firstExport = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export complete pack" }).click();
+  await page.getByRole("button", { name: "Export complete career bundle" }).click();
   await firstExport;
 
   const before = await readState(page);
@@ -194,14 +194,14 @@ try {
   // The license key is deliberately not in the backup (it is the user's
   // receipt, kept separately) — so exports must be gated again, and pasting
   // the SAME saved key must re-unlock without friction.
-  verify((await page.getByRole("button", { name: "Export complete pack" }).count()) === 0, "after restore on a clean profile, exports are gated again (license intentionally not in the backup)");
+  verify((await page.getByRole("button", { name: "Export complete career bundle" }).count()) === 0, "after restore on a clean profile, exports are gated again (license intentionally not in the backup)");
   await page.goto(`${baseUrl}/unlock`);
   await page.getByLabel("Access code").fill(licenseKey);
   await page.getByRole("button", { name: "Activate" }).click();
-  await page.getByText("Career Switch Pack activated").waitFor();
+  await page.getByText("Career Pack activated").waitFor();
   await page.goto(`${baseUrl}/versions`);
   const secondExport = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export complete pack" }).click();
+  await page.getByRole("button", { name: "Export complete career bundle" }).click();
   const exported = await secondExport;
   verify(exported.suggestedFilename() === "Rae-Recovery-Resume-Pack.zip", "re-pasting the saved key re-unlocks and export succeeds first-click after full recovery");
 
