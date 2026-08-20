@@ -85,7 +85,7 @@ if (!recording) {
   console.log("Genuine production-host Stripe test Checkout created.");
   console.log(`session ${result.sessionId}`);
   console.log(`url     ${result.url}`);
-  console.log("Complete the $49 test payment, verify inbox delivery, redeploy the same commit, and re-deliver the Stripe event before recording.");
+  console.log("Complete the $9 Resume Pack test payment, verify inbox delivery, redeploy the same commit, and re-deliver the Stripe event before recording.");
   process.exit(0);
 }
 

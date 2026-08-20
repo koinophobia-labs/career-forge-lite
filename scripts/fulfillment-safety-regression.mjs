@@ -1,6 +1,6 @@
 // Fulfillment-safety checks.
 //
-// These exist because an audit found that a customer could be charged $49 and
+// These exist because an audit found that a customer could be charged and
 // receive nothing, silently: in live mode the app handed out a Stripe Payment
 // Link and never learned the outcome, the webhook safety net 503'd because its
 // secret was never provisioned, and no route logged or persisted anything.
@@ -79,7 +79,10 @@ const ALL_CONFIG = {
   STRIPE_SECRET_KEY: "x",
   LICENSE_SIGNING_PRIVATE_KEY: "x",
   REDEMPTION_CODE_PEPPER: "x",
-  STRIPE_PRICE_RESET: "price_test_reset",
+  STRIPE_PRICE_RESUME: "price_test_resume",
+  STRIPE_PRICE_JOB: "price_test_job",
+  STRIPE_PRICE_CAREER: "price_test_career",
+  STRIPE_PRICE_ALL_ACCESS: "price_test_all_access",
   STRIPE_WEBHOOK_SECRET: "x",
   RESEND_API_KEY: "x",
   LICENSE_EMAIL_FROM: "x",
@@ -173,13 +176,13 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     stripeAccountId: "acct_test",
     checkoutSessionId: "cs_test_real_123",
     stripeEventId: "evt_real_123",
-    priceId: "price_reset",
-    tier: "reset",
+    priceId: "price_resume",
+    tier: "resume",
     emailProviderMessageId: "msg_123",
     fulfillmentStoreKind: "neon-postgres",
     fulfillmentAttempts: 2,
-    licenseTierVerified: "reset",
-    redemptionTierVerified: "reset",
+    licenseTierVerified: "resume",
+    redemptionTierVerified: "resume",
     successRouteStatus: 200,
     cancellationRouteStatus: 200,
     completedAt: "2026-07-20T12:00:00.000Z",
@@ -189,7 +192,7 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
   {
     const inner = new MemoryFulfillmentStore();
     const store = durable(inner);
-    await store.claim("cs_test_drill_anything", "evt_forged", { paymentStatus: "paid", tier: "reset" });
+    await store.claim("cs_test_drill_anything", "evt_forged", { paymentStatus: "paid", tier: "resume" });
     await store.update("cs_test_drill_anything", { status: "email_sent", licenseMinted: true, emailSent: true });
     const v = await sellVerdict(store);
     check("a caller-chosen cs_test_drill_* id has no certifying authority", v.canSellSafely === false);
@@ -249,8 +252,8 @@ await withEnv({ ...ALL_CONFIG, NEXT_PUBLIC_COMMERCE_MODE: "live" }, async () => 
     ["evidence without provider acceptance fails", { emailProviderMessageId: "" }, /email provider accepted/i],
     ["evidence without durable duplicate suppression fails", { fulfillmentAttempts: 1 }, /duplicate webhook/i],
     ["evidence without a durable store fails", { fulfillmentStoreKind: "memory" }, /durable fulfillment store/i],
-    ["evidence without license activation fails", { licenseTierVerified: "job-search" }, /issued license activates/i],
-    ["evidence without short-code redemption fails", { redemptionTierVerified: "job-search" }, /emailed access code activates/i],
+    ["evidence without license activation fails", { licenseTierVerified: "job" }, /issued license activates/i],
+    ["evidence without short-code redemption fails", { redemptionTierVerified: "job" }, /emailed access code activates/i],
     ["evidence without both return routes fails", { cancellationRouteStatus: 500 }, /return routes/i],
     ["evidence from an older drill version fails", { drillVersion: "1.0.0" }, /drill 1\.0\.0/i],
   ];
@@ -311,7 +314,10 @@ await withEnv(
     NEXT_PUBLIC_COMMERCE_MODE: "live",
     STRIPE_SECRET_KEY: "x",
     LICENSE_SIGNING_PRIVATE_KEY: "x",
-    STRIPE_PRICE_RESET: "price_test_reset",
+    STRIPE_PRICE_RESUME: "price_test_resume",
+    STRIPE_PRICE_JOB: "price_test_job",
+    STRIPE_PRICE_CAREER: "price_test_career",
+    STRIPE_PRICE_ALL_ACCESS: "price_test_all_access",
   },
   async () => {
     const { liveCommerceUnsafe } = loadTs("src/lib/server/fulfillment-readiness.ts");
@@ -347,10 +353,10 @@ await withEnv(
   const { MemoryFulfillmentStore } = loadTs("src/lib/server/fulfillment-store.ts");
   const store = new MemoryFulfillmentStore();
 
-  const first = await store.claim("cs_1", "evt_1", { paymentStatus: "paid", tier: "reset" });
+  const first = await store.claim("cs_1", "evt_1", { paymentStatus: "paid", tier: "resume" });
   check("first claim of a session wins", first.won === true);
 
-  const second = await store.claim("cs_1", "evt_1_retry", { paymentStatus: "paid", tier: "reset" });
+  const second = await store.claim("cs_1", "evt_1_retry", { paymentStatus: "paid", tier: "resume" });
   check("a second claim of the same session loses", second.won === false);
   check("attempts are counted across retries", second.record.attempts === 2);
   check("the retry's event id is recorded", second.record.lastEventId === "evt_1_retry");
@@ -380,7 +386,7 @@ await withEnv(
   const deliver = async (eventId) => {
     const { record } = await store.claim("cs_same_entitlement", eventId, {
       paymentStatus: "paid",
-      tier: "reset",
+      tier: "resume",
     });
     if (record.emailSent) return;
     fulfillmentEmails += 1;
@@ -528,16 +534,16 @@ check("commerce log documents the no-PII rule", /NEVER log: email addresses/.tes
 
 const pricingPage = read("src/app/pricing/page.tsx");
 check("pricing page asks whether it may sell", pricingPage.includes("/api/commerce-health"));
-check("pricing page closes checkout when unsafe", pricingPage.includes("checkoutClosed"));
+check("pricing page computes checkout availability from mode and readiness", pricingPage.includes("checkoutAvailable"));
 check(
-  "an unsafe deployment shows a contact CTA instead of a buy button",
-  /checkoutClosed \?[\s\S]{0,900}mailto:/.test(pricingPage)
+  "an unsafe live deployment does not render a buy button",
+  /checkoutAvailable \? \([\s\S]{0,900}<button/.test(pricingPage)
 );
-check("checkout cannot be started while closed", /if \(checkoutClosed\) return;/.test(pricingPage));
-check("the CTA defaults to closed before readiness is known", pricingPage.includes("canSellSafely !== true"));
+check("checkout cannot be started while unavailable", /if \(checkoutInFlightRef\.current \|\| !checkoutAvailable\) return;/.test(pricingPage));
+check("live checkout defaults closed before readiness is known", pricingPage.includes('commerceMode === "live" && canSellSafely === true'));
 check(
-  "the header does not advertise an open paid beta while closed",
-  /checkoutClosed[\s\S]{0,200}Checkout closed/.test(pricingPage)
+  "the header clearly states when live checkout is paused",
+  /canSellSafely === false[\s\S]{0,200}Checkout paused/.test(pricingPage)
 );
 
 // --- Recovery procedure -------------------------------------------------------------------------

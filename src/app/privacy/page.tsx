@@ -26,13 +26,13 @@ export default function PrivacyPage() {
             <p className="mt-2">Pilot summaries are never transmitted automatically. A participant must explicitly consent, generate the counts-and-timings JSON in Settings, review it, and send it manually. The summary contains no résumé content, name, employer, or contact information.</p>
           </section>
           <section>
-            <h2 className="text-lg font-bold text-paper">Optional $149 human service</h2>
+            <h2 className="text-lg font-bold text-paper">Separate optional human service</h2>
             <p className="mt-2">The Career Forge Résumé Rebuild is separate from the local-first app. An availability inquiry does not require résumé files. After scope is confirmed, you may voluntarily email a résumé, Career Forge export, or other intake material to Koinophobia Labs so Blake Taylor can perform the work. Only Koinophobia Labs and the email/file providers used for delivery may access those files. Working files are deleted within 30 days after final delivery unless you request earlier deletion or longer retention in writing. Transaction records may be retained where required for accounting, fraud prevention, or legal compliance.</p>
             <p className="mt-2">Request early deletion or ask a service-data question at <a href="mailto:koinophobia999@gmail.com" className="text-cyan underline hover:text-gold">koinophobia999@gmail.com</a>.</p>
           </section>
           <section>
             <h2 className="text-lg font-bold text-paper">Purchases</h2>
-            <p className="mt-2">For the $149 human service, a secure Stripe payment link is sent only after availability and scope are confirmed. Stripe handles payment details and email under <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan underline hover:text-gold">Stripe&apos;s privacy policy</a>; Koinophobia Labs never sees your full card number. If automated Career Packs are offered later, their licenses contain only the pack tier and an order reference, not career data.</p>
+            <p className="mt-2">Stripe handles payment details and checkout email under <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan underline hover:text-gold">Stripe&apos;s privacy policy</a>; Koinophobia Labs never sees your full card number. Career Forge self-service entitlements contain only the package tier, purchase time, an opaque order reference, and an expiration time when applicable—not résumé text or other career data. The separate human service uses a payment link only after availability and scope are confirmed.</p>
           </section>
           <section>
             <h2 className="text-lg font-bold text-paper">Deleting app data</h2>

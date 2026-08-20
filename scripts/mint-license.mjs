@@ -2,8 +2,9 @@
 // review copies, or owner QA. Usage:
 //
 //   LICENSE_SIGNING_PRIVATE_KEY=... node scripts/mint-license.mjs <tier> [ref]
+//   LICENSE_SIGNING_PRIVATE_KEY=... node scripts/mint-license.mjs --tier <tier> --session <cs_...> [--issued-at <unix>]
 //
-// tier: reset | job-search | career-switch
+// tier: resume | job | career | all-access
 // ref:  optional purchase reference shown in support conversations (default "manual")
 
 import fs from "node:fs";
@@ -47,11 +48,27 @@ function loadTsModule(filePath) {
 const { isPackageTier } = loadTsModule(path.join(root, "src/lib/packages.ts"));
 const { mintLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-mint.ts"));
 
-const tier = process.argv[2];
-const ref = process.argv[3] ?? "manual";
+function option(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? null : process.argv[index + 1] ?? null;
+}
+
+const tier = option("--tier") ?? process.argv[2];
+const ref = option("--session") ?? option("--ref") ?? (process.argv.includes("--tier") ? "manual" : process.argv[3]) ?? "manual";
+const issuedAtInput = option("--issued-at");
+const issuedAt = issuedAtInput === null ? Math.floor(Date.now() / 1000) : Number(issuedAtInput);
 
 if (!isPackageTier(tier)) {
-  console.error("Usage: node scripts/mint-license.mjs <reset|job-search|career-switch> [ref]");
+  console.error("Usage: node scripts/mint-license.mjs <resume|job|career|all-access> [ref]");
+  console.error("   or: node scripts/mint-license.mjs --tier <tier> --session <cs_...> [--issued-at <unix>]");
+  process.exit(1);
+}
+if (!Number.isSafeInteger(issuedAt) || issuedAt <= 0) {
+  console.error("--issued-at must be a positive Unix timestamp.");
+  process.exit(1);
+}
+if (tier === "all-access" && issuedAtInput === null) {
+  console.error("All Access recovery requires --issued-at from the Stripe Session creation time so expiry is not extended.");
   process.exit(1);
 }
 if (!process.env.LICENSE_SIGNING_PRIVATE_KEY) {
@@ -59,7 +76,7 @@ if (!process.env.LICENSE_SIGNING_PRIVATE_KEY) {
   process.exit(1);
 }
 
-const license = mintLicenseKey(tier, ref, Math.floor(Date.now() / 1000));
+const license = mintLicenseKey(tier, ref, issuedAt);
 if (!license) {
   console.error("Minting failed — is LICENSE_SIGNING_PRIVATE_KEY a valid base64 PKCS8 P-256 key?");
   process.exit(1);

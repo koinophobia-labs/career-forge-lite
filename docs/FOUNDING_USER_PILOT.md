@@ -1,5 +1,8 @@
 # Founding-User Pilot Protocol
 
+> Archived pilot plan for the retired $49/$79/$99 catalog. Do not use this to
+> configure checkout; the current offers live in `src/lib/packages.ts`.
+
 Internal tests establish mechanical readiness. They cannot establish usefulness or willingness to pay. Career Forge will validate **one commercial outcome first: the $49 Career Reset Pack**. The $79 Job Search and $99 Career Switch packs remain hypotheses until the first tier earns its footing.
 
 ## Release stages

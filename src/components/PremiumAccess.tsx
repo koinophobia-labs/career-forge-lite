@@ -44,7 +44,7 @@ export function UpgradeCallout() {
           <>
             Six free answers to see how the conversational interview works. The{" "}
             <Link href="/pricing" className="font-bold text-gold underline hover:text-cyan">
-              Job Search Pack
+              Job Pack
             </Link>{" "}
             removes the limit.
           </>
@@ -58,7 +58,7 @@ export function UpgradeCallout() {
 
 export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResume }: { hasGeneratedResume?: boolean; onStartOver: () => void; onViewResume?: () => void }) {
   const { commerceEnabled } = useEntitlement();
-  const pack = PACKAGES["job-search"];
+  const pack = PACKAGES.job;
 
   return (
     <div className="rounded-md border border-gold/30 bg-gold/10 p-5">
@@ -66,7 +66,7 @@ export function PremiumLockedPanel({ hasGeneratedResume, onStartOver, onViewResu
       <h2 className="mt-3 text-2xl font-bold text-paper">You have used the free interview preview.</h2>
       <p className="mt-3 text-sm leading-6 text-paper/70">
         {commerceEnabled
-          ? `The full conversational interview — unlimited answers, deeper follow-ups — is part of the ${pack.name} ($${pack.priceUsd}, one-time). Your answers so far are saved on this device.`
+          ? `The full conversational interview — unlimited answers and deeper follow-ups — is part of the ${pack.name} ($${pack.priceUsd}). Your answers so far are saved on this device.`
           : "The preview is intentionally limited while this mode is being tested. The guided builder remains fully open."}
       </p>
       <div className="mt-5 flex flex-wrap gap-3">

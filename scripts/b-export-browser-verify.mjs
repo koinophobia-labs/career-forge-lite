@@ -6,10 +6,43 @@
 // Optional compatibility form:
 //   node scripts/b-export-browser-verify.mjs <state-with-identity.json> <state-no-identity.json> <license.txt>
 import fs from "node:fs";
+import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { generateKeyPairSync } from "node:crypto";
+import ts from "typescript";
 import { chromium } from "playwright";
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const moduleCache = new Map();
+function loadTsModule(filePath) {
+  const absolute = path.resolve(filePath);
+  if (moduleCache.has(absolute)) return moduleCache.get(absolute).exports;
+  const source = fs.readFileSync(absolute, "utf8");
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022
+    },
+    fileName: absolute
+  });
+  const cjsModule = { exports: {} };
+  moduleCache.set(absolute, cjsModule);
+  const dirname = path.dirname(absolute);
+  const localRequire = (request) => {
+    if (request.startsWith("@/")) return loadTsModule(path.join(root, "src", `${request.slice(2)}.ts`));
+    if (request.startsWith(".")) return loadTsModule(path.resolve(dirname, request.endsWith(".ts") ? request : `${request}.ts`));
+    return require(request);
+  };
+  new Function("require", "module", "exports", "__dirname", "__filename", outputText)(localRequire, cjsModule, cjsModule.exports, dirname, absolute);
+  return cjsModule.exports;
+}
 
 const port = 3240;
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -28,7 +61,15 @@ function generatedState(withIdentity) {
 
 const stateWithIdentity = fixtureArgs.length ? fs.readFileSync(fixtureArgs[0], "utf8") : generatedState(true);
 const stateNoIdentity = fixtureArgs.length ? fs.readFileSync(fixtureArgs[1], "utf8") : generatedState(false);
-const license = fixtureArgs.length ? fs.readFileSync(fixtureArgs[2], "utf8").trim() : "";
+let license = fixtureArgs.length ? fs.readFileSync(fixtureArgs[2], "utf8").trim() : "";
+let testPublicKey = process.env.NEXT_PUBLIC_LICENSE_PUBLIC_KEY ?? "";
+if (!fixtureArgs.length) {
+  const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const privateB64 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+  testPublicKey = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  const { mintLicenseKey } = loadTsModule(path.join(root, "src/lib/server/license-mint.ts"));
+  license = mintLicenseKey("career", "export-browser-test", Math.floor(Date.now() / 1000), privateB64) ?? "";
+}
 
 let passes = 0;
 const verify = (condition, message) => { if (!condition) throw new Error(`FAIL ${message}`); passes += 1; console.log(`PASS ${message}`); };
@@ -38,7 +79,12 @@ const server = spawn(
   ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)],
   {
     detached: process.platform !== "win32",
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_COMMERCE_MODE: "off" },
+    env: {
+      ...process.env,
+      NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_PUBLIC_COMMERCE_MODE: "off",
+      NEXT_PUBLIC_LICENSE_PUBLIC_KEY: testPublicKey
+    },
     stdio: ["ignore", "pipe", "pipe"]
   }
 );
@@ -103,7 +149,7 @@ try {
   await page.getByRole("heading", { name: "Your Résumé Pack is ready." }).waitFor();
   const gateLinks = page.getByRole("link", { name: "Add your name first → one field, 10 seconds" });
   verify((await gateLinks.count()) >= 3, "identity gate replaces pack + variant export buttons");
-  verify((await page.getByRole("button", { name: "Export complete pack" }).count()) === 0, "pack export button hidden while identity is empty");
+  verify((await page.getByRole("button", { name: "Export complete career bundle" }).count()) === 0, "career bundle export button hidden while identity is empty");
   verify((await page.getByRole("button", { name: "Print / PDF" }).count()) === 0, "variant export buttons hidden while identity is empty");
   await page.getByText("Exports are paused so you never send a résumé without your name on it.", { exact: false }).waitFor();
   await gateLinks.first().click();
@@ -116,7 +162,7 @@ try {
   await page.getByRole("textbox", { name: "Name on your documents" }).fill("Riley Example");
   await page.getByRole("textbox", { name: "Email on your documents" }).fill("riley@example.com");
   await page.goto(`${baseUrl}/versions`);
-  await page.getByRole("button", { name: "Export complete pack" }).waitFor();
+  await page.getByRole("button", { name: "Export complete career bundle" }).waitFor();
   verify((await page.getByRole("link", { name: "Add your name first → one field, 10 seconds" }).count()) === 0, "quick-fill unblocks exports without re-forging");
 
   // --- Callout dismissal persists ---
@@ -160,7 +206,7 @@ try {
   verify((await docxDownload).suggestedFilename().endsWith(".docx"), "DOCX download works from the pack card");
 
   const zipDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export complete pack" }).click();
+  await page.getByRole("button", { name: "Export complete career bundle" }).click();
   verify((await zipDownload).suggestedFilename() === "Riley-Example-Resume-Pack.zip", "pack bundle exports with identity-based filename");
 
   // --- /versions/view copies the whole document, not the summary sentence ---

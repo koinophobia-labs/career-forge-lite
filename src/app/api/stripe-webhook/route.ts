@@ -87,7 +87,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return looked.ok
       ? { ok: true as const, session: looked.session, accountId: null }
       : { ok: false as const, status: looked.status };
-  }, certificationEvent ? new Map([[certification!.priceReset, "reset"]]) : undefined);
+  }, certificationEvent ? new Map([[certification!.priceResume, "resume"]]) : undefined);
 
   if (!verification.ok) {
     // Stripe disagrees with the payload. Never fulfill on the payload's word.
@@ -212,6 +212,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const pack = getPackage(tier);
+  const expirationText = pack.durationDays
+    ? `This access expires ${new Date((session.created + pack.durationDays * 86_400) * 1_000).toISOString().slice(0, 10)} and does not renew automatically.`
+    : "This pack does not expire.";
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
   const unlockUrl = appUrl ? `${appUrl}/unlock` : "the Unlock page";
 
@@ -237,6 +240,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         `Your access code:`,
         redemptionCode,
         ``,
+        expirationText,
+        ``,
         `Paste this code to unlock Career Forge:`,
         unlockUrl,
         ``,
@@ -247,6 +252,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         `<p>You received this email because a $${pack.priceUsd} Career Forge purchase was completed for this address.</p>`,
         `<p style="margin-bottom:8px"><strong>Your access code</strong></p>`,
         `<p style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;font-weight:700;letter-spacing:2px;margin:0 0 24px">${redemptionCode}</p>`,
+        `<p>${expirationText}</p>`,
         `<p><a href="${unlockUrl}">Paste this code to unlock Career Forge</a></p>`,
         `<p>Questions? Reply to this email.</p>`,
         `</div>`,

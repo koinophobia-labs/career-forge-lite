@@ -1,30 +1,41 @@
-// License keys: how a one-time purchase unlocks Career Forge without an
-// account. A key is a signed statement — "this tier was purchased" — minted
-// server-side at checkout and verified OFFLINE here with the public key.
-// No career data, email, or identity is inside a key. A buyer can restore it
-// from the dedicated Career Forge license email or through verified support.
+// A Career Forge entitlement is a server-signed statement about a purchase.
+// The browser may store it, but cannot change its tier or expiration without
+// invalidating the signature. No career data, email address, or identity is in
+// the payload.
 //
 // Format: CF1.<base64url payload JSON>.<base64url ECDSA-P256-SHA256 signature>
-// ECDSA P-256 is used (not Ed25519) because it has been universally supported
-// in browser WebCrypto for years.
 
-import { isPackageTier, type PackageTier } from "@/lib/packages";
+import {
+  isPackageTier,
+  normalizePackageTier,
+  type PackageTier
+} from "@/lib/packages";
 
 export const LICENSE_PREFIX = "CF1";
 
 export type LicensePayload = {
-  v: 1;
+  // v1 is accepted for previously issued $49/$79/$99 keys. New purchases use
+  // v2, whose optional expiration is part of the signed statement.
+  v: 1 | 2;
   tier: PackageTier;
-  // Opaque purchase reference (e.g. tail of the checkout session id) so a key
-  // can be matched to a receipt in support conversations. Never identity.
   ref: string;
-  // Unix seconds at mint. Perpetual license: no expiry field exists.
   iat: number;
+  exp?: number;
 };
 
 export type LicenseVerification =
   | { ok: true; payload: LicensePayload }
-  | { ok: false; reason: "malformed" | "bad-signature" | "bad-payload" | "no-public-key" | "crypto-unavailable" };
+  | {
+      ok: false;
+      reason:
+        | "malformed"
+        | "bad-signature"
+        | "bad-payload"
+        | "no-public-key"
+        | "crypto-unavailable"
+        | "expired";
+      payload?: LicensePayload;
+    };
 
 function base64UrlToBytes(value: string): Uint8Array | null {
   try {
@@ -49,27 +60,43 @@ export function parseLicenseKey(key: string): { payloadB64: string; signatureB64
 function parsePayload(bytes: Uint8Array): LicensePayload | null {
   try {
     const raw = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-    if (!raw || typeof raw !== "object") return null;
-    if (raw.v !== 1) return null;
-    if (!isPackageTier(raw.tier)) return null;
-    if (typeof raw.ref !== "string" || !raw.ref) return null;
-    if (typeof raw.iat !== "number" || !Number.isFinite(raw.iat)) return null;
-    return { v: 1, tier: raw.tier, ref: raw.ref, iat: raw.iat };
+    if (!raw || typeof raw !== "object" || (raw.v !== 1 && raw.v !== 2)) return null;
+
+    const tier = raw.v === 1 ? normalizePackageTier(raw.tier) : isPackageTier(raw.tier) ? raw.tier : null;
+    if (!tier) return null;
+    if (typeof raw.ref !== "string" || !raw.ref || raw.ref.length > 160) return null;
+    if (typeof raw.iat !== "number" || !Number.isFinite(raw.iat) || raw.iat <= 0) return null;
+
+    if (raw.exp !== undefined && (typeof raw.exp !== "number" || !Number.isFinite(raw.exp) || raw.exp <= raw.iat)) {
+      return null;
+    }
+    if (raw.v === 2 && tier === "all-access" && raw.exp === undefined) return null;
+
+    return {
+      v: raw.v,
+      tier,
+      ref: raw.ref,
+      iat: Math.floor(raw.iat),
+      ...(typeof raw.exp === "number" ? { exp: Math.floor(raw.exp) } : {})
+    };
   } catch {
     return null;
   }
 }
 
-// The verifying public key ships with the app (it is public by definition).
-// Provided via env so deployments can rotate it without a code change.
 export function getLicensePublicKeyB64(): string | null {
   const configured = process.env.NEXT_PUBLIC_LICENSE_PUBLIC_KEY;
   return configured && configured.trim() ? configured.trim() : null;
 }
 
+export function entitlementIdentity(payload: LicensePayload): string {
+  return `${payload.tier}:${payload.ref}:${payload.iat}`;
+}
+
 export async function verifyLicenseKey(
   key: string,
-  publicKeyB64: string | null = getLicensePublicKeyB64()
+  publicKeyB64: string | null = getLicensePublicKeyB64(),
+  nowUnixSeconds = Math.floor(Date.now() / 1000)
 ): Promise<LicenseVerification> {
   const parts = parseLicenseKey(key);
   if (!parts) return { ok: false, reason: "malformed" };
@@ -105,5 +132,8 @@ export async function verifyLicenseKey(
 
   const payload = parsePayload(payloadBytes);
   if (!payload) return { ok: false, reason: "bad-payload" };
+  if (payload.exp !== undefined && nowUnixSeconds >= payload.exp) {
+    return { ok: false, reason: "expired", payload };
+  }
   return { ok: true, payload };
 }

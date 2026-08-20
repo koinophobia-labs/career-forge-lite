@@ -2,10 +2,10 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PackageTier } from "@/lib/packages";
 import { mintLicenseKey } from "@/lib/server/license-mint";
 
-// A founder invite comps the entry ("reset") tier — the same tier the live paid
+// A founder invite comps the entry Resume Pack — the same tier as the lowest
 // beta actually sells. An invite must never grant a HIGHER tier than a real
 // purchase can buy.
-export const FOUNDER_INVITE_TIER: PackageTier = "reset";
+export const FOUNDER_INVITE_TIER: PackageTier = "resume";
 
 // The founder invite is OFF unless a deployment explicitly opts in AND supplies
 // its own per-deployment code hash. There is deliberately NO shipped default

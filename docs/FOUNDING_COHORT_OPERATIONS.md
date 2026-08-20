@@ -1,5 +1,8 @@
 # Career Reset Founding Cohort Operations
 
+> Archived operations plan for the retired founding cohort. It is preserved as
+> research history, not as current pricing or checkout guidance.
+
 This playbook runs the first five paid Career Reset users without pretending the wider pricing model is validated. Personal applicant records, résumé content, and interview notes stay outside this repository.
 
 ## Offer boundary

@@ -53,10 +53,12 @@ check("profile: identity deep links reveal the collapsed fields", profile.includ
 check("profile: optional project and education forms are collapsed", profile.includes("Add projects, independent work, or education") && profile.includes("<details className=\"trust-panel mt-6"));
 
 check("resume pack: empty state follows the actual activation stage", versions.includes("currentActivationStage(state)") && versions.includes("{nextStage.action} →"));
-check("resume pack: completed work offers optional human review", versions.includes("Want a person to pressure-test the final package?") && versions.includes('href="/reviewed-service"'));
+check("resume pack: completed work points to the self-service export choice", versions.includes("Resume Pack") && versions.includes("Career Pack"));
+check("resume pack: human service is not a primary completion CTA", !versions.includes('href="/reviewed-service"'));
 
-check("pricing: free self-serve and human review are clearly separated", pricing.includes("Free self-serve:") && pricing.includes("$149 human-reviewed rebuild:"));
-check("pricing: both honest next actions are visible", pricing.includes("Continue with free self-serve") && pricing.includes("See the $149 human-reviewed rebuild"));
+check("pricing: free use is concrete and cardless", pricing.includes("FREE_OFFER") && pricing.includes("Continue with Free") && pricing.includes("What stays free?"));
+check("pricing: paid packs are outcome-based self-service", pricing.includes("What paid access changes") && pricing.includes("Get the ${pack.name}"));
+check("pricing: the human service is not in the primary funnel", !pricing.includes("$149") && !pricing.includes("reviewed-service"));
 
 check("tailor: job post is the only required input", tailor.includes("disabled={!form.jobPost.trim()}") && !tailor.includes("if (!form.jobPost.trim() || !effectiveBaseline)"));
 check("tailor: application details are collapsed", tailor.includes("Add application details") && tailor.indexOf("Paste the full job posting") < tailor.indexOf("Add application details"));

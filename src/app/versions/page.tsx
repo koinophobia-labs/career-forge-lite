@@ -227,6 +227,7 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
   // Building, reviewing, and editing stay free; taking documents out of the
   // app (copy/PDF/DOCX/bundle) is what a pack purchase unlocks.
   const exportsUnlocked = hasFeature("export_baseline_pack");
+  const bundleUnlocked = hasFeature("career_bundle_export");
   // Documents bind identity at export time, so a missing name means every
   // file would ship headed "Résumé"/placeholder — block with an explanation.
   const identityMissing = !state.dossier.identity.fullName.trim();
@@ -235,7 +236,7 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
   const packExportBlocked = [...defensibilityByVariant.values()].some((receipt) => receipt.missingProvenance > 0);
 
   async function exportBundle() {
-    if (packExportBlocked || !exportsUnlocked || identityMissing) return;
+    if (packExportBlocked || !bundleUnlocked || identityMissing) return;
     setWorking(true);
     try {
       const result = await createPackBundle(pack, state.dossier, state.lanes, ["pdf", "docx"]);
@@ -372,14 +373,14 @@ function PackDashboard({ pack, state, onUpdate, onRecordExport }: { pack: Resume
     <section className="trust-panel mt-8 overflow-hidden p-5 sm:p-6" aria-labelledby="pack-ready-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="trust-kicker text-xs font-bold uppercase">{packExportBlocked ? "Evidence integrity changed" : "Generation complete"}</p><h2 id="pack-ready-title" className="mt-2 text-3xl font-bold text-paper">{packExportBlocked ? "Your Résumé Pack needs evidence review." : "Your Résumé Pack is ready."}</h2><p className="mt-2 text-sm text-paper/65">{pack.lanePacks.length} active lane{pack.lanePacks.length === 1 ? "" : "s"} · {pack.variants.length} generated résumés · {pack.receipt.evidenceUsed.length} evidence items in the original generation receipt · {uniqueUnclaimed.length} unique gaps or unsupported claims left unclaimed</p>{packExportBlocked && <p className="mt-2 text-sm font-bold text-coral">A cited source is missing, rejected, or incomplete. Review dossier evidence and regenerate before tailoring or export.</p>}</div>
-        <div className="flex flex-wrap gap-2">{packExportBlocked ? <Link href="/profile" className="inline-flex min-h-11 items-center rounded border border-coral/45 px-5 py-2.5 text-sm font-bold text-coral">Review dossier evidence →</Link> : <Link href="/tailor" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Tailor a résumé to a real job →</Link>}{!exportsUnlocked ? <LockedActionPill feature="export_baseline_pack" label="Export complete pack" /> : identityMissing ? <IdentityGatePrompt /> : <button type="button" onClick={exportBundle} disabled={working || packExportBlocked} title={packExportBlocked ? "Restore every cited source before exporting this pack." : undefined} className="min-h-11 rounded-md border border-gold/45 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">{working ? "Building ZIP…" : "Export complete pack"}</button>}{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} résumé files plus LinkedIn materials and a README.</p>}{exportNotice && <p role="status" aria-live="polite" className={`w-full text-xs font-bold ${exportNotice.tone === "ok" ? "text-mint" : "text-coral"}`}>{exportNotice.text}</p>}</div>
+        <div className="flex flex-wrap gap-2">{packExportBlocked ? <Link href="/profile" className="inline-flex min-h-11 items-center rounded border border-coral/45 px-5 py-2.5 text-sm font-bold text-coral">Review dossier evidence →</Link> : <Link href="/tailor" className="lab-pill-button inline-flex min-h-11 items-center px-5 py-2.5 text-sm font-black">Tailor a résumé to a real job →</Link>}{!bundleUnlocked ? <LockedActionPill feature="career_bundle_export" label="Export complete career bundle" /> : identityMissing ? <IdentityGatePrompt /> : <button type="button" onClick={exportBundle} disabled={working || packExportBlocked} title={packExportBlocked ? "Restore every cited source before exporting this pack." : undefined} className="min-h-11 rounded-md border border-gold/45 bg-gold/10 px-4 py-2 text-sm font-bold text-gold transition hover:bg-gold hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">{working ? "Building ZIP…" : "Export complete career bundle"}</button>}{lastExportCount !== null && <p className="w-full text-xs font-bold text-mint">Bundle prepared with {lastExportCount} résumé files plus LinkedIn materials and a README.</p>}{exportNotice && <p role="status" aria-live="polite" className={`w-full text-xs font-bold ${exportNotice.tone === "ok" ? "text-mint" : "text-coral"}`}>{exportNotice.text}</p>}</div>
       </div>
       {!exportsUnlocked && (
         <div className="mt-5">
           <LockedFeaturePanel
             feature="export_baseline_pack"
             title="Your pack is built — unlock it to use it."
-            description="Everything below is generated from your approved evidence and free to review and edit. A one-time pack unlocks copying, PDF and DOCX export, and the complete ZIP bundle with your LinkedIn materials."
+            description="Everything below is generated from your approved evidence and free to review and edit. The Resume Pack unlocks copying plus PDF and DOCX résumé files; the Career Pack adds the complete ZIP bundle with LinkedIn materials."
           />
         </div>
       )}
@@ -476,19 +477,6 @@ export default function VersionsPage() {
 
         {hydrated && currentPack && <PackDashboard pack={currentPack} state={state} onUpdate={updatePack} onRecordExport={recordPackExport} />}
         {hydrated && currentPack && currentPack.variants.length > 0 && <div className="mt-4"><BetaFeedbackCard milestone="pack" /></div>}
-        {hydrated && currentPack && currentPack.variants.length > 0 && (
-          <aside className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6" aria-labelledby="human-review-title">
-            <div>
-              <p className="trust-kicker text-xs font-bold uppercase">Optional human review</p>
-              <h2 id="human-review-title" className="mt-2 text-lg font-bold text-paper">Want a person to pressure-test the final package?</h2>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-paper/65">Self-serve stays free during beta. The separate $149 Résumé Rebuild adds a human diagnostic, reviewed PDF and DOCX, a LinkedIn headline, three target-role directions, a Loom walkthrough, and one revision.</p>
-            </div>
-            <Link href="/reviewed-service" className="mt-4 inline-flex min-h-11 shrink-0 items-center rounded-md bg-gold px-4 py-2 text-sm font-black text-ink transition hover:bg-cyan sm:mt-0">
-              See the human-reviewed option →
-            </Link>
-          </aside>
-        )}
-
         {deletedLabel && (
           <div className="mt-6 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-paper/80">
             Deleted “{deletedLabel}”. Any application it was attached to now shows no resume version.

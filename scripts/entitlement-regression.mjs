@@ -59,6 +59,7 @@ const { PACKAGES, PACKAGE_ORDER, isPackageTier, tierHasFeature, tierLaneLimit } 
   path.join(root, "src/lib/packages.ts")
 );
 const { verifyStripeWebhookSignature } = loadTsModule(path.join(root, "src/lib/server/stripe.ts"));
+const { resolveEntitlementKeys } = loadTsModule(path.join(root, "src/lib/entitlement.ts"));
 
 // --- Test keypair (never the production keys) -----------------------------------------------------
 
@@ -76,7 +77,7 @@ const NOW = 1_752_600_000; // fixed timestamp keeps this suite deterministic
 for (const tier of PACKAGE_ORDER) {
   const key = mintLicenseKey(tier, "test-ref", NOW, privateB64);
   check(`mints a ${tier} license`, typeof key === "string" && key.startsWith("CF1."));
-  const verified = await verifyLicenseKey(key, publicB64);
+  const verified = await verifyLicenseKey(key, publicB64, NOW + 1);
   check(`verifies a ${tier} license`, verified.ok === true && verified.payload.tier === tier);
   check(`${tier} license carries the purchase ref`, verified.ok && verified.payload.ref === "test-ref");
 }
@@ -85,15 +86,15 @@ for (const tier of PACKAGE_ORDER) {
 // entitlement payload is. Two independently minted keys for the same purchase
 // must therefore both verify and activate the same package even when their
 // signature bytes differ.
-const entitlementKeyA = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
-let entitlementKeyB = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
+const entitlementKeyA = mintLicenseKey("resume", "same-purchase", NOW, privateB64);
+let entitlementKeyB = mintLicenseKey("resume", "same-purchase", NOW, privateB64);
 for (let attempt = 0; attempt < 8 && entitlementKeyB === entitlementKeyA; attempt += 1) {
-  entitlementKeyB = mintLicenseKey("reset", "same-purchase", NOW, privateB64);
+  entitlementKeyB = mintLicenseKey("resume", "same-purchase", NOW, privateB64);
 }
 const entitlementPartsA = parseLicenseKey(entitlementKeyA);
 const entitlementPartsB = parseLicenseKey(entitlementKeyB);
-const entitlementA = await verifyLicenseKey(entitlementKeyA, publicB64);
-const entitlementB = await verifyLicenseKey(entitlementKeyB, publicB64);
+const entitlementA = await verifyLicenseKey(entitlementKeyA, publicB64, NOW + 1);
+const entitlementB = await verifyLicenseKey(entitlementKeyB, publicB64, NOW + 1);
 check(
   "same purchase produces one deterministic entitlement payload",
   entitlementPartsA.payloadB64 === entitlementPartsB.payloadB64
@@ -103,28 +104,28 @@ check(
   entitlementPartsA.signatureB64 !== entitlementPartsB.signatureB64 && entitlementA.ok && entitlementB.ok
 );
 check(
-  "both valid signatures activate the same reset package",
-  entitlementA.ok && entitlementB.ok && entitlementA.payload.tier === "reset" && entitlementB.payload.tier === "reset"
+  "both valid signatures activate the same resume package",
+  entitlementA.ok && entitlementB.ok && entitlementA.payload.tier === "resume" && entitlementB.payload.tier === "resume"
 );
 
 // --- Tampering and forgery --------------------------------------------------------------------------
 
-const genuine = mintLicenseKey("reset", "ref-1", NOW, privateB64);
+const genuine = mintLicenseKey("resume", "ref-1", NOW, privateB64);
 const genuineParts = parseLicenseKey(genuine);
 
-// Upgrade attack: swap the payload to career-switch but keep the reset signature.
-const forgedPayload = Buffer.from(JSON.stringify({ v: 1, tier: "career-switch", ref: "ref-1", iat: NOW }), "utf8")
+// Upgrade attack: swap the payload to All Access but keep the Resume signature.
+const forgedPayload = Buffer.from(JSON.stringify({ v: 2, tier: "all-access", ref: "ref-1", iat: NOW, exp: NOW + 30 * 86_400 }), "utf8")
   .toString("base64")
   .replace(/\+/g, "-")
   .replace(/\//g, "_")
   .replace(/=+$/, "");
 const upgraded = `CF1.${forgedPayload}.${genuineParts.signatureB64}`;
-const upgradeResult = await verifyLicenseKey(upgraded, publicB64);
+const upgradeResult = await verifyLicenseKey(upgraded, publicB64, NOW + 1);
 check("payload-swap upgrade attack is rejected", upgradeResult.ok === false && upgradeResult.reason === "bad-signature");
 
 // Key minted with a different private key must not verify.
-const foreign = mintLicenseKey("career-switch", "ref-2", NOW, wrongPrivateB64);
-const foreignResult = await verifyLicenseKey(foreign, publicB64);
+const foreign = mintLicenseKey("career", "ref-2", NOW, wrongPrivateB64);
+const foreignResult = await verifyLicenseKey(foreign, publicB64, NOW + 1);
 check("license from a different signing key is rejected", foreignResult.ok === false);
 
 // Signature bit-flip. Flip a real bit in the DECODED signature bytes and
@@ -136,15 +137,15 @@ const flippedSigBytes = Buffer.from(genuineParts.signatureB64.replace(/-/g, "+")
 flippedSigBytes[10] ^= 0x01;
 const flippedSigB64 = flippedSigBytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const flipped = `CF1.${genuineParts.payloadB64}.${flippedSigB64}`;
-check("bit-flipped signature is rejected", (await verifyLicenseKey(flipped, publicB64)).ok === false);
+check("bit-flipped signature is rejected", (await verifyLicenseKey(flipped, publicB64, NOW + 1)).ok === false);
 
 // Structural garbage.
 for (const junk of ["", "CF1", "CF1.only-two", "CF2.a.b", "not a key at all", "CF1..", `CF1.${forgedPayload}.`]) {
-  check(`malformed key ${JSON.stringify(junk.slice(0, 20))} is rejected`, (await verifyLicenseKey(junk, publicB64)).ok === false);
+  check(`malformed key ${JSON.stringify(junk.slice(0, 20))} is rejected`, (await verifyLicenseKey(junk, publicB64, NOW + 1)).ok === false);
 }
 
 // Valid signature over an invalid payload (unknown tier) must be rejected.
-const badTierPayload = { v: 1, tier: "supreme", ref: "x", iat: NOW };
+const badTierPayload = { v: 2, tier: "supreme", ref: "x", iat: NOW };
 {
   const { sign, createPrivateKey } = await import("node:crypto");
   const payloadBytes = Buffer.from(JSON.stringify(badTierPayload), "utf8");
@@ -154,38 +155,89 @@ const badTierPayload = { v: 1, tier: "supreme", ref: "x", iat: NOW };
   });
   const b64u = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const badTierKey = `CF1.${b64u(payloadBytes)}.${b64u(sig)}`;
-  const badTierResult = await verifyLicenseKey(badTierKey, publicB64);
+  const badTierResult = await verifyLicenseKey(badTierKey, publicB64, NOW + 1);
   check("signed-but-unknown tier is rejected", badTierResult.ok === false && badTierResult.reason === "bad-payload");
 }
 
 // Missing public key configuration never grants.
-check("verification without a public key is rejected", (await verifyLicenseKey(genuine, null)).ok === false);
+check("verification without a public key is rejected", (await verifyLicenseKey(genuine, null, NOW + 1)).ok === false);
 
 // Minting without a private key fails closed.
-check("minting without a private key returns null", mintLicenseKey("reset", "r", NOW, null) === null);
-check("minting with garbage private key returns null", mintLicenseKey("reset", "r", NOW, "bm90IGEga2V5") === null);
+check("minting without a private key returns null", mintLicenseKey("resume", "r", NOW, null) === null);
+check("minting with garbage private key returns null", mintLicenseKey("resume", "r", NOW, "bm90IGEga2V5") === null);
+
+const allAccess = mintLicenseKey("all-access", "all-access-ref", NOW, privateB64);
+const allAccessBeforeExpiry = await verifyLicenseKey(allAccess, publicB64, NOW + 30 * 86_400 - 1);
+const allAccessAtExpiry = await verifyLicenseKey(allAccess, publicB64, NOW + 30 * 86_400);
+check("All Access is valid immediately before day 30", allAccessBeforeExpiry.ok === true);
+check(
+  "All Access expires exactly 30 days after purchase",
+  !allAccessAtExpiry.ok && allAccessAtExpiry.reason === "expired" && allAccessAtExpiry.payload?.tier === "all-access"
+);
+
+// --- Multiple-purchase wallet ---------------------------------------------------------------------
+
+const resumePermanent = mintLicenseKey("resume", "resume-order", NOW - 100, privateB64);
+const careerPermanent = mintLicenseKey("career", "career-order", NOW - 50, privateB64);
+const allAccessCurrent = mintLicenseKey("all-access", "active-window", NOW, privateB64);
+const allAccessExpired = mintLicenseKey("all-access", "expired-window", NOW - 31 * 86_400, privateB64);
+const walletActive = await resolveEntitlementKeys(
+  [resumePermanent, careerPermanent, allAccessCurrent, "tampered"],
+  publicB64,
+  NOW + 1
+);
+check("multiple permanent purchases coexist", walletActive.activeEntitlements.some((grant) => grant.tier === "resume") && walletActive.activeEntitlements.some((grant) => grant.tier === "career"));
+check("active All Access wins the compatibility tier", walletActive.status === "valid" && walletActive.tier === "all-access");
+check("one bad local value cannot erase purchased access", walletActive.status === "valid" && walletActive.activeEntitlements.length === 3);
+
+const walletFallback = await resolveEntitlementKeys(
+  [resumePermanent, careerPermanent, allAccessExpired],
+  publicB64,
+  NOW + 1
+);
+check("expired All Access is reported", walletFallback.expiredEntitlements.length === 1 && walletFallback.expiredEntitlements[0].tier === "all-access");
+check("expired All Access falls back to a permanent pack", walletFallback.status === "valid" && walletFallback.tier === "career");
+check("wallet deduplicates independently signed copies of one purchase", (await resolveEntitlementKeys([entitlementKeyA, entitlementKeyB], publicB64, NOW + 1)).activeEntitlements.length === 1);
+
+// Previously issued v1 keys remain valid but normalize into the new catalog.
+{
+  const { sign, createPrivateKey } = await import("node:crypto");
+  const legacyPayload = Buffer.from(JSON.stringify({ v: 1, tier: "reset", ref: "legacy-ref", iat: NOW }), "utf8");
+  const legacySignature = sign("sha256", legacyPayload, {
+    key: createPrivateKey({ key: Buffer.from(privateB64, "base64"), format: "der", type: "pkcs8" }),
+    dsaEncoding: "ieee-p1363"
+  });
+  const b64u = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const legacyKey = `CF1.${b64u(legacyPayload)}.${b64u(legacySignature)}`;
+  const legacyResult = await verifyLicenseKey(legacyKey, publicB64, NOW + 1);
+  check("legacy reset entitlement remains valid as Resume Pack", legacyResult.ok && legacyResult.payload.tier === "resume");
+}
 
 // --- Package config sanity ---------------------------------------------------------------------------
 
-check("three packages defined", PACKAGE_ORDER.length === 3);
-check("prices ascend with tier", PACKAGES["reset"].priceUsd < PACKAGES["job-search"].priceUsd && PACKAGES["job-search"].priceUsd < PACKAGES["career-switch"].priceUsd);
+check("four paid packages defined", PACKAGE_ORDER.length === 4);
+check(
+  "prices match the approved self-service ladder",
+  PACKAGES.resume.priceUsd === 9 && PACKAGES.job.priceUsd === 15 && PACKAGES.career.priceUsd === 25 && PACKAGES["all-access"].priceUsd === 39
+);
 check(
   "higher tiers include every lower-tier feature",
-  PACKAGES["reset"].features.every((f) => PACKAGES["job-search"].features.includes(f)) &&
-    PACKAGES["job-search"].features.every((f) => PACKAGES["career-switch"].features.includes(f))
+  PACKAGES.resume.features.every((f) => PACKAGES.job.features.includes(f)) &&
+    PACKAGES.job.features.every((f) => PACKAGES.career.features.includes(f)) &&
+    PACKAGES.career.features.every((f) => PACKAGES["all-access"].features.includes(f))
 );
-check("lane limits ascend", tierLaneLimit("reset") === 1 && tierLaneLimit("job-search") === 2 && tierLaneLimit("career-switch") === 3);
+check("lane limits match package scopes", tierLaneLimit("resume") === 1 && tierLaneLimit("job") === 1 && tierLaneLimit("career") === 3 && tierLaneLimit("all-access") === 10);
 check("no tier grants nothing", PACKAGE_ORDER.every((tier) => PACKAGES[tier].features.length > 0));
 check("unentitled lane limit is 1", tierLaneLimit(null) === 1);
 check("tierHasFeature rejects null tier", tierHasFeature(null, "export_baseline_pack") === false);
-check("isPackageTier rejects junk", !isPackageTier("premium") && !isPackageTier(null) && !isPackageTier(1));
+check("isPackageTier rejects junk and retired checkout tiers", !isPackageTier("premium") && !isPackageTier("reset") && !isPackageTier("job-search") && !isPackageTier(null));
 check(
-  "interview stays gated below job-search",
-  !tierHasFeature("reset", "interview_unlimited") && tierHasFeature("job-search", "interview_unlimited")
+  "interview stays gated below Job Pack",
+  !tierHasFeature("resume", "interview_unlimited") && tierHasFeature("job", "interview_unlimited")
 );
 check(
-  "career-switch toolkit is exclusive to the top tier",
-  !tierHasFeature("job-search", "career_switch_toolkit") && tierHasFeature("career-switch", "career_switch_toolkit")
+  "complete career bundle starts at Career Pack",
+  !tierHasFeature("job", "career_bundle_export") && tierHasFeature("career", "career_bundle_export")
 );
 
 // --- Stripe webhook signature verification ------------------------------------------------------------

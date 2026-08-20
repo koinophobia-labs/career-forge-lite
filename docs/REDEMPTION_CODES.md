@@ -6,6 +6,12 @@ redemption returns a freshly signed `CF1.<payload>.<signature>` entitlement to
 the browser, where the existing public-key verifier checks and stores it for
 offline use. The signed entitlement is never rendered or emailed.
 
+Resume, Job, and Career Pack grants are permanent. A 30-Day All Access grant
+includes a signed expiration computed from the original Stripe Session creation
+time; redeeming later or on another device never restarts the 30-day window.
+Activating a new code appends to the local entitlement wallet rather than
+overwriting earlier purchases.
+
 ## Security and storage
 
 - The 13-character body uses a 31-symbol alphabet and cryptographically secure,

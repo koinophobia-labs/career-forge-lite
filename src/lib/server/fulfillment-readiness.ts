@@ -109,12 +109,17 @@ export function configurationReadiness(): ConfigurationReadiness {
         "Customer access codes cannot be securely hashed or recovered for a safe fulfillment retry.",
       present: present("REDEMPTION_CODE_PEPPER"),
     },
-    {
-      name: "STRIPE_PRICE_RESET",
+    ...[
+      ["STRIPE_PRICE_RESUME", "Resume Pack"],
+      ["STRIPE_PRICE_JOB", "Job Pack"],
+      ["STRIPE_PRICE_CAREER", "Career Pack"],
+      ["STRIPE_PRICE_ALL_ACCESS", "30-Day All Access"],
+    ].map(([name, label]) => ({
+      name,
       consequence:
-        "Checkout falls back to an inline price with no stable id, so fulfillment cannot derive which package was bought from the paid session.",
-      present: present("STRIPE_PRICE_RESET"),
-    },
+        `${label} has no authoritative Stripe Price ID, so checkout and fulfillment cannot agree on what was purchased.`,
+      present: present(name),
+    })),
     {
       name: "STRIPE_WEBHOOK_SECRET",
       consequence:

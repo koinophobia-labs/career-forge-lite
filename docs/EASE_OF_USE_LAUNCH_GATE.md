@@ -1,5 +1,8 @@
 # Ease-of-Use Launch Gate
 
+> Historical release evidence for the retired $49 founding cohort. The current
+> self-service catalog and launch procedure are documented in `docs/PAYMENTS.md`.
+
 **Current status: mechanically ready for a controlled founding-user pilot.**
 **Broad-launch status: gated on unassisted human completion.**
 

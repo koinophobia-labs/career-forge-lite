@@ -74,7 +74,7 @@ Résumé truth is not a weather forecast.
 ## The commercial boundary
 
 Career Forge is a living system a user returns to for years. The purchase is
-a one-time transaction. These must not be conflated — a $49 purchase does not
+a one-time transaction. These must not be conflated — a pack purchase does not
 sell unlimited lifetime generation. Each purchased Career Pack defines:
 
 - **Permanent ownership** of the user's approved evidence and manual edits —

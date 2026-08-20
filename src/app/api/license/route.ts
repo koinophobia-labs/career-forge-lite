@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ? { ok: true as const, session: result.session, accountId: null }
       : { ok: false as const, status: result.status };
   }, useCertificationKey
-    ? new Map([[certification!.priceReset, "reset" as const]])
+    ? new Map([[certification!.priceResume, "resume" as const]])
     : undefined);
   if (!verification.ok) {
     if (verification.reason === "not_paid") {
