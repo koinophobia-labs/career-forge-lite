@@ -276,8 +276,10 @@ async function main() {
     const otherEnvironment = target === "preview" ? "production" : "preview";
     const otherEnv = pullVercelEnvironment(otherEnvironment, path.join(tempDir, `${otherEnvironment}.env`));
     const stripeSecret = process.env[stripeInputName] || targetEnv.STRIPE_SECRET_KEY;
-    const expectedPrefix = target === "preview" ? "sk_test_" : "sk_live_";
-    if (!stripeSecret?.startsWith(expectedPrefix)) throw new Error(`${stripeInputName} with the correct mode prefix is required.`);
+    const expectedPrefixes = target === "preview" ? ["sk_test_", "rk_test_"] : ["sk_live_", "rk_live_"];
+    if (!stripeSecret || !expectedPrefixes.some((prefix) => stripeSecret.startsWith(prefix))) {
+      throw new Error(`${stripeInputName} with the correct mode prefix is required.`);
+    }
 
     const deployedPair = { privateKey: targetEnv.LICENSE_SIGNING_PRIVATE_KEY, publicKey: targetEnv.NEXT_PUBLIC_LICENSE_PUBLIC_KEY };
     const signingPair = validateSigningPair(deployedPair.privateKey, deployedPair.publicKey) ? deployedPair : loadOrCreateSigningPair(signingKeyFile);
