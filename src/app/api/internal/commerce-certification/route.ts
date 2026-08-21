@@ -43,6 +43,13 @@ function operatorAuthorized(request: Request, token: string): boolean {
   return header.startsWith("Bearer ") && sameSecret(header.slice(7), token);
 }
 
+// A release probe uses GET to prove this temporary operator surface is absent.
+// Next would otherwise advertise the POST-only route with 405 Method Not
+// Allowed, so answer with the same 404 an unconfigured POST returns.
+export async function GET(): Promise<NextResponse> {
+  return NextResponse.json({ error: "Not found." }, { status: 404 });
+}
+
 async function stripeGet(path: string, secretKey: string): Promise<unknown | null> {
   const response = await fetch(`https://api.stripe.com/v1${path}`, {
     headers: { Authorization: `Bearer ${secretKey}` },

@@ -482,6 +482,7 @@ check("certification client states it does not authorize live checkout", /eviden
 
 const operatorRoute = read("src/app/api/internal/commerce-certification/route.ts");
 check("production-host recorder is disabled without all temporary credentials", /if \(!config\)[\s\S]{0,100}status: 404/.test(operatorRoute));
+check("production probe sees the disabled certification surface as 404", /export async function GET\(\)[\s\S]{0,180}status: 404/.test(operatorRoute));
 check("production-host recorder requires a bearer token", /operatorAuthorized/.test(operatorRoute) && /Bearer /.test(operatorRoute));
 check("production-host recorder refuses a foreign host or stale commit", /requestHost !== identity\.host/.test(operatorRoute) && /certification_commit/.test(operatorRoute));
 check("production-host recorder retrieves the Stripe event directly", /\/events\//.test(operatorRoute) && /checkout\.session\.completed/.test(operatorRoute));
