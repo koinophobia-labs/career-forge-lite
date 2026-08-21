@@ -48,6 +48,57 @@
     ],
     "evidence": [
       {
+        "id": "evidence-jwkcu3",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "No reliable numerical performance metrics",
+        "source": "manual",
+        "sourceText": "No reliable numerical performance metrics",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "No reliable numerical performance metrics"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-1vsz9oa",
+        "kind": "metric",
+        "label": "Metric",
+        "detail": "I don't know my exact ticket numbers",
+        "source": "manual",
+        "sourceText": "I don't know my exact ticket numbers",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "I don't know my exact ticket numbers"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
+        "id": "evidence-16ap2l7",
+        "kind": "proof",
+        "label": "Proof",
+        "detail": "Target roles: Product Operations Specialist; Implementation Specialist",
+        "source": "manual",
+        "sourceText": "Target roles: Product Operations Specialist; Implementation Specialist",
+        "confidence": "high",
+        "approved": true,
+        "rejected": false,
+        "sourceFilenames": [],
+        "sourceExcerpts": [
+          "Target roles: Product Operations Specialist; Implementation Specialist"
+        ],
+        "createdAt": "2026-07-16T18:00:00.000Z",
+        "updatedAt": "2026-07-16T18:00:00.000Z"
+      },
+      {
         "id": "evidence-n8nyk1",
         "kind": "proof",
         "label": "Proof",
@@ -263,5 +314,6 @@
   ],
   "exports": [],
   "pendingImportReviews": [],
+  "roleSprints": [],
   "activeGoal": null
 }
