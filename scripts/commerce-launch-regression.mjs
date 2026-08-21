@@ -43,6 +43,7 @@ check("temporary credential directory is deleted", /rmSync\(tempDir, \{ recursiv
 check("new signing key files are mode 0600", /openSync\(resolved, "wx", 0o600\)/.test(launch));
 check("signing key file stays outside the repository", launch.includes("--signing-key-file must not be stored inside the repository"));
 check("production requires charges and payouts", /charges_enabled !== true \|\| account\.payouts_enabled !== true/.test(launch));
+check("launch accepts least-privilege restricted Stripe keys", launch.includes('["sk_test_", "rk_test_"]') && launch.includes('["sk_live_", "rk_live_"]'));
 check("legacy Vercel checkout configuration is removed", ["STRIPE_PRICE_RESET", "PAID_BETA_TIER", "NEXT_PUBLIC_PAID_BETA_TIER", "STRIPE_LIVE_RESET_PAYMENT_LINK"].every((name) => launch.includes(name)) && launch.includes("removeVercelEnvironment"));
 check("only Career Forge legacy links are retired", launch.includes("belongsToCareerForge && legacy"));
 check("no Payment Link is created", !launch.includes('stripeRequest("/v1/payment_links", secretKey, form'));
