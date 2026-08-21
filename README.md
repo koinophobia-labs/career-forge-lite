@@ -52,6 +52,15 @@ Useful scripts:
 
 Every regression suite is a plain Node script (`scripts/*-regression.mjs`) that transpiles the TypeScript sources on the fly and asserts behavior — including an 82-persona generation-quality suite with a hallucination gate, truth-workflow provenance checks, entitlement/license forgery checks, and data-durability checks. `npm test` runs them all.
 
+## Continuous verification
+
+Pull requests run two existing GitHub Actions gates:
+
+- **Pull request checks:** typecheck, lint, deterministic unit regressions, and browser regression
+- **Product quality gate:** deterministic regressions, desktop and mobile browser coverage, a redacted private acceptance fixture, a test-mode first-time-user journey, backup and recovery proof, lint, typecheck, and production build
+
+These checks make the documented trust, durability, and usability standards visible on every proposed change.
+
 ## Deployment
 
 Vercel (`career-forge-lite.vercel.app`). See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment configuration, payment modes, and the release smoke-test checklist.
