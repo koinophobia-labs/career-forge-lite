@@ -254,7 +254,7 @@ function materialsText(pack: ResumePack, lanes: TargetLane[], dossier: CareerDos
 
 function readmeText(pack: ResumePack, lanes: TargetLane[], formats: PackExportFormat[]): string {
   return [
-    "Career Forge Résumé Pack — Public Beta",
+    "Career Forge Résumé Pack",
     "",
     `Generated: ${pack.createdAt}`,
     `Formats: ${formats.join(", ").toUpperCase()}`,

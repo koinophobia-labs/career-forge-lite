@@ -266,7 +266,26 @@ check("PDF rule is no longer drawn through the next text baseline", !/pdf\.line\
 
 const homeSource = fs.readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 check("mobile comparison region is keyboard focusable and named", /tabIndex=\{0\}[\s\S]*role="region"[\s\S]*aria-label=/.test(homeSource));
-check("public-beta homepage does not hard-code the unsupported $49 offer", !/One-time packs from \$49/i.test(homeSource));
+check("homepage does not hard-code the unsupported $49 offer", !/One-time packs from \$49/i.test(homeSource));
+
+const publicBrandingSources = [
+  "src/app/layout.tsx",
+  "src/app/founding-beta/page.tsx",
+  "src/app/reviewed-service/page.tsx",
+  "src/app/terms/page.tsx",
+  "src/components/BetaFeedbackCard.tsx",
+  "src/components/BetaSafetyBanner.tsx",
+  "src/components/InterviewMode.tsx",
+  "src/components/PremiumAccess.tsx",
+  "src/components/ResumePreview.tsx",
+  "src/components/SiteFooter.tsx",
+  "src/components/TellMyStoryMode.tsx",
+  "src/lib/pack-export.ts"
+].map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
+const layoutSource = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
+check("public branding no longer says public beta", !/public[ -]beta/i.test(publicBrandingSources));
+check("public branding no longer says Career Forge Lite", !/Career Forge Lite/i.test(publicBrandingSources));
+check("canonical metadata uses the production host", layoutSource.includes('metadataBase: new URL("https://career-forge-lite.vercel.app")') && /canonical:\s*"\/"/.test(layoutSource));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

@@ -114,7 +114,7 @@ function ResumeFeedback({ data, resume }: { data: IntakeData; resume: ResumePack
     <article className="resume-preview-chrome mt-6 rounded-md border border-white/10 bg-white/5 p-5">
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Beta feedback</p>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">Product feedback</p>
           <h3 className="mt-2 text-xl font-bold text-paper">Was this resume draft useful?</h3>
           <p className="mt-3 text-sm leading-6 text-paper/68">
             Quick feedback helps shape the next version. Nothing is submitted unless you copy it.

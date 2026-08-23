@@ -62,7 +62,7 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Current beta boundaries</h2>
+          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-paper">Current product boundaries</h2>
           <div className="mt-4 grid gap-2 text-paper/66">
             <span>No account or login required</span>
             <span>Career data stays on your device</span>

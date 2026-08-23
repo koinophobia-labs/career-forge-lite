@@ -24,7 +24,7 @@ export function BetaFeedbackCard({ milestone }: { milestone: string }) {
 
   if (submitted) {
     return (
-      <aside className="rounded-xl border border-mint/35 bg-mint/10 p-4" aria-label="Beta feedback submitted">
+      <aside className="rounded-xl border border-mint/35 bg-mint/10 p-4" aria-label="Feedback submitted">
         <p className="text-sm font-bold text-paper">Thank you — your feedback is saved on this device.</p>
         <p className="mt-1 text-xs leading-5 text-paper/55">It helps shape Career Forge before the wider launch. Nothing left your device.</p>
       </aside>
@@ -53,7 +53,7 @@ export function BetaFeedbackCard({ milestone }: { milestone: string }) {
     <aside className="rounded-xl border border-cyan/25 bg-cyan/5 p-5" aria-labelledby="beta-feedback-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="trust-kicker text-xs font-bold uppercase text-cyan">Help shape the beta</p>
+          <p className="trust-kicker text-xs font-bold uppercase text-cyan">Help shape Career Forge</p>
           <h3 id="beta-feedback-title" className="mt-1 text-lg font-bold text-paper">You have a finished résumé — how did that go?</h3>
         </div>
         <button

@@ -5,7 +5,7 @@ import { useEntitlement } from "@/lib/entitlement";
 import type { InterviewModeLimitState } from "@/lib/feature-access";
 import { PACKAGES } from "@/lib/packages";
 
-export function PremiumBadge({ label = "Beta Preview" }: { label?: string }) {
+export function PremiumBadge({ label = "Preview" }: { label?: string }) {
   return (
     <span className="inline-flex items-center rounded-md border border-cyan/25 bg-cyan/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-cyan">
       {label}
@@ -37,7 +37,7 @@ export function UpgradeCallout() {
   return (
     <div className="rounded-md border border-gold/25 bg-gold/10 p-4">
       <p className="text-xs font-black uppercase tracking-[0.14em] text-gold">
-        {commerceEnabled ? "Free preview" : "Beta Preview"}
+        {commerceEnabled ? "Free preview" : "Preview"}
       </p>
       <p className="mt-2 text-sm leading-6 text-paper/70">
         {commerceEnabled ? (

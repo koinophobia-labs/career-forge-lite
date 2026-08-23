@@ -25,9 +25,21 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Career Forge Public Beta",
+  metadataBase: new URL("https://career-forge-lite.vercel.app"),
+  title: "Career Forge",
   description:
-    "A local-first public beta for organizing approved career evidence and creating reviewable résumé and application drafts. Every generated material requires careful review before use."
+    "A local-first workspace for organizing approved career evidence and creating reviewable résumé and application drafts. Every generated material requires careful review before use.",
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    title: "Career Forge",
+    description:
+      "Organize approved career evidence and create reviewable résumé and application drafts in a local-first workspace.",
+    url: "/",
+    siteName: "Career Forge",
+    type: "website"
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

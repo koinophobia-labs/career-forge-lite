@@ -42,12 +42,12 @@ const inquiry = `mailto:${SERVICE_EMAIL}?subject=${encodeURIComponent("Career Fo
     <main>
       <CommandNav active="/pricing" />
       <section className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
-        <p className="trust-kicker text-sm font-bold uppercase">Human service · Separate from the SaaS beta</p>
+        <p className="trust-kicker text-sm font-bold uppercase">Human service · Separate from self-service packs</p>
         <h1 className="mt-3 text-3xl font-bold text-paper sm:text-4xl">Career Forge Résumé Rebuild — $149 flat</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-paper/68">
           This is the same done-for-you offer shown by Koinophobia Labs: a diagnostic, rebuilt résumé, LinkedIn headline,
           three target-role directions, Loom walkthrough, and one revision. It is not an automated Career Pack and does
-          not imply that public-beta output received human review.
+          not imply that self-service output received human review.
         </p>
 
         <div className="trust-panel mt-8 p-5 sm:p-6" aria-labelledby="reviewed-deliverables-title">

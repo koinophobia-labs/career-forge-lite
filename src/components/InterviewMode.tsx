@@ -206,12 +206,12 @@ export function InterviewMode() {
       <main className="min-h-screen px-5 py-8 sm:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge">
               <span className="logo-mark" aria-hidden="true">
                 CF
               </span>
               <span>
-                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
                 <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
                   Review Resume
                 </span>
@@ -244,7 +244,7 @@ export function InterviewMode() {
           </div>
 
           <section className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">Beta Preview Result</p>
+            <p className="trust-kicker text-xs font-black uppercase">Preview Result</p>
             <div className="mt-3 grid gap-5 lg:grid-cols-[1fr_22rem]">
               <div>
                 <h1 className="text-3xl font-bold text-paper sm:text-5xl">Your interview-built resume draft</h1>
@@ -351,12 +351,12 @@ export function InterviewMode() {
     <main className="min-h-screen px-5 py-8 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-          <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+          <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge">
             <span className="logo-mark" aria-hidden="true">
               CF
             </span>
             <span>
-              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
+              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
               <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">
                 Interview Mode Preview
               </span>
@@ -367,7 +367,7 @@ export function InterviewMode() {
 
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="trust-panel rounded-md p-5 sm:p-7">
-            <p className="trust-kicker text-xs font-black uppercase">Beta Preview</p>
+            <p className="trust-kicker text-xs font-black uppercase">Preview</p>
             <h1 className="mt-3 text-3xl font-bold text-paper sm:text-5xl">Let Career Forge interview you.</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-paper/70">
               Answer naturally. Career Forge pulls out responsibilities, achievements, tools, and proof, then turns them
@@ -430,7 +430,7 @@ export function InterviewMode() {
                   onChange={(event) => setInput(event.target.value)}
                   disabled={limitState.isLocked}
                   rows={4}
-                  placeholder={limitState.isLocked ? "Beta preview limit reached." : "Type naturally. I'll translate it."}
+                  placeholder={limitState.isLocked ? "Preview limit reached." : "Type naturally. I'll translate it."}
                   className="mt-2 w-full rounded-md border border-white/12 bg-white/8 px-4 py-3 text-sm leading-6 text-paper outline-none transition placeholder:text-paper/35 focus:border-cyan disabled:cursor-not-allowed disabled:opacity-55"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

@@ -129,12 +129,12 @@ export function TellMyStoryMode() {
       <main className="min-h-screen px-5 py-8 sm:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+            <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge">
               <span className="logo-mark" aria-hidden="true">
                 CF
               </span>
               <span>
-                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge Lite</span>
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
                 <span className="block text-[0.68rem] font-bold uppercase tracking-[0.22em] text-paper/56">Tell My Story</span>
               </span>
             </Link>
@@ -177,7 +177,7 @@ export function TellMyStoryMode() {
     <main className="min-h-screen px-5 py-8 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-          <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge Lite">
+          <Link href="/" className="inline-flex items-center gap-3" aria-label="Back to Career Forge">
             <span className="logo-mark" aria-hidden="true">
               CF
             </span>
