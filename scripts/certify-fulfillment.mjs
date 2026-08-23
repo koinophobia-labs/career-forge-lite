@@ -10,13 +10,13 @@
  * appear in shell history or the process argument list:
  *
  *   CERTIFICATION_OPERATOR_TOKEN=... CERTIFICATION_TEST_EMAIL=... \
- *   node scripts/certify-fulfillment.mjs --base https://career-forge-lite.vercel.app
+ *   node scripts/certify-fulfillment.mjs --base https://careerforge.koinophobialabs.com
  *
  * After Stripe has delivered and then re-delivered the same event from a fresh
  * deployment instance:
  *
  *   CERTIFICATION_OPERATOR_TOKEN=... CERTIFICATION_REDEMPTION_CODE=... \
- *   node scripts/certify-fulfillment.mjs --base https://career-forge-lite.vercel.app \
+ *   node scripts/certify-fulfillment.mjs --base https://careerforge.koinophobialabs.com \
  *     --session-id cs_test_... --event-id evt_...
  */
 
@@ -46,7 +46,7 @@ if (!base || !token) {
 }
 
 const target = new URL("/api/internal/commerce-certification", base);
-if (target.protocol !== "https:" || target.hostname !== "career-forge-lite.vercel.app") {
+if (target.protocol !== "https:" || target.hostname !== "careerforge.koinophobialabs.com") {
   die("certification must target the exact Career Forge production hostname over HTTPS");
 }
 if (bypass) target.searchParams.set("x-vercel-protection-bypass", bypass);

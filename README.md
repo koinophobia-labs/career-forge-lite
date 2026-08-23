@@ -54,6 +54,6 @@ Every regression suite is a plain Node script (`scripts/*-regression.mjs`) that 
 
 ## Deployment
 
-Vercel (`career-forge-lite.vercel.app`). See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment configuration, payment modes, and the release smoke-test checklist.
+Vercel (`careerforge.koinophobialabs.com`). See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment configuration, payment modes, and the release smoke-test checklist.
 
 Built by [Koinophobia Labs](https://koinophobialabs.com).

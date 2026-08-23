@@ -115,4 +115,4 @@ console.log(`  environment ${approval.approvedEnvironment}`);
 console.log(`  actor       ${approval.approvalActor}`);
 console.log(`  evidence    ${approval.evidenceId}`);
 console.log(`  surface     ${approval.surfaceHash}`);
-console.log("\nVerify: curl -s https://career-forge-lite.vercel.app/api/commerce-health\n");
+console.log("\nVerify: curl -s https://careerforge.koinophobialabs.com/api/commerce-health\n");

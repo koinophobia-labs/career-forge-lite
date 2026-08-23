@@ -27,7 +27,7 @@ const LEGACY_AMOUNTS = new Set([4_900, 7_900, 9_900, 14_900]);
 function usage() {
   console.log(`Usage:
   npm run commerce:launch -- --target preview --app-url https://<preview-host> [--signing-key-file /absolute/test-license.json]
-  npm run commerce:launch -- --target production --app-url https://career-forge-lite.vercel.app [--signing-key-file /absolute/live-license.json]
+  npm run commerce:launch -- --target production --app-url https://careerforge.koinophobialabs.com [--signing-key-file /absolute/live-license.json]
   npm run commerce:launch -- --dry-run --target <preview|production> --app-url <https-origin>
 
 Required only when the selected Vercel environment has no Stripe key:

@@ -285,7 +285,7 @@ const publicBrandingSources = [
 const layoutSource = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
 check("public branding no longer says public beta", !/public[ -]beta/i.test(publicBrandingSources));
 check("public branding no longer says Career Forge Lite", !/Career Forge Lite/i.test(publicBrandingSources));
-check("canonical metadata uses the production host", layoutSource.includes('metadataBase: new URL("https://career-forge-lite.vercel.app")') && /canonical:\s*"\/"/.test(layoutSource));
+check("canonical metadata uses the production host", layoutSource.includes('metadataBase: new URL("https://careerforge.koinophobialabs.com")') && /canonical:\s*"\/"/.test(layoutSource));
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

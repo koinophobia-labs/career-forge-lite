@@ -51,7 +51,7 @@ check("production diagnostic route must be 404", launch.includes("diagnostic.sta
 check("technical packaging does not self-certify", !launch.includes("CERTIFICATION_RECORD_ID") && /Certification and[\s\S]*stay separate/i.test(launch));
 
 for (const target of ["preview", "production"]) {
-  const appUrl = target === "preview" ? "https://career-forge-lite-preview.example.vercel.app" : "https://career-forge-lite.vercel.app";
+  const appUrl = target === "preview" ? "https://career-forge-lite-preview.example.vercel.app" : "https://careerforge.koinophobialabs.com";
   const result = spawnSync(process.execPath, [launchPath, "--dry-run", "--target", target, "--app-url", appUrl], { cwd: root, encoding: "utf8", env: {} });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   check(`${target} dry-run exits without credentials`, result.status === 0);

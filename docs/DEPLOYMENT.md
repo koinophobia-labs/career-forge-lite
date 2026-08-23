@@ -1,7 +1,7 @@
 # Career Forge Deployment Guide
 
 Target platform: Vercel (project `career-forge-lite`, production URL
-`career-forge-lite.vercel.app`). Standard Next.js App Router build — static
+`careerforge.koinophobialabs.com`). Standard Next.js App Router build — static
 pages plus server-side checkout, verification, redemption, health, and webhook
 routes.
 

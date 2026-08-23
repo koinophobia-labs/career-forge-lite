@@ -25,7 +25,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://career-forge-lite.vercel.app"),
+  metadataBase: new URL("https://careerforge.koinophobialabs.com"),
   title: "Career Forge",
   description:
     "A local-first workspace for organizing approved career evidence and creating reviewable résumé and application drafts. Every generated material requires careful review before use.",

@@ -2,7 +2,7 @@
 
 ## Links
 
-- Live tool: https://career-forge-lite.vercel.app
+- Live tool: https://careerforge.koinophobialabs.com
 - GitHub repo: https://github.com/koinophobia-labs/career-forge-lite
 
 ## Short Product Description
@@ -51,7 +51,7 @@ The tool collects role target, role family, tools, responsibilities, scope, and 
 
 No login. No fake ATS score. No job placement promises. Just a cleaner way to translate real work into stronger career language.
 
-Try it here: https://career-forge-lite.vercel.app
+Try it here: https://careerforge.koinophobialabs.com
 
 GitHub: https://github.com/koinophobia-labs/career-forge-lite
 
@@ -71,7 +71,7 @@ The interesting part is the deterministic resume generator and role-intelligence
 I kept the scope intentionally tight: no auth, no database, no payments, no job board, and no fake ATS score.
 
 Repo: https://github.com/koinophobia-labs/career-forge-lite
-Live: https://career-forge-lite.vercel.app
+Live: https://careerforge.koinophobialabs.com
 
 ## Suggested Hashtags
 
