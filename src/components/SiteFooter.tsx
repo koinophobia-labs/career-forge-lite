@@ -7,17 +7,17 @@ export function SiteFooter() {
         <div>
           <div className="inline-flex items-center gap-3">
             <span className="logo-mark" aria-hidden="true">
-              CF
+              WI
             </span>
             <span>
-              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
+              <span className="block text-xs font-black uppercase tracking-[0.18em] text-gold">Way In</span>
               <span className="block text-[0.7rem] font-bold uppercase tracking-[0.2em] text-paper/50">
                 by Koinophobia Labs
               </span>
             </span>
           </div>
           <p className="mt-4 max-w-sm leading-6">
-            Built by Koinophobia Labs to turn reviewed career evidence into reusable draft materials. Career Forge stays
+            Built by Koinophobia Labs to turn reviewed career evidence into reusable draft materials. Way In stays
             local, editable, and review-first; every generated document still needs a human check before use.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
@@ -57,6 +57,9 @@ export function SiteFooter() {
             </Link>
             <Link href="/privacy" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
               Privacy
+            </Link>
+            <Link href="/support" className="inline-flex min-h-6 items-center py-1 text-paper/70 transition hover:text-cyan">
+              Support
             </Link>
           </div>
         </div>

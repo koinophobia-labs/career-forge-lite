@@ -26,18 +26,18 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://careerforge.koinophobialabs.com"),
-  title: "Career Forge",
+  title: "Way In",
   description:
     "A local-first workspace for organizing approved career evidence and creating reviewable résumé and application drafts. Every generated material requires careful review before use.",
   alternates: {
     canonical: "/"
   },
   openGraph: {
-    title: "Career Forge",
+    title: "Way In",
     description:
       "Organize approved career evidence and create reviewable résumé and application drafts in a local-first workspace.",
     url: "/",
-    siteName: "Career Forge",
+    siteName: "Way In",
     type: "website"
   }
 };

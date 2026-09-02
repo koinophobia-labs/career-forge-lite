@@ -81,10 +81,10 @@ export function CommandNav({ active }: CommandNavProps) {
       </a>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/" className="group inline-flex min-w-0 items-center gap-3" aria-label="Career Forge home">
-            <span className="logo-mark shrink-0" aria-hidden="true">CF</span>
+          <Link href="/" className="group inline-flex min-w-0 items-center gap-3" aria-label="Way In home">
+            <span className="logo-mark shrink-0" aria-hidden="true">WI</span>
             <span className="min-w-0 leading-none">
-              <span className="block truncate text-xs font-black uppercase tracking-[0.18em] text-gold">Career Forge</span>
+              <span className="block truncate text-xs font-black uppercase tracking-[0.18em] text-gold">Way In</span>
               <span className="hidden text-[0.68rem] font-bold uppercase tracking-[0.16em] text-paper/56 sm:block">
                 One clear next step
               </span>
@@ -95,7 +95,7 @@ export function CommandNav({ active }: CommandNavProps) {
 
         <details ref={mobileMenuRef} className="relative md:hidden">
           <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-paper/75">Menu</summary>
-          <nav aria-label="Career Forge mobile navigation" className="absolute right-0 top-12 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
+          <nav aria-label="Way In mobile navigation" className="absolute right-0 top-12 z-50 grid max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-white/15 bg-obsidian p-2 shadow-2xl">
             {primaryStations.map(([label, href]) => (
               <Link key={href} href={href} onClick={() => handleStationClick(href)} className={menuLinkClass(href)}>{label}</Link>
             ))}
@@ -106,7 +106,7 @@ export function CommandNav({ active }: CommandNavProps) {
           </nav>
         </details>
 
-        <nav aria-label="Career Forge navigation" className="hidden items-center justify-end gap-1.5 text-xs font-bold text-paper/70 md:flex">
+        <nav aria-label="Way In navigation" className="hidden items-center justify-end gap-1.5 text-xs font-bold text-paper/70 md:flex">
           {primaryStations.map(([label, href]) => (
             <Link
               key={href}
