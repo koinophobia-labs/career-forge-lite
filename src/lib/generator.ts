@@ -92,7 +92,12 @@ const groundingAliasGroups: string[][] = [
   ["schedul", "appointment", "calendar", "booking", "shift", "coverage"],
   ["document", "note", "record", "log", "report", "paperwork", "file", "wrote", "writ"],
   ["deliver", "route", "courier", "dispatch", "doordash", "driver", "driving", "drove", "trip"],
-  ["conflict", "de-escalat", "deescalat", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  // Situation words (conflict, upset customers, tense moments) may ground
+  // resolution claims, but never the de-escalation ACTION — being near tense
+  // moments is not performing de-escalation, so that stem only grounds when
+  // the user described de-escalating or defusing themselves (RA-P0-03).
+  ["conflict", "upset", "angry", "complaint", "calm", "tense", "resolut", "resolv", "frustrat"],
+  ["de-escalat", "deescalat", "defus"],
   ["team", "coworker", "crew", "staff", "colleague", "kitchen staff", "servers"],
   ["safety", "safe", "ppe", "osha", "hazard"],
   ["order", "ticket", "request", "case", "wager", "issue"],
@@ -121,7 +126,9 @@ const labelGrounding = new Map<string, RegExp>([
   // candidate managed time. Only evidence about their own time performance
   // authorises the competency.
   ["time management", /\b(deadlines?|on time|prioriti\w*|multitask\w*|juggl\w*|time management|scheduled around)\b/],
-  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?|kitchen)\b/],
+  // A room is not a team: "kitchen" was grounding Team Coordination for a
+  // user who described cleaning it alone. People words only.
+  ["team coordination", /\b(teams?|coworkers?|crews?|staff|colleagues?|handoffs?)\b/],
   // Performing a checking TASK ("checked labels") is not the same claim as
   // possessing the QUALITY. This is the same over-claim as the ungated canned
   // bullets that asserted "attention to detail" and were removed; the label
@@ -130,7 +137,9 @@ const labelGrounding = new Map<string, RegExp>([
   ["order accuracy", /\b(orders?|accuracy|accurate)\b/],
   ["problem solving", /\b(problems?|issues?|resolved?|fixed|solved?|troubleshoot|troubleshot)\b/],
   ["patient support", /\b(patients?|residents?|clients?|care)\b/],
-  ["safety procedures", /\b(safety|safe|ppe|osha|sanitation)\b/],
+  // "The dock always felt safe" describes how a place felt, not that the
+  // candidate followed safety procedures. The bare adjective is out.
+  ["safety procedures", /\b(safety|ppe|osha|sanitation)\b/],
   ["inventory", /\b(inventory|stock(?:ed|ing|er)?|restock\w*|shelves|shelf|shipments?|supplies|pallets?)\b/],
   ["documentation", /\b(document\w*|notes?|records?|logs?|reports?|paperwork|wrote)\b/],
   ["reliability", /\b(reliab\w*|on time|showed up|never missed|attendance|dependab\w*|consistent\w*|covered shifts?)\b/],
@@ -886,18 +895,34 @@ function buildScopeItems(data: IntakeData) {
 // role statements or third-party narration are dropped rather than templated.
 function splitResponsibilityText(value: string) {
   const { text } = stripTerminationReasons(value);
+  // Split on sentence boundaries ONLY. Splitting on "," and "and" tore compound
+  // objects apart — "Logged calls from O'Fallon and DeSoto." became a bullet
+  // plus the fabricated fragment "Supported DeSoto." A sentence the user wrote
+  // is one claim and stays one claim.
   return text
-    .split(/,|\n|;|\.|\band\b/i)
-    .map((item) => cleanWhitespace(item).replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
+    .split(/\n|;|(?<=[.!?])\s+/)
+    .map((item) => cleanWhitespace(item).replace(/[.!?]+$/, "").replace(/^(i|we)\s+(also\s+)?/i, "").replace(/^(and|or|plus|also)\s+/i, ""))
     .filter((item) => item.length > 2 && !isWeakFreeText(item) && !isUncertaintyStatement(item))
-    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item))
-    .filter((item) => !/\b(me|they|them|it was|i was|i am|my manager|my boss)\b/i.test(item));
+    .filter((item) => !/^(worked|was|am|is|work)\s+(at|in|for|as)\b/i.test(item));
+    // The narration filter that used to sit here DELETED any sentence mentioning
+    // "my manager", "they", "me" and so on. It destroyed true statements —
+    // "Reported to my manager and the shift lead." vanished from every surface —
+    // while the leftover token "manager" separately authorised an unrelated
+    // canned claim. Narration is the user's own wording and is kept.
 }
 
 // Extraction artifacts ("Clients About What They Wanted") read as narration,
-// not responsibilities; they are dropped rather than templated.
+// not responsibilities; they are dropped rather than templated. Only
+// title-cased heading fragments match: a sentence the user actually wrote is
+// sentence-cased and is a claim, not an artifact — "It was my job to
+// reconcile the drawer." and "They told me to cover the front desk." must
+// survive verbatim (RA-P0-03).
 function looksLikeNarrationFragment(item: string) {
-  return /\b(they|them|about what|it was|i was)\b/i.test(item);
+  if (!/\b(they|them|about what|it was|i was)\b/i.test(item)) return false;
+  const words = item.split(/\s+/).filter((word) => /[a-z]/i.test(word));
+  if (words.length < 3) return true;
+  const capitalized = words.filter((word) => /^[A-Z]/.test(word));
+  return capitalized.length >= Math.ceil(words.length * 0.8);
 }
 
 function buildUserResponsibilityList(data: IntakeData) {
@@ -1215,6 +1240,41 @@ type GroundedBullet = { text: string; when?: RegExp; evidence?: RegExp[] };
  * the missing clauses become material for a targeted question instead of
  * silently becoming résumé content.
  */
+
+const THIRD_PARTY_DETERMINER = /^(?:the|a|an|our|their|his|her|its|this|that|these|those|every|each)$/i;
+
+// Irregular leads a suffix rule cannot stem.
+const LEAD_STEM_OVERRIDES = new Map<string, string>([
+  ["kept", "keep|kept"], ["held", "hold|held"], ["led", "lead|led"], ["built", "build|built"],
+  ["ran", "run|ran"], ["made", "make|made"], ["took", "take|took"], ["drove", "drive|drove"],
+  ["sent", "send|sent"], ["met", "meet|met"], ["set", "set"], ["put", "put"],
+]);
+
+/**
+ * True when the corpus evidences the ACT named by a composed bullet's lead verb.
+ * Derived from the lead's own first word so every call site is covered without
+ * each one restating its verb.
+ */
+function leadIsEvidenced(corpus: string, lead: string): boolean {
+  const first = (lead.trim().split(/\s+/)[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!first) return true;
+  const override = LEAD_STEM_OVERRIDES.get(first);
+  const stem = override ?? first.replace(/(?:ed|d)$/, "");
+  if (stem.length < 3) return true;
+  const occurrence = new RegExp(`\\b(?:${stem})\\w*`, "gi");
+  let hit: RegExpExecArray | null;
+  while ((hit = occurrence.exec(corpus)) !== null) {
+    // The act has to be the CANDIDATE'S. "The facility keeps care notes"
+    // evidences the word "keeps" but attributes it to the employer, so it is no
+    // licence for the résumé to claim "Kept care notes." A third-party subject
+    // immediately before the verb disqualifies that occurrence.
+    const preceding = corpus.slice(0, hit.index).trimEnd().split(/\s+/).slice(-2);
+    const thirdParty = preceding.length === 2 && THIRD_PARTY_DETERMINER.test(preceding[0] ?? "");
+    if (!thirdParty) return true;
+  }
+  return false;
+}
+
 function composed(
   corpus: string,
   lead: string,
@@ -1224,6 +1284,11 @@ function composed(
   const matched = clauses.filter(([evidence]) => evidence.test(corpus)).map(([, phrase]) => phrase);
   const min = options.min ?? 1;
   if (matched.length < min) return { text: "" };
+  // The LEAD carries a claim too. Gating only the clauses meant "Maintained the
+  // safety log" emitted "Reported safety concerns." — a correctly grounded
+  // clause bolted to a verb the user never used. A gated clause attached to an
+  // invented verb is still fabrication, so the lead must be evidenced as well.
+  if (!leadIsEvidenced(corpus, lead)) return { text: "" };
   // `concepts` records exactly what this bullet claims, so a later pass can tell
   // whether it restates the user or adds something.
   const evidence = clauses.filter(([test]) => test.test(corpus)).map(([test]) => test);
@@ -1290,7 +1355,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bdisplays?\b|\bpresentation|\bfacing|\bmerchandis\w*/, "maintaining store presentation"],
         [/\binventory\b|\bshelves\b|\bshelf\b|\bbackroom\b/, "organizing inventory areas"]
       ]),
-      { text: "Escalated customer issues to leads or managers.", when: /\b(escalat\w*|leads?|managers?|supervisors?)\b/ },
+      // The gate names the ACTION only. "my manager" says who was nearby, not
+      // that anything was escalated; "de-escalated" is the opposite action and
+      // must not match through the hyphen boundary.
+      { text: "Escalated customer issues to leads or managers.", when: /(?<!de[\s-])\bescalat\w*/i },
       composed(corpus, "Balanced", [
         [/\bregisters?\b|\baccura\w*/, "register accuracy"],
         [/\bcustomers?\b|\bservice\b/, "customer service"],
@@ -1337,7 +1405,9 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bobservations?\b|\bnoticed\b/, "observations"],
         [/\bnotes?\b|\blogs?\b|\blogged\b|\bwrote\b|\breport\w*/, "shift notes"]
       ]),
-      { text: "Escalated concerns in line with site policies.", when: /\b(escalat\w*|supervisors?|called|polic(?:y|ies)|procedures?)\b/ },
+      // Same rule: only escalation language grounds an escalation claim.
+      // "called" (phoning anyone) and "policies" (existing) did not.
+      { text: "Escalated concerns in line with site policies.", when: /(?<!de[\s-])\bescalat\w*/i },
       // (ungated canned bullet removed: it asserted reliability / attention to
       // detail with nothing in the user's corpus behind it, and could be the ONLY
       // experience bullet on the résumé. A role with nothing grounded renders
@@ -1425,7 +1495,10 @@ function buildOccupationBullets(data: IntakeData, role: ExperienceRole, occupati
         [/\bclean\w*|\bwiped?\b/, "clean"],
         [/\borganiz\w*|\bstation\b|\bstocked\b/, "organized"]
       ]),
-      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|team|kitchen)\b/ },
+      // "kitchen" is a room, not collaboration: "Scrubbed the kitchen floors
+      // after close." described solo work and was grounding a two-claim
+      // coordination bullet. The gate names people, not places.
+      { text: "Coordinated with coworkers to keep orders moving.", when: /\b(coworkers?|teammates?|team|crew|servers?|expo)\b/ },
       composed(corpus, "Handled", [
         [/\bquestions?\b|\basked\b/, "customer questions"],
         [/\bissues?\b|\bcomplaints?\b|\bwrong\b|\bremade?\b/, "order issues"]
@@ -1814,12 +1887,21 @@ function isVerbLed(line: string) {
   return verbLedPhrase.test(line) || /^[a-z]{3,}(ed|ing)$/i.test(first);
 }
 
+// A clause has a subject and/or a copula: "It was hectic.", "They promoted
+// me twice.", "was the closer". A word count cannot tell these from a chip
+// label, and treating them as labels produced fabricated leads like
+// "Supported It was hectic." Detected structurally — no verb whitelist.
+function readsAsClause(line: string) {
+  return /\b(?:it|they|them|we|he|she|you|i)\b/i.test(line) || /\b(?:is|was|were|are|am|be|been|being)\b/i.test(line);
+}
+
 // A line may take the "Supported …" lead ONLY when it is unmistakably a bare
-// noun label — a short fragment with no verb of its own. Anything else is the
-// user's own sentence and is emitted as written. Never guess a lead.
+// noun label — a short fragment with no verb and no clause structure of its
+// own. Anything else is the user's own sentence and is emitted as written.
+// Never guess a lead.
 function isNounLabel(line: string) {
   const words = cleanWhitespace(line).split(/\s+/).filter(Boolean);
-  return words.length > 0 && words.length <= 4 && !isVerbLed(line);
+  return words.length > 0 && words.length <= 4 && !isVerbLed(line) && !readsAsClause(line);
 }
 
 function capitalizeSentence(value: string) {
