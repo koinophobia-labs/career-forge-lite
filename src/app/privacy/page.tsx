@@ -12,6 +12,11 @@ export default function PrivacyPage() {
         <p className="trust-kicker text-sm font-bold uppercase">Privacy</p>
         <h1 className="mt-3 text-3xl font-bold text-paper">The Way In app keeps your career data on your device.</h1>
         <p className="mt-2 text-sm text-paper/50">Last updated: September 2, 2026</p>
+        <aside className="mt-6 rounded-2xl border border-cyan/40 bg-cyan/5 p-5" aria-label="Native app information">
+          <h2 className="text-lg font-bold text-paper">Way In on iPhone or iPad</h2>
+          <p className="mt-2 text-sm leading-7 text-paper/80">Read the current native-app privacy policy, including local storage, optional iCloud, Apple purchases, diagnostics, and deletion. The information below also covers the separate legacy web service and older features.</p>
+          <a href="https://koinophobialabs.com/way-in/privacy" className="mt-3 inline-flex min-h-11 items-center font-bold text-cyan underline">Read the iPhone and iPad privacy policy →</a>
+        </aside>
         <div className="mt-8 space-y-8 text-sm leading-7 text-paper/75">
           <section>
             <h2 className="text-lg font-bold text-paper">Local-first app data</h2>
