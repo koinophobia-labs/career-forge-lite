@@ -474,7 +474,7 @@ check("synthetic tool refuses live keys at runtime", /sk_live[\s\S]{0,200}proces
 check("synthetic tool never writes certification", !synthetic.includes("CERTIFICATION_RECORD_ID"));
 
 const certify = read("scripts/certify-fulfillment.mjs");
-check("certification client targets only the exact production host", /hostname !== "career-forge-lite\.vercel\.app"/.test(certify));
+check("certification client targets only the exact production host", /hostname !== "careerforge\.koinophobialabs\.com"/.test(certify));
 check("certification client reads the operator token only from the environment", /process\.env\.CERTIFICATION_OPERATOR_TOKEN/.test(certify) && !/operator-token/.test(certify));
 check("certification client holds no Stripe key", !/STRIPE_TEST_SECRET_KEY|STRIPE_SECRET_KEY|sk_test_/.test(certify));
 check("certification client takes the delivered access code only from the environment", /process\.env\.CERTIFICATION_REDEMPTION_CODE/.test(certify));
